@@ -134,17 +134,26 @@ function FoldButton({ onClick }: { onClick: () => void }) {
 }
 
 /**
- * Ligne « à … · cc … » : un clic déplie la liste complète (une adresse par ligne, À puis Cc),
- * pour vérifier qui était en copie ; chaque adresse se copie d'un clic.
+ * Ligne « à … · cc … · cci … » : la liste complète (une adresse par ligne, À, Cc puis Cci)
+ * est dépliée d'office dès qu'il y a des copies ; chaque adresse se copie d'un clic, et
+ * « Copier les adresses » les copie toutes (pour les mettre dans un CRM).
  */
 function Recipients({ m, className }: { m: MailMessage; className: string }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
   const groups = [
     { label: t("À"), list: addressParts(m.to ?? "") },
     { label: "Cc", list: addressParts(m.cc ?? "") },
+    { label: t("Cci"), list: addressParts(m.bcc ?? "") },
   ].filter((g) => g.list.length);
+  const [open, setOpen] = useState(() => !!(m.cc || m.bcc));
   if (!groups.length) return null;
+  const all = [...new Set(groups.flatMap((g) => g.list.map((a) => a.email)))];
+  const copyAll = () => {
+    void navigator.clipboard
+      ?.writeText(all.join(", "))
+      .then(() => toast(all.length > 1 ? t("{n} adresses copiées", { n: all.length }) : t("Adresse copiée")))
+      .catch(() => toast(all.join(", ")));
+  };
   return (
     <>
       <button
@@ -155,7 +164,7 @@ function Recipients({ m, className }: { m: MailMessage; className: string }) {
         className={`flex min-w-0 max-w-full items-center gap-1 text-left transition-colors hover:text-foreground ${className}`}
       >
         <span className="min-w-0 truncate">
-          {t("à {to}", { to: cleanAddr(m.to) })}{m.cc ? ` · cc ${cleanAddr(m.cc)}` : ""}
+          {t("à {to}", { to: cleanAddr(m.to) })}{m.cc ? ` · cc ${cleanAddr(m.cc)}` : ""}{m.bcc ? ` · cci ${cleanAddr(m.bcc)}` : ""}
         </span>
         <ChevronDown className={`h-3 w-3 shrink-0 transition-transform ${open ? "rotate-180" : ""}`} />
       </button>
@@ -174,6 +183,13 @@ function Recipients({ m, className }: { m: MailMessage; className: string }) {
               </span>
             </span>
           ))}
+          {all.length > 1 && (
+            <span className="col-span-2 pt-1">
+              <button type="button" onClick={copyAll} className="inline-flex items-center gap-1.5 font-medium text-primary transition-opacity hover:opacity-80">
+                <Copy className="h-3 w-3" /> {t("Copier les adresses")}
+              </button>
+            </span>
+          )}
         </span>
       )}
     </>
@@ -205,7 +221,7 @@ function CopyAddress({ email, className }: { email: string; className: string })
       className={`group/addr flex w-fit max-w-full items-center gap-1.5 text-left transition-colors hover:text-foreground ${className}`}
     >
       <span className="min-w-0 truncate">{email}</span>
-      {done ? <Check className="h-3.5 w-3.5 shrink-0 text-ok" /> : <Copy className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover/addr:opacity-100 max-sm:opacity-60" />}
+      {done ? <Check className="h-3.5 w-3.5 shrink-0 text-ok" /> : <Copy className="h-3 w-3 shrink-0 opacity-50 transition-opacity group-hover/addr:opacity-100" />}
     </button>
   );
 }

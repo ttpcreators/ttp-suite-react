@@ -322,5 +322,8 @@ export const EN_CREATORPAGES: Record<string, string> = {
   "Les mails que ton agence envoie pour toi : démarchages et réponses aux marques.": "Emails your agency sends for you: pitches and replies to brands.",
   "À": "To",
   "Masquer les destinataires": "Hide recipients",
+  "Cci": "Bcc",
+  "Copier les adresses": "Copy addresses",
+  "{n} adresses copiées": "{n} addresses copied",
   "Voir tous les destinataires": "Show all recipients",
 };

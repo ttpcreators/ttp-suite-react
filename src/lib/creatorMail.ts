@@ -49,6 +49,8 @@ export function prospectStats(threads: Pick<MailThreadLite, "prospect" | "replie
 export type MailAttachment = { messageId: string; attachmentId: string; filename: string; mimeType: string; size: number };
 export type MailMessage = {
   id: string; from: string; fromEmail: string; fromAgency: boolean; to: string; cc: string;
+  /** Copie cachée (vue agence, nos envois seulement ; jamais renvoyée à un créateur). */
+  bcc?: string;
   ts: number; html: string; text: string; attachments: MailAttachment[];
   /** Vue agence : réponse envoyée sans l'adresse du créateur, il ne la voit pas dans son espace. */
   hiddenFromCreator?: boolean;

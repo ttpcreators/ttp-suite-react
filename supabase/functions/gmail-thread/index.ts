@@ -296,6 +296,8 @@ Deno.serve(async (req: Request) => {
       from,
       to: h("to"),
       cc: h("cc"),
+      // Copie cachée : Gmail ne la garde que sur nos propres envois (agence uniquement).
+      bcc: h("bcc"),
       subject: h("subject"),
       date: h("date"),
       html,
