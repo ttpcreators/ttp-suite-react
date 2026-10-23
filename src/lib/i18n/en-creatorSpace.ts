@@ -1,5 +1,11 @@
 /** Traductions anglaises (clé = texte français exact affiché dans l'app). */
 export const EN_CREATORSPACE: Record<string, string> = {
+  "Tout ce que l'agence a sur toi": "Everything your agency has on you",
+  "Chargement de tes collabs": "Loading your collabs",
+  "Pas de collab en cours.": "No collab in progress.",
+  "To-do": "To-do",
+  "Mes informations": "My details",
+  "Tes coordonnées et tes chiffres. Tu peux les modifier ici.": "Your contact details and your numbers. You can edit them here.",
   // ── Menu, onglets et en-têtes
   "Mon espace": "My space",
   "Accueil": "Home",

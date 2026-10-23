@@ -13,7 +13,7 @@ export type CsTab =
   | "accueil" | "missions" | "mails" | "gains" | "profil"
   | "guide" | "evolution" | "rapport" | "debrief" | "roadmap"
   | "aujourdhui" | "todo" | "ideas" | "gifting" | "planning"
-  | "mediakit" | "documents" | "contacts";
+  | "mediakit" | "documents" | "contacts" | "infos";
 
 /** Les rubriques principales de la barre du bas (suivies de « Plus », le Menu). */
 export const CS_MAIN_TABS = ["accueil", "missions", "todo", "mails"] as const satisfies readonly CsTab[];
@@ -31,7 +31,7 @@ export const CS_ALL_TABS: readonly CsTab[] = [
   CS_MENU_TAB,
   "guide", "evolution", "rapport", "debrief", "roadmap",
   "aujourdhui", "gains", "ideas", "gifting", "planning",
-  "mediakit", "documents", "contacts",
+  "mediakit", "documents", "contacts", "infos",
 ];
 
 /**

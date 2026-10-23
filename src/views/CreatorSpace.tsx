@@ -151,8 +151,10 @@ const CREATOR_GROUPS: {
     icon: LayoutDashboard,
     items: [
       { id: "accueil", label: "Accueil", icon: TtpHome },
-      { id: "missions", label: "Missions", icon: TtpMission },
+      { id: "missions", label: "Collabs", icon: TtpMission },
       { id: "gains", label: "Gains", icon: TtpGains },
+      // Mes informations : coordonnées et chiffres, faciles à retrouver (demande de Marc, 2026-10-24).
+      { id: "infos", label: "Mes informations", icon: Contact },
       // Messages (boîte mail) : section activée par l'agence (sinon un message l'explique).
       { id: "mails", label: "Mail", icon: TtpMail },
       // Le Menu : ouvert par l'avatar en haut à droite au téléphone.
@@ -165,7 +167,7 @@ const CREATOR_GROUPS: {
     icon: ListChecks,
     items: [
       { id: "aujourdhui", label: "Aujourd'hui", icon: TtpToday },
-      { id: "todo", label: "À faire", icon: TtpTodo },
+      { id: "todo", label: "To-do", icon: TtpTodo },
       { id: "ideas", label: "Idées", icon: TtpIdea },
       { id: "gifting", label: "Gifting", icon: TtpGift },
       { id: "planning", label: "Planning", icon: TtpPlanning },
@@ -283,6 +285,7 @@ function greetingWord(): string {
 
 /** À quoi sert chaque onglet, en une phrase (comme les pages agence, viewHints.ts). */
 const TAB_HINTS: Partial<Record<Tab, string>> = {
+  infos: "Tes coordonnées et tes chiffres. Tu peux les modifier ici.",
   evolution: "Tes abonnés et ton taux d'engagement dans le temps, d'après les mesures de ton agence.",
   rapport: "Ton mois en un coup d'œil : tes gains, tes collabs, tes chiffres et ce que l'agence t'a apporté.",
   debrief: "Les bilans de tes campagnes envoyés aux marques : chiffres et points forts.",
@@ -675,7 +678,6 @@ export function CreatorSpace({
   const [todos, setTodos] = useState<Todo[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
   const [ideaSubsOpen, setIdeaSubsOpen] = useState<Set<string>>(() => new Set());
-  const [infosOpen, setInfosOpen] = useState(false); // Menu : « Mes infos » repliées par défaut
   const [briefs, setBriefs] = useState<Brief[]>([]);
   const [gifts, setGifts] = useState<GiftRow[]>([]);
   // Futures collabs qui la concernent (fonction SQL creator_discussions : marque, livrables,
@@ -698,7 +700,7 @@ export function CreatorSpace({
   // "Mes infos" edit state
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Partial<Creator>>({});
-  const [infoTab, setInfoTab] = useStickyState("espace:infos", ["stats", "coord"] as const, "stats"); // carte Mes infos : onglet actif
+  const [infoTab, setInfoTab] = useStickyState("espace:infos2", ["stats", "coord"] as const, "coord"); // carte Mes infos : onglet actif
   // Sidebar desktop repliable en rail (mémorisé).
   const [sbCollapsed, setSbCollapsed] = useState(() => lsGet("ttp:cs-sidebar-collapsed") === "1");
   useEffect(() => { lsSet("ttp:cs-sidebar-collapsed", sbCollapsed ? "1" : "0"); }, [sbCollapsed]);
@@ -2311,7 +2313,7 @@ export function CreatorSpace({
               title={openMission ? openMission.brand : tabLabel(tab)}
               left={
                 openMission ? (
-                  <IosBackButton label={t("Missions")} onClick={() => setMissionId(null)} />
+                  <IosBackButton label={t("Collabs")} onClick={() => setMissionId(null)} />
                 ) : !isMainTab(tab) && tab !== "profil" ? (
                   <IosBackButton label={t("Menu")} onClick={() => setTab("profil")} />
                 ) : null
@@ -2432,7 +2434,7 @@ export function CreatorSpace({
               { label: t("Abonnés"), value: followersNow ? fmtCompact(followersNow) : "—", foot: <Delta value={followersDelta} suffix={t("vs relevé préc.")} /> },
               { label: t("Engagement"), value: topEr ? String(topEr) : "—", foot: platformLatest[0]?.platformLabel ?? t("Dernière mesure de ton agence") },
               { label: t("CA encaissé"), value: formatEuro(caEncaisse), foot: t("sur {amount} facturés", { amount: formatEuro(totalFacture) }) },
-              { label: t("À faire"), value: String(openTodos.length), foot: `${plural(briefs.length, "{n} brief", "{n} briefs")} · ${plural(ideas.length, "{n} idée", "{n} idées")}` },
+              { label: t("To-do"), value: String(openTodos.length), foot: `${plural(briefs.length, "{n} brief", "{n} briefs")} · ${plural(ideas.length, "{n} idée", "{n} idées")}` },
             ];
             if (!(ready.collabs && ready.briefs && ready.invoices)) {
               return (
@@ -2604,7 +2606,7 @@ export function CreatorSpace({
                 <section>
                   <div className="mb-2.5 flex items-baseline justify-between gap-2 px-1">
                     <h2 className="flex items-baseline gap-2 text-[20px] font-bold tracking-[-0.02em]">
-                      {t("À faire")} <span className="text-[16px] font-semibold tabular-nums text-muted-foreground">{steps.length - 1}</span>
+                      {t("To-do")} <span className="text-[16px] font-semibold tabular-nums text-muted-foreground">{steps.length - 1}</span>
                     </h2>
                     <button type="button" onClick={() => setTab("aujourdhui")} className="-my-3 px-1 py-3 text-[14px] font-medium text-primary">
                       {t("Tout voir")}
@@ -3219,7 +3221,7 @@ export function CreatorSpace({
               label={t("Missions, gifting et discussions")}
               orderKey="cs-missions"
               items={[
-                { value: "missions", label: t("Missions"), count: missions.filter((m) => !m.done).length, tone: "blue" },
+                { value: "missions", label: t("Collabs"), count: missions.filter((m) => !m.done).length, tone: "blue" },
                 { value: "gifting", label: t("Gifting"), count: gifts.length, tone: "pink" },
                 { value: "discussions", label: t("En discussion"), count: discussions?.length ?? 0, tone: "orange" },
               ]}
@@ -3251,11 +3253,11 @@ export function CreatorSpace({
                 </div>
               )
             ) : !(ready.collabs && ready.briefs) ? (
-              <SkeletonList count={3} action label={t("Chargement de tes missions")} />
+              <SkeletonList count={3} action label={t("Chargement de tes collabs")} />
             ) : missions.length === 0 ? (
               <div className="rounded-[20px] border border-border bg-surface px-6 py-10 text-center shadow-sm">
                 <IconTile className="mx-auto"><SquareCheckBig /></IconTile>
-                <div className="mt-3 text-[16px] font-semibold text-foreground">{t("Pas de mission en cours.")}</div>
+                <div className="mt-3 text-[16px] font-semibold text-foreground">{t("Pas de collab en cours.")}</div>
                 <p className="mt-1 text-[15px] text-muted-foreground">{t("On te prévient dès qu'une marque dit oui.")}</p>
                 <button type="button" onClick={() => setTab("mediakit")} className="mt-4 h-11 rounded-full bg-field px-5 text-[15px] font-semibold text-foreground transition-transform duration-200 ease-out active:scale-[0.97]">
                   {t("Voir mon media kit")}
@@ -3308,7 +3310,7 @@ export function CreatorSpace({
               <div className="mx-auto flex w-full max-w-[720px] flex-col gap-4">
                 {!iosPhone && (
                   <button type="button" onClick={() => setMissionId(null)} className="flex w-fit items-center gap-1 text-[14px] font-semibold text-primary transition-opacity hover:opacity-80">
-                    <ArrowLeft className="h-4 w-4" /> {t("Missions")}
+                    <ArrowLeft className="h-4 w-4" /> {t("Collabs")}
                   </button>
                 )}
                 <div className="flex items-center gap-3.5">
@@ -3735,12 +3737,14 @@ export function CreatorSpace({
                   size={60}
                   onUploaded={(url) => setCreator((c) => (c ? { ...c, photo_url: url } : c))}
                 />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[22px] font-bold tracking-[-0.02em]">{titleCase(name)}</div>
-                  <div className="truncate text-[14px] text-muted-foreground">
-                    {[creator?.handle, creator?.niche, creator?.ville].filter((x) => x && x.trim() && x !== "—").join(" · ") || (preview ? "Vue agence" : t("Créateur TTP"))}
-                  </div>
-                </div>
+                {/* Un tap sur le nom ouvre « Mes informations » (coordonnées et chiffres). */}
+                <button type="button" onClick={() => setTab("infos")} className="flex min-h-11 min-w-0 flex-1 items-center gap-2 text-left">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[22px] font-bold tracking-[-0.02em]">{titleCase(name)}</span>
+                    <span className="block truncate text-[14px] text-muted-foreground">{t("Mes informations")}</span>
+                  </span>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-faint" />
+                </button>
               </div>
 
               {/* Toutes les rubriques en tuiles, juste sous le profil : tout l'espace en un geste.
@@ -3785,14 +3789,60 @@ export function CreatorSpace({
 
               </section>
 
-              {/* Mes infos : repliées par défaut (le Menu reste court), ouvertes pour les voir ou les modifier */}
-              <IosGroup>
-                <IosRow icon={Contact} label={t("Mes infos")} detail={infosOpen || editing ? t("Masquer") : undefined} chevron={!(infosOpen || editing)} onClick={() => setInfosOpen((v) => !v)} />
+
+              {/* Réseaux connectés : leurs stats arrivent toutes seules */}
+              {(FEATURES.connect.instagram || !!creator?.ig?.link || FEATURES.connect.tiktok || !!creator?.tt?.link || FEATURES.connect.youtube || !!creator?.yt?.link) && (
+                <section className="flex flex-col">
+                  <h2 className="px-4 pb-1.5 text-[0.8125rem] uppercase tracking-[0.02em] text-muted-foreground">{t("Réseaux connectés")}</h2>
+                  <div className="[&>div:last-child]:mb-0">{networkBlocks}</div>
+                </section>
+              )}
+
+              <IosGroup title={t("Préférences")}>
+                {/* Langue de l'espace : pour un créateur anglophone (l'agence le règle aussi sur sa fiche). */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-3.5 py-3">
+                  <span className="text-[16px] text-foreground">{t("Langue de l'espace")}</span>
+                  <div className="flex gap-1" role="group" aria-label={t("Langue de l'espace")}>
+                    {(["fr", "en"] as const).map((l) => (
+                      <button key={l} type="button" aria-pressed={lang === l} disabled={!creator} onClick={() => void setSpaceLang(l)}
+                        className={cn("h-11 rounded-full px-4 text-[15px] font-medium transition-colors disabled:opacity-50", lang === l ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+                        {l === "fr" ? "Français" : "English"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Thème (propre à cet appareil) : Clair, Sombre ou Auto (suit le téléphone, par défaut) */}
+                <div className="flex flex-col gap-2 px-3.5 py-3">
+                  <span className="text-[16px] text-foreground">{t("Thème")}</span>
+                  <Tabs
+                    size="sm"
+                    fullWidth
+                    label={t("Thème")}
+                    value={themeCtx.theme === "verre" ? "clair" : themeCtx.theme}
+                    onValueChange={(v) => themeCtx.setTheme(v as ThemeChoice)}
+                    items={THEME_CHOICES.filter((c) => c.value !== "verre").map((c) => ({ value: c.value, label: c.value === "noir" ? t("Sombre") : t(c.label) }))}
+                  />
+                </div>
               </IosGroup>
-              {(infosOpen || editing) && (
+
+              <IosGroup>
+                <IosRow icon={BarChart3} label={t("Envoyer mes stats")} onClick={() => setStatsModalOpen(true)} />
+              </IosGroup>
+
+              <IosGroup>
+                <IosRow icon={preview ? ArrowLeft : LogOut} label={exitTitle} destructive chevron={false} onClick={exitAction} />
+              </IosGroup>
+            </div>
+          )}
+
+          {/* Gains (ex-Facturation) : à recevoir, encaissé, à venir, historique + dépôt de facture.
+              Calculs purs : src/lib/creatorGains.ts (le rouge = argent en retard, seulement). */}
+          {/* Mes informations : coordonnées + chiffres, modifiables */}
+          {tab === "infos" && (
+            <div className="flex flex-col gap-4">
               <Card index={0}>
                 <div className="mb-4 flex items-center justify-between gap-3">
-                  <div className="text-sm font-semibold">{t("Mes infos")}</div>
+                  <div className="text-sm font-semibold text-muted-foreground">{t("Tout ce que l'agence a sur toi")}</div>
                   {editing ? (
                     <div className="flex items-center gap-2">
                       {/* Annuler : on quitte sans enregistrer (le formulaire est rechargé depuis la fiche à la prochaine ouverture) */}
@@ -3855,7 +3905,7 @@ export function CreatorSpace({
                       label={t("Mes infos")}
                       value={infoTab}
                       onValueChange={(v) => setInfoTab(v as "stats" | "coord")}
-                      items={[{ value: "stats", label: t("Statistiques") }, { value: "coord", label: t("Coordonnées") }]}
+                      items={[{ value: "coord", label: t("Coordonnées") }, { value: "stats", label: t("Statistiques") }]}
                     />
 
                     <AnimatePresence mode="wait" initial={false}>
@@ -3933,55 +3983,9 @@ export function CreatorSpace({
                   </>
                 )}
               </Card>
-              )}
-
-              {/* Réseaux connectés : leurs stats arrivent toutes seules */}
-              {(FEATURES.connect.instagram || !!creator?.ig?.link || FEATURES.connect.tiktok || !!creator?.tt?.link || FEATURES.connect.youtube || !!creator?.yt?.link) && (
-                <section className="flex flex-col">
-                  <h2 className="px-4 pb-1.5 text-[0.8125rem] uppercase tracking-[0.02em] text-muted-foreground">{t("Réseaux connectés")}</h2>
-                  <div className="[&>div:last-child]:mb-0">{networkBlocks}</div>
-                </section>
-              )}
-
-              <IosGroup title={t("Préférences")}>
-                {/* Langue de l'espace : pour un créateur anglophone (l'agence le règle aussi sur sa fiche). */}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/70 px-3.5 py-3">
-                  <span className="text-[16px] text-foreground">{t("Langue de l'espace")}</span>
-                  <div className="flex gap-1" role="group" aria-label={t("Langue de l'espace")}>
-                    {(["fr", "en"] as const).map((l) => (
-                      <button key={l} type="button" aria-pressed={lang === l} disabled={!creator} onClick={() => void setSpaceLang(l)}
-                        className={cn("h-11 rounded-full px-4 text-[15px] font-medium transition-colors disabled:opacity-50", lang === l ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
-                        {l === "fr" ? "Français" : "English"}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {/* Thème (propre à cet appareil) : Clair, Sombre ou Auto (suit le téléphone, par défaut) */}
-                <div className="flex flex-col gap-2 px-3.5 py-3">
-                  <span className="text-[16px] text-foreground">{t("Thème")}</span>
-                  <Tabs
-                    size="sm"
-                    fullWidth
-                    label={t("Thème")}
-                    value={themeCtx.theme === "verre" ? "clair" : themeCtx.theme}
-                    onValueChange={(v) => themeCtx.setTheme(v as ThemeChoice)}
-                    items={THEME_CHOICES.filter((c) => c.value !== "verre").map((c) => ({ value: c.value, label: c.value === "noir" ? t("Sombre") : t(c.label) }))}
-                  />
-                </div>
-              </IosGroup>
-
-              <IosGroup>
-                <IosRow icon={BarChart3} label={t("Envoyer mes stats")} onClick={() => setStatsModalOpen(true)} />
-              </IosGroup>
-
-              <IosGroup>
-                <IosRow icon={preview ? ArrowLeft : LogOut} label={exitTitle} destructive chevron={false} onClick={exitAction} />
-              </IosGroup>
             </div>
           )}
 
-          {/* Gains (ex-Facturation) : à recevoir, encaissé, à venir, historique + dépôt de facture.
-              Calculs purs : src/lib/creatorGains.ts (le rouge = argent en retard, seulement). */}
           {tab === "gains" && !ready.invoices && (
             <div className="flex flex-col gap-4">
               <SkeletonFigure label={t("Chargement de tes gains")} />
