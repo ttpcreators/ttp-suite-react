@@ -201,7 +201,7 @@ Deno.serve(async (req: Request) => {
           return "fail";
         }
         if (tr.status === 404) return null; // supprimé entre la liste et la lecture
-        const d = await tr.json().catch(() => null) as { messages?: { labelIds?: string[]; internalDate?: string; payload?: { headers?: Header[] } }[] } | null;
+        const d = await tr.json().catch(() => null) as { messages?: { labelIds?: string[]; internalDate?: string; snippet?: string; payload?: { headers?: Header[] } }[] } | null;
         if (!tr.ok || !d) return "fail";
         const msgs = (d.messages ?? []).filter((m) => !(m.labelIds ?? []).includes("DRAFT"));
         if (!msgs.length) return null;
@@ -223,7 +223,9 @@ Deno.serve(async (req: Request) => {
           subject: h(msgs[0], "subject"),
           name: nameOf(other),
           email: addr(other),
-          snippet: String(t.snippet ?? "").slice(0, 200),
+          // Extrait du MÊME dernier message que `direction` (« Toi : » + texte de la marque sinon :
+          // l'extrait du fil renvoyé par Gmail ne vient pas toujours du dernier message).
+          snippet: String(last.snippet ?? t.snippet ?? "").slice(0, 200),
           ts: Number(last.internalDate ?? 0),
           count: msgs.length,
           direction: out ? "out" : "in",
