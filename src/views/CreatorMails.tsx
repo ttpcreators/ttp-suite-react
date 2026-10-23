@@ -1006,7 +1006,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
   // ── Même barre, en ligne (téléphone, tablette) ; masquée pendant la lecture ──
   const pills = simple ? null : (
-    <nav aria-label={t("Ranger les échanges")} className={cn("flex gap-1.5 overflow-x-auto border-b border-border p-2 [scrollbar-width:none] lg:hidden", openId && "max-lg:hidden")}>
+    <nav aria-label={t("Ranger les échanges")} className={cn("flex flex-wrap gap-1.5 border-b border-border p-2 lg:hidden", openId && "max-lg:hidden")}>
       {FILTERS.map((f) => {
         const on = filter === f.key;
         return (
@@ -1058,7 +1058,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         )}
         <ToolButton icon={RefreshCw} label={t("Actualiser")} spin={loading} disabled={loading} onClick={retry} className="h-11 w-11 max-lg:hidden" />
       </div>
-      <nav aria-label={t("Ranger les échanges")} className="-mx-4 mt-2 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none]">
+      <nav aria-label={t("Ranger les échanges")} className="mt-2 flex flex-wrap gap-1.5">
         {simpleOrder.map((key) => {
           const f = FILTERS.find((x) => x.key === key)!;
           const on = filter === key;
