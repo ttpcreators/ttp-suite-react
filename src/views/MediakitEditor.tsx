@@ -12,6 +12,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/u
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { MediakitThemePicker } from "@/components/ui/mediakit-theme-picker";
 import { knownBioEn } from "@/lib/mediakitBiosEn";
+import { creatorAudience, type AudienceRow } from "@/lib/creatorAudience";
+import { mergeRates, ratesFromPricing, type RatesMerge } from "@/lib/mediakitRates";
+import type { RateOverrides } from "@/lib/pricing";
+import { KitRatesDialog } from "@/components/kit-rates-dialog";
 
 /**
  * Éditeur du MEDIA KIT EN LIGNE (par créatrice). Tout est écrit dans la colonne
@@ -400,6 +404,30 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
     patchUgc({ [key]: raw.split("\n").map((s) => s.trim()).filter(Boolean) } as Partial<UgcKit>);
   const setPlatforms = (platforms: PlatformBlock[]) => patch({ platforms });
   const setRates = (rates: RateRow[]) => patch({ rates });
+
+  // « Calculer » : grille de tarifs depuis le barème de l'agence (page Tarifs) et les vraies
+  // stats du créateur ; aperçu puis application dans le formulaire (à enregistrer ensuite).
+  const [ratesPlan, setRatesPlan] = useState<{ merge: RatesMerge; missing: string[] } | null>(null);
+  const [ratesBusy, setRatesBusy] = useState(false);
+  const computeRates = async () => {
+    if (!selId || ratesBusy) return;
+    setRatesBusy(true);
+    try {
+      const { data, error } = await supabase.from("creators").select("*").eq("id", selId).maybeSingle();
+      if (error || !data) return toast("Fiche illisible, réessaie");
+      invalidateAppState();
+      const st = (await getAppState()) as AppState;
+      const { rows, missing } = ratesFromPricing(creatorAudience(data as AudienceRow), (st["pricingRates"] as RateOverrides | undefined) ?? {});
+      if (!rows.length) return toast(missing.length ? `Il manque les abonnés ${missing.join(", ")}` : "Aucune audience sur sa fiche");
+      const merge = mergeRates(mk.rates ?? [], rows);
+      if (!merge.added.length && !merge.replaced.length) return toast("La grille est déjà à jour");
+      setRatesPlan({ merge, missing });
+    } catch {
+      toast("Calcul impossible, réessaie");
+    } finally {
+      setRatesBusy(false);
+    }
+  };
   const setCasting = (casting: Record<string, string>) => patch({ casting });
 
   // Adresse publique : même calcul que le build du site (« Lien » sinon prénom, doublons
@@ -760,7 +788,34 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
               </button>
               }
             />
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => void computeRates()}
+                disabled={ratesBusy || !selId}
+                title="Remplit la grille avec le barème de l'agence (page Tarifs) et les vraies stats du créateur"
+                className="inline-flex h-10 items-center gap-1.5 rounded-full bg-field px-4 text-[13px] font-semibold text-foreground transition-colors hover:bg-rowhover disabled:opacity-40"
+              >
+                <Wand2 className="h-4 w-4" /> {ratesBusy ? "Calcul…" : "Calculer"}
+              </button>
+              <span className="text-[12px] text-muted-foreground">Prix d'un contenu, selon le barème de Tarifs.</span>
+            </div>
             <RatesEditor rates={mk.rates ?? []} onChange={setRates} />
+            {ratesPlan && (
+              <KitRatesDialog
+                title="Tarifs calculés"
+                merge={ratesPlan.merge}
+                hideRates={!!mk.hideRates}
+                missing={ratesPlan.missing}
+                confirmLabel="Remplir la grille"
+                onConfirm={() => {
+                  setRates(ratesPlan.merge.rates);
+                  setRatesPlan(null);
+                  toast("Grille remplie. Pense à enregistrer.");
+                }}
+                onClose={() => setRatesPlan(null)}
+              />
+            )}
             <div className="mt-3">
               <label className={LBL}>Mention sous la grille</label>
               <input
