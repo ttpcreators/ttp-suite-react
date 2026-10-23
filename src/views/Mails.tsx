@@ -25,7 +25,7 @@ import { parseTouches, nextKind, touchId, type Touch } from "@/lib/touches";
 import { updateTouches } from "@/lib/touchesDb";
 import { MailComposer, type ComposerContact } from "@/components/mail-composer";
 import { BoxChip, BoxDot } from "@/components/mail-box-chip";
-import { BOX_LABEL, BOX_STYLE, readDraft, readDraftRaw, replyDraftKey, sendFailText, sendGmail, writeDraft, type MailBox, type OutAttachment } from "@/lib/mailSend";
+import { BOX_LABEL, BOX_STYLE, readDraft, readDraftRaw, replyDraftKey, scheduleSend, sendFailText, sendGmail, writeDraft, type MailBox, type OutAttachment } from "@/lib/mailSend";
 import { ForwardDialog, MailSettingsDialog, NewMailDialog, ReplyBox, useDeviceDraftKeys, type ForwardReopen } from "@/components/mail-tools";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
@@ -36,6 +36,9 @@ import { useSearch } from "@/lib/search";
 import { useLiveKey } from "@/lib/useLive";
 import { buildBrandIndex, collabTag, creatorTone, matchCollabs, relanceDays, type BrandIndex, type CollabLite, type MailTag } from "@/lib/mailCollab";
 import { LinkedCollabCard, MailTagChip } from "@/components/mail-collab";
+import { MailReactions } from "@/components/mail-reactions";
+import { canReact, reactionErrorText, reactionRecipients, splitReactions, type ReactionPill } from "@/lib/mailReactions";
+import { myDisplayName } from "@/lib/team";
 import { useIntent } from "@/lib/openIntent";
 
 // Espace mails d'un créateur (statuts, remarques, suivi), chargé seulement à la demande.
@@ -70,6 +73,10 @@ type ThreadMsg = {
   messageIdHeader?: string; inReplyTo?: string; references?: string; replyTo?: string;
   /** Brouillon Gmail du fil (libellé DRAFT) : pas affiché comme un message. */
   draft?: boolean;
+  /** Réaction emoji (gmail-thread 2026-10-23) : pastille sous le message visé. */
+  reaction?: string;
+  /** Message d'une liste de diffusion : pas de réaction proposée. */
+  list?: boolean;
 };
 type InboxThread = {
   threadId: string; subject: string; name: string; email: string; snippet: string;
@@ -1546,10 +1553,56 @@ export function Mails() {
 
   // ── Réponse ──────────────────────────────────────────────────────────────
   const firstName = (n: string) => titleCase(n).split(" ")[0] || titleCase(n);
+  // Réactions emoji : pastilles sous le message visé, retirées du fil (comme Gmail).
+  const split = useMemo(() => splitReactions(threadMsgs ?? []), [threadMsgs]);
+  // Réactions envoyées depuis cet écran, en attendant que Gmail les renvoie dans le fil.
+  const [myReacts, setMyReacts] = useState<Map<string, string[]>>(() => new Map());
+  const threadKey = thread ? keyOf(thread) : "";
+  useEffect(() => setMyReacts(new Map()), [threadKey]);
+  const pillsOf = (id: string): ReactionPill[] => {
+    const list = (split.pills.get(id) ?? []).map((p) => ({ ...p }));
+    for (const e of myReacts.get(id) ?? []) {
+      const same = list.find((p) => p.emoji === e);
+      if (same?.mine) continue;
+      if (same) {
+        same.mine = true;
+        same.count += 1;
+      } else list.push({ emoji: e, who: "Toi", mine: true, count: 1 });
+    }
+    return list;
+  };
+  const sendReaction = (msgId: string, emoji: string) => {
+    const t = thread;
+    const m = (threadMsgs ?? []).find((x) => x.id === msgId);
+    if (!t || !m) return;
+    const { to, cc } = reactionRecipients(m, AGENCY_DOMAIN.slice(1));
+    const mark = (on: boolean) =>
+      setMyReacts((prev) => {
+        const next = new Map(prev);
+        const cur = (next.get(msgId) ?? []).filter((e) => e !== emoji);
+        next.set(msgId, on ? [...cur, emoji] : cur);
+        return next;
+      });
+    mark(true);
+    scheduleSend(`Réaction ${emoji}`, 5, async () => {
+      const name = await myDisplayName().catch(() => "");
+      const res = await sendGmail({
+        to, cc, subject: t.subject, html: "", threadId: t.threadId, source: "manual", box: t.box,
+        inReplyTo: m.messageIdHeader, references: [m.references?.trim(), m.messageIdHeader?.trim()].filter(Boolean).join(" ").slice(-1900) || undefined,
+        reaction: { emoji, name: name || "TTP Creators" },
+      });
+      if (!res.ok || res.reaction !== emoji) {
+        mark(false);
+        toast(reactionErrorText(res.ok ? "ancienne_version" : res.error));
+        return;
+      }
+      threadCache.delete(keyOf(t));
+    }, { onCancel: () => mark(false) });
+  };
   // Fil → format du lecteur partagé (messages envoyés = agence).
   const readerMsgs: MailMessage[] = useMemo(
     () =>
-      (threadMsgs ?? []).map((m) => ({
+      split.shown.map((m) => ({
         id: m.id,
         from: displayName(m.from),
         fromEmail: addrOf(m.from),
@@ -1561,9 +1614,9 @@ export function Mails() {
         text: m.html ? "" : m.text,
         attachments: m.attachments ?? [],
       })),
-    [threadMsgs],
+    [split],
   );
-  const plan = useMemo(() => replyPlan(threadMsgs ?? [], thread?.contact ?? ""), [threadMsgs, thread]);
+  const plan = useMemo(() => replyPlan(split.shown, thread?.contact ?? ""), [split, thread]);
   const replyName = thread
     ? plan.to === thread.contact
       ? titleCase(prettyName(selected?.person || thread.name || displayName(thread.contact))) || plan.to
@@ -2617,6 +2670,16 @@ export function Mails() {
                             { icon: Reply, label: "Répondre", onClick: () => focusReply("reply") },
                             { icon: Forward, label: "Transférer", onClick: () => setForward({ msg: m, subject: thread.subject, box: thread.box }) },
                           ]}
+                          extra={(() => {
+                            const src = split.shown.find((x) => x.id === m.id);
+                            return (
+                              <MailReactions
+                                pills={pillsOf(m.id)}
+                                canReact={!!src && canReact(src, AGENCY_DOMAIN.slice(1))}
+                                onReact={(e) => sendReaction(m.id, e)}
+                              />
+                            );
+                          })()}
                           footer={last ? (
                             <>
                             {/* Actions rapides (maquette), sous le dernier message : ordinateur. */}
