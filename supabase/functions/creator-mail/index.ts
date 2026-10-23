@@ -413,7 +413,10 @@ async function listThreads(sb: Sb, token: string, s: Settings, fresh: boolean) {
       const shown = shownMessages(t, s);
       if (!shown.length) return null;
       const first = shown[0];
-      const last = shown[shown.length - 1];
+      // Une réaction emoji (« Marc a réagi avec ❤️ », « … reacted via Gmail ») n'est pas un vrai
+      // message : l'aperçu vient du dernier VRAI message (même règle que gmail-history).
+      const isReaction = (m: GMessage) => /^\S.{0,80}\s(a réagi avec|reacted (with|via Gmail))\b/i.test(decodeEntities(m.snippet ?? "").trim());
+      const last = [...shown].reverse().find((m) => !isReaction(m)) ?? shown[shown.length - 1];
       const row = byId.get(t.id);
       return {
         id: t.id,
@@ -422,7 +425,7 @@ async function listThreads(sb: Sb, token: string, s: Settings, fresh: boolean) {
           displayName(header(first.payload?.headers ?? [], "From")),
         brandEmail: brandAddressOf(shown.map(lite), AGENCY_DOMAIN) || brandAddressOf(msgs.map(lite), AGENCY_DOMAIN),
         excerpt: decodeEntities(last.snippet ?? "").slice(0, 220),
-        ts: Number(last.internalDate ?? 0),
+        ts: Number(shown[shown.length - 1].internalDate ?? 0),
         count: shown.length,
         status: effectiveStatus(row, msgs),
         ...decisionOf(row),

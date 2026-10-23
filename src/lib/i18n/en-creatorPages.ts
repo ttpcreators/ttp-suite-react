@@ -302,6 +302,8 @@ export const EN_CREATORPAGES: Record<string, string> = {
   "Démarchées": "Pitched",
   "Démarchée par l'agence": "Pitched by the agency",
   "L'agence a démarché {n} marques pour toi ce mois-ci": "The agency pitched {n} brands for you this month",
+  "Ton agence a démarché {n} marques ce mois-ci": "Your agency pitched {n} brands this month",
+  "Ton agence a démarché {n} marque ce mois-ci": "Your agency pitched {n} brand this month",
   "L'agence a démarché {n} marque pour toi ce mois-ci": "The agency pitched {n} brand for you this month",
   "{n} marques démarchées ce mois-ci": "{n} brands pitched this month",
   "{n} marque démarchée ce mois-ci": "{n} brand pitched this month",
