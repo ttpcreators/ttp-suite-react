@@ -32,6 +32,11 @@ import { IconTile } from "@/components/ui/icon-tile";
 import { TONE_DOT } from "@/lib/statusTone";
 import { SCOUT_SORTS, SCOUT_STEPS, SCOUT_TONE, engagementBarPct, engagementTone, nextScoutStep, sortScouting, stepState, type ScoutSort, type ScoutStatus } from "@/lib/scouting";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { createPortal } from "react-dom";
+import { useIosPhone } from "@/components/mobile/ios-sheet";
+import { useNavActionSlot } from "@/lib/navAction";
+import { FilterPanel } from "@/components/ui/filter-panel";
+import { PhonePills } from "@/components/ui/phone-bar";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { DateInput } from "@/components/ui/date-range-picker";
 import { fmtDay, todayISO } from "@/lib/dates";
@@ -561,13 +566,17 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
     }
   };
 
+  const iosPhone = useIosPhone();
+  const barSlot = useNavActionSlot(true);
   // En-tête de la page (liste visible seulement) : quota Meta, Hashtag et « + ». Créateurs /
   // Sportifs sont les onglets « dossier » de la page.
   const header = (withActions: boolean) =>
     active && withActions ? (
       <PageHeaderRow>
+        {/* Téléphone : la jauge Meta monte dans la barre de titre (pas de ligne vide sous le titre). */}
+        {barSlot && createPortal(<MetaQuotaBadge compact />, barSlot)}
         <div className="ml-auto flex items-center gap-2">
-          <MetaQuotaBadge compact />
+          <span className="ios-phone-hide"><MetaQuotaBadge compact /></span>
           {FEATURES.hashtagSearch && (
             <button type="button" onClick={() => setHashOpen((o) => !o)} aria-pressed={hashOpen} className={cn("flex h-9 items-center gap-1.5 rounded-full border px-3 text-[12px] font-medium transition-colors", hashOpen ? "border-primary text-primary" : "border-border text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
               <Hash className="h-3.5 w-3.5" /> Hashtag
@@ -902,6 +911,37 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
 
       <div className={cn("grid items-start gap-5", showInspector && "grid-cols-[minmax(0,1fr)_320px]")}>
         <div className="@container min-w-0">
+          {/* Téléphone : recherche, puis UNE rangée de statuts qui défile ; catégorie, contact et
+              tri dans la feuille « Filtres ». */}
+          {iosPhone && (
+            <>
+              <PillSearch className="mb-2 sm:max-w-none" value={pageQ} onChange={setPageQ} placeholder="Rechercher" />
+              <PhonePills
+                className="mb-3"
+                label="Filtrer par statut de scouting"
+                value={statusFilter}
+                onChange={(v) => setStatusFilter(v as ScoutStatus | "__all__")}
+                options={[{ value: "__all__", label: "Tous", count: filtered.length }, ...STATUSES.map((s) => ({ value: s.v, label: s.short }))]}
+                after={
+                  <FilterPanel
+                    activeCount={(tagFilter !== ALL ? 1 : 0) + (contactFilter !== "all" ? 1 : 0)}
+                    onClear={() => {
+                      setTagFilter(ALL);
+                      setContactFilter("all");
+                    }}
+                    groups={[
+                      ...(tagList.length > 0
+                        ? [{ id: "cat", label: K.catLabel, value: tagFilter, onChange: setTagFilter, options: [{ value: ALL, label: K.allCats, count: rows.length }, ...tagList.map((t) => ({ value: t.key, label: t.label, count: t.count }))] }]
+                        : []),
+                      { id: "contact", label: "Prise de contact", value: contactFilter, onChange: (v: string) => setContactFilter(v as ContactFilter), options: [{ value: "all", label: "Tous" }, { value: "contacted", label: "Déjà contactés" }, { value: "never", label: "Jamais contactés" }] },
+                      { id: "tri", label: "Trier", value: sortBy, onChange: (v: string) => setSortBy(v as ScoutSort), options: SCOUT_SORTS.map((v) => ({ value: v, label: SORT_LABEL[v].charAt(0).toLocaleUpperCase("fr") + SORT_LABEL[v].slice(1) })) },
+                    ]}
+                  />
+                }
+              />
+            </>
+          )}
+          {!iosPhone && <>
           {/* Filtre par statut de scouting (mémorisé sur l'appareil) */}
           <Tabs
             className="mb-3"
@@ -949,6 +989,7 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
               {filtering && <span className="text-faint"> / {rows.length}</span>}
             </span>
           </div>
+          </>}
 
           <InlineForm open={formOpen} title={editId ? K.editTitle : K.newTitle} onClose={() => setFormOpen(false)} onSubmit={submit} submitLabel={editId ? "Enregistrer" : "Ajouter"}>
             <TextField label="Nom" value={fName} onChange={setFName} placeholder={K.namePh} className="min-w-[200px] flex-[2]" />

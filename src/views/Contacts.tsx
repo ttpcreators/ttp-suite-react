@@ -37,6 +37,7 @@ import { useIosPhone } from "@/components/mobile/ios-sheet";
 import { SignaturePicker } from "@/components/ui/signature-picker";
 import { renderSignatureHtml, type MailSignature } from "@/lib/useMailSignatures";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { PhoneMenu, PhonePills, PhoneStrip } from "@/components/ui/phone-bar";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { NewMailDialog } from "@/components/mail-tools";
 import { contactCard } from "@/lib/contactCard";
@@ -1580,16 +1581,25 @@ export function Contacts() {
               if (f) importCsv(f);
             }}
           />
+          {/* Téléphone : « Écrire » et Importer / Exporter passent dans le « ⋯ » de la barre de titre. */}
+          <PhoneMenu
+            items={[
+              { key: "write", label: "Écrire", icon: Mail, onClick: () => openMail() },
+              { key: "import", label: importing ? "Import…" : "Importer un CSV", icon: Upload, onClick: () => { if (!importing) csvInputRef.current?.click(); } },
+              { key: "export", label: "Exporter en CSV", icon: Download, onClick: exportCsv },
+            ]}
+          />
           <button
             type="button"
             onClick={() => openMail()}
-            className="flex h-10 items-center gap-1.5 rounded-full bg-surface px-4 text-[13px] font-medium text-foreground transition-colors hover:bg-rowhover"
+            className="ios-phone-hide flex h-10 items-center gap-1.5 rounded-full bg-surface px-4 text-[13px] font-medium text-foreground transition-colors hover:bg-rowhover"
             title="Écrire un email (choisir les destinataires)"
           >
             <Mail className="h-4 w-4" />
             <span>Écrire</span>
           </button>
           {/* Importer / Exporter (CSV) */}
+          <span className="ios-phone-hide">
           <ActionMenu
             buttonClassName="h-10 w-10 bg-surface text-foreground hover:bg-rowhover"
             items={[
@@ -1604,6 +1614,7 @@ export function Contacts() {
               { key: "export", label: "Exporter en CSV", icon: Download, onClick: exportCsv },
             ]}
           />
+          </span>
           {iosPhone ? (
             <AddButton label="Contact" onClick={openAdd} />
           ) : (
@@ -1623,8 +1634,19 @@ export function Contacts() {
       <div className={cn(showInspector && "grid grid-cols-[minmax(0,1fr)_320px] items-start gap-5")}>
         {/* Colonne principale */}
         <div className="@container min-w-0">
-          {/* Synthèse : quatre cases dans un seul panneau */}
-          {total > 0 && (
+          {/* Synthèse : quatre cases dans un seul panneau (téléphone : bande compacte qui défile) */}
+          {total > 0 && iosPhone && (
+            <PhoneStrip
+              className="mb-3"
+              items={[
+                { label: "Répertoire", value: String(total) },
+                { label: `À relancer, ${relanceDays} j+`, value: String(relancerCount), tone: TONE_TEXT.wait, active: contactFilter === "relancer", onClick: () => setContactFilter(contactFilter === "relancer" ? "all" : "relancer") },
+                { label: "Déjà contactés", value: `${contactedCount} · ${contactedPct} %` },
+                { label: "Jamais contactés", value: String(neverRows.length) },
+              ]}
+            />
+          )}
+          {total > 0 && !iosPhone && (
             <div className="mb-5 grid grid-cols-2 overflow-hidden rounded-[20px] bg-surface @2xl:grid-cols-4">
               <div className={cn(kpiCell, "border-b border-r border-border @2xl:border-b-0")}>
                 <span className={kpiLabel}>Répertoire</span>
@@ -1669,14 +1691,24 @@ export function Contacts() {
           )}
 
           {/* Mode iPhone : les trois filtres dans une feuille « Filtres » */}
-          {iosPhone && <PillSearch className="mb-2.5 sm:max-w-none" value={pageQ} onChange={setPageQ} placeholder="Rechercher un contact, un mail…" />}
+          {iosPhone && <PillSearch className="mb-2 sm:max-w-none" value={pageQ} onChange={setPageQ} placeholder="Rechercher" />}
           {iosPhone ? (
+            <PhonePills
+              className="mb-3"
+              label="Filtrer par suivi de contact"
+              value={contactFilter}
+              onChange={(v) => setContactFilter(v as ContactFilter)}
+              options={[
+                { value: "all", label: "Tous" },
+                { value: "relancer", label: "À relancer", count: relancerCount },
+                { value: "never", label: "Jamais contactés" },
+                { value: "contacted", label: "Déjà contactés" },
+              ]}
+              after={
             <FilterPanel
-              className="mb-4"
-              activeCount={(tagFilter !== ALL_TAGS ? 1 : 0) + (contactFilter !== "all" ? 1 : 0) + (cityFilter ? 1 : 0)}
+              activeCount={(tagFilter !== ALL_TAGS ? 1 : 0) + (cityFilter ? 1 : 0)}
               onClear={() => {
                 setTagFilter(ALL_TAGS);
-                setContactFilter("all");
                 setCityFilter("");
               }}
               groups={[
@@ -1691,18 +1723,6 @@ export function Contacts() {
                     ...(hasCreatorContacts ? [{ value: CREATOR_FILTER, label: "Ajoutés par les créateurs" }] : []),
                   ],
                 },
-                {
-                  id: "suivi",
-                  label: "Suivi",
-                  value: contactFilter,
-                  onChange: (v) => setContactFilter(v as ContactFilter),
-                  options: [
-                    { value: "all", label: "Tous" },
-                    { value: "contacted", label: "Déjà contactés" },
-                    { value: "never", label: "Jamais contactés" },
-                    { value: "relancer", label: "À relancer" },
-                  ],
-                },
               ]}
               extra={cityList.length > 0 ? (
                 <div className="flex flex-col gap-2">
@@ -1711,6 +1731,8 @@ export function Contacts() {
                     options={[{ value: "", label: "Toutes les villes" }, ...cityList.map((c) => ({ value: c, label: c }))]} />
                 </div>
               ) : undefined}
+            />
+              }
             />
           ) : (
             /* Catégorie (segments) + suivi de contact + ville */

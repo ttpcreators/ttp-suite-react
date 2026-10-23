@@ -8,6 +8,7 @@ import { AddButton, InlineForm, TextField, SelectField, DeleteButton } from "@/c
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { PhoneMenu } from "@/components/ui/phone-bar";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
 
 /**
@@ -229,12 +230,13 @@ export function Echeances() {
           <span>{list.length > 1 ? "contrats suivis" : "contrat suivi"}</span>
         </div>
         <div className="flex items-center gap-2">
+          <PhoneMenu items={[{ key: "import", label: syncing ? "Import…" : "Importer depuis Contrats", icon: RefreshCw, onClick: () => { if (!syncing) void syncFromContracts(); } }]} />
           <button
             type="button"
             onClick={syncFromContracts}
             disabled={syncing}
             title="Ajoute les contrats déjà enregistrés qui ne sont pas encore suivis"
-            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+            className="ios-phone-hide flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
           >
             <RefreshCw className={"h-3.5 w-3.5" + (syncing ? " animate-spin" : "")} />
             <span>{syncing ? "Import…" : "Importer depuis Contrats"}</span>

@@ -13,6 +13,9 @@ import { Tabs } from "@/components/ui/animated-tabs";
 import { FolderTabs } from "@/components/ui/folder-tabs";
 import { useVisitedTabs } from "@/lib/useVisitedTabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { PhoneMenu } from "@/components/ui/phone-bar";
+import { useNavActionSlot } from "@/lib/navAction";
+import { createPortal } from "react-dom";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { HelpTip } from "@/components/ui/help-tip";
 import { PlatformIcon } from "@/components/ui/platform-icon";
@@ -274,6 +277,7 @@ export function Sourcing() {
   // Mode d'emploi : seulement à la demande (bouton « Mode d'emploi » ou touche « ? »),
   // jamais tout seul : il cachait la page à la première visite.
   const [guide, setGuide] = useState(false);
+  const barSlot = useNavActionSlot(true);
   const closeGuide = () => setGuide(false);
   // « ? » rouvre le mode d'emploi (sauf pendant une saisie, ou quand la liste de « Trouver des créateurs » s'en sert pour ses raccourcis).
   useEffect(() => {
@@ -299,7 +303,10 @@ export function Sourcing() {
   return (
     <>
       <PageHeaderRow>
-        <div className="flex items-center gap-2">
+        {/* Téléphone : « Mode d'emploi » dans le « ⋯ », la jauge Meta dans la barre de titre. */}
+        <PhoneMenu items={[{ key: "guide", label: "Mode d'emploi", icon: BookOpen, onClick: () => setGuide(true) }]} />
+        {barSlot && createPortal(<MetaQuotaBadge compact />, barSlot)}
+        <div className="ios-phone-hide flex items-center gap-2">
           <button type="button" onClick={() => setGuide(true)} className="flex h-9 items-center gap-1.5 rounded-full bg-field px-3.5 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover">
             <BookOpen className="h-3.5 w-3.5" /> Mode d'emploi
           </button>

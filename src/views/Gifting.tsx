@@ -278,7 +278,7 @@ export function Gifting({ embedded = false }: { embedded?: boolean } = {}) {
       {embedded && !loading && list.length > 0 && (() => {
         const c = giftCounts(shown);
         return (
-          <StatsBento
+          <StatsBento phoneStrip
             primary={{ eyebrow: "Cadeaux reçus", value: String(c.total), caption: period ? "sur la période choisie." : "au total." }}
             bars={{ label: "Contenus attendus", value: String(c.expected), series: GIFT_STATUS.map((st) => shown.filter((g) => (g.status ?? "recu") === st.value).length) }}
             small={{ value: String(c.waiting), label: "Contenus en attente" }}

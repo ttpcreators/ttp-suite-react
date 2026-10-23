@@ -47,6 +47,7 @@ import { printHtml } from "@/lib/printPdf";
 import { docHead, pdfFileTitle, ttpLogoImg } from "@/lib/pdfDoc";
 import { notifyCreator } from "@/lib/push";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { PhoneMenu } from "@/components/ui/phone-bar";
 import { IosSheet, Overlay } from "@/components/mobile/ios-sheet";
 import { useIsPhone } from "@/lib/iosUi";
 import { CreatorPicker } from "@/components/ui/creator-picker";
@@ -1246,11 +1247,15 @@ export function Facturation() {
           {rows.length} facture{rows.length > 1 ? "s" : ""}
         </div>
         <div className="flex items-center gap-2">
-          <button type="button" onClick={openBanks} className={cn(ghostBtn, "flex items-center gap-1.5")} title="Comptes bancaires">
+          <PhoneMenu items={[
+            { key: "comptes", label: "Comptes bancaires", icon: Landmark, onClick: openBanks },
+            { key: "emetteur", label: "Émetteur", icon: Settings2, onClick: () => setIssuerDraft(issuer) },
+          ]} />
+          <button type="button" onClick={openBanks} className={cn(ghostBtn, "ios-phone-hide flex items-center gap-1.5")} title="Comptes bancaires">
             <Landmark className="h-3.5 w-3.5" />
             <span>Comptes</span>
           </button>
-          <button type="button" onClick={() => setIssuerDraft(issuer)} className={cn(ghostBtn, "flex items-center gap-1.5")} title="Informations émetteur">
+          <button type="button" onClick={() => setIssuerDraft(issuer)} className={cn(ghostBtn, "ios-phone-hide flex items-center gap-1.5")} title="Informations émetteur">
             <Settings2 className="h-3.5 w-3.5" />
             <span>Émetteur</span>
           </button>
@@ -1267,7 +1272,7 @@ export function Facturation() {
 
       {/* Synthèse (bento) */}
       {rows.length > 0 && (
-        <StatsBento
+        <StatsBento phoneStrip
           className="mb-5"
           primary={{
             eyebrow: `Encaissé · ${period ? periodName : nowY}`,

@@ -645,7 +645,7 @@ export function Debrief() {
         const sumBudget = list.reduce((s, d) => s + amountOf(d.budget), 0);
         const roiStr = sumBudget > 0 ? (sumRevenue / sumBudget).toFixed(1).replace(".", ",") + "×" : "—";
         return (
-          <StatsBento
+          <StatsBento phoneStrip
             primary={{ eyebrow: "CA généré · bilans", value: formatEuro(sumRevenue), caption: `${list.length} campagne${list.length > 1 ? "s" : ""} · budget HT ${formatEuro(sumBudget)}` }}
             bars={{ label: "CA par campagne", value: `CA : ${roasText(roiStr)}`, series: list.map((d) => amountOf(d.revenue)) }}
             small={{ value: String(list.length), label: "Campagnes" }}

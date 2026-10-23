@@ -1,6 +1,7 @@
 import type { LucideIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { useIosPhone } from "@/components/mobile/ios-sheet";
+import { PhoneStrip } from "@/components/ui/phone-bar";
 
 /**
  * Bandeau de chiffres clés, dans le langage de l'Aperçu : UN panneau bordé,
@@ -23,6 +24,8 @@ export type StatsBentoProps = {
   small: { value: string; label: string };
   accent: { value: string; label: string; icon?: LucideIcon };
   className?: string;
+  /** Téléphone : bande compacte qui défile (une ligne) au lieu de 2 × 2 (pages agence). */
+  phoneStrip?: boolean;
 };
 
 const cell = "flex min-w-0 flex-col px-4 py-4 sm:px-5 sm:py-5";
@@ -31,7 +34,7 @@ const cell = "flex min-w-0 flex-col px-4 py-4 sm:px-5 sm:py-5";
 const label = "line-clamp-2 min-h-[2lh] text-[12px] leading-snug text-muted-foreground sm:text-[13px] lg:min-h-0";
 const big = "mt-2 line-clamp-2 break-words text-[20px] font-semibold leading-tight tracking-tight sm:truncate sm:leading-none tabular-nums text-foreground sm:text-[26px]";
 
-export function StatsBento({ primary, bars, small, accent, className }: StatsBentoProps) {
+export function StatsBento({ primary, bars, small, accent, className, phoneStrip }: StatsBentoProps) {
   const finite = bars.series.filter((n) => Number.isFinite(n));
   const max = Math.max(1, ...finite);
   // Série toute à 0 : aucune barre mise en avant (sinon une barre pleine contredit le « 0 »).
@@ -47,6 +50,7 @@ export function StatsBento({ primary, bars, small, accent, className }: StatsBen
       { label: small.label, value: small.value },
       { label: accent.label, value: accent.value, icon: AccentIcon },
     ];
+    if (phoneStrip) return <PhoneStrip className={className} items={chips.map((c) => ({ label: c.label, value: c.value }))} />;
     return (
       <section className={cn("grid grid-cols-2 gap-2", className)}>
         {chips.map((c, i) => (
