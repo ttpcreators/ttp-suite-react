@@ -229,12 +229,14 @@ function headClick(onToggle: () => void) {
  * Replié : une ligne compacte (expéditeur, aperçu, date).
  */
 export function MailItem({
-  m, open, onToggle, threadId, creator, actions = [], footer, index = 0, onDownload, variant = "card",
+  m, open, onToggle, threadId, creator, actions = [], footer, extra, index = 0, onDownload, variant = "card",
 }: {
   m: MailMessage; open: boolean; onToggle: () => void; threadId?: string; creator?: string;
   /** Téléchargement personnalisé (page Mails agence) ; sinon via creator-mail. */
   onDownload?: (a: MailAttachment) => Promise<void> | void;
   actions?: MailAction[]; footer?: ReactNode; index?: number;
+  /** Sous le corps du message, avant le pied (ex. réactions emoji). */
+  extra?: ReactNode;
   /** « plain » : sans cadre, façon client mail (page Mails agence). */
   variant?: "card" | "plain";
 }) {
@@ -353,6 +355,7 @@ export function MailItem({
           </div>
         )}
 
+        {extra}
         {footer && <div className="mt-6">{footer}</div>}
       </motion.article>
     );
@@ -443,6 +446,7 @@ export function MailItem({
             ))}
           </div>
         )}
+        {extra}
       </div>
 
       {/* Pied (réponse) */}

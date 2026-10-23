@@ -128,6 +128,8 @@ export type SendParams = {
   attachments?: OutAttachment[];
   /** Transfert : le serveur joint les pièces jointes d'origine de ce message. */
   forward?: { box: MailBox; messageId: string };
+  /** Réaction emoji au message `inReplyTo` (gmail-send 2026-10-23) ; `html` est alors vide. */
+  reaction?: { emoji: string; name?: string };
 };
 
 /** Taille totale max des pièces jointes d'un envoi (18 Mo bruts, comme côté serveur). */
@@ -146,7 +148,7 @@ export function readAttachment(file: File): Promise<OutAttachment> {
     r.readAsDataURL(file);
   });
 }
-export type SendResult = { ok?: boolean; error?: string; id?: string; threadId?: string };
+export type SendResult = { ok?: boolean; error?: string; id?: string; threadId?: string; /** Écho d'une réaction envoyée (absent avec une ancienne version). */ reaction?: string };
 
 /** Délai max d'un envoi (pièces jointes comprises) avant d'abandonner l'attente. */
 const SEND_TIMEOUT_MS = 60_000;

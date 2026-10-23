@@ -16,6 +16,12 @@
 //  - threadId + inReplyTo (+ references = chaîne de Message-ID du fil) : pour threader
 //    une réponse dans le même fil (en-têtes In-Reply-To / References).
 //  - Corps HTML encodé en base64 (lignes de 76 caractères).
+//  - reaction = { emoji, name? } (2026-10-23) : RÉACTION emoji au format Gmail au message
+//    `inReplyTo` (obligatoire) ; `html` n'est PAS envoyé par l'app (une ancienne version de
+//    cette fonction répond alors `contenu_requis` au lieu d'envoyer un mail texte) ; le corps
+//    (texte + JSON de réaction + HTML de repli) est construit ici (_shared/emailReaction.ts).
+//    Pas de pièce jointe ni de transfert. Sortie : { ok, id, threadId, box, reaction: emoji }
+//    (l'écho prouve que la version déployée sait réagir).
 // Sortie : { ok, id, threadId }.
 // Erreurs : limite_gmail (429), pieces_trop_lourdes (413), google_non_connecte (401 /
 //           invalid_grant), gmail_scope_manquant (403), envoi_echoue.
@@ -25,6 +31,7 @@
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 import { boxToken, boxError, parseBox } from "../_shared/gmailBox.ts";
 import { gfetch, classifyGmail, gmailMessage, GfetchError } from "../_shared/gfetch.ts";
+import { isSingleEmoji, reactionBody, reactionFallback, reactionSubject } from "../_shared/emailReaction.ts";
 
 const GMAIL_SEND = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 const GMAIL_UPLOAD = "https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=multipart";
@@ -159,6 +166,7 @@ Deno.serve(async (req: Request) => {
     to?: string; cc?: string[] | string; bcc?: string[] | string; subject?: string; html?: string;
     threadId?: string; inReplyTo?: string; references?: string; source?: string; contactName?: string; box?: string;
     attachments?: Att[]; forward?: { box?: string; messageId?: string };
+    reaction?: { emoji?: unknown; name?: unknown };
   } = {};
   try {
     body = await req.json();
@@ -167,8 +175,12 @@ Deno.serve(async (req: Request) => {
   }
 
   const to = String(body.to ?? "").trim().toLowerCase();
-  const subject = String(body.subject ?? "").trim();
-  const html = body.html ?? "";
+  // Réaction emoji : un seul emoji, un message visé (In-Reply-To), corps construit ici.
+  const reaction = body.reaction ? (isSingleEmoji(body.reaction.emoji) ? body.reaction.emoji.trim() : "") : null;
+  if (reaction === "") return jsonRes({ error: "reaction_invalide" }, 400);
+  const reactor = String(body.reaction?.name ?? "").replace(/[\r\n<>]+/g, " ").trim().slice(0, 60);
+  const subject = reaction != null ? reactionSubject(String(body.subject ?? "")) : String(body.subject ?? "").trim();
+  const html = reaction != null ? `<p>${reactionFallback(reaction, reactor).replace(/[&<>]/g, "")}</p>` : body.html ?? "";
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return jsonRes({ error: "destinataire_invalide" }, 400);
   // Copie / copie cachée : adresses validées une par une (jamais de CR/LF ni de séparateur injecté).
   const ccList = addrList(body.cc);
@@ -177,6 +189,9 @@ Deno.serve(async (req: Request) => {
   if (ccList.length > 10 || bccList.length > 10) return jsonRes({ error: "copie_trop_longue" }, 400);
   if (!subject) return jsonRes({ error: "objet_requis" }, 400);
   if (!html.trim()) return jsonRes({ error: "contenu_requis" }, 400);
+  if (reaction != null && (!msgIds(body.inReplyTo)[0] || body.attachments?.length || body.forward)) {
+    return jsonRes({ error: "reaction_sans_message" }, 400);
+  }
 
   // Jeton de la boîte d'envoi : connexion de l'app (partnerships@) ou compte de service (talent@).
   const box = parseBox(body.box);
@@ -227,7 +242,10 @@ Deno.serve(async (req: Request) => {
   // Corps HTML en base64 (lignes de 76) : aucune ligne trop longue, accents préservés.
   const htmlB64 = b64Lines(new TextEncoder().encode(html));
   let mime: string;
-  if (attachments.length === 0) {
+  if (reaction != null) {
+    const boundary = "ttp_r_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+    mime = [...base, reactionBody(reaction, reactor, boundary)].join("\r\n");
+  } else if (attachments.length === 0) {
     mime = [...base, 'Content-Type: text/html; charset="UTF-8"', "Content-Transfer-Encoding: base64", "", htmlB64].join("\r\n");
   } else {
     // multipart/mixed : corps HTML + chaque pièce jointe (base64).
@@ -325,7 +343,7 @@ Deno.serve(async (req: Request) => {
       contact_name: body.contactName ?? null,
       direction: "out",
       subject,
-      snippet: html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180),
+      snippet: (reaction != null ? `Réaction ${reaction}` : html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).slice(0, 180),
       source: body.source ?? "manual",
       thread_id: threadId,
       gmail_message_id: id,
@@ -333,5 +351,5 @@ Deno.serve(async (req: Request) => {
     if (logError) console.error("gmail-send journal", logError.message);
   } catch { /* table absente / RLS : on ignore */ }
 
-  return jsonRes({ ok: true, id, threadId, box });
+  return jsonRes({ ok: true, id, threadId, box, ...(reaction != null ? { reaction } : {}) });
 });

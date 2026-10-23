@@ -20,12 +20,16 @@
 //   draftId invalide → 400 draft_requis. Jamais d'envoi ici : l'envoi passe par gmail-send.
 // Chaque message porte `draft: true` s'il est un brouillon (libellé DRAFT) : l'app ne
 // l'affiche pas comme un message du fil et le propose dans sa zone de réponse.
+// Réactions emoji (2026-10-23) : un message qui contient une partie de réaction Gmail valide
+// porte `reaction: "❤️"` (l'app l'affiche en pastille sous le message `inReplyTo`) ; `list: true`
+// si le message vient d'une liste de diffusion (en-tête List-Id : pas de réaction proposée).
 // ============================================================================
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 import { boxToken, boxError, parseBox } from "../_shared/gmailBox.ts";
 import { gfetch, classifyGmail, gmailMessage, charsetOf, decodeGmailBody, GfetchError } from "../_shared/gfetch.ts";
 import { isDraftId } from "../_shared/gmailDrafts.ts";
+import { parseReactionJson, REACTION_MIME } from "../_shared/emailReaction.ts";
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
@@ -69,9 +73,10 @@ const hv = (headers: Header[] | undefined, name: string) =>
   (headers ?? []).find((x) => x.name.toLowerCase() === name)?.value ?? "";
 
 /** Extrait le corps HTML et/ou texte d'un message + ses pièces jointes (parcours récursif des parts). */
-function extractBody(payload: Part | undefined, messageId: string): { html: string; text: string; attachments: Attachment[]; inline: InlineImg[] } {
+function extractBody(payload: Part | undefined, messageId: string): { html: string; text: string; attachments: Attachment[]; inline: InlineImg[]; reaction: string | null } {
   let html = "";
   let text = "";
+  let reaction: string | null = null;
   const attachments: Attachment[] = [];
   const inline: InlineImg[] = [];
   const walk = (p?: Part) => {
@@ -92,12 +97,14 @@ function extractBody(payload: Part | undefined, messageId: string): { html: stri
         mimeType: p.mimeType ?? "application/octet-stream", size: p.body.size ?? 0,
         ...(cid ? { cid } : {}),
       });
+    } else if (mime === REACTION_MIME && p.body?.data && !reaction && !disposition.startsWith("attachment")) {
+      reaction = parseReactionJson(decodeGmailBody(p.body.data, charsetOf(p.headers)));
     } else if (mime === "text/html" && p.body?.data && !html && !p.filename) html = decodeGmailBody(p.body.data, charsetOf(p.headers));
     else if (mime === "text/plain" && p.body?.data && !text && !p.filename) text = decodeGmailBody(p.body.data, charsetOf(p.headers));
     if (p.parts) for (const c of p.parts) walk(c);
   };
   walk(payload);
-  return { html, text, attachments, inline };
+  return { html, text, attachments, inline, reaction };
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -301,6 +308,8 @@ Deno.serve(async (req: Request) => {
       references: h("references"),
       replyTo: h("reply-to"),
       ...((m.labelIds ?? []).includes("DRAFT") ? { draft: true } : {}),
+      ...(ex.reaction ? { reaction: ex.reaction } : {}),
+      ...(h("list-id") ? { list: true } : {}),
     };
   }
   const messages = built.sort((a, b) => a.ts - b.ts); // ordre chronologique (conversation)
