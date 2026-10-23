@@ -44,6 +44,7 @@ import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
 import { OfflineBanner } from "@/components/mobile/offline-banner";
 import { onDeepLink, setCurrentPlace, takeDeepLink } from "@/lib/deepLink";
 import { requestIntent } from "@/lib/openIntent";
+import { collabTabRedirect } from "@/lib/collabTabs";
 import { useAppBadge, useCloseMailNotifications } from "@/lib/appBadge";
 
 // Vues chargées à la demande (code-splitting → démarrage plus léger, mobile compris).
@@ -371,7 +372,11 @@ export default function App() {
 
   // Navigue l'onglet COURANT vers `id` (comme un lien dans Chrome) : remplace la
   // page de l'onglet actif, ou bascule dessus s'il est déjà ouvert.
-  const navigateCurrentTab = useCallback((id: ViewId) => {
+  const navigateCurrentTab = useCallback((target: ViewId) => {
+    // Gifting et Pipeline vivent dans Collabs (onglets) : on y ouvre le bon onglet.
+    const r = collabTabRedirect(target);
+    if (r) requestIntent("collabs:tab", r.tab);
+    const id = (r?.view ?? target) as ViewId;
     setTabs((prev) => navigateTab(prev, activeRef.current, id) as ViewId[]);
     setActive(id);
   }, []);
@@ -546,7 +551,10 @@ export default function App() {
     setSpace("agency");
   };
   // Ouvre `id` dans un NOUVEL onglet (ou bascule dessus s'il est déjà ouvert).
-  const openInNewTab = (id: ViewId) => {
+  const openInNewTab = (target: ViewId) => {
+    const r = collabTabRedirect(target);
+    if (r) requestIntent("collabs:tab", r.tab);
+    const id = (r?.view ?? target) as ViewId;
     setTabs((prev) => addTab(prev, id) as ViewId[]);
     setActive(id);
     setSub(null);

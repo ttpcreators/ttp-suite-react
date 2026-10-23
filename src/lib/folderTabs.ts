@@ -210,6 +210,15 @@ export const FOLDER_PAGES: readonly FolderPage[] = [
     ],
   },
   {
+    id: "collabs",
+    label: "Collabs",
+    tabs: [
+      { value: "payees", label: "Payées", tone: "blue" },
+      { value: "gifting", label: "Gifting", tone: "pink" },
+      { value: "negociations", label: "Négociations", tone: "orange" },
+    ],
+  },
+  {
     id: "sourcing",
     label: "Sourcing",
     tabs: [

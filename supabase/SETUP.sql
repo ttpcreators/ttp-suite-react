@@ -783,6 +783,24 @@ alter table public.prospects add column if not exists collab_id    uuid referenc
 create index if not exists prospects_contact_idx on public.prospects (contact_id);
 create index if not exists prospects_collab_idx  on public.prospects (collab_id);
 
+-- Espace créateur › Missions › « En discussion » (sql/2026-10-23-negociations-createur.sql) :
+-- colonnes non sensibles de SES négociations, sans ouvrir la table prospects.
+create or replace function public.creator_discussions(p_creator text default null)
+returns table (id uuid, brand text, deliverables text, stage text, created_at timestamptz)
+  language sql stable security definer set search_path = public, pg_temp as $$
+  select p.id, p.brand, p.deliverables, p.stage, p.created_at
+    from public.prospects p
+   where p.collab_id is null
+     and lower(btrim(coalesce(p.creator, ''))) <> ''
+     and lower(btrim(p.creator)) = lower(btrim(
+           case when public.is_agency() then coalesce(p_creator, '') else coalesce(public.my_creator(), '') end))
+   order by p.created_at desc
+   limit 50;
+$$;
+revoke all on function public.creator_discussions(text) from public, anon;
+grant execute on function public.creator_discussions(text) to authenticated;
+
+
 -- 2) Garde : hors agence, collab_id doit être vide ou une collab du créateur connecté.
 create or replace function public.collab_link_guard() returns trigger
   language plpgsql security definer set search_path = public, pg_temp as $$

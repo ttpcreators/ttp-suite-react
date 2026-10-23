@@ -26,6 +26,10 @@ import { fmtDay, fmtDayAny } from "@/lib/dates";
 import { getCache, setCache } from "@/lib/viewCache";
 import { STEPS, STEP_COUNT, PHASES, stepDef, phaseOf, isDone, type PhaseKey } from "@/lib/collabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
+import { FolderTabs, type FolderTabItem } from "@/components/ui/folder-tabs";
+import { COLLAB_TABS, normalizeCollabTab, type CollabTab } from "@/lib/collabTabs";
+import { Gifting } from "@/views/Gifting";
+import { Prospection } from "@/views/Prospection";
 import { requestIntent, useIntent } from "@/lib/openIntent";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { fmtCompact } from "@/lib/timeSeries";
@@ -143,6 +147,9 @@ export function Collabs() {
   // Affichage : détail (liste par phase + fiche à droite, par défaut), cartes ou liste.
   // Retenu sur l'appareil.
   const [layout, changeLayout] = useStickyState("collabs:vue", ["detail", "cards", "list"] as const, "detail");
+  // Classeur : Payées (les collabs) · Gifting · Négociations (src/lib/collabTabs.ts).
+  const [onglet, setOnglet] = useStickyState<CollabTab>("collabs:onglet", COLLAB_TABS, "payees");
+  useIntent("collabs:tab", (t) => setOnglet(normalizeCollabTab(t)));
   // Collab ouverte dans l'affichage détail (retenue sur l'appareil) ; sur petit écran,
   // la fiche s'ouvre à la place de la liste.
   const [selId, setSelId] = useState<string | null>(() => {
@@ -166,10 +173,14 @@ export function Collabs() {
   // formulaire de création
   const [formOpen, setFormOpen] = useState(false);
   // « Nouvelle collab » de la palette ⌘K : ouvre le formulaire de création.
-  useIntent("collab:new", () => setFormOpen(true));
+  useIntent("collab:new", () => {
+    setOnglet("payees");
+    setFormOpen(true);
+  });
   // « Ouvrir » d'une collab bloquée (Aujourd'hui) : affichage détail, filtres levés, fiche ouverte.
   useIntent("collab:open", (id) => {
     if (!id) return;
+    setOnglet("payees");
     changeLayout("detail");
     if (statusFilter !== "__all__" && statusFilter !== "active") setStatusFilter("active");
     setPhaseFilter("__all__");
@@ -1068,14 +1079,30 @@ export function Collabs() {
 
   const activeRows = (rows ?? []).filter((r) => r.status === "active");
 
+  const folderItems: FolderTabItem[] = [
+    { value: "payees", label: "Payées" },
+    { value: "gifting", label: "Gifting" },
+    { value: "negociations", label: "Négociations" },
+  ];
+
   return (
     <div>
-      <PageHeaderRow>
-        <div className="text-sm text-muted-foreground">
-          {rows === null ? "Chargement…" : `${rows.length} collab${rows.length > 1 ? "s" : ""}`}
-        </div>
-        <AddButton label="Collab" onClick={() => setFormOpen(true)} />
-      </PageHeaderRow>
+      {/* En-tête : celui de l'onglet ouvert (Gifting et Négociations ont le leur). */}
+      {onglet === "payees" && (
+        <PageHeaderRow>
+          <div className="text-sm text-muted-foreground">
+            {rows === null ? "Chargement…" : `${rows.length} collab${rows.length > 1 ? "s" : ""}`}
+          </div>
+          <AddButton label="Collab" onClick={() => setFormOpen(true)} />
+        </PageHeaderRow>
+      )}
+      <FolderTabs label="Collabs, gifting et négociations" orderKey="collabs" items={folderItems} value={onglet} onValueChange={(v) => setOnglet(normalizeCollabTab(v))}>
+      {onglet === "gifting" ? (
+        <Gifting embedded />
+      ) : onglet === "negociations" ? (
+        <Prospection embedded />
+      ) : (
+      <>
 
       {/* Synthèse (bento) */}
       {rows !== null && rows.length > 0 && (() => {
@@ -1166,6 +1193,9 @@ export function Collabs() {
       </InlineForm>
 
       {content}
+      </>
+      )}
+      </FolderTabs>
     </div>
   );
 }

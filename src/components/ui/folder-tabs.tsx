@@ -29,16 +29,7 @@ export type FolderTabItem = {
  * changement d'onglet). `phoneTabs={false}` : sur téléphone la page affiche son propre
  * sélecteur, seul `children` est rendu.
  */
-export function FolderTabs({
-  items,
-  value,
-  onValueChange,
-  label,
-  orderKey,
-  maxTabWidth,
-  phoneTabs = true,
-  children,
-}: {
+type FolderTabsProps = {
   items: FolderTabItem[];
   value: string;
   onValueChange: (value: string) => void;
@@ -48,7 +39,35 @@ export function FolderTabs({
   maxTabWidth?: number;
   phoneTabs?: boolean;
   children: ReactNode;
-}) {
+};
+
+export function FolderTabs(props: FolderTabsProps) {
+  // Couleurs choisies par l'équipe (blob agence) : page, puis cadre de la page.
+  const custom = useFolderTones()[props.orderKey];
+  const frameColor = frameColorFor(useFolderFrames(), props.orderKey);
+  return <FolderTabsBase {...props} custom={custom} frameColor={frameColor} />;
+}
+
+/**
+ * Même classeur, sans lire les réglages de l'agence (blob agence) : couleurs par défaut
+ * de la page. Pour l'espace créateur, qui ne lit jamais le blob agence.
+ */
+export function StaticFolderTabs(props: FolderTabsProps) {
+  return <FolderTabsBase {...props} custom={undefined} frameColor={null} />;
+}
+
+function FolderTabsBase({
+  items,
+  value,
+  onValueChange,
+  label,
+  orderKey,
+  maxTabWidth,
+  phoneTabs = true,
+  children,
+  custom,
+  frameColor,
+}: FolderTabsProps & { custom: Parameters<typeof resolveTabTones>[2]; frameColor: string | null }) {
   const phone = useIsPhone();
   const storageKey = `ttp:${orderKey}-tab-order`;
   const [order, setOrder] = useState<string[]>(() => {
@@ -67,7 +86,6 @@ export function FolderTabs({
     }
   };
 
-  const custom = useFolderTones()[orderKey];
   const tones = useMemo(() => {
     const defaults: Record<string, FolderTone> = pageDefaultTones(orderKey);
     for (const it of items) if (it.tone) defaults[it.value] = it.tone;
@@ -79,7 +97,6 @@ export function FolderTabs({
   }, [items, orderKey, custom]);
   const toneOf = (v: string) => (tones[v] ? TONE_VAR[tones[v]] : undefined);
   // Couleur du cadre (Paramètres) : celle de la page, sinon celle de tous les classeurs.
-  const frameColor = frameColorFor(useFolderFrames(), orderKey);
   const frame = frameColor ? { color: frameColor, light: isLightColor(frameColor) } : null;
 
   if (phone) {
