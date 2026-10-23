@@ -206,7 +206,11 @@ Deno.serve(async (req: Request) => {
         const msgs = (d.messages ?? []).filter((m) => !(m.labelIds ?? []).includes("DRAFT"));
         if (!msgs.length) return null;
         const h = (m: typeof msgs[number], n: string) => (m.payload?.headers ?? []).find((x) => x.name.toLowerCase() === n)?.value ?? "";
-        const last = msgs[msgs.length - 1];
+        // Une réaction emoji (« Marc a réagi avec ❤️ », « … reacted via Gmail ») n'est pas un
+        // vrai message : l'extrait et le sens (« Toi : ») viennent du dernier VRAI message.
+        const isReaction = (m: typeof msgs[number]) => /^\S.{0,80}\s(a réagi avec|reacted (with|via Gmail))\b/i.test(String(m.snippet ?? "").trim());
+        const last = [...msgs].reverse().find((m) => !isReaction(m)) ?? msgs[msgs.length - 1];
+        const newest = msgs[msgs.length - 1];
         const from = h(last, "from");
         const out = fromAgency(from);
         if (isUnsubscribe(h(msgs[0], "subject"), String(t.snippet ?? ""))) return null;
@@ -226,7 +230,7 @@ Deno.serve(async (req: Request) => {
           // Extrait du MÊME dernier message que `direction` (« Toi : » + texte de la marque sinon :
           // l'extrait du fil renvoyé par Gmail ne vient pas toujours du dernier message).
           snippet: String(last.snippet ?? t.snippet ?? "").slice(0, 200),
-          ts: Number(last.internalDate ?? 0),
+          ts: Number(newest.internalDate ?? 0),
           count: msgs.length,
           direction: out ? "out" : "in",
           unread: msgs.some((m) => (m.labelIds ?? []).includes("UNREAD")),
