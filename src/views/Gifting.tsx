@@ -1,6 +1,6 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Gift, Mail, Package, CalendarClock, Pencil, Trash2, LayoutGrid, List as ListIcon, ShieldCheck, Eye, X } from "@/components/icons";
+import { Gift, Mail, Package, CalendarClock, Pencil, Trash2, LayoutGrid, List as ListIcon, ShieldCheck, Eye, X, PanelsTopLeft, ChevronLeft, Handshake } from "@/components/icons";
 import { HelpTip } from "@/components/ui/help-tip";
 import { supabase } from "@/lib/supabase";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
@@ -22,10 +22,13 @@ import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
-import { CollabField, ObjectCollabLink } from "@/components/collab-links";
-import { setCollabLink } from "@/lib/collabLinksDb";
+import { CollabField, ObjectCollabLink, useCollabLinkReady } from "@/components/collab-links";
+import { getCollabLink, openCollab, setCollabLink } from "@/lib/collabLinksDb";
+import { StatsBento } from "@/components/ui/stats-bento";
+import { BrandTile, DetailRows, MasterList } from "@/components/brand-tile";
+import { firstNameOf, giftCounts } from "@/lib/gifting";
 
-type GView = "cards" | "list";
+type GView = "detail" | "cards" | "list";
 
 /** Chip « contenu attendu / spontané ». */
 function ContentChip({ expected }: { expected: boolean | null }) {
@@ -40,12 +43,23 @@ function ContentChip({ expected }: { expected: boolean | null }) {
   );
 }
 
-export function Gifting() {
+/**
+ * `embedded` : onglet « Gifting » de la page Collabs (classeur). Affichage maître-détail par
+ * défaut, compteurs en tête ; la page Gifting autonome (anciens liens) reste identique.
+ */
+export function Gifting({ embedded = false }: { embedded?: boolean } = {}) {
   const creators = useCreators();
   const live = useLiveKey();
   const [rows, setRows] = useState<GiftRow[] | null>(() => getCache<GiftRow[]>("gifting"));
   const [error, setError] = useState(false);
-  const [view, setView] = useStickyState<GView>("gifting:vue", ["cards", "list"], "list");
+  const [view, setView] = useStickyState<GView>(
+    embedded ? "collabs:gifting-vue" : "gifting:vue",
+    embedded ? ["detail", "cards", "list"] : ["cards", "list"],
+    embedded ? "detail" : "list",
+  );
+  const [selId, setSelId] = useState<string | null>(null); // maître-détail : gifting ouvert
+  const [phoneDetail, setPhoneDetail] = useState(false);
+  const [linkKey, setLinkKey] = useState(0); // relit le lien collab après « Transformer »
   const [viewG, setViewG] = useState<GiftRow | null>(null); // fiche détail (clic sur une ligne)
 
   const [formOpen, setFormOpen] = useState(false);
@@ -252,6 +266,7 @@ export function Gifting() {
               value={view}
               onValueChange={(v) => setView(v as GView)}
               items={[
+                ...(embedded ? [{ value: "detail", label: "Détail", icon: <PanelsTopLeft className="h-4 w-4" />, hideLabel: "mobile" as const }] : []),
                 { value: "cards", label: "Cartes", icon: <LayoutGrid className="h-4 w-4" />, hideLabel: "mobile" },
                 { value: "list", label: "Liste", icon: <ListIcon className="h-4 w-4" />, hideLabel: "mobile" },
               ]}
@@ -259,6 +274,18 @@ export function Gifting() {
           )}
         </div>
       )}
+
+      {embedded && !loading && list.length > 0 && (() => {
+        const c = giftCounts(shown);
+        return (
+          <StatsBento
+            primary={{ eyebrow: "Cadeaux reçus", value: String(c.total), caption: period ? "sur la période choisie." : "au total." }}
+            bars={{ label: "Contenus attendus", value: String(c.expected), series: GIFT_STATUS.map((st) => shown.filter((g) => (g.status ?? "recu") === st.value).length) }}
+            small={{ value: String(c.waiting), label: "Contenus en attente" }}
+            accent={{ value: String(c.published), label: "Contenus publiés", icon: ShieldCheck }}
+          />
+        );
+      })()}
 
       <InlineForm
         open={formOpen}
@@ -323,6 +350,46 @@ export function Gifting() {
           <div className="text-sm font-medium text-foreground">{period ? "Aucun gifting sur cette période" : "Aucun gifting suivi"}</div>
           <div className="mt-1.5 text-xs text-faint">{period ? "Change de période ou choisis « Toutes périodes »." : "Ajoute un cadeau reçu pour tracer sa provenance et le contenu attendu."}</div>
         </div>
+      ) : view === "detail" ? (
+        (() => {
+          const sel = shown.find((g) => g.id === selId) ?? shown[0];
+          const photoOf = (name?: string | null) => (name ? creators.find((c) => c.name.toLowerCase() === name.toLowerCase())?.photo_url ?? null : null);
+          return (
+            <div className="grid items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
+              <div className={cn(phoneDetail && "max-lg:hidden")}>
+                <MasterList
+                  groups={GIFT_STATUS.map((st) => ({ key: st.value, label: st.label, items: shown.filter((g) => (g.status ?? "recu") === st.value) }))}
+                  selectedId={sel?.id}
+                  onPick={(id) => {
+                    setSelId(id);
+                    setPhoneDetail(true);
+                  }}
+                  row={(g, on) => ({
+                    tile: <BrandTile brand={g.brand || g.product || "?"} email={g.contact_email} creator={g.creator} photoUrl={photoOf(g.creator)} onAccent={on} />,
+                    title: `${g.brand || g.product || "Gifting"}${g.creator ? ` × ${firstNameOf(g.creator)}` : ""}`,
+                    sub: [g.product && g.brand ? g.product : "", g.value ?? "", fmtDayAny(g.received_on)].filter(Boolean).slice(0, 3).join(" · "),
+                  })}
+                />
+              </div>
+              {sel && (
+                <div className={cn("min-w-0", !phoneDetail && "max-lg:hidden")}>
+                  <button type="button" onClick={() => setPhoneDetail(false)} className="mb-2 flex min-h-11 items-center gap-1 text-[16px] font-medium text-primary lg:hidden">
+                    <ChevronLeft className="h-4 w-4" /> Gifting
+                  </button>
+                  <GiftPanel
+                    key={`${sel.id}:${linkKey}`}
+                    g={sel}
+                    photoUrl={photoOf(sel.creator)}
+                    onStatus={(v) => changeStatus(sel, v)}
+                    onEdit={() => startEdit(sel)}
+                    onRemove={() => void remove(sel)}
+                    onLinked={() => setLinkKey((k) => k + 1)}
+                  />
+                </div>
+              )}
+            </div>
+          );
+        })()
       ) : view === "cards" ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {shown.map((g) => (
@@ -502,5 +569,120 @@ function GiftDetail({ g, onClose, onEdit }: { g: GiftRow; onClose: () => void; o
         </div>
       </div>
     </Overlay>
+  );
+}
+
+/**
+ * Fiche d'un gifting dans le maître-détail (onglet Gifting de Collabs) : tout ce qui est
+ * saisi, statut modifiable, collab liée (ou « Relier »), « Transformer en collab ».
+ */
+function GiftPanel({ g, photoUrl, onStatus, onEdit, onRemove, onLinked }: {
+  g: GiftRow; photoUrl: string | null; onStatus: (v: string) => void; onEdit: () => void; onRemove: () => void; onLinked: () => void;
+}) {
+  const ready = useCollabLinkReady();
+  const [linked, setLinked] = useState<string | null | undefined>(undefined);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void getCollabLink("gifting", g.id).then((c) => alive && setLinked(c));
+    return () => {
+      alive = false;
+    };
+  }, [g.id]);
+  // Crée la collab (marque, créateur, livrables, cachet vide) et y relie le gifting.
+  const transform = async () => {
+    if (busy || !g.creator) return;
+    setBusy(true);
+    const { data: last } = await supabase.from("collabs").select("sort_order").order("sort_order", { ascending: false }).limit(1);
+    const order = ((last?.[0] as { sort_order?: number } | undefined)?.sort_order ?? 0) + 1;
+    const created = await dbInsert("collabs", {
+      brand: (g.brand || g.product || "Gifting").trim(),
+      creator: g.creator,
+      contact: g.contact_name || null,
+      deliverables: g.deliverables || null,
+      cachet: null,
+      step: 1,
+      status: "active",
+      sort_order: order,
+    });
+    if (!created) {
+      setBusy(false);
+      return toast("Erreur, réessaie");
+    }
+    const id = (created as { id: string }).id;
+    await setCollabLink("gifting", g.id, id);
+    setBusy(false);
+    onLinked();
+    toast("Collab créée ✓");
+    void openCollab(id);
+  };
+  const rows: [string, ReactNode][] = [
+    ["Produit", g.product || "—"],
+    ["Valeur estimée", g.value || "—"],
+    ["Reçu le", fmtDayAny(g.received_on) || "—"],
+    ["Contenu attendu", g.content_expected ? g.deliverables || "Oui" : "Aucun"],
+    ["Interlocuteur", g.contact_name || "—"],
+    ["Email", g.contact_email ? <a href={`mailto:${g.contact_email}`} className="text-primary hover:underline">{g.contact_email}</a> : "—"],
+  ];
+  const title = `${g.brand || g.product || "Gifting"}${g.creator ? ` × ${titleCase(g.creator)}` : ""}`;
+  return (
+    <div className="flex flex-col gap-4 rounded-[22px] bg-surface p-4 sm:p-5">
+      <div className="flex items-start gap-3">
+        <BrandTile brand={g.brand || g.product || "?"} email={g.contact_email} creator={g.creator} photoUrl={photoUrl} size="lg" />
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-foreground [overflow-wrap:anywhere]">{title}</h2>
+          <div className="mt-2 w-[200px] max-w-full">
+            <StatusSelect value={g.status ?? "recu"} options={GIFT_STATUS} onChange={onStatus} />
+          </div>
+        </div>
+        <ActionMenu
+          items={[
+            { key: "edit", label: "Modifier", icon: Pencil, onClick: onEdit },
+            {
+              key: "del",
+              label: "Mettre à la corbeille",
+              icon: Trash2,
+              danger: true,
+              onClick: onRemove,
+              confirm: { title: "Mettre à la corbeille", message: `Déplacer « ${g.brand || g.product || "ce gifting"} » vers la corbeille ? Tu pourras le restaurer.`, confirmLabel: "Mettre à la corbeille" },
+            },
+          ]}
+        />
+      </div>
+
+      <DetailRows rows={rows} />
+
+      {ready && (
+        <dl className="rounded-[16px] bg-panel">
+          <ObjectCollabLink table="gifting" id={g.id} creator={g.creator} asRow />
+        </dl>
+      )}
+
+      {g.mentions && (
+        <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+          <ShieldCheck className="h-4 w-4 shrink-0" /> Mention à rappeler
+          <HelpTip title="Mention à rappeler au créateur">
+            <p>{g.mentions}</p>
+          </HelpTip>
+        </div>
+      )}
+      {g.note && (
+        <div>
+          <div className="mb-1 text-[13px] font-medium text-muted-foreground">Note</div>
+          <p className="text-[14px] leading-relaxed text-foreground">{g.note}</p>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={onEdit} className="flex h-11 items-center gap-1.5 rounded-full bg-field px-4 text-[14px] font-semibold text-foreground transition-colors hover:bg-rowhover">
+          <Pencil className="h-4 w-4" /> Modifier
+        </button>
+        {ready && linked === null && g.creator && (
+          <button type="button" onClick={() => void transform()} disabled={busy} title="Crée la collab (marque, créateur, contenu attendu) et la relie à ce gifting" className="flex h-11 items-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60">
+            <Handshake className="h-4 w-4" /> Créer la collab
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

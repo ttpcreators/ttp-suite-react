@@ -12,7 +12,7 @@ import {
   SelectField,
 } from "@/components/ui/form";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { ArrowRight, Handshake, Pencil, Trash2 } from "@/components/icons";
+import { ArrowRight, Handshake, Pencil, Trash2, PanelsTopLeft, Columns3, ChevronLeft, Mail } from "@/components/icons";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
 import { useCreators } from "@/lib/useCreators";
 import { cachetOf, collabFromProspect, type Proposal } from "@/lib/prospectProposal";
@@ -20,7 +20,16 @@ import { markProspectSigned, proposalColumnsReady } from "@/lib/prospectsDb";
 import { openCollab } from "@/lib/collabLinksDb";
 import { fmtDay } from "@/lib/dates";
 import { titleCase } from "@/lib/utils";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { useStickyState } from "@/lib/useStickyState";
+import { StatsBento } from "@/components/ui/stats-bento";
+import { BrandTile, DetailRows, MasterList } from "@/components/brand-tile";
+import { Picker } from "@/components/ui/form";
+import { NewMailDialog } from "@/components/mail-tools";
+import { priceRange } from "@/lib/pricingForm";
+import { formatEuro } from "@/lib/money";
+import { firstNameOf } from "@/lib/gifting";
+import { negotiationCounts } from "@/lib/collabTabs";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { PageHeaderRow } from "@/components/ui/page-header";
@@ -66,7 +75,12 @@ const DOT_CLASS: Record<NonNullable<Row["tone"]>, string> = {
 
 const STAGE_OPTIONS = STAGE_ORDER.map((s) => ({ value: s, label: stageLabel(s) }));
 
-export function Prospection() {
+/**
+ * `embedded` : onglet « Négociations » de la page Collabs (classeur). Maître-détail par
+ * défaut (Colonnes en option), compteurs en tête, « Écrire » au contact de la marque. La page
+ * Pipeline autonome (anciens liens) reste identique.
+ */
+export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
   const [rows, setRows] = useState<Row[] | null>(() =>
     getCache<Row[]>("prospects"),
   );
@@ -81,6 +95,23 @@ export function Prospection() {
   const [value, setValue] = useState("");
   const [stage, setStage] = useState(STAGE_ORDER[0]);
   const [stageFilter, setStageFilter] = useState("Tous");
+  const [layout, setLayout] = useStickyState<"detail" | "colonnes">("collabs:nego-vue", ["detail", "colonnes"], "detail");
+  const detailMode = embedded && layout === "detail";
+  const [selId, setSelId] = useState<string | null>(null);
+  const [phoneDetail, setPhoneDetail] = useState(false);
+  const [mail, setMail] = useState<{ key: string; to: string; subject: string; body: string } | null>(null);
+  // Contacts des marques (fiche Contacts) : lien contact_id, sinon même nom de marque.
+  const [brandContacts, setBrandContacts] = useState<{ id: string; brand: string | null; person: string | null; email: string | null }[]>([]);
+  useEffect(() => {
+    if (!embedded) return;
+    let alive = true;
+    void supabase.from("contacts").select("id, brand, person, email").then(({ data }) => {
+      if (alive && data) setBrandContacts(data as typeof brandContacts);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [embedded]);
   // Chiffres Instagram de la marque (fiche contact du même nom, mis à jour par ig-sync).
   const [igByBrand] = useIgColumn<IgBrand>("contacts", "brand");
 
@@ -203,7 +234,7 @@ export function Prospection() {
           ? null
           : `${rows.length} marque${rows.length > 1 ? "s" : ""} en cours`}
       </div>
-      <AddButton label="Prospect" onClick={() => { resetForm(); setFormOpen(true); }} />
+      <AddButton label={embedded ? "Négociation" : "Prospect"} onClick={() => { resetForm(); setFormOpen(true); }} />
     </PageHeaderRow>
   );
 
@@ -224,7 +255,7 @@ export function Prospection() {
   const form = (
     <InlineForm
       open={formOpen}
-      title={editId ? "Modifier le prospect" : "Nouveau prospect"}
+      title={editId ? (embedded ? "Modifier la négociation" : "Modifier le prospect") : embedded ? "Nouvelle négociation" : "Nouveau prospect"}
       onClose={resetForm}
       onSubmit={submit}
       submitLabel={editId ? "Enregistrer" : "Ajouter"}
@@ -338,12 +369,151 @@ export function Prospection() {
     } else toast("Erreur, réessaie");
   };
 
+  const contactOf = (r: Row) => {
+    const byId = r.contact_id ? brandContacts.find((c) => c.id === r.contact_id) : undefined;
+    return byId ?? brandContacts.find((c) => (c.brand ?? "").trim().toLowerCase() === r.brand.trim().toLowerCase() && c.email);
+  };
+  const photoOf = (name?: string | null) => (name ? creators.find((c) => c.name.toLowerCase() === name.toLowerCase())?.photo_url ?? null : null);
+
+  const toolbar = embedded ? (
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+      <Tabs label="Filtrer par étape" items={stageChips.map((chip) => ({ value: chip, label: stageLabel(chip) }))} value={effStage} onValueChange={setStageFilter} />
+      <Tabs
+        size="sm"
+        label="Affichage des négociations"
+        value={layout}
+        onValueChange={(v) => setLayout(v as "detail" | "colonnes")}
+        items={[
+          { value: "detail", label: "Détail", icon: <PanelsTopLeft className="h-3.5 w-3.5" />, hideLabel: "mobile" },
+          { value: "colonnes", label: "Colonnes", icon: <Columns3 className="h-3.5 w-3.5" />, hideLabel: "mobile" },
+        ]}
+      />
+    </div>
+  ) : stageBar;
+
+  const bento = embedded ? (() => {
+    const c = negotiationCounts(rows);
+    return (
+      <StatsBento
+        className="mb-5"
+        primary={{ eyebrow: "Négociations en cours", value: String(c.open), caption: `sur ${rows.length} marque${rows.length > 1 ? "s" : ""} au total.` }}
+        bars={{ label: "En négociation", value: String(c.negotiating), series: STAGE_ORDER.map((st) => rows.filter((r) => r.stage === st).length) }}
+        small={{ value: String(c.signed), label: "Signées" }}
+        accent={{ value: c.proposed ? formatEuro(c.proposed) : "—", label: "Valeur proposée", icon: Handshake }}
+      />
+    );
+  })() : null;
+
+  if (detailMode) {
+    const sel = filtered.find((r) => r.id === selId) ?? filtered[0];
+    return (
+      <div>
+        {header}
+        {form}
+        {convertForm}
+        {bento}
+        {toolbar}
+        <div className="grid items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
+          <div className={cn(phoneDetail && "max-lg:hidden")}>
+            <MasterList
+              groups={stages.map((st) => ({ key: st, label: stageLabel(st), items: filtered.filter((r) => (r.stage ?? "Sans étape") === st) }))}
+              selectedId={sel?.id}
+              onPick={(id) => {
+                setSelId(id);
+                setPhoneDetail(true);
+              }}
+              row={(r, on) => ({
+                tile: <BrandTile brand={r.brand} email={contactOf(r)?.email} creator={r.creator} photoUrl={photoOf(r.creator)} onAccent={on} />,
+                title: `${r.brand}${r.creator ? ` × ${firstNameOf(r.creator)}` : ""}`,
+                sub: [r.deliverables ?? "", r.proposal ? priceRange(r.proposal.min, r.proposal.max, false) : r.value && r.value !== "—" ? r.value : ""].filter(Boolean).slice(0, 2).join(" · "),
+              })}
+            />
+          </div>
+          {sel && (
+            <div className={cn("min-w-0", !phoneDetail && "max-lg:hidden")}>
+              <button type="button" onClick={() => setPhoneDetail(false)} className="mb-2 flex min-h-11 items-center gap-1 text-[16px] font-medium text-primary lg:hidden">
+                <ChevronLeft className="h-4 w-4" /> Négociations
+              </button>
+              {(() => {
+                const ct = contactOf(sel);
+                const rowsInfo: [string, ReactNode][] = [
+                  ["Créateur", sel.creator ? titleCase(sel.creator) : "—"],
+                  ["Livrables", sel.deliverables || sel.proposal?.deliverables || "—"],
+                  ["Proposition", sel.proposal ? `${priceRange(sel.proposal.min, sel.proposal.max)} · cible ${formatEuro(sel.proposal.target)}` : sel.value && sel.value !== "—" ? sel.value : "—"],
+                  ["Contact", ct ? [ct.person, ct.email].filter(Boolean).join(" · ") || "—" : sel.contact || "—"],
+                  ["Proposée le", sel.proposal?.at ? fmtDay(sel.proposal.at) : "—"],
+                ];
+                return (
+                  <div className="flex flex-col gap-4 rounded-[22px] bg-surface p-4 sm:p-5">
+                    <div className="flex items-start gap-3">
+                      <BrandTile brand={sel.brand} email={ct?.email} creator={sel.creator} photoUrl={photoOf(sel.creator)} size="lg" />
+                      <div className="min-w-0 flex-1">
+                        <h2 className="text-[22px] font-bold leading-tight tracking-[-0.02em] text-foreground [overflow-wrap:anywhere]">
+                          {sel.brand}{sel.creator ? ` × ${titleCase(sel.creator)}` : ""}
+                        </h2>
+                        <div className="mt-2 w-[200px] max-w-full">
+                          <Picker
+                            ariaLabel="Étape de la négociation"
+                            size="sm"
+                            value={sel.stage ?? STAGE_ORDER[0]}
+                            onChange={(v) => void saveEdit(sel.id, { stage: v }).then((ok) => ok && toast(`Passé en « ${stageLabel(v)} » ✓`))}
+                            options={STAGE_OPTIONS}
+                          />
+                        </div>
+                      </div>
+                      <ActionMenu
+                        items={[
+                          { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(sel) },
+                          {
+                            key: "delete",
+                            label: "Supprimer",
+                            icon: Trash2,
+                            danger: true,
+                            onClick: () => removeCard(sel.id),
+                            confirm: { title: "Supprimer la négociation", message: `Supprimer « ${sel.brand} » ? Elle ira dans la Corbeille, d'où tu pourras la restaurer.` },
+                          },
+                        ]}
+                      />
+                    </div>
+                    <DetailRows rows={rowsInfo} />
+                    <div className="flex flex-wrap gap-2">
+                      {sel.collab_id ? (
+                        <button type="button" onClick={() => void openCollab(sel.collab_id as string)} className="flex h-11 items-center gap-1.5 rounded-full bg-field px-4 text-[14px] font-semibold text-foreground transition-colors hover:bg-rowhover">
+                          <Handshake className="h-4 w-4" /> Ouvrir la collab
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => startConvert(sel)} title="La marque a dit oui : crée la collab avec la proposition" className={cn("flex h-11 items-center gap-1.5 rounded-full px-4 text-[14px] font-semibold transition-opacity hover:opacity-90", sel.stage === "Négociation" || sel.stage === "Signé" ? "bg-primary text-primary-foreground" : "bg-field text-foreground")}>
+                          <Handshake className="h-4 w-4" /> Signer
+                        </button>
+                      )}
+                      {ct?.email && (
+                        <button
+                          type="button"
+                          onClick={() => setMail({ key: `nego:${sel.id}`, to: ct.email as string, subject: `${sel.brand}${sel.creator ? ` × ${titleCase(sel.creator)}` : ""}`, body: "" })}
+                          className="flex h-11 items-center gap-1.5 rounded-full bg-field px-4 text-[14px] font-semibold text-foreground transition-colors hover:bg-rowhover"
+                        >
+                          <Mail className="h-4 w-4" /> Écrire
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+        <NewMailDialog open={!!mail} floating defaultBox="partnerships" prefill={mail} onClose={() => setMail(null)} />
+      </div>
+    );
+  }
+
   return (
     <div>
       {header}
       {form}
       {convertForm}
-      {stageBar}
+      {bento}
+      {toolbar}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5 items-start">
         {stages.map((stage) => {
           const cards = filtered.filter(

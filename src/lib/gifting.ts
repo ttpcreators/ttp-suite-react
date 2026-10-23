@@ -42,3 +42,17 @@ export const GIFT_STATUS: StatusOption[] = [
 
 export const giftStatusMeta = (v: string | null | undefined): StatusOption =>
   GIFT_STATUS.find((s) => s.value === v) ?? GIFT_STATUS[0];
+
+/** Prénom lisible (« LÉNA PASQUALE » → « Léna »). */
+export function firstNameOf(name: string | null | undefined): string {
+  const w = (name ?? "").trim().split(/\s+/)[0] ?? "";
+  return w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : "";
+}
+
+/** Compteurs de l'onglet Gifting : reçus, contenus attendus, en attente, publiés. */
+export function giftCounts(list: readonly Pick<Gift, "status" | "content_expected">[]): { total: number; expected: number; waiting: number; published: number } {
+  const expected = list.filter((g) => g.content_expected).length;
+  const waiting = list.filter((g) => g.content_expected && g.status !== "publie" && g.status !== "clos" && g.status !== "refuse").length;
+  const published = list.filter((g) => g.status === "publie").length;
+  return { total: list.length, expected, waiting, published };
+}

@@ -55,6 +55,8 @@ import { TONE_TEXT, type StatusTone } from "@/lib/statusTone";
 import { useTheme } from "@/lib/theme";
 import { THEME_CHOICES, type ThemeChoice } from "@/lib/accent";
 import { CS_BAR_TABS, CS_FAVORABLE, csFavoritesShown, isMainTab, normalizeCsTab, ownerTab, parseCsFavorites, toggleCsFavorite, type CsTab } from "@/lib/creatorTabs";
+import { discussionStage, normalizeMissionTab, sortDiscussions, type CreatorDiscussion, type MissionTab } from "@/lib/collabTabs";
+import { StaticFolderTabs } from "@/components/ui/folder-tabs";
 import { hasResume, parseResume, type BriefResume } from "@/lib/briefResume";
 import { brandInitial, briefKey, buildMissions, CREATOR_STAGES, creatorStage, missionAction, missionState, type Mission, type MissionCollab } from "@/lib/creatorMissions";
 import { BriefBlocks, MissionCard, MissionStages } from "@/components/creator-missions";
@@ -414,7 +416,18 @@ export function CreatorSpace({
   // Onglet mémorisé (comme la dernière page côté agence) : un rechargement ne
   // renvoie plus systématiquement le créateur sur l'accueil. Les anciennes valeurs
   // (« briefs », « facturation », écran « Plus ») sont ramenées vers leur nouvel onglet.
-  const [tab, setTabState] = useState<Tab>(() => normalizeCsTab(lsGet("ttp:cs-tab")));
+  // Gifting vit dans Missions (onglet du classeur) : un ancien « gifting » ouvre Missions › Gifting.
+  const [tab, setTabState] = useState<Tab>(() => {
+    const n = normalizeCsTab(lsGet("ttp:cs-tab"));
+    return n === "gifting" ? "missions" : n;
+  });
+  const [missionTab, setMissionTabState] = useState<MissionTab>(() =>
+    lsGet("ttp:cs-tab") === "gifting" ? "gifting" : normalizeMissionTab(lsGet("ttp:cs-missions-tab")),
+  );
+  const setMissionTab = (v: MissionTab) => {
+    setMissionTabState(v);
+    lsSet("ttp:cs-missions-tab", v);
+  };
   // Favoris : les rubriques préférées du créateur, en tête du menu et sur l'Accueil (propres à cet appareil).
   const [favs, setFavs] = useState<CsTab[]>(() => parseCsFavorites(lsGet("ttp:cs-favoris")));
   const toggleFav = (id: CsTab) =>
@@ -429,7 +442,11 @@ export function CreatorSpace({
   // Mission ouverte (fiche) dans l'onglet Missions ; null = la liste.
   const [missionId, setMissionId] = useState<string | null>(null);
   const setTab = (next: Tab | string) => {
-    const n = normalizeCsTab(next);
+    let n = normalizeCsTab(next);
+    if (n === "gifting") {
+      setMissionTab("gifting");
+      n = "missions";
+    }
     setTabState(n);
     setMissionId(null);
     lsSet("ttp:cs-tab", n);
@@ -515,7 +532,11 @@ export function CreatorSpace({
       if (!l) return;
       // Du nouveau sur une tâche, une idée, un brief… : l'onglet, sur l'objet si possible.
       if (l.open === "cs-tab") {
-        const next = normalizeCsTab(l.tab);
+        let next = normalizeCsTab(l.tab);
+        if (next === "gifting") {
+          setMissionTab("gifting");
+          next = "missions";
+        }
         setTabState(next);
         setMissionId(null);
         lsSet("ttp:cs-tab", next);
@@ -656,6 +677,9 @@ export function CreatorSpace({
   const [infosOpen, setInfosOpen] = useState(false); // Menu : « Mes infos » repliées par défaut
   const [briefs, setBriefs] = useState<Brief[]>([]);
   const [gifts, setGifts] = useState<GiftRow[]>([]);
+  // Futures collabs qui la concernent (fonction SQL creator_discussions : marque, livrables,
+  // étape, date ; jamais les montants, le contact ni les notes). Avant le SQL : liste vide.
+  const [discussions, setDiscussions] = useState<CreatorDiscussion[] | null>(null);
   const [events, setEvents] = useState<Ev[]>([]);
   const [docs, setDocs] = useState<Doc[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -774,6 +798,10 @@ export function CreatorSpace({
         if (apply(error)) setBriefs(((data as unknown as Brief[]) ?? []).map((x) => ({ ...x, resume: parseResume(x.resume) })));
       });
     supabase.from("gifting").select(GIFT_COLS).eq("creator", name).order("sort_order", { ascending: false }).then(({ data, error }) => apply(error) && setGifts((data as GiftRow[]) ?? []));
+    void supabase.rpc("creator_discussions", { p_creator: name }).then(({ data, error }) => {
+      if (!alive) return;
+      setDiscussions(error ? [] : sortDiscussions((data as CreatorDiscussion[]) ?? []));
+    });
     supabase.from("events").select("id,date,day,time,title,type,who,description").or("deleted.is.null,deleted.eq.false").then(({ data, error }) => {
       if (!apply(error)) return;
       const rows = (data as Ev[]) ?? [];
@@ -2049,6 +2077,95 @@ export function CreatorSpace({
   // Contact de la marque : uniquement les contacts du créateur lui-même (RLS).
   const brandContact = (brand: string) => contacts.find((c) => c.brand.trim().toLowerCase() === brand.trim().toLowerCase()) ?? null;
 
+  // Gifting : onglet de Missions (classeur), et aussi rendu seul pour un ancien lien.
+  const giftingBlock = (
+            <div className="space-y-4">
+              {/* Rappel mentions — visible en haut, c'est le point clé pour le créateur */}
+              <div className="flex items-center gap-2.5 rounded-2xl bg-surface px-4 py-3 text-[15px] text-foreground shadow-sm">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1">{rich(t("Tu le montres ? Écris {a}."), { a: <b>{t("« Produit offert »")}</b> })}</span>
+                <HelpTip title={t("Pourquoi le dire")} align="end">
+                  {rich(t("Un cadeau reçu d'une marque est un partenariat\u00A0: dès que tu le montres, indique-le clairement («\u00A0{a}\u00A0» ou «\u00A0{b}\u00A0»). C'est une obligation légale (loi n°\u00A02023-451)."), {
+                    a: <b>{t("Produit offert")}</b>,
+                    b: <b>{t("Cadeau")}</b>,
+                  })}
+                </HelpTip>
+              </div>
+
+              <PageHeaderRow>
+                <div className="text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">{gifts.length}</span> {isOne(gifts.length) ? t("cadeau") : t("cadeaux")}
+                </div>
+                <AddButton navBar label={t("Signaler un cadeau")} onClick={() => setGiOpen(true)} />
+              </PageHeaderRow>
+
+              <InlineForm
+                open={giOpen}
+                title={t("Signaler un cadeau reçu")}
+                onClose={resetGiftForm}
+                onSubmit={addGift}
+                submitLabel={t("Signaler")}
+              >
+                <TextField label={t("Marque")} value={giBrand} onChange={setGiBrand} placeholder={t("ex Sézane")} className="sm:min-w-[160px] flex-1" />
+                <TextField label={t("Produit reçu")} value={giProduct} onChange={setGiProduct} placeholder={t("ex Sac + foulard")} className="sm:min-w-[180px] flex-[2]" />
+                <TextField label={t("Valeur estimée")} value={giValue} onChange={setGiValue} placeholder="≈ 220 €" className="sm:min-w-[110px] flex-1" />
+                <TextField label={t("Interlocuteur")} value={giContactName} onChange={setGiContactName} placeholder={t("ex Julie (RP)")} className="sm:min-w-[140px] flex-1" />
+                <TextField label={t("Email interlocuteur")} value={giContactEmail} onChange={setGiContactEmail} type="email" placeholder={t("julie@marque.com")} className="sm:min-w-[170px] flex-1" />
+                <TextField label={t("Date de réception")} value={giReceivedOn} onChange={setGiReceivedOn} type="date" className="sm:min-w-[150px] flex-1" />
+              </InlineForm>
+
+              {gifts.length === 0 ? (
+                <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
+                  {t("Aucun cadeau pour le moment. Signale un produit reçu pour le tracer.")}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {gifts.map((g) => (
+                    <div key={g.id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-semibold text-foreground">{g.brand || "—"}</div>
+                          {g.product && (
+                            <div className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
+                              <Package className="h-3.5 w-3.5 shrink-0 text-faint" /> <span className="truncate">{g.product}</span>
+                              {g.value && <span className="shrink-0 text-faint">· {g.value}</span>}
+                            </div>
+                          )}
+                        </div>
+                        <div className="w-full sm:w-[168px] sm:shrink-0">
+                          <StatusSelect value={g.status ?? "recu"} options={opts.gift} onChange={(v) => setGiftStatus(g.id, v)} />
+                        </div>
+                      </div>
+
+                      {g.content_expected && (
+                        <div className="mt-2.5 rounded-lg bg-foreground/[0.06] px-3 py-2 text-[12px] font-medium text-amber">
+                          {g.deliverables ? t("Contenu attendu par la marque : {items}", { items: g.deliverables }) : t("Contenu attendu par la marque")}
+                        </div>
+                      )}
+
+                      {/* Mention propre à ce cadeau seulement (la règle générale est en haut, derrière « ? ») */}
+                      {g.mentions && g.mentions.trim() && g.mentions !== DEFAULT_MENTIONS && (
+                        <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-field px-3 py-2 text-[13px] leading-snug text-foreground">
+                          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <span>{g.mentions}</span>
+                        </div>
+                      )}
+
+                      {g.contact_email && (
+                        <a href={`mailto:${g.contact_email}`} className="mt-2.5 flex items-center gap-1.5 text-[12px] text-primary hover:underline">
+                          <Mail className="h-3.5 w-3.5 shrink-0" />
+                          {g.contact_name ? `${g.contact_name} · ` : ""}{g.contact_email}
+                        </a>
+                      )}
+                      {g.received_on && <div className="mt-1.5 text-[13px] text-muted-foreground">{t("Reçu le {date}", { date: fmtDay(g.received_on, locale) })}</div>}
+                      {g.note && <p className="mt-2 text-[12px] leading-relaxed text-faint">{g.note}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+  );
+
   return (
     <LangProvider lang={lang}>
     {/* Retour au toucher (espace créateur) : chaque bouton s'enfonce un instant, 200 ms, ease-out. */}
@@ -3067,7 +3184,42 @@ export function CreatorSpace({
 
           {/* Missions : collabs (étape sur 11) + briefs, en liste ; un tap ouvre la fiche */}
           {tab === "missions" && !openMission && (
-            !(ready.collabs && ready.briefs) ? (
+            <StaticFolderTabs
+              label={t("Missions, gifting et discussions")}
+              orderKey="cs-missions"
+              items={[
+                { value: "missions", label: t("Missions"), count: missions.filter((m) => !m.done).length, tone: "blue" },
+                { value: "gifting", label: t("Gifting"), count: gifts.length, tone: "pink" },
+                { value: "discussions", label: t("En discussion"), count: discussions?.length ?? 0, tone: "orange" },
+              ]}
+              value={missionTab}
+              onValueChange={(v) => setMissionTab(normalizeMissionTab(v))}
+            >
+            {missionTab === "gifting" ? giftingBlock : missionTab === "discussions" ? (
+              discussions === null ? (
+                <SkeletonList count={2} label={t("Chargement")} />
+              ) : discussions.length === 0 ? (
+                <div className="rounded-[20px] border border-border bg-surface px-6 py-10 text-center shadow-sm">
+                  <div className="text-[16px] font-semibold text-foreground">{t("Rien en discussion pour l'instant.")}</div>
+                  <p className="mt-1 text-[15px] text-muted-foreground">{t("Ton agence te prévient dès qu'une marque s'intéresse.")}</p>
+                </div>
+              ) : (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {discussions.map((d) => (
+                    <div key={d.id} className="flex items-start gap-3 rounded-[20px] bg-surface p-4 shadow-sm">
+                      <IconTile tone="info"><span className="text-[17px] font-bold">{(d.brand.trim()[0] ?? "?").toUpperCase()}</span></IconTile>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[16px] font-semibold text-foreground" title={d.brand}>{d.brand}</div>
+                        <div className="mt-0.5 truncate text-[14px] text-muted-foreground">
+                          {[d.deliverables ?? "", d.created_at ? fmtDay(d.created_at, locale) : ""].filter(Boolean).join(" · ") || t("Détails à venir")}
+                        </div>
+                      </div>
+                      <StatusPill tone={d.stage === "Signé" ? "ok" : d.stage === "Négociation" ? "progress" : "closed"} size="xs">{t(discussionStage(d.stage))}</StatusPill>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : !(ready.collabs && ready.briefs) ? (
               <SkeletonList count={3} action label={t("Chargement de tes missions")} />
             ) : missions.length === 0 ? (
               <div className="rounded-[20px] border border-border bg-surface px-6 py-10 text-center shadow-sm">
@@ -3110,7 +3262,8 @@ export function CreatorSpace({
                   </section>
                 ))}
               </div>
-            )
+            )}
+            </StaticFolderTabs>
           )}
 
           {/* Fiche mission : la collab vue par le créateur (phases, échéance, brief, script, étapes, contact) */}
@@ -3304,93 +3457,7 @@ export function CreatorSpace({
             );
           })()}
 
-          {tab === "gifting" && (
-            <div className="space-y-4">
-              {/* Rappel mentions — visible en haut, c'est le point clé pour le créateur */}
-              <div className="flex items-center gap-2.5 rounded-2xl bg-surface px-4 py-3 text-[15px] text-foreground shadow-sm">
-                <ShieldCheck className="h-4 w-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1">{rich(t("Tu le montres ? Écris {a}."), { a: <b>{t("« Produit offert »")}</b> })}</span>
-                <HelpTip title={t("Pourquoi le dire")} align="end">
-                  {rich(t("Un cadeau reçu d'une marque est un partenariat\u00A0: dès que tu le montres, indique-le clairement («\u00A0{a}\u00A0» ou «\u00A0{b}\u00A0»). C'est une obligation légale (loi n°\u00A02023-451)."), {
-                    a: <b>{t("Produit offert")}</b>,
-                    b: <b>{t("Cadeau")}</b>,
-                  })}
-                </HelpTip>
-              </div>
-
-              <PageHeaderRow>
-                <div className="text-xs text-muted-foreground">
-                  <span className="font-semibold text-foreground">{gifts.length}</span> {isOne(gifts.length) ? t("cadeau") : t("cadeaux")}
-                </div>
-                <AddButton navBar label={t("Signaler un cadeau")} onClick={() => setGiOpen(true)} />
-              </PageHeaderRow>
-
-              <InlineForm
-                open={giOpen}
-                title={t("Signaler un cadeau reçu")}
-                onClose={resetGiftForm}
-                onSubmit={addGift}
-                submitLabel={t("Signaler")}
-              >
-                <TextField label={t("Marque")} value={giBrand} onChange={setGiBrand} placeholder={t("ex Sézane")} className="sm:min-w-[160px] flex-1" />
-                <TextField label={t("Produit reçu")} value={giProduct} onChange={setGiProduct} placeholder={t("ex Sac + foulard")} className="sm:min-w-[180px] flex-[2]" />
-                <TextField label={t("Valeur estimée")} value={giValue} onChange={setGiValue} placeholder="≈ 220 €" className="sm:min-w-[110px] flex-1" />
-                <TextField label={t("Interlocuteur")} value={giContactName} onChange={setGiContactName} placeholder={t("ex Julie (RP)")} className="sm:min-w-[140px] flex-1" />
-                <TextField label={t("Email interlocuteur")} value={giContactEmail} onChange={setGiContactEmail} type="email" placeholder={t("julie@marque.com")} className="sm:min-w-[170px] flex-1" />
-                <TextField label={t("Date de réception")} value={giReceivedOn} onChange={setGiReceivedOn} type="date" className="sm:min-w-[150px] flex-1" />
-              </InlineForm>
-
-              {gifts.length === 0 ? (
-                <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground">
-                  {t("Aucun cadeau pour le moment. Signale un produit reçu pour le tracer.")}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {gifts.map((g) => (
-                    <div key={g.id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
-                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:gap-3">
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-sm font-semibold text-foreground">{g.brand || "—"}</div>
-                          {g.product && (
-                            <div className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
-                              <Package className="h-3.5 w-3.5 shrink-0 text-faint" /> <span className="truncate">{g.product}</span>
-                              {g.value && <span className="shrink-0 text-faint">· {g.value}</span>}
-                            </div>
-                          )}
-                        </div>
-                        <div className="w-full sm:w-[168px] sm:shrink-0">
-                          <StatusSelect value={g.status ?? "recu"} options={opts.gift} onChange={(v) => setGiftStatus(g.id, v)} />
-                        </div>
-                      </div>
-
-                      {g.content_expected && (
-                        <div className="mt-2.5 rounded-lg bg-foreground/[0.06] px-3 py-2 text-[12px] font-medium text-amber">
-                          {g.deliverables ? t("Contenu attendu par la marque : {items}", { items: g.deliverables }) : t("Contenu attendu par la marque")}
-                        </div>
-                      )}
-
-                      {/* Mention propre à ce cadeau seulement (la règle générale est en haut, derrière « ? ») */}
-                      {g.mentions && g.mentions.trim() && g.mentions !== DEFAULT_MENTIONS && (
-                        <div className="mt-2.5 flex items-start gap-1.5 rounded-lg bg-field px-3 py-2 text-[13px] leading-snug text-foreground">
-                          <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                          <span>{g.mentions}</span>
-                        </div>
-                      )}
-
-                      {g.contact_email && (
-                        <a href={`mailto:${g.contact_email}`} className="mt-2.5 flex items-center gap-1.5 text-[12px] text-primary hover:underline">
-                          <Mail className="h-3.5 w-3.5 shrink-0" />
-                          {g.contact_name ? `${g.contact_name} · ` : ""}{g.contact_email}
-                        </a>
-                      )}
-                      {g.received_on && <div className="mt-1.5 text-[13px] text-muted-foreground">{t("Reçu le {date}", { date: fmtDay(g.received_on, locale) })}</div>}
-                      {g.note && <p className="mt-2 text-[12px] leading-relaxed text-faint">{g.note}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          {tab === "gifting" && giftingBlock}
 
           {/* Planning — même calendrier que l'espace agence */}
           {tab === "planning" && (
