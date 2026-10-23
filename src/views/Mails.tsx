@@ -5,7 +5,7 @@ import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import { ExpandableActionBar } from "@/components/ui/expandable-action-bar";
 import { Loader, Spin } from "@/components/ui/loader";
 import { Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, PenLine, Reply, Forward, Settings2, RefreshCw, Send, Copy, MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X, Plus, FilePen, Smartphone, type LucideIcon } from "@/components/icons";
-import { ConfirmDialog } from "@/components/ui/action-menu";
+import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import {
   deleteGmailDraft, draftBodyText, draftDeleteErrText, gmailDraftLocalKey, isReplyDraft, parseDraftsRes, parseReplyDraftKey, seedReplyDraft,
   type GmailDraftRow, type ReplyDraft,
@@ -2588,7 +2588,38 @@ export function Mails() {
   );
   const threadReader = thread && tgt && (
     <section className="flex min-h-0 min-w-0 flex-col" aria-label="Lecture du mail">
-      <div className="@container sticky top-0 z-20 flex h-14 shrink-0 items-center gap-0.5 border-b border-border bg-surface px-2 max-md:top-[calc(2.75rem+env(safe-area-inset-top))] sm:px-3 lg:static">
+      {/* Téléphone : « ‹ Mails », précédent / suivant et « ⋯ » (toutes les actions du fil). */}
+      <div className="ios-bar sticky top-[calc(2.75rem+env(safe-area-inset-top))] z-20 flex h-12 shrink-0 items-center gap-0.5 px-1 md:hidden">
+        <button type="button" onClick={closeThread} className="flex h-11 items-center gap-0.5 pr-2 text-[17px] text-primary">
+          <ChevronLeft className="h-6 w-6" /> Mails
+        </button>
+        <span className="min-w-0 flex-1" />
+        {navIdx >= 0 && navList.length > 1 && (
+          <>
+            <button type="button" aria-label="Mail précédent" disabled={navIdx <= 0} onClick={() => openThread(navList[navIdx - 1])}
+              className="grid h-11 w-11 place-items-center rounded-full text-primary disabled:text-faint">
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <button type="button" aria-label="Mail suivant" disabled={navIdx >= navList.length - 1} onClick={() => openThread(navList[navIdx + 1])}
+              className="grid h-11 w-11 place-items-center rounded-full text-primary disabled:text-faint">
+              <ChevronRight className="h-5 w-5" />
+            </button>
+          </>
+        )}
+        <ActionMenu
+          buttonClassName="h-11 w-11 text-primary"
+          items={[
+            { key: "reply", label: "Répondre", icon: Reply, onClick: () => focusReply("reply") },
+            { key: "forward", label: "Transférer", icon: Forward, onClick: forwardLast },
+            { key: "archive", label: "Archiver", icon: Archive, onClick: () => archive(tgt) },
+            { key: "unread", label: "Marquer non lu", icon: Mail, onClick: () => void setRead(tgt, true) },
+            { key: "copy", label: "Copier le fil pour Claude", icon: Copy, onClick: () => void copyThread() },
+            ...(threadCreator ? [{ key: "creator", label: `Ce que voit ${firstName(threadCreator.creator)}`, icon: MessageSquareText, onClick: openThreadCreator }] : []),
+            { key: "trash", label: "Corbeille", icon: Trash2, danger: true, onClick: () => trash(tgt) },
+          ]}
+        />
+      </div>
+      <div className="@container sticky top-0 z-20 flex h-14 shrink-0 items-center gap-0.5 border-b border-border bg-surface px-2 max-md:hidden sm:px-3 lg:static">
         <ToolButton icon={ArrowLeft} label={selected ? "Retour aux échanges" : "Retour à la liste"} shortcut="Échap" tipSide="bottom-start" onClick={closeThread} />
         {/* Ordinateur : barre extensible (icônes, noms au survol). Téléphone : boutons simples. */}
         <ExpandableActionBar
@@ -2602,34 +2633,29 @@ export function Mails() {
             ...(threadCreator ? [{ id: "creator", label: `Ce que voit ${firstName(threadCreator.creator)}`, icon: <MessageSquareText className="h-full w-full" />, onClick: openThreadCreator }] : []),
           ]}
         />
-        <span className="contents md:hidden">
-          <ToolButton icon={Trash2} label="Corbeille" text="Corbeille" shortcut="#" danger onClick={() => trash(tgt)} />
-          <ToolButton icon={Mail} label="Marquer non lu" text="Non lu" shortcut="⇧U" onClick={() => void setRead(tgt, true)} />
-          {threadCreator && (
-            <ToolButton icon={MessageSquareText} label={`Statut et remarques que ${firstName(threadCreator.creator)} voit`} tipSide="bottom" onClick={openThreadCreator} />
-          )}
-        </span>
         <div className="flex min-w-0 flex-1 items-center justify-center gap-0.5 max-md:invisible">{navBtns}</div>
         <ToolButton icon={Copy} label="Copier le fil pour Claude" text="Copier le fil" shortcut="c" tipSide="bottom" disabled={!loaded} onClick={() => void copyThread()} />
         <ToolButton icon={Reply} label="Répondre" text="Répondre" shortcut="r" className="max-md:hidden" disabled={!loaded} onClick={() => focusReply("reply")} />
         <ToolButton icon={Forward} label="Transférer" text="Transférer" shortcut="f" tipSide="bottom-end" disabled={!loaded} onClick={forwardLast} />
       </div>
 
-      <div className="@container min-h-0 flex-1 overflow-y-auto">
-        <div className={cn("mx-auto w-full px-4 pb-6 pt-4 max-md:pb-40 sm:px-8", threadCollabs.length ? "max-w-[1140px]" : "max-w-[860px]")}>
+      <div className="@container min-h-0 flex-1 overflow-y-auto bg-panel">
+        <div className={cn("mx-auto w-full px-4 pb-6 pt-4 max-md:pb-40 sm:px-6", threadCollabs.length ? "max-w-[1140px]" : "max-w-[860px]")}>
           {/* Grand lecteur : encart « Collab liée » à droite ; sinon en haut du mail. */}
           <div className={cn(threadCollabs.length > 0 && "@3xl:grid @3xl:grid-cols-[minmax(0,1fr)_248px] @3xl:items-start @3xl:gap-8")}>
             <div className="min-w-0">
-              <h1 className="text-[19px] font-semibold leading-snug tracking-tight text-foreground [overflow-wrap:anywhere] [text-wrap:balance] sm:text-[24px]">
-                {thread.subject || "(sans objet)"}
-              </h1>
-              <p className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
-                <BoxChip box={thread.box} className="text-[10px]" />
-                <span className="min-w-0 truncate">
-                  {listName}
-                  {threadMsgs ? ` · ${threadMsgs.length} message${threadMsgs.length > 1 ? "s" : ""}` : ""}
-                </span>
-              </p>
+              {/* En-tête : qui (logo + nom en grand), l'objet dessous, puis une ligne de méta. */}
+              <div className="flex items-start gap-3">
+                <Initial name={listName || thread.contact} email={thread.contact} size="lg" />
+                <div className="min-w-0 flex-1">
+                  <h1 className="truncate text-[22px] font-bold leading-tight tracking-[-0.02em] text-foreground">{listName || thread.contact}</h1>
+                  <p className="mt-0.5 text-[15px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{thread.subject || "(sans objet)"}</p>
+                  <p className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
+                    <BoxChip box={thread.box} className="text-[10px]" />
+                    {threadMsgs && <span>{threadMsgs.length} message{threadMsgs.length > 1 ? "s" : ""}</span>}
+                  </p>
+                </div>
+              </div>
               <LinkedCollabCard collabs={threadCollabs} photoOf={photoOf} onOpen={openCollab} className="mt-3 @3xl:hidden" />
               {threadErr ? (
                 <ErrorCard
@@ -2642,21 +2668,20 @@ export function Mails() {
               ) : readerMsgs.length === 0 ? (
                 <ErrorCard text="Ce fil est vide (mail supprimé ?)." onRetry={retryThread} />
               ) : (
-                <div className="mt-2 flex flex-col divide-y divide-border">
+                <div className="mt-4 flex flex-col gap-2.5">
                   {/* Fil long (maquette) : les anciens messages repliés derrière un bouton en haut. */}
                   {many && (
                     <button type="button" onClick={() => setShowAllMsgs(true)}
-                      className="mb-2 h-10 w-full rounded-xl border border-border bg-surface text-[12.5px] font-medium text-muted-foreground shadow-sm shadow-black/[0.02] transition-colors hover:bg-rowhover hover:text-foreground">
+                      className="h-11 w-full rounded-2xl bg-surface text-[14px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                       Charger {readerMsgs.length - 2 > 1 ? `les ${readerMsgs.length - 2} messages précédents` : "le message précédent"}
                     </button>
                   )}
                   {readerMsgs.map((m, i) => {
                     if (many && i < readerMsgs.length - 2) return null;
-                    const last = i === readerMsgs.length - 1;
                     return (
                       <div key={m.id} className="flex flex-col">
                         <MailItem
-                          variant="plain"
+                          variant="conversation"
                           m={m}
                           index={i}
                           onDownload={downloadAgencyAttachment}
@@ -2680,21 +2705,12 @@ export function Mails() {
                               />
                             );
                           })()}
-                          footer={last ? (
-                            <>
-                            {/* Actions rapides (maquette), sous le dernier message : ordinateur. */}
-                            <div className="-mt-2 mb-4 hidden justify-end gap-2 md:flex">
-                              {[
-                                { icon: Copy, label: "Copier le fil pour Claude (c)", on: () => void copyThread() },
-                                { icon: Forward, label: "Transférer (f)", on: forwardLast },
-                                { icon: Reply, label: "Répondre (r)", on: () => focusReply("reply") },
-                              ].map((b) => (
-                                <button key={b.label} type="button" onClick={b.on} title={b.label} aria-label={b.label}
-                                  className="grid h-10 w-10 place-items-center rounded-xl bg-surface text-muted-foreground shadow-[0_4px_14px_-4px_rgba(15,23,42,0.2)] ring-1 ring-border/70 transition-colors hover:text-foreground">
-                                  <b.icon className="h-4 w-4" />
-                                </button>
-                              ))}
-                            </div>
+                        />
+                      </div>
+                    );
+                  })}
+                  {/* Réponse : sous la conversation, dans sa propre carte. */}
+                  <div className="mt-2">
                             {gmailDraftWaiting && threadGmailDraft && (
                               <div role="status" className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/50 px-3.5 py-2 text-[12.5px] text-muted-foreground">
                                 <FilePen className="h-3.5 w-3.5 shrink-0" />
@@ -2729,12 +2745,7 @@ export function Mails() {
                                 prenom: replyName && !replyName.includes("@") ? replyName.split(" ")[0] : null,
                               }}
                             />
-                            </>
-                          ) : undefined}
-                        />
-                      </div>
-                    );
-                  })}
+                  </div>
                 </div>
               )}
             </div>
@@ -2743,31 +2754,18 @@ export function Mails() {
         </div>
       </div>
 
-      {/* Téléphone : actions principales en pilule flottante, AU-DESSUS de la barre d'onglets
-          (62 px + sa marge basse), comme elle (avant : glissée dessous, à moitié cachée). */}
-      <div className="ios-chrome ios-bar fixed inset-x-4 bottom-[calc(62px+max(0.75rem,env(safe-area-inset-bottom))+0.5rem)] z-40 flex h-12 items-center gap-1 rounded-full px-1.5 shadow-[0_8px_24px_-12px_rgba(15,23,42,0.35)] ring-1 ring-border/60 md:hidden">
+      {/* Téléphone : champ « Répondre… » collé en bas, AU-DESSUS de la barre d'onglets ; il amène
+          à la zone de réponse complète (signature, Cc/Cci, pièces jointes, modèles, Claude). */}
+      <div className="fixed inset-x-4 bottom-[calc(62px+max(0.75rem,env(safe-area-inset-bottom))+0.5rem)] z-40 flex items-center gap-2 md:hidden">
         <button type="button" onClick={() => focusReply("reply")} disabled={!loaded}
-          className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[13px] font-semibold text-primary-foreground disabled:opacity-40">
-          <Reply className="h-4 w-4" /> Répondre
+          className="ios-bar flex h-12 min-w-0 flex-1 items-center gap-2 rounded-full px-4 text-left text-[16px] text-muted-foreground shadow-[0_8px_24px_-12px_rgba(15,23,42,0.35)] ring-1 ring-border/60 disabled:opacity-50">
+          <Reply className="h-4 w-4 shrink-0" />
+          <span className="min-w-0 truncate">{replyName && !replyName.includes("@") ? `Répondre à ${replyName.split(" ")[0]}…` : "Répondre…"}</span>
         </button>
-        <button type="button" onClick={() => archive(tgt)}
-          className="flex h-9 items-center gap-1.5 rounded-full px-3 text-[13px] font-medium text-foreground">
-          <Archive className="h-4 w-4" /> Archiver
+        <button type="button" onClick={forwardLast} disabled={!loaded} aria-label="Transférer"
+          className="ios-bar grid h-12 w-12 shrink-0 place-items-center rounded-full text-foreground shadow-[0_8px_24px_-12px_rgba(15,23,42,0.35)] ring-1 ring-border/60 disabled:opacity-50">
+          <Forward className="h-5 w-5" />
         </button>
-        <span className="flex-1" />
-        {navIdx >= 0 && navList.length > 1 && (
-          <>
-            <button type="button" aria-label="Mail précédent" disabled={navIdx <= 0} onClick={() => openThread(navList[navIdx - 1])}
-              className="grid h-9 w-9 place-items-center rounded-full text-foreground disabled:opacity-30">
-              <ChevronLeft className="h-5 w-5" />
-            </button>
-            <span className="text-[12px] tabular-nums text-muted-foreground">{navIdx + 1}/{navList.length}</span>
-            <button type="button" aria-label="Mail suivant" disabled={navIdx >= navList.length - 1} onClick={() => openThread(navList[navIdx + 1])}
-              className="grid h-9 w-9 place-items-center rounded-full text-foreground disabled:opacity-30">
-              <ChevronRight className="h-5 w-5" />
-            </button>
-          </>
-        )}
       </div>
     </section>
   );
@@ -2971,6 +2969,8 @@ export function Mails() {
         style={fillH ? { height: fillH } : undefined}
         className={cn(
           "flex min-w-0 flex-col overflow-clip rounded-2xl border border-border bg-surface lg:grid lg:min-h-[560px] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden",
+          // Téléphone : une discussion ouverte occupe tout l'écran, sans cadre (façon app Mail).
+          thread && "max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent",
           mode === "creators"
             ? "lg:grid-cols-[72px_minmax(0,1fr)] xl:grid-cols-[208px_minmax(0,1fr)]"
             : "lg:grid-cols-[72px_minmax(320px,360px)_minmax(0,1fr)] xl:grid-cols-[208px_minmax(300px,360px)_minmax(0,1fr)] 2xl:grid-cols-[220px_minmax(330px,400px)_minmax(0,1fr)]",
