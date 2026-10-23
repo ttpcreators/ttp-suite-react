@@ -99,9 +99,28 @@ export function makePayload(p: PayloadInput, opts: { capitalize?: boolean } = {}
 export type MailBoxName = "partnerships" | "talent";
 const THREAD_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
-/** « /?open=mails&thread=…&box=… » (agence) ou « /?open=cs-mails&thread=… » (créateur). */
-export function deepLinkUrl(l: { open: "mails"; thread?: string; box?: MailBoxName } | { open: "cs-mails"; thread?: string }): string {
+const PAGE_RE = /^[a-z][a-z-]{1,24}$/;
+
+/**
+ * « /?open=mails&thread=…&box=… » (agence), « /?open=cs-mails&thread=… » (créateur),
+ * « /?open=view&view=<page>&item=<id> » (page agence), « /?open=cs-tab&tab=<onglet>&item=<id> »
+ * (onglet créateur). Une page ou un onglet invalide renvoie « / ».
+ */
+export function deepLinkUrl(
+  l:
+    | { open: "mails"; thread?: string; box?: MailBoxName }
+    | { open: "cs-mails"; thread?: string }
+    | { open: "view"; view: string; item?: string }
+    | { open: "cs-tab"; tab: string; item?: string },
+): string {
   const q = new URLSearchParams({ open: l.open });
+  if (l.open === "view" || l.open === "cs-tab") {
+    const page = l.open === "view" ? l.view : l.tab;
+    if (!PAGE_RE.test(page)) return "/";
+    q.set(l.open === "view" ? "view" : "tab", page);
+    if (l.item && THREAD_RE.test(l.item)) q.set("item", l.item);
+    return `/?${q.toString()}`;
+  }
   if (l.thread && THREAD_RE.test(l.thread)) q.set("thread", l.thread);
   if (l.open === "mails" && l.thread && l.box) q.set("box", l.box);
   return `/?${q.toString()}`;

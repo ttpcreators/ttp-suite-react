@@ -24,6 +24,9 @@ export const NOTIF_TEXTS_CREATOR: NotifTextField[] = [
   { key: "c_invoice", label: "Facture", def: "Facture mise à jour" },
   { key: "c_roadmap", label: "Feuille de route", def: "Feuille de route mise à jour" },
   { key: "c_mail", label: "Statut d'un échange mail", def: "Un échange a changé de statut" },
+  { key: "c_task_update", label: "Du nouveau sur une tâche", def: "Du nouveau sur une tâche" },
+  { key: "c_idea_update", label: "Du nouveau sur une idée", def: "Du nouveau sur une idée" },
+  { key: "c_brief_update", label: "Brief mis à jour", def: "Ton brief a été mis à jour" },
 ];
 
 /** Notifs reçues par l'AGENCE (quand un créateur agit), PAR type d'action.
@@ -36,6 +39,9 @@ export const NOTIF_TEXTS_AGENCY: NotifTextField[] = [
   { key: "a_gift", label: "Créateur — cadeau / dotation", def: "{createur} · cadeau reçu" },
   { key: "a_facture", label: "Créateur dépose une facture", def: "{createur} · facture déposée" },
   { key: "a_contenu", label: "Créateur envoie un contenu", def: "{createur} · contenu envoyé" },
+  { key: "a_task_update", label: "Créateur écrit sur une tâche", def: "{createur} · du nouveau sur une tâche" },
+  { key: "a_idea_update", label: "Créateur écrit sur une idée", def: "{createur} · du nouveau sur une idée" },
+  { key: "a_brief_update", label: "Créateur modifie un brief", def: "{createur} · du nouveau sur un brief" },
   { key: "a_stats", label: "Créateur envoie ses stats", def: "{createur} · stats envoyées" },
   { key: "a_mail", label: "Créateur : avis ou message sur un mail", def: "{createur} · message sur un mail" },
 ];

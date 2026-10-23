@@ -26,6 +26,7 @@ import {
   type MailThreadLite, type MailSettings, prospectStats } from "@/lib/creatorMail";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
 import { BarButton, RailButton, SearchField, ToolButton, UnreadToggle, mailCardBtnCls, mailCardCls, mailCardListCls, pillCls } from "@/components/mail-shell";
+import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { useLocale, useT, type Vars } from "@/lib/i18n";
 
@@ -439,6 +440,11 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   // Date du dernier message (liste) quand l'échange ouvert a été lu : relu seulement s'il a bougé.
   const fetchedTs = useRef(new Map<string, number>());
   const unseen = useUnseenMail(creator, mode === "creator");
+  // Repères « nouveau » : remarque ou statut posé de l'autre côté sur un échange (activity_events).
+  const activity = useActivityEvents(mode === "agency" ? "agency" : "creator", mode !== "preview");
+  useEffect(() => {
+    if (openId && mode !== "preview") void markActivityRead("mail", openId);
+  }, [openId, mode]);
   const [query, setQuery] = useState(""); // recherche dans la liste (marque, objet, extrait)
   // « Non lus » (créateur) : échanges pas encore vus, plus ceux qui l'étaient à l'activation.
   const [unreadOnly, setUnreadOnly] = useState<Set<string> | null>(null);
@@ -1122,7 +1128,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           <ul className={mailCardListCls}>
             {shown.map((th) => {
               const on = openId === th.id;
-              const fresh = unseen.has(th.id);
+              const fresh = unseen.has(th.id) || activity.keys.has(`mail:${th.id}`);
               return (
                 <li key={th.id} className={mailCardCls(on)}>
                   <button type="button" aria-current={on || undefined} onClick={() => openFromList(th.id)} className={mailCardBtnCls}>

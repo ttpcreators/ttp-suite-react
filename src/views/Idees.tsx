@@ -15,7 +15,9 @@ import {
 import { ActionMenu } from "@/components/ui/action-menu";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { useCreators } from "@/lib/useCreators";
-import { notifyCreator } from "@/lib/push";
+import { notifyCreator, notifyCreatorsChange } from "@/lib/push";
+import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
+import { NewDot } from "@/components/ui/new-dot";
 import { Trash2, MessageSquarePlus, Check, X, Pencil, UserRound, Sparkles } from "@/components/icons";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
@@ -58,6 +60,8 @@ const ALL_STATUS = "__all__";
 
 export function Idees() {
   const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("ideas"));
+  // Repères « nouveau » : idées sur lesquelles un créateur a écrit (activity_events).
+  const activity = useActivityEvents("agency");
   const [error, setError] = useState<boolean>(false);
   const live = useLiveKey();
 
@@ -176,8 +180,11 @@ export function Idees() {
     setRows(next);
     setCache("ideas", next);
     setEditId(null);
-    if (await dbUpdate("ideas", id, { text: t })) toast("Idée modifiée ✓");
-    else {
+    if (await dbUpdate("ideas", id, { text: t })) {
+      toast("Idée modifiée ✓");
+      const c = (prev ?? []).find((r) => r.id === id)?.creator;
+      if (c) notifyCreatorsChange("idea", [c], "text", t, id);
+    } else {
       // Échec : retour à l'ancien texte, et le champ d'édition se rouvre.
       setRows(prev);
       if (prev) setCache("ideas", prev);
@@ -219,8 +226,13 @@ export function Idees() {
       setCache("ideas", next);
     };
     apply((r) => ({ ...r, subtasks }));
+    // Une sous-tâche AJOUTÉE (pas une coche) : le créateur de l'idée est prévenu.
+    const added = subtasks.length > (back?.length ?? 0);
     const run = async () => {
-      if (await dbUpdate("ideas", id, { subtasks })) return true;
+      if (await dbUpdate("ideas", id, { subtasks })) {
+        if (added && cur.creator) notifyCreatorsChange("idea", [cur.creator], "subtask", cur.text, id);
+        return true;
+      }
       // Échec : retour arrière seulement si aucune coche plus récente n'a remplacé celle-ci
       apply((r) => (r.subtasks === subtasks ? { ...r, subtasks: back } : r));
       toast("Sous-tâche non enregistrée, réessaie");
@@ -356,6 +368,8 @@ export function Idees() {
           {(filtered ?? []).map((row) => (
             <div
               key={row.id}
+              // Un clic sur l'idée efface son repère « nouveau ».
+              onClickCapture={() => activity.keys.has(`idea:${row.id}`) && void markActivityRead("idea", row.id)}
               className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 pl-5 shadow-sm transition-colors hover:bg-rowhover"
             >
               <span className={cn("absolute left-0 top-0 h-full w-1", ideaAccent(row.status))} />
@@ -391,7 +405,10 @@ export function Idees() {
               ) : (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="min-w-0">
-                    <div className="whitespace-pre-wrap text-sm font-medium leading-relaxed text-foreground">{row.text}</div>
+                    <div className="whitespace-pre-wrap text-sm font-medium leading-relaxed text-foreground">
+                      {activity.keys.has(`idea:${row.id}`) && <NewDot label="Du nouveau d'un créateur" className="mr-1.5 align-middle" />}
+                      {row.text}
+                    </div>
                     <div className="mt-0.5 text-xs text-muted-foreground">
                       {row.creator ? titleCase(row.creator) : "Idée générale"} ·{" "}
                       {row.source === "creator" ? "Proposée par le créateur" : "Ajoutée par l'agence"}

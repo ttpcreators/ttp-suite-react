@@ -569,6 +569,7 @@ export const EN_CREATORSPACE: Record<string, string> = {
   "Fiche de la tâche": "Task details",
   "Filtres": "Filters",
   "Message de l'agence": "Message from your agency",
+  "Du nouveau de ton agence": "Something new from your agency",
   "Nouveau point d'avancement": "New update",
   "Nouvelle sous-tâche": "New subtask",
   "Nouvelle échéance": "New due date",

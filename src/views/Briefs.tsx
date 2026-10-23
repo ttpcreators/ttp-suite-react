@@ -1,6 +1,8 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
+import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
+import { NewDot } from "@/components/ui/new-dot";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { cn, titleCase } from "@/lib/utils";
 import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, FileDown, Paperclip, FileText, UserRound, CheckCircle2 } from "@/components/icons";
@@ -24,7 +26,7 @@ import { toISODate, frDate, fmtDayAny } from "@/lib/dates";
 import { HelpTip } from "@/components/ui/help-tip";
 import { getCache, setCache } from "@/lib/viewCache";
 import { openLater } from "@/lib/openLater";
-import { notifyCreator } from "@/lib/push";
+import { notifyCreator, notifyCreatorsChange } from "@/lib/push";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
 import { CollabField, ObjectCollabLink } from "@/components/collab-links";
@@ -111,6 +113,8 @@ function briefHTML(row: Row): string {
 
 export function Briefs() {
   const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("briefs"));
+  // Repères « nouveau » : briefs modifiés par un créateur (activity_events).
+  const activity = useActivityEvents("agency");
   const [error, setError] = useState(false);
   const { query } = useSearch();
   const creators = useCreators();
@@ -247,9 +251,13 @@ export function Briefs() {
       toast("Erreur — réessaie");
       return;
     }
+    const old = (rows ?? []).find((r) => r.id === id);
     setRows((rows ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
     toast("Brief mis à jour ✓");
     setEditId(null);
+    // Ce que le créateur lit a changé (consignes, livrables, échéance, résumé) : il est prévenu.
+    const seen = !same || (old && (old.consignes ?? "") !== patch.consignes) || old?.deliverables !== patch.deliverables || old?.due !== patch.due;
+    if (seen && patch.creator) notifyCreatorsChange("brief", [patch.creator], "update", patch.brand, id);
   };
   const changeStatus = async (id: string, next: string) => {
     // MAJ optimiste → la carte se déplace immédiatement dans la bonne colonne.
@@ -411,10 +419,18 @@ export function Briefs() {
     }
     const meta = statusMeta(row.status);
     return (
-      <div key={row.id} className="flex flex-col rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:bg-rowhover">
+      <div
+        key={row.id}
+        // Un clic sur le brief efface son repère « nouveau ».
+        onClickCapture={() => activity.keys.has(`brief:${row.id}`) && void markActivityRead("brief", row.id)}
+        className="flex flex-col rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:bg-rowhover"
+      >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <h2 className="truncate text-[14px] font-semibold tracking-tight text-foreground">{row.brand}</h2>
+            <h2 className="flex min-w-0 items-center gap-1.5 text-[14px] font-semibold tracking-tight text-foreground">
+              {activity.keys.has(`brief:${row.id}`) && <NewDot label="Du nouveau d'un créateur" />}
+              <span className="truncate">{row.brand}</span>
+            </h2>
             <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{row.creator ? titleCase(row.creator) : "—"}</p>
           </div>
           <div className="flex shrink-0 items-center gap-1">

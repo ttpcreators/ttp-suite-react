@@ -8,7 +8,7 @@ import { useEffect, useRef } from "react";
  * navigue : la page la consomme à son montage, ou tout de suite si elle est déjà montée
  * (onglets gardés en vie). Une intention ne sert qu'une fois.
  */
-export type OpenIntent = "todo:new" | "collab:new" | "collab:open" | "collab:recap" | "mail:open";
+export type OpenIntent = "todo:new" | "todo:open" | "cs-todo:open" | "collab:new" | "collab:open" | "collab:recap" | "mail:open";
 
 const EVENT = "ttp-intent";
 let pending: OpenIntent | null = null;

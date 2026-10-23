@@ -1,5 +1,6 @@
 import { Check } from "@/components/icons";
 import { IconTile } from "@/components/ui/icon-tile";
+import { NewDot } from "@/components/ui/new-dot";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { TONE_TEXT } from "@/lib/statusTone";
@@ -47,8 +48,10 @@ export function MissionStages({ stage, compact = false }: { stage: number; compa
 }
 
 /** Carte d'une mission : un clic ouvre la fiche, le bouton fait l'action du moment. */
-export function MissionCard({ m, dateText, whenText, late, onOpen, onAction }: {
+export function MissionCard({ m, dateText, whenText, late, onOpen, onAction, isNew }: {
   m: Mission;
+  /** Le brief a du nouveau de l'agence (repère « nouveau »). */
+  isNew?: boolean;
   /** « 21 oct. », "" sans échéance. */
   dateText: string;
   /** « dans 3 j », « aujourd'hui »…, ou null. */
@@ -66,7 +69,10 @@ export function MissionCard({ m, dateText, whenText, late, onOpen, onAction }: {
       <button type="button" onClick={onOpen} className="flex min-w-0 items-start gap-3 text-left">
         <IconTile tone="info"><span className="text-[17px] font-bold">{brandInitial(m.brand)}</span></IconTile>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[16px] font-semibold text-foreground">{m.brand}</span>
+          <span className="flex min-w-0 items-center gap-1.5 text-[16px] font-semibold text-foreground">
+            {isNew && <NewDot label={t("Du nouveau de ton agence")} />}
+            <span className="truncate">{m.brand}</span>
+          </span>
           <span className="block truncate text-[13px] text-muted-foreground" title={what ?? undefined}>{what ? clip45(what) : t("Livrables à préciser")}</span>
         </span>
         {dateText && (
