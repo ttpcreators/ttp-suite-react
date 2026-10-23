@@ -296,9 +296,29 @@ export function MailItem({
         <div className="flex cursor-pointer items-start gap-3" onClick={headClick(onToggle)}>
           <Initial name={m.from} email={m.fromEmail} agency={m.fromAgency} size="md" />
           <span className="min-w-0 flex-1">
-            <span className="flex min-w-0 items-baseline gap-2">
+            <span className="flex min-w-0 items-center gap-2">
               <span data-sel className="min-w-0 cursor-text select-text truncate text-[15px] font-semibold text-foreground">{name}</span>
               <span className="ml-auto shrink-0 text-[13px] tabular-nums text-faint">{fmtWhen(m.ts, locale)}</span>
+              {/* Actions du message (page Mails agence : répondre, transférer) ; aucune côté créateur. */}
+              {actions.length > 0 && (
+                <span className="-my-2 -mr-1.5 flex shrink-0 items-center text-muted-foreground">
+                  {actions.map((a) => (
+                    <button
+                      key={a.label}
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        a.onClick();
+                      }}
+                      title={a.label}
+                      aria-label={a.label}
+                      className="grid h-9 w-9 place-items-center rounded-full transition-colors hover:bg-rowhover hover:text-foreground max-md:h-11 max-md:w-11"
+                    >
+                      <a.icon className="h-4 w-4" />
+                    </button>
+                  ))}
+                </span>
+              )}
             </span>
             <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 text-[13px] text-faint">
               {!m.fromAgency && m.fromEmail && <CopyAddress email={m.fromEmail} className="text-[13px] text-muted-foreground" />}
