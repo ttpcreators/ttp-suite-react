@@ -50,14 +50,21 @@ self.addEventListener("fetch", (event) => {
 
 // Page d'accueil : le réseau, revalidé auprès du serveur (pas le cache du navigateur,
 // gardé 10 min par GitHub Pages) ; la copie gardée ne sert que hors ligne.
+// Chaque page garde SA copie : l'accord du connecteur (/connecteur/) ne remplace jamais
+// la page de l'app (sinon, hors ligne, l'app s'ouvrait sur l'accord Claude).
 async function networkFirst(req) {
   const cache = await caches.open(SHELL);
+  const path = new URL(req.url).pathname;
+  const key = path === "/index.html" ? "/" : path;
   try {
     const res = await fetch(req.url, { cache: "no-cache", credentials: "same-origin" });
-    if (res.ok) cache.put("/", res.clone()).catch(() => {});
+    // Réponse venue d'une redirection (« /connecteur » → « /connecteur/ ») : le navigateur
+    // refuse de l'afficher telle quelle pour une navigation, on lui renvoie la redirection.
+    if (res.redirected) return Response.redirect(res.url, 302);
+    if (res.ok) cache.put(key, res.clone()).catch(() => {});
     return res;
   } catch {
-    return (await cache.match("/")) || Response.error();
+    return (await cache.match(key)) || Response.error();
   }
 }
 
@@ -248,7 +255,8 @@ self.addEventListener("message", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const raw = (event.notification.data && event.notification.data.url) || "/";
-  const url = new URL(raw.startsWith("/") ? raw : "/", self.registration.scope).href;
+  // Adresse interne seulement (« //autre-site » commence aussi par « / »).
+  const url = new URL(raw.startsWith("/") && !raw.startsWith("//") ? raw : "/", self.registration.scope).href;
   event.waitUntil(
     (async () => {
       const list = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
