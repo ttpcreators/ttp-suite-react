@@ -23,8 +23,9 @@ export function useLang(): Lang {
 export type Vars = Record<string, string | number>;
 
 export function translate(lang: Lang, fr: string, vars?: Vars): string {
-  const s = lang === "en" ? EN[fr] ?? fr : fr;
-  return vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (k in vars ? String(vars[k]) : m)) : s;
+  // hasOwn : « constructor », « toString »… ne sont ni des traductions ni des variables.
+  const s = lang === "en" && Object.hasOwn(EN, fr) ? EN[fr] : fr;
+  return vars ? s.replace(/\{(\w+)\}/g, (m, k: string) => (Object.hasOwn(vars, k) ? String(vars[k]) : m)) : s;
 }
 
 /** t(texteFrançais, variables?) dans la langue de l'espace. */

@@ -50,7 +50,7 @@ export const CS_TAB_ALIASES: Record<string, CsTab> = {
 export function normalizeCsTab(saved: string | null | undefined): CsTab {
   const v = String(saved ?? "").trim();
   if (!v) return "accueil";
-  if (v in CS_TAB_ALIASES) return CS_TAB_ALIASES[v];
+  if (Object.hasOwn(CS_TAB_ALIASES, v)) return CS_TAB_ALIASES[v]; // hasOwn : « constructor » n'est pas un alias
   return (CS_ALL_TABS as readonly string[]).includes(v) ? (v as CsTab) : "accueil";
 }
 
@@ -88,7 +88,7 @@ export function parseCsFavorites(raw: string | null | undefined): CsTab[] {
     if (!Array.isArray(arr)) return [];
     const out: CsTab[] = [];
     for (const v of arr) {
-      const t = typeof v === "string" ? (v in CS_TAB_ALIASES ? CS_TAB_ALIASES[v] : v) : "";
+      const t = typeof v === "string" ? (Object.hasOwn(CS_TAB_ALIASES, v) ? CS_TAB_ALIASES[v] : v) : "";
       if ((CS_FAVORABLE as readonly string[]).includes(t) && !out.includes(t as CsTab)) out.push(t as CsTab);
     }
     return out;

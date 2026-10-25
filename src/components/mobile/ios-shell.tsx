@@ -23,7 +23,7 @@ export function IosTabBar({ items, active, onSelect, onReselect }: {
     // Capsule flottante (TTP Suite 2.0) : verre dépoli, onglet actif dans une pastille.
     <nav
       aria-label={tr("Navigation principale")}
-      className="ios-chrome fixed inset-x-0 bottom-0 z-50 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
+      className="ios-chrome ios-tabbar-nav fixed inset-x-0 bottom-0 z-50 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] md:hidden"
     >
       <div
         className="ios-tabbar grid h-[62px] rounded-full p-1.5"

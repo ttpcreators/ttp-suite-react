@@ -54,6 +54,8 @@ export const EN_SHARED: Record<string, string> = {
   "Masquer : {label}": "Hide: {label}",
   "Afficher : {label}": "Show: {label}",
   "Événements": "Events",
+  "Événement": "Event",
+  "Type": "Type",
   "Factures": "Invoices",
   "Facture": "Invoice",
   "Posts Instagram": "Instagram posts",

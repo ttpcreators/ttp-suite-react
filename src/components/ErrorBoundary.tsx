@@ -35,6 +35,10 @@ const RELOAD_KEY = "ttp:chunk-reload";
  * l'écran propose alors un bouton au lieu de rester bloqué sur « Mise à jour… ».
  */
 export function recoverStaleApp(): boolean {
+  // Hors ligne, le fichier manque parce qu'il n'a jamais été gardé, pas à cause d'une mise
+  // en ligne : recharger viderait les fichiers gardés (2e essai) et l'app ne s'ouvrirait
+  // plus du tout sans réseau. On affiche le bouton à la place.
+  if (typeof navigator !== "undefined" && navigator.onLine === false) return false;
   let tries = 0;
   try {
     const saved = JSON.parse(sessionStorage.getItem(RELOAD_KEY) || "null") as { n?: number; at?: number } | null;
@@ -70,7 +74,9 @@ function forceUpdate() {
   } catch {
     /* rien à effacer */
   }
-  void clearAppCaches().finally(() => location.reload());
+  // Sans réseau : simple rechargement, on garde les fichiers de l'app sur l'appareil.
+  if (navigator.onLine === false) location.reload();
+  else void clearAppCaches().finally(() => location.reload());
 }
 
 // Clés d'UI (non critiques) qu'on peut effacer sans danger pour se ré-parer.
@@ -226,7 +232,7 @@ export class ErrorBoundary extends Component<Props, State> {
     return (
       <div className="grid min-h-screen place-items-center bg-background p-6">
         <div className="w-full max-w-md rounded-2xl border border-border bg-surface p-6 text-center shadow-sm">
-          <div className="text-lg font-semibold text-foreground">Oups — un souci d'affichage</div>
+          <div className="text-lg font-semibold text-foreground">Oups, un souci d'affichage</div>
           <div className="mt-2 text-sm text-muted-foreground">
             L'app a rencontré une erreur. Tes données sont en sécurité (rien n'est perdu).
             Recharge pour repartir sur une base saine.

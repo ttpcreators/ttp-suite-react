@@ -480,10 +480,22 @@ export default function App() {
   }, [navigateCurrentTab]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setSession(data.session));
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) =>
-      setSession(s),
-    );
+    let hadSession = false;
+    supabase.auth.getSession().then(({ data }) => {
+      hadSession ||= !!data.session;
+      setSession(data.session);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((e, s) => {
+      // Déconnexion : on recharge l'app. Les mémoires partagées (blob agence, pages gardées
+      // en cache, factures de la palette…) ne passent jamais au compte suivant, sur un
+      // appareil partagé (agence puis créateur, fondateur puis membre).
+      if (e === "SIGNED_OUT" && hadSession) {
+        window.location.reload();
+        return;
+      }
+      hadSession ||= !!s;
+      setSession(s);
+    });
     return () => sub.subscription.unsubscribe();
   }, []);
 
