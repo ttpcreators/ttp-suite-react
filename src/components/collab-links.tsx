@@ -7,6 +7,7 @@ import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { fmtDayAny } from "@/lib/dates";
 import { useLiveKey } from "@/lib/useLive";
+import { useRestrictedViews } from "@/lib/restrictedViews";
 import { formatEuro, parseAmount, saveAppStateKey, useAppState } from "@/lib/appState";
 import { collabChoices, collabLabel, linkGroups, type CollabLite, type LinkData, type LinkTable } from "@/lib/collabLinks";
 import { collabIdReady, getCollabLink, loadCollabsLite, loadLinkData, openCollab, setCollabLink } from "@/lib/collabLinksDb";
@@ -50,6 +51,15 @@ export function useCollabLinkReady(): boolean | null {
     };
   }, []);
   return ready;
+}
+
+/**
+ * Relie un objet tout juste créé à la collab choisie dans son formulaire. L'objet est déjà
+ * enregistré : en cas d'échec, on le dit (sinon le lien se perd sans bruit).
+ */
+export async function linkNewToCollab(table: LinkTable, id: string, collabId: string): Promise<void> {
+  if (!collabId) return;
+  if ((await setCollabLink(table, id, collabId)) === "error") toast("Ajouté, mais pas relié à la collab : relie-le depuis sa fiche");
 }
 
 /** Champ « Collab » d'un formulaire. Rien avant le SQL. */
@@ -183,7 +193,10 @@ export function CollabLinkedPanel({ collab, onCreateInvoice, onPrepareRecap }: {
     } else toast(r === "missing" ? "Pas encore disponible" : "Erreur, réessaie");
   };
 
-  const showInvoice = !!onCreateInvoice && collab.step >= 7;
+  // Membre (Facturation réservée aux fondateurs) : ni bouton facture (il mènerait à « Accès
+  // réservé ») ni montants des factures reliées.
+  const money = !useRestrictedViews().includes("facturation");
+  const showInvoice = money && !!onCreateInvoice && collab.step >= 7;
   // Bilan pour la marque : proposé à l'étape 10, bouton principal à l'étape 11 « Bilan ».
   const showRecap = !!onPrepareRecap && collab.step >= 10;
   return (
@@ -228,7 +241,7 @@ export function CollabLinkedPanel({ collab, onCreateInvoice, onPrepareRecap }: {
         <p className="text-[13px] text-muted-foreground">Chargement…</p>
       ) : (
         <div className="flex flex-col gap-3">
-          {SECTIONS.map(({ table, label }) => {
+          {SECTIONS.filter((s) => money || s.table !== "invoices").map(({ table, label }) => {
             const g = groups[table];
             const total = g.linked.length + g.suggested.length;
             return (

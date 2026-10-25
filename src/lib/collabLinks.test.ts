@@ -29,6 +29,10 @@ describe("collab au centre", () => {
     expect(autoTaskFor(3, nutri, now)).toBeNull();
     expect(hasAutoTask([{ text: "résumer le brief pour Léna", collab_id: "c1" }], "c1", "Résumer le brief pour Léna")).toBe(true);
     expect(hasAutoTask([{ text: "Résumer le brief pour Léna", collab_id: "c9" }], "c1", "Résumer le brief pour Léna")).toBe(false);
+    // Sans collab : bloque seulement si elle est encore à faire (une vieille tâche finie ne bloque pas la nouvelle collab).
+    expect(hasAutoTask([{ text: "Résumer le brief pour Léna", collab_id: null, done: false }], "c1", "Résumer le brief pour Léna")).toBe(true);
+    expect(hasAutoTask([{ text: "Résumer le brief pour Léna", collab_id: null, done: true }], "c1", "Résumer le brief pour Léna")).toBe(false);
+    expect(hasAutoTask([{ text: "Résumer le brief pour Léna", collab_id: "c1", done: true }], "c1", "Résumer le brief pour Léna")).toBe(true);
   });
   it("montant du cachet", () => {
     expect(cachetAmount("1 500 €")).toBe(1500);

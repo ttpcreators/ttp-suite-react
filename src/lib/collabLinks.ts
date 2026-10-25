@@ -83,10 +83,14 @@ export function autoTaskFor(step: number, c: Pick<CollabLite, "brand" | "creator
   return { text, due: iso(now + m.days * DAY) };
 }
 
-/** Une tâche identique existe déjà pour cette collab (pas de doublon). */
-export function hasAutoTask(todos: readonly { text: string; collab_id?: string | null }[], collabId: string, text: string): boolean {
+/**
+ * Une tâche identique existe déjà pour cette collab (pas de doublon). Une tâche sans collab
+ * ne compte que si elle est encore à faire : une ancienne tâche terminée au même texte
+ * (collab précédente avec la même marque et le même créateur) ne bloque pas la nouvelle.
+ */
+export function hasAutoTask(todos: readonly { text: string; collab_id?: string | null; done?: boolean | null }[], collabId: string, text: string): boolean {
   const t = fold(text);
-  return todos.some((x) => fold(x.text) === t && (x.collab_id == null || x.collab_id === collabId));
+  return todos.some((x) => fold(x.text) === t && (x.collab_id === collabId || (x.collab_id == null && !x.done)));
 }
 
 /** Montant du cachet (« 1 500 € », « 1500€ HT ») → nombre, 0 si illisible. */

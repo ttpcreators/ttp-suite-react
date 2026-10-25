@@ -33,6 +33,21 @@ export function unreadKeys(events: readonly Pick<ActivityEvent, "object_type" | 
   return new Set(events.map((e) => activityKey(e.object_type, e.object_id)));
 }
 
+/**
+ * Retire les repères qu'on vient de marquer lus sur cet appareil (clé → heure du « lu »).
+ * Une lecture partie AVANT le « marquer lu » peut encore les renvoyer : sans ce filtre, le
+ * point « nouveau » réapparaît. Un repère mis à jour APRÈS (nouveau changement) reste.
+ */
+export function dropReadLocally<T extends Pick<ActivityEvent, "object_type" | "object_id" | "updated_at">>(events: readonly T[], readAt: ReadonlyMap<string, number>): T[] {
+  if (!readAt.size) return [...events];
+  return events.filter((e) => {
+    const at = readAt.get(activityKey(e.object_type, e.object_id));
+    if (at === undefined) return true;
+    const t = Date.parse(e.updated_at);
+    return Number.isFinite(t) && t > at;
+  });
+}
+
 /** Page du menu où vit chaque objet : agence (id de vue) ou créateur (onglet). */
 const AGENCY_PAGE: Record<ActivityObject, string> = { todo: "todo", idea: "ideas", brief: "briefs", mail: "mails" };
 const CREATOR_TAB: Record<ActivityObject, string> = { todo: "todo", idea: "ideas", brief: "missions", mail: "mails" };

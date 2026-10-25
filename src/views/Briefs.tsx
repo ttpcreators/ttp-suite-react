@@ -29,8 +29,7 @@ import { openLater } from "@/lib/openLater";
 import { notifyCreator, notifyCreatorsChange } from "@/lib/push";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
-import { CollabField, ObjectCollabLink } from "@/components/collab-links";
-import { setCollabLink } from "@/lib/collabLinksDb";
+import { CollabField, ObjectCollabLink, linkNewToCollab } from "@/components/collab-links";
 
 type Row = {
   id: string;
@@ -193,7 +192,7 @@ export function Briefs() {
       return;
     }
     setRows([created as unknown as Row, ...(rows ?? [])]);
-    if (collabId) void setCollabLink("briefs", (created as { id: string }).id, collabId);
+    void linkNewToCollab("briefs", (created as { id: string }).id, collabId);
     setCollabId("");
     if (creator) notifyCreator("brief", creator, brand.trim()); // push au créateur (s'il a activé les notifs)
     toast("Brief ajouté ✓");

@@ -51,6 +51,16 @@ export async function saveProposal(p: Proposal, brand: string, contact: string |
   return row ? { id: (row as { id: string }).id, created: true } : null;
 }
 
+/**
+ * Collab déjà reliée au prospect, relue en base (un collègue a pu signer depuis le dernier
+ * chargement). null = aucune, ou colonne absente / lecture impossible : on laisse créer.
+ */
+export async function prospectCollabId(id: string): Promise<string | null> {
+  if (!(await proposalColumnsReady())) return null;
+  const { data, error } = await supabase.from("prospects").select("collab_id").eq("id", id).maybeSingle<{ collab_id: string | null }>();
+  return error ? null : data?.collab_id ?? null;
+}
+
 /** Relie un prospect à la collab créée et le passe en « Signé ». */
 export async function markProspectSigned(id: string, collabId: string): Promise<boolean> {
   const full = await proposalColumnsReady();

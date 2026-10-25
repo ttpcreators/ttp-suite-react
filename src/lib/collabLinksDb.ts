@@ -70,7 +70,7 @@ export async function createStepTask(c: CollabLite, step: number): Promise<"crea
   if (!task) return "none";
   const { data: same, error } = await supabase.from("todos").select("*").ilike("text", task.text.replace(/[\\%_]/g, (m) => `\\${m}`));
   if (error) return "error";
-  if (hasAutoTask((same as { text: string; collab_id?: string | null }[]) ?? [], c.id, task.text)) return "exists";
+  if (hasAutoTask((same as { text: string; collab_id?: string | null; done?: boolean | null }[]) ?? [], c.id, task.text)) return "exists";
   const created = await dbInsert("todos", {
     text: task.text,
     descr: null,
