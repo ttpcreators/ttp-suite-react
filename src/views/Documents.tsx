@@ -308,7 +308,7 @@ export function Documents() {
 
   const del = async (row: Row) => {
     if (!(await dbDelete("documents", row.id))) {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return;
     }
     if (row.path && !isExternalUrl(row.path)) {

@@ -361,7 +361,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
     try {
       st = (await getAppState()) as AppState;
     } catch {
-      return toast("Import impossible — réessaie");
+      return toast("Import impossible, réessaie");
     }
     const hist = ((st["engagementHistory"] as HistLike[]) ?? []).filter(
       (h) => (h.creator || "").toLowerCase() === (selected.name || "").toLowerCase(),

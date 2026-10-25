@@ -482,7 +482,7 @@ export function Debrief() {
         next = [built, ...fresh];
       }
       if (!(await saveAppStateKey("debriefData", next))) {
-        toast("Erreur — réessaie");
+        toast("Erreur, réessaie");
         return;
       }
       setLocal(next);
@@ -497,7 +497,7 @@ export function Debrief() {
       if (!wasEdit && built.creator) notifyCreator("debrief", built.creator, built.brand); // push au créateur à la création
       toast(wasEdit ? "Debrief modifié ✓" : "Debrief créé ✓");
     } catch {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
     }
   }
 
@@ -507,11 +507,11 @@ export function Debrief() {
       const fresh = (((await getAppState())["debriefData"] as Debrief[]) ?? []).map(normDebrief);
       const s = debriefSig(d);
       const next = fresh.filter((x) => debriefSig(x) !== s);
-      if (!(await saveAppStateKey("debriefData", next))) return toast("Erreur — réessaie");
+      if (!(await saveAppStateKey("debriefData", next))) return toast("Erreur, réessaie");
       setLocal(next);
       toast("Supprimé");
     } catch {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
     }
   }
 
