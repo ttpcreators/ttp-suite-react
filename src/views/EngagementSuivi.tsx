@@ -23,7 +23,8 @@ import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/u
 import { cn, titleCase } from "@/lib/utils";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { Tabs } from "@/components/ui/animated-tabs";
-import { useLang, useT } from "@/lib/i18n";
+import { localeOf, useLang, useT } from "@/lib/i18n";
+import { fmtDayAny } from "@/lib/dates";
 
 /**
  * Suivi engagement — page dédiée à l'ÉVOLUTION des mesures enregistrées dans
@@ -357,9 +358,13 @@ export function SuiviPanel({ entries, lockedCreator, initialCreator }: { entries
             .map((x, i) => (
               <div key={`${x.full}-${i}`} className="flex items-center gap-3 py-2.5">
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5 sm:flex-row sm:items-center sm:gap-3">
-                  <span className="shrink-0 text-[12px] font-medium tabular-nums text-foreground sm:w-24">{x.full}</span>
+                  <span className="shrink-0 text-[12px] font-medium tabular-nums text-foreground sm:w-24">{fmtDayAny(x.full, localeOf(lang)) || x.full}</span>
+                  {/* Interactions ou abonnés absents de la mesure : rien plutôt qu'un « 0 » trompeur. */}
                   <span className="min-w-0 truncate text-[12px] text-muted-foreground">
-                    {t("{n} interactions", { n: fmtCompact(x.interactions) })}{x.followers > 0 ? ` · ${t("{n} abonnés", { n: fmtCompact(x.followers) })}` : ""}
+                    {[
+                      x.interactions > 0 ? t("{n} interactions", { n: fmtCompact(x.interactions) }) : "",
+                      x.followers > 0 ? t("{n} abonnés", { n: fmtCompact(x.followers) }) : "",
+                    ].filter(Boolean).join(" · ")}
                   </span>
                 </span>
                 <span className="shrink-0 text-[14px] font-semibold tabular-nums">{pctFmt(x.er)}</span>

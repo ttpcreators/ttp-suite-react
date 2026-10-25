@@ -20,7 +20,8 @@ import { CT_HANDLED_KEY, CT_SNOOZE_KEY, creatorKindLabel, creatorTodayItems, cre
  * Données : celles que l'espace lit déjà (RLS du créateur), logique dans src/lib/creatorToday.ts.
  */
 
-const lgMq = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(min-width: 1024px)") : null;
+// Panneau détail à droite à partir de 1280 px (en dessous, la liste n'avait plus que ~380 px).
+const lgMq = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(min-width: 1280px)") : null;
 function useIsLg(): boolean {
   return useSyncExternalStore(
     (fn) => {
@@ -175,6 +176,8 @@ export function CreatorToday({ data, onOpen, onDoneTodo, isHigh }: Props) {
   const subLine = (s: CtItem) => {
     const detail = t(s.detail, s.detailVars);
     const kind = t(creatorKindLabel(s));
+    // Tâche et rendez-vous : le détail dit déjà le type (« Tâche prioritaire », « Rendez-vous à 10:00 »).
+    if (s.kind === "todo" || s.kind === "event") return detail;
     return detail === kind ? kind : `${detail} · ${kind}`;
   };
   const sectionRight = (from?: string, to?: string, n = 0) =>
@@ -204,7 +207,7 @@ export function CreatorToday({ data, onOpen, onDoneTodo, isHigh }: Props) {
 
   return (
     <div ref={rootRef}>
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="min-w-0">
           {/* État de la journée */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-3 rounded-[20px] bg-surface p-5 shadow-sm">

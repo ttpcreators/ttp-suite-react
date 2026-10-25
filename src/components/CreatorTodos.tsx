@@ -89,7 +89,9 @@ const FILTERS: { id: CtFilter; label: string }[] = [
   { id: "toutes", label: "Toutes" },
 ];
 
-const lgMq = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(min-width: 1024px)") : null;
+// Panneau détail à droite à partir de 1280 px : en dessous (menu de 224 px + panneau de 340 px),
+// la liste et les chiffres étaient écrasés (« En c… », « Priori… ») ; la fiche s'ouvre alors en feuille.
+const lgMq = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(min-width: 1280px)") : null;
 function useIsLg(): boolean {
   return useSyncExternalStore(
     (fn) => {
@@ -197,7 +199,8 @@ export function CreatorTodos(p: Props) {
   const addPoint = async (td: CreatorTodo) => {
     const text = pointInput.trim();
     if (!text) return;
-    if (await p.onPatch(td.id, (x) => ({ progress: appendPoint(x.progress, text, new Date(), "Créateur") }))) {
+    // Aperçu agence : le point est signé « Agence », jamais au nom du créateur.
+    if (await p.onPatch(td.id, (x) => ({ progress: appendPoint(x.progress, text, new Date(), p.preview ? "Agence" : "Créateur") }))) {
       setPointInput("");
       tellAgency(td, "progress");
     }
