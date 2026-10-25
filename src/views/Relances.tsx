@@ -53,7 +53,7 @@ export function Relances() {
       await navigator.clipboard.writeText(`Objet : ${subject}\n\n${body}`);
       toast("Email de relance copié ✓");
     } catch {
-      toast("Copie impossible — réessaie");
+      toast("Copie impossible, réessaie");
     }
   };
 

@@ -27,10 +27,12 @@ export function parseDueDate(s: string | null): Date | null {
   return null;
 }
 
-/** Jours écoulés depuis `d` (date locale, à minuit). */
+/** Jours écoulés depuis `d` (date locale, à minuit). Arrondi, pas troncature : un jour
+ *  de passage à l'heure d'été ne dure que 23 h (sinon « 0 jour » de retard le lendemain). */
 export function daysSinceDue(d: Date, now: Date = new Date()): number {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.floor((today.getTime() - d.getTime()) / 86400000);
+  const day0 = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  return Math.round((today.getTime() - day0.getTime()) / 86400000);
 }
 
 /** Facture à relancer : « retard », ou « attente » dont l'échéance est passée. */

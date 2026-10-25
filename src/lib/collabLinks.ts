@@ -6,6 +6,7 @@
  *     la marque de la collab et concernent son créateur (bouton « Relier ») ;
  *   • à chaque étape franchie, une tâche de l'étape est proposée (`autoTaskFor`).
  */
+import { firstAmount, parseAmountStrict } from "./money";
 
 export type CollabLite = { id: string; brand: string; creator: string | null; step: number; status: string; cachet?: string | null };
 
@@ -89,10 +90,10 @@ export function hasAutoTask(todos: readonly { text: string; collab_id?: string |
   return todos.some((x) => fold(x.text) === t && (x.collab_id == null || x.collab_id === collabId));
 }
 
-/** Montant du cachet (« 1 500 € », « 1500€ HT ») → nombre, 0 si illisible. */
+/** Montant du cachet (« 1 500 € », « 1500€ HT », « 1.500 € », « 1,5k ») → nombre, 0 si illisible.
+ *  Même lecture que les autres montants (src/lib/money.ts) : « 1.500 » vaut 1500, pas 1,50. */
 export function cachetAmount(cachet: string | null | undefined): number {
-  const m = (cachet ?? "").replace(/\s| | /g, "").match(/\d+(?:[.,]\d+)?/);
-  return m ? Math.round(Number(m[0].replace(",", ".")) * 100) / 100 : 0;
+  return parseAmountStrict(cachet) ?? firstAmount(cachet);
 }
 
 // ── Fiche collab : objets reliés et suggérés ────────────────────────────────

@@ -35,6 +35,11 @@ describe("collab au centre", () => {
     expect(cachetAmount("1500€ HT")).toBe(1500);
     expect(cachetAmount("950,50 €")).toBe(950.5);
     expect(cachetAmount("")).toBe(0);
+    // Point des milliers à la française et suffixe k : jamais une facture à 1,50 €.
+    expect(cachetAmount("1.500 €")).toBe(1500);
+    expect(cachetAmount("1,5k€")).toBe(1500);
+    expect(cachetAmount("1 500 € / 3 mois")).toBe(1500);
+    expect(cachetAmount("à définir")).toBe(0);
   });
 });
 

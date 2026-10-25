@@ -4,8 +4,9 @@ import { StatsBento } from "@/components/ui/stats-bento";
 import { supabase } from "@/lib/supabase";
 import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, parseAmount, formatEuro, type AppState } from "@/lib/appState";
 import { useCreators } from "@/lib/useCreators";
-import { commissionMap } from "@/lib/commission";
-import { totalsOf, type LineItem } from "@/lib/invoice";
+import { commissionMap, DEFAULT_COMMISSION } from "@/lib/commission";
+import { cents, type InvoiceDetailLike } from "@/lib/invoice";
+import { owesMoney, overpaid, reversementRows, type Payout, type PayoutsMap, type RevInvoice, type RevRow } from "@/lib/reversements";
 import { titleCase } from "@/lib/utils";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { useLiveKey } from "@/lib/useLive";
@@ -22,30 +23,13 @@ import { fmtDayAny } from "@/lib/dates";
  * Les paiements sont stockés dans le blob agence `creatorPayouts`.
  */
 
-type Inv = { id: string; amount: string; status: string; creator: string | null };
-// Sous-ensemble d'invoiceDetails (blob) nécessaire au calcul du reversement.
-type InvDetails = { items: LineItem[]; franchise: boolean; vatRate: number; commissionRate: number };
-type Payout = { id: string; date: string; amount: number; note?: string };
-type PayoutsMap = Record<string, Payout[]>;
-
-const DEFAULT_COMMISSION = 20;
+type Inv = RevInvoice;
 let _uid = 0;
 const uid = () => `pay${Date.now().toString(36)}${(_uid += 1)}`;
 // Date LOCALE (toISOString = UTC → la veille entre minuit et 2 h en France)
 const todayISO = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-};
-
-type Row = {
-  creator: string;
-  encaisse: number;
-  rate: number;
-  commission: number;
-  du: number;
-  reverse: number;
-  reste: number;
-  payouts: Payout[];
 };
 
 export function Reversements() {
@@ -86,76 +70,35 @@ export function Reversements() {
     };
   }, [live]);
 
-  const rows: Row[] = useMemo(() => {
+  // Calcul au centime, partagé avec Facturation et les gains du créateur (src/lib/reversements.ts).
+  const rows: RevRow[] = useMemo(() => {
     if (!invoices) return [];
-    const rosterCommission = commissionMap(creators);
-    const details = (app?.invoiceDetails as Record<string, InvDetails>) ?? {};
-    // Accumulateur EXACT par créateur. La commission + le dû se calculent sur le HT
-    // (via totalsOf, comme Facturation) → les 2 écrans donnent le même « dû au créateur ».
-    type Acc = { encaisse: number; ht: number; commission: number; du: number };
-    const acc = new Map<string, Acc>();
-    const bump = (c: string): Acc => {
-      let a = acc.get(c);
-      if (!a) { a = { encaisse: 0, ht: 0, commission: 0, du: 0 }; acc.set(c, a); }
-      return a;
-    };
-    for (const iv of invoices) {
-      if (iv.status !== "payee") continue;
-      const c = (iv.creator || "").trim();
-      if (!c) continue;
-      const a = bump(c);
-      const d = details[iv.id];
-      if (d && Array.isArray(d.items)) {
-        // Facture détaillée : HT réel, TVA exclue de la commission, taux DE LA FACTURE, seuil inclus.
-        const t = totalsOf(d.items, d.franchise, d.vatRate, d.commissionRate);
-        a.encaisse += t.ttc;
-        a.ht += t.ht;
-        a.commission += t.commission;
-        a.du += t.reversal;
-      } else {
-        // Facture sans détails (legacy) : montant supposé = HT (cas franchise, défaut) + taux roster.
-        const rate = rosterCommission[c] ?? (commissions[c] != null ? commissions[c] : DEFAULT_COMMISSION);
-        const t = totalsOf([{ id: "x", label: "", qty: 1, unit: parseAmount(iv.amount) }], true, 0, rate);
-        a.encaisse += t.ttc;
-        a.ht += t.ht;
-        a.commission += t.commission;
-        a.du += t.reversal;
-      }
-    }
-    // Inclure aussi les créateurs qui ont déjà des paiements enregistrés.
-    for (const c of Object.keys(payoutsMap)) if (!acc.has(c)) bump(c);
-    const out: Row[] = [];
-    for (const [creator, x] of acc) {
-      const rosterRate = rosterCommission[creator] ?? (commissions[creator] != null ? commissions[creator] : DEFAULT_COMMISSION);
-      // Taux effectif affiché = commission / HT (juste même si les factures ont des taux
-      // différents ou passent sous le seuil). Repli sur le taux roster si pas de HT.
-      const rate = x.ht > 0 ? Math.round((x.commission / x.ht) * 100) : rosterRate;
-      const encaisse = Math.round(x.encaisse);
-      const commission = Math.round(x.commission);
-      const du = Math.round(x.du);
-      const list = payoutsMap[creator] ?? [];
-      const reverse = list.reduce((s, p) => s + (p.amount || 0), 0);
-      out.push({ creator, encaisse, rate, commission, du, reverse, reste: du - reverse, payouts: list });
-    }
-    return out.sort((a, b) => b.reste - a.reste);
+    return reversementRows({
+      invoices,
+      details: (app?.invoiceDetails as Record<string, InvoiceDetailLike>) ?? {},
+      payouts: payoutsMap,
+      rosterRates: commissionMap(creators),
+      savedRates: commissions,
+      defaultRate: DEFAULT_COMMISSION,
+    });
   }, [invoices, commissions, payoutsMap, creators, app]);
 
-  const totalReste = rows.reduce((s, r) => s + Math.max(0, r.reste), 0);
-  const totalDu = rows.reduce((s, r) => s + r.du, 0);
-  const totalReverse = rows.reduce((s, r) => s + r.reverse, 0);
+  const totalReste = cents(rows.reduce((s, r) => s + (owesMoney(r) ? r.reste : 0), 0));
+  const totalDu = cents(rows.reduce((s, r) => s + r.du, 0));
+  const totalReverse = cents(rows.reduce((s, r) => s + r.reverse, 0));
 
-  // Relit FRAIS le blob et ne fusionne QUE le créateur modifié (paiements = argent :
+  // Relit FRAIS le blob et ne fusionne QUE les entrées modifiées (paiements = argent :
   // deux postes ne doivent jamais s'écraser). Renvoie le booléen d'écriture.
-  const mutatePayouts = async (creator: string, fn: (arr: Payout[]) => Payout[]): Promise<boolean> => {
+  const mutatePayouts = async (change: (fresh: PayoutsMap) => PayoutsMap): Promise<boolean> => {
     let ok = false;
     let next: PayoutsMap = {};
     try {
       invalidateAppState();
       const fresh = ((await getAppState())["creatorPayouts"] as PayoutsMap) ?? {};
-      const list = fn(fresh[creator] ?? []);
-      next = { ...fresh, [creator]: list };
-      // N'envoie QUE l'entrée de ce créateur (fusion côté base, sous verrou).
-      ok = await mergeAppStateKey("creatorPayouts", { [creator]: list });
+      const part = change(fresh);
+      next = { ...fresh, ...part };
+      // N'envoie QUE les entrées de ce créateur (fusion côté base, sous verrou).
+      ok = Object.keys(part).length > 0 && (await mergeAppStateKey("creatorPayouts", part));
     } catch {
       ok = false;
     }
@@ -175,14 +118,14 @@ export function Reversements() {
 
   const openAdd = (creator: string, reste: number) => {
     setOpenFor(creator);
-    setAmt(reste > 0 ? String(reste) : "");
+    setAmt(reste > 0 ? String(cents(reste)) : "");
     setDate(todayISO());
     setNote("");
   };
-  const submitPayout = async (creator: string) => {
+  const submitPayout = async (r: RevRow) => {
     if (busyRef.current) return;
-    const n = parseAmount(amt);
-    if (n <= 0) {
+    const n = cents(parseAmount(amt));
+    if (!(n > 0)) {
       toast("Montant invalide");
       return;
     }
@@ -190,7 +133,7 @@ export function Reversements() {
     busyRef.current = true;
     setBusy(true);
     try {
-      const ok = await mutatePayouts(creator, (arr) => [entry, ...arr]);
+      const ok = await mutatePayouts((fresh) => ({ [r.writeKey]: [entry, ...(fresh[r.writeKey] ?? [])] }));
       // Échec : le formulaire reste ouvert (saisie conservée)
       if (ok) {
         setOpenFor(null);
@@ -201,8 +144,13 @@ export function Reversements() {
       setBusy(false);
     }
   };
-  const removePayout = async (creator: string, id: string) => {
-    const ok = await mutatePayouts(creator, (arr) => arr.filter((p) => p.id !== id));
+  const removePayout = async (r: RevRow, id: string) => {
+    // Retire le versement de la graphie du nom qui le contient (relue fraîche).
+    const ok = await mutatePayouts((fresh) =>
+      Object.fromEntries(
+        r.keys.filter((k) => (fresh[k] ?? []).some((p) => p.id === id)).map((k) => [k, (fresh[k] ?? []).filter((p) => p.id !== id)]),
+      ),
+    );
     if (ok) toast("Paiement supprimé");
   };
 
@@ -225,7 +173,7 @@ export function Reversements() {
   return (
     <div className="space-y-4">
       {rows.length > 0 && (() => {
-        const nbAPayer = rows.filter((r) => r.reste > 0.5).length;
+        const nbAPayer = rows.filter(owesMoney).length;
         return (
           <StatsBento phoneStrip
             primary={{
@@ -261,8 +209,11 @@ export function Reversements() {
                     <div className="text-[11px] text-faint">Commission TTP {r.rate} %</div>
                   </div>
                 </div>
-                {r.reste > 0.5 ? (
+                {owesMoney(r) ? (
                   <div className="rounded-full bg-amber/15 px-3 py-1 text-[12px] font-bold text-amber">Reste {formatEuro(r.reste)}</div>
+                ) : overpaid(r) ? (
+                  // Versé plus que dû (facture supprimée ou repassée « en attente » après un virement).
+                  <div className="rounded-full bg-amber/15 px-3 py-1 text-[12px] font-bold text-amber">Trop versé {formatEuro(-r.reste)}</div>
                 ) : (
                   <div className="rounded-full bg-signal/15 px-3 py-1 text-[12px] font-bold text-signaltext">À jour ✓</div>
                 )}
@@ -285,7 +236,7 @@ export function Reversements() {
                       {p.note && <span className="truncate text-muted-foreground">· {p.note}</span>}
                       <button
                         type="button"
-                        onClick={() => setPendingDel({ message: `Supprimer ce paiement de ${formatEuro(p.amount)} ?`, run: () => removePayout(r.creator, p.id) })}
+                        onClick={() => setPendingDel({ message: `Supprimer ce paiement de ${formatEuro(p.amount)} ?`, run: () => removePayout(r, p.id) })}
                         className="ml-auto grid h-7 w-7 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-dangertext"
                         title="Supprimer"
                       >
@@ -310,7 +261,7 @@ export function Reversements() {
                     <span className="text-[11px] font-medium text-muted-foreground">Note (optionnel)</span>
                     <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Virement, espèces…" className="w-full rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary" />
                   </label>
-                  <button type="button" onClick={() => submitPayout(r.creator)} disabled={busy} className="h-[38px] shrink-0 rounded-full bg-primary px-4 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60">
+                  <button type="button" onClick={() => submitPayout(r)} disabled={busy} className="h-[38px] shrink-0 rounded-full bg-primary px-4 text-[12px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60">
                     {busy ? "Enregistrement…" : "Enregistrer"}
                   </button>
                   <button type="button" onClick={() => setOpenFor(null)} className="h-[38px] shrink-0 rounded-lg border border-border px-3 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover">
