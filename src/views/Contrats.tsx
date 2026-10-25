@@ -658,10 +658,10 @@ function ContractGenerator({ initial }: { initial: EditRequest | null }) {
       const next = fn(fresh);
       const ok = await saveAppStateKey("contractConfigs", next);
       if (ok) setLocalCfg(next);
-      else toast("Erreur — réessaie");
+      else toast("Erreur, réessaie");
       return ok;
     } catch {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return false;
     }
   };
@@ -700,10 +700,10 @@ function ContractGenerator({ initial }: { initial: EditRequest | null }) {
       const next = [...upsert.filter((u) => !fresh.some((h) => h.id === u.id)), ...fresh.filter((h) => !remove.includes(h.id)).map((h) => upsert.find((u) => u.id === h.id) ?? h)];
       const ok = await listAppStateKey("brandContractHistory", upsert, remove, true);
       if (ok) setLocalHist(next);
-      else toast("Erreur — réessaie");
+      else toast("Erreur, réessaie");
       return ok;
     } catch {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return false;
     }
   };

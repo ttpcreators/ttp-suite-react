@@ -63,6 +63,12 @@ export function parseAmountStrict(x: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+/** Premier montant d'une saisie libre (« 1.500 € / 3 mois » → 1500), au centime ; 0 si aucun. */
+export function firstAmount(x: unknown): number {
+  const n = amountTokens(String(x ?? ""))[0];
+  return n != null && Number.isFinite(n) ? Math.round(n * 100) / 100 || 0 : 0;
+}
+
 /** Parse un montant texte ("3 000 €", "1 200,50 €", "1.234,50", "1234.5", "3k", "1,5 M€")
  *  en nombre ; 0 si vide ou illisible. Saisie à plusieurs nombres : ancien comportement
  *  conservé pour les écrans existants (chiffres collés) ; pour un calcul qui part chez
@@ -76,7 +82,10 @@ export function parseAmount(x: unknown): number {
 
 /** Formate un nombre en "3 000 €" (normalise l'espace insécable des milliers). */
 export function formatEuro(n: number): string {
+  if (!Number.isFinite(n)) return "— €";
+  // Arrondi au centime d'abord (999,995 → « 1 000 € », jamais « 1 000,00 € » ni « -0 € »).
+  const r = Math.round(n * 100) / 100 || 0;
   // Montant à centimes : toujours deux décimales (« 1 615,20 € », jamais « 1 615,2 € »).
-  const cents = Math.round(n * 100) % 100 !== 0;
-  return n.toLocaleString("fr-FR", cents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : undefined).replace(/ /g, " ") + " €";
+  const cents = Math.round(r * 100) % 100 !== 0;
+  return r.toLocaleString("fr-FR", cents ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : { maximumFractionDigits: 0 }).replace(/ /g, " ") + " €";
 }

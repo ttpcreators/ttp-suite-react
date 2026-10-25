@@ -340,7 +340,7 @@ export function Engagement() {
     const next = freshHist.filter((h) => h.id !== id);
     const okBlob = await listAppStateKey("engagementHistory", [], [id]);
     if (!okBlob) {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return;
     }
     setHistory(next);

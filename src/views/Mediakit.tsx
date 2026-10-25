@@ -257,7 +257,7 @@ function MediakitFiles() {
     };
     const created = await dbInsert("documents", row);
     if (!created) {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return false;
     }
     setArchives((prev) => [created as unknown as ArchiveRow, ...(prev ?? [])]);
@@ -279,7 +279,7 @@ function MediakitFiles() {
   };
 
   const remove = async (row: ArchiveRow) => {
-    if (!(await dbDelete("documents", row.id))) return toast("Erreur — réessaie");
+    if (!(await dbDelete("documents", row.id))) return toast("Erreur, réessaie");
     if (!isLink(row.path)) {
       try {
         const { error: rmErr } = await supabase.storage.from("documents").remove([row.path]);

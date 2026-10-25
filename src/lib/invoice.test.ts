@@ -43,6 +43,17 @@ describe("totalsOf", () => {
     expect(t.reversal).toBe(1125);
   });
 
+  it("arrondi au centime : HT + TVA = TTC pile, jamais de NaN", () => {
+    const t = totalsOf([item(0.1), item(0.2), item(333.33)], false, 5.5, 20);
+    expect(t.ht).toBe(333.63);
+    expect(t.tva).toBe(18.35);
+    expect(t.ttc).toBe(351.98);
+    expect(t.commission).toBe(66.73);
+    expect(t.reversal).toBe(266.9);
+    const bad = totalsOf([{ id: "x", label: "", qty: NaN, unit: 50 }, item(200)], false, NaN, NaN);
+    expect(bad).toEqual({ ht: 200, tva: 0, ttc: 200, commission: 0, reversal: 200 });
+  });
+
   it("liste vide → 0 partout", () => {
     const t = totalsOf([], true, 0, 20);
     expect(t.ht).toBe(0);

@@ -10,6 +10,7 @@ import { titleCase, cn } from "@/lib/utils";
 import { invMonthKey, monthsBetween, momDelta, monthLabel, fmtCompact } from "@/lib/timeSeries";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
+import { useIsFounder } from "@/lib/useFounder";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { StatCard } from "@/components/ui/stat-card";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -214,6 +215,9 @@ function CompareCard({ label, current, previous, delta, curLbl, prevLbl }: { lab
 export function Stats() {
   const [data, setData] = useState<StatsData | null>(() => getCache<StatsData>("statsData"));
   const [error, setError] = useState(false);
+  // Chiffre d'affaires et factures : fondateurs seulement (comme Facturation). Un membre
+  // garde l'audience, l'engagement et l'activité.
+  const money = useIsFounder() === true;
   const [cmpMonths, setCmpMonths] = useStickyState<1 | 3 | 6 | 12>("stats:duree", [1, 3, 6, 12], 3);
   const [cmpAgainst, setCmpAgainst] = useStickyState("stats:comparer", ["prev", "year"] as const, "prev");
   const live = useLiveKey();
@@ -410,19 +414,23 @@ export function Stats() {
     <div className="space-y-4">
       {/* KPIs */}
       <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border lg:grid-cols-4">
-        <StatCard
-          icon={Receipt}
-          label="CA facturé"
-          value={formatEuro(totalCA)}
-          hint={`${issuedCount} facture${issuedCount > 1 ? "s" : ""} émise${issuedCount > 1 ? "s" : ""}, toutes périodes`}
-        />
-        <StatCard
-          icon={Wallet}
-          label="Encaissé"
-          value={formatEuro(byStatus.payee)}
-          hint="payé, toutes périodes"
-        />
-        <StatCard icon={Clock} label="En attente + retard" value={formatEuro(byStatus.attente + byStatus.retard)} hint="à suivre" />
+        {money && (
+          <>
+            <StatCard
+              icon={Receipt}
+              label="CA facturé"
+              value={formatEuro(totalCA)}
+              hint={`${issuedCount} facture${issuedCount > 1 ? "s" : ""} émise${issuedCount > 1 ? "s" : ""}, toutes périodes`}
+            />
+            <StatCard
+              icon={Wallet}
+              label="Encaissé"
+              value={formatEuro(byStatus.payee)}
+              hint="payé, toutes périodes"
+            />
+            <StatCard icon={Clock} label="En attente + retard" value={formatEuro(byStatus.attente + byStatus.retard)} hint="à suivre" />
+          </>
+        )}
         <StatCard
           icon={Users}
           label="Créateurs actifs"
@@ -463,6 +471,7 @@ export function Stats() {
       </div>
 
       {/* Comparaison de période */}
+      {money && (
       <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <div className="text-sm font-semibold text-foreground">Comparaison</div>
@@ -527,9 +536,10 @@ export function Stats() {
           </>
         )}
       </div>
+      )}
 
       {/* Vedette « glass » : CA facturé par mois (gros chiffre + tendance) */}
-      {hasRevenue && (
+      {money && hasRevenue && (
         <Suspense fallback={<div className="h-[320px] animate-pulse rounded-2xl bg-panel/50" />}>
           <GlassStatChart
             title="Chiffre d'affaires facturé"
@@ -543,11 +553,12 @@ export function Stats() {
       )}
 
       {/* Graphique détaillé : facturé vs encaissé + sélecteur de période */}
-      {hasRevenue && <RevenueChart points={revenuePoints} />}
+      {money && hasRevenue && <RevenueChart points={revenuePoints} />}
 
       {/* Graphiques */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* CA par statut */}
+        {money && (
         <ChartCard title="Répartition du chiffre d'affaires" subtitle="Par statut de facture">
           {statusData.length === 0 ? (
             <div className="grid h-[240px] place-items-center text-sm text-faint">Aucune facture</div>
@@ -579,8 +590,10 @@ export function Stats() {
             </>
           )}
         </ChartCard>
+        )}
 
         {/* Top créateurs par CA */}
+        {money && (
         <ChartCard title="Top créateurs · CA facturé" subtitle="8 premiers par montant facturé">
           {topCreators.length === 0 ? (
             <div className="grid h-[260px] place-items-center text-sm text-faint">Aucune donnée</div>
@@ -604,6 +617,7 @@ export function Stats() {
             </ChartContainer>
           )}
         </ChartCard>
+        )}
 
         {/* Abonnés par créatrice */}
         <ChartCard title="Abonnés par créateur" subtitle="8 plus grosses audiences">

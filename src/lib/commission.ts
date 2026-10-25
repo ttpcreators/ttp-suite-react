@@ -12,6 +12,28 @@ export function parseCommissionPct(s: string | null | undefined): number | null 
   return m ? parseFloat(m[1].replace(",", ".")) : null;
 }
 
+/**
+ * Taux d'un créateur : sa fiche roster, sinon le taux mémorisé à la dernière facture
+ * (blob `creatorCommission`), sinon le défaut. Le nom se compare sans majuscules ni
+ * espaces autour (« Léna Test » = « LÉNA TEST »).
+ */
+export function rateFor(
+  name: string | null | undefined,
+  roster: Record<string, number>,
+  saved: Record<string, number> = {},
+  fallback = DEFAULT_COMMISSION,
+): number {
+  const k = (name ?? "").trim().toLowerCase();
+  if (!k) return fallback;
+  const find = (map: Record<string, number>) => {
+    if (map[name as string] != null) return map[name as string];
+    for (const [n, v] of Object.entries(map)) if (n.trim().toLowerCase() === k && v != null) return v;
+    return undefined;
+  };
+  const v = find(roster) ?? find(saved);
+  return v != null && Number.isFinite(Number(v)) ? Number(v) : fallback;
+}
+
 /** Construit une table nom_créateur → taux (%) depuis le roster. */
 export function commissionMap(creators: { name: string; commission?: string | null }[]): Record<string, number> {
   const out: Record<string, number> = {};

@@ -205,10 +205,10 @@ export function RepresentationContract({ initial = null }: { initial?: ContractH
       const next = fn(fresh);
       const ok = await saveAppStateKey("representationConfigs", next);
       if (ok) setLocalCfg(next);
-      else toast("Erreur — réessaie");
+      else toast("Erreur, réessaie");
       return ok;
     } catch {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return false;
     }
   };
@@ -375,7 +375,7 @@ export function RepresentationContract({ initial = null }: { initial?: ContractH
       ok = false;
     }
     if (!ok) {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return;
     }
     setLocalHist(next);

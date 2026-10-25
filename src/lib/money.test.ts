@@ -109,3 +109,18 @@ describe("parseAmountStrict : une saisie ambiguë ne donne jamais un nombre faux
     expect(parseAmountStrict(1234.5)).toBe(1234.5);
   });
 });
+
+describe("formatEuro : arrondi et valeurs limites", () => {
+  const f = (n: number) => formatEuro(n).replace(/\s/g, " ");
+  it("arrondit au centime avant de choisir le format", () => {
+    expect(f(1200.004)).toBe("1 200 €");
+    expect(f(999.995)).toBe("1 000 €");
+    expect(f(0.1 + 0.2)).toBe("0,30 €");
+    expect(f(-12.5)).toBe("-12,50 €");
+  });
+  it("jamais « -0 € » ni « NaN € »", () => {
+    expect(f(-0.004)).toBe("0 €");
+    expect(f(NaN)).toBe("— €");
+    expect(f(Infinity)).toBe("— €");
+  });
+});

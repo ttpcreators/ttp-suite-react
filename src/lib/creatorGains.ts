@@ -1,7 +1,7 @@
 import type { StatusTone } from "./statusTone";
 import { parseAmount } from "./money";
 import { isOverdueInvoice } from "./relance";
-import { totalsOf } from "./invoice";
+import { cents, invoiceTotals, PAYOUT_TOLERANCE_EUR } from "./invoice";
 
 /**
  * Gains de l'espace créateur (logique PURE, testable sous Node), à partir des
@@ -71,7 +71,7 @@ export function gainsSummary(invoices: GainInvoice[], now: Date = new Date()): G
 
 /** Part nette du créateur sur un montant facturé. */
 export function netShare(amount: number, ratePct: number): number {
-  return Math.round(totalsOf([{ id: "x", label: "", qty: 1, unit: amount }], true, 0, ratePct).reversal);
+  return invoiceTotals(amount, null, ratePct).reversal;
 }
 
 /** Statut d'un versement, en mots de créatrice : à venir (en préparation), en cours (la marque paie), versé. */
@@ -128,11 +128,8 @@ export type RealPayout = { id?: string; date: string; amount: number; note?: str
 
 /** Part nette d'une facture : détail exact s'il existe, sinon le taux de sa fiche. */
 export function invoiceNet(inv: ReportInvoice, details: Record<string, ReportDetail>, ratePct: number): number {
-  const d = details[inv.id];
-  if (d && Array.isArray(d.items) && d.items.length) {
-    return Math.round(totalsOf(d.items, d.franchise !== false, Number(d.vatRate) || 0, d.commissionRate != null ? Number(d.commissionRate) : ratePct).reversal);
-  }
-  return netShare(parseAmount(inv.amount), ratePct);
+  // Même calcul que Facturation et Reversements (src/lib/invoice.ts), au centime.
+  return invoiceTotals(parseAmount(inv.amount), details?.[inv.id], ratePct).reversal;
 }
 
 export type GainLine = { key: string; label: string; amount: number; status: PayoutKey; date: string | null };
@@ -168,14 +165,16 @@ export function realGains(
   const done = [...payouts]
     .filter((p) => Number(p.amount) > 0)
     .sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
-  const paid = Math.round(done.reduce((s, p) => s + Number(p.amount), 0));
-  const owed = Math.max(0, Math.round(due) - paid);
+  const paid = cents(done.reduce((s, p) => s + Number(p.amount), 0));
+  // Même règle que Reversements : un reste sous la tolérance est un écart d'arrondi, pas un dû.
+  const rest = cents(due - paid);
+  const owed = rest > PAYOUT_TOLERANCE_EUR ? rest : 0;
   if (owed > 0) lines.unshift({ key: "owed", label: "", amount: owed, status: "encours", date: null });
   for (const [i, p] of done.entries()) {
-    lines.push({ key: `pay:${p.id ?? i}`, label: (p.note ?? "").trim(), amount: Math.round(Number(p.amount)), status: "verse", date: p.date });
+    lines.push({ key: `pay:${p.id ?? i}`, label: (p.note ?? "").trim(), amount: cents(Number(p.amount)), status: "verse", date: p.date });
   }
-  const last = done[0] ? { amount: Math.round(Number(done[0].amount)), party: (done[0].note ?? "").trim() } : null;
-  return { coming: owed + upcoming, paid, late, last, owed, lines };
+  const last = done[0] ? { amount: cents(Number(done[0].amount)), party: (done[0].note ?? "").trim() } : null;
+  return { coming: cents(owed + upcoming), paid, late: cents(late), last, owed, lines };
 }
 
 /** Libellé et couleur d'un statut de versement (mêmes mots que `payoutStatus`). */

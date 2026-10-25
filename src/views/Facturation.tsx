@@ -39,10 +39,10 @@ import { FilterBar } from "@/components/ui/filter-bar";
 import { PeriodFilter, periodsFrom, inPeriod, periodToRange, periodLabel } from "@/components/ui/period-filter";
 import { fullMonthOf, rangeLabel } from "@/lib/dateRange";
 import { useCreators } from "@/lib/useCreators";
-import { commissionMap } from "@/lib/commission";
+import { commissionMap, rateFor } from "@/lib/commission";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
-import { totalsOf, type LineItem, type Totals } from "@/lib/invoice";
+import { invoiceTotals, totalsOf, type LineItem, type Totals } from "@/lib/invoice";
 import { printHtml } from "@/lib/printPdf";
 import { docHead, pdfFileTitle, ttpLogoImg } from "@/lib/pdfDoc";
 import { notifyCreator } from "@/lib/push";
@@ -51,6 +51,7 @@ import { PhoneMenu } from "@/components/ui/phone-bar";
 import { IosSheet, Overlay } from "@/components/mobile/ios-sheet";
 import { useIsPhone } from "@/lib/iosUi";
 import { CreatorPicker } from "@/components/ui/creator-picker";
+import { isOverdueInvoice } from "@/lib/relance";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -130,32 +131,9 @@ function metaOf(status: string): { badge: AnimatedBadgeStatus; label: string } {
   return STATUS_META[status as InvoiceStatus] ?? { badge: "neutral", label: status || "—" };
 }
 
-/** Échéance d'une facture → Date locale (même lecture que la page Relances). */
-function parseDueDate(s: string | null): Date | null {
-  if (!s) return null;
-  const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(s.trim());
-  if (iso) return new Date(Number(iso[1]), Number(iso[2]) - 1, Number(iso[3]));
-  const dm = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/.exec(s.trim());
-  if (dm) {
-    let y = dm[3] ?? String(new Date().getFullYear());
-    if (y.length === 2) y = "20" + y;
-    return new Date(Number(y), Number(dm[2]) - 1, Number(dm[1]));
-  }
-  return null;
-}
-function daysSinceDue(d: Date): number {
-  const t = new Date();
-  const today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
-  return Math.floor((today.getTime() - d.getTime()) / 86400000);
-}
-/** Facture en retard : statut « retard », ou « En attente » dont l'échéance est passée
- *  (même règle que la page Relances). Règle UNIQUE du badge, du filtre et du compteur. */
-function isLate(r: { status: string; date: string | null }): boolean {
-  if (r.status === "retard") return true;
-  if (r.status !== "attente") return false;
-  const d = parseDueDate(r.date);
-  return !!d && daysSinceDue(d) > 0;
-}
+/** Facture en retard : statut « retard », ou « En attente » dont l'échéance est passée.
+ *  Règle UNIQUE de src/lib/relance.ts (page Relances, gains du créateur) : badge, filtre, compteur. */
+const isLate = (r: { status: string; date: string | null }): boolean => isOverdueInvoice(r);
 /** Statut AFFICHÉ (rien n'est enregistré) : « En attente » échue → « retard ». */
 function shownStatusOf(r: { status: string; date: string | null }): string {
   return isLate(r) ? "retard" : r.status;
@@ -558,16 +536,21 @@ export function Facturation() {
 
   // « Créer le devis » depuis Tarifs : nouvelle facture en brouillon, lignes remplies, pas
   // encore enregistrée (quitter sans enregistrer demande confirmation).
+  // Le roster doit être lu : le taux de commission vient de la fiche du créateur (sinon la
+  // facture partait au taux par défaut, et Reversements suit le taux DE LA FACTURE).
   useEffect(() => {
-    if (!rows || !appData) return;
+    if (!rows || !appData || !creators.length) return;
     const p = takeInvoicePrefill();
     if (!p) return;
     const blank = blankDraft(rows.map((r) => r.ref), ((appData.invoiceBankAccounts as BankAccount[]) ?? [])[0]?.id ?? "");
     const lines = p.lines.map((l) => ({ id: uid(), label: l.label, qty: 1, unit: l.unit }));
-    setDraft({ ...blank, creator: p.creator, brand: p.brand, items: lines.length ? lines : blank.items, ...(p.collabId ? { collabId: p.collabId } : {}) });
+    const commissionRate = p.creator
+      ? rateFor(p.creator, commissionMap(creators), (appData.creatorCommission as Record<string, number>) ?? {}, DEFAULT_COMMISSION)
+      : blank.commissionRate;
+    setDraft({ ...blank, creator: p.creator, brand: p.brand, commissionRate, items: lines.length ? lines : blank.items, ...(p.collabId ? { collabId: p.collabId } : {}) });
     setBaseline(draftSnapshot(blank));
     setConfirmLeave(false);
-  }, [rows, appData]);
+  }, [rows, appData, creators]);
 
 
   // Erreur seulement si rien n'est chargé : un raté de rafraîchissement garde la liste.
@@ -591,10 +574,7 @@ export function Facturation() {
   // Taux de commission : la fiche roster (creators.commission) fait foi ; repli
   // sur l'ancien blob puis le défaut. → changer le % sur le roster met à jour les factures.
   const rosterCommission = commissionMap(creators);
-  const commissionFor = (creator: string | null) =>
-    creator
-      ? rosterCommission[creator] ?? (commissions[creator] != null ? commissions[creator] : DEFAULT_COMMISSION)
-      : DEFAULT_COMMISSION;
+  const commissionFor = (creator: string | null) => rateFor(creator, rosterCommission, commissions, DEFAULT_COMMISSION);
 
   const detailsFor = (r: Row): Details => {
     const existing = details[r.id];
@@ -647,12 +627,8 @@ export function Facturation() {
   // Facture détaillée → lignes + TVA + taux de la facture ; ancienne facture sans
   // détail → montant enregistré considéré HT (franchise), taux du roster. Seuil 100 € inclus.
   const finOf = (r: Row): Totals & { rate: number } => {
-    const d = details[r.id];
-    const rate = d?.commissionRate ?? commissionFor(r.creator);
-    const t = d?.items?.length
-      ? totalsOf(d.items, d.franchise, d.vatRate, rate)
-      : totalsOf([{ id: "x", label: "", qty: 1, unit: parseAmount(r.amount) }], true, 0, rate);
-    return { ...t, rate };
+    // Même calcul que Reversements et les gains du créateur (src/lib/invoice.ts).
+    return invoiceTotals(parseAmount(r.amount), details[r.id], commissionFor(r.creator));
   };
   // Synthèse sur la période (brouillons exclus : ce n'est pas encore facturé).
   const billed = scope.filter((r) => r.status !== "brouillon");

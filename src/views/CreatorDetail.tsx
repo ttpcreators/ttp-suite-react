@@ -19,6 +19,7 @@ import { useAppState, mergeAppStateKey, listAppStateKey, getAppState, invalidate
 
 const CreatorMailsAgency = lazy(lazyImport(() => import("./CreatorMails").then((m) => ({ default: m.CreatorMailsAgency }))));
 import { parseAmount, formatEuro } from "@/lib/money";
+import { useIsFounder } from "@/lib/useFounder";
 
 type CtDeadline = { id?: string; creator: string; start: string; months: number; type?: string; note?: string };
 function ctEndDate(start: string, months: number): Date | null {
@@ -209,6 +210,8 @@ export function CreatorDetail({
   const [phoneSeg, setPhoneSeg] = useStickyState("fiche-createur:section", ["suivi", "infos", "activite", "mails"] as const, "suivi");
   const segHide = (seg: typeof phoneSeg) => (phoneSeg !== seg ? "hidden" : "");
   const [inv, setInv] = useState<Inv[]>([]);
+  // Montants (CA, factures) réservés aux fondateurs, comme Facturation.
+  const founder = useIsFounder() === true;
   const [td, setTd] = useState<Td[]>([]);
   const [br, setBr] = useState<Br[]>([]);
   const [ideas, setIdeas] = useState<Idea[]>([]);
@@ -281,7 +284,8 @@ export function CreatorDetail({
       setC(row);
       if (row && !editingRef.current) setForm(coordOf(row));
     });
-    supabase.from("invoices").select("ref,party,amount,date,status").eq("creator", name).then(({ data, error }) => { if (error) console.error("Factures créateur:", error); if (alive) setInv((data as Inv[]) ?? []); });
+    // Sans tenir compte des majuscules (« LÉNA TEST » = « Léna Test »), comme Reversements et creator-report.
+    supabase.from("invoices").select("ref,party,amount,date,status").ilike("creator", name.trim().replace(/[\\%_]/g, (m) => "\\" + m)).then(({ data, error }) => { if (error) console.error("Factures créateur:", error); if (alive) setInv((data as Inv[]) ?? []); });
     // Ses tâches + celles partagées avec d'autres créateurs (todos.creators).
     void selectTodosFor<Td>(name, "id,text,done").then(({ data, error }) => { if (error) console.error("À faire créateur:", error); if (alive) setTd(data ?? []); });
     supabase.from("briefs").select("brand,deliverables,due").eq("creator", name).then(({ data, error }) => { if (error) console.error("Briefs créateur:", error); if (alive) setBr((data as Br[]) ?? []); });
@@ -314,7 +318,7 @@ export function CreatorDetail({
     if (!form.birth && c.birth && !toISODate(c.birth)) delete patch.birth;
     const ok = await dbUpdate("creators", c.id, patch);
     if (!ok) {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return;
     }
     // Exclusivité : blob agence — n'envoie QUE l'entrée de ce créateur (fusion côté
@@ -378,7 +382,7 @@ export function CreatorDetail({
     // N'envoie QUE cette échéance (remplacée sur place ou ajoutée en fin, côté base).
     const ok = await listAppStateKey("contractDeadlines", [entry]);
     if (!ok) {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return;
     }
     setDeadlinesLocal(list); // reflète immédiatement (évite le doublon et l'affichage périmé)
@@ -868,7 +872,7 @@ export function CreatorDetail({
 
       {/* Activité : factures, tâches, briefs, idées */}
       <div className={cn("grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-4", segHide("activite"))}>
-        <div className="rounded-2xl border border-border bg-surface p-5">
+        {founder && <div className="rounded-2xl border border-border bg-surface p-5">
           <div className="mb-3">{sectionTitle(Receipt, "Facturation")}</div>
           {inv.length === 0 ? (
             <div className="text-xs text-muted-foreground">Aucune facture.</div>
@@ -883,7 +887,7 @@ export function CreatorDetail({
               </div>
             ))
           )}
-        </div>
+        </div>}
         <div className="rounded-2xl border border-border bg-surface p-5">
           <div className="mb-3">{sectionTitle(ListChecks, "À faire")}</div>
           {td.length === 0 ? (
@@ -1035,7 +1039,7 @@ export function CreatorDetail({
               ["Engagement", mainEntry ? mainEntry.er : (c?.er ?? null)],
               ["CA encaissé", caEncaisse > 0 ? formatEuro(caEncaisse) : null],
               ["Couverture", c?.reach ?? null],
-            ] as [string, string | null][]).map(([l, v]) => (
+            ] as [string, string | null][]).filter(([l]) => founder || l !== "CA encaissé").map(([l, v]) => (
               <div key={l} className="min-w-[118px] shrink-0 snap-start rounded-xl border border-border bg-surface px-3.5 py-2.5">
                 <div className="truncate text-[12px] text-muted-foreground">{l}</div>
                 <div className="mt-0.5 truncate text-[19px] font-semibold tabular-nums tracking-tight text-foreground">{v || "—"}</div>
@@ -1055,7 +1059,7 @@ export function CreatorDetail({
           </div>
         </>
       )}
-      <div className={cn("mb-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-4", iosPhone && "hidden")}>
+      <div className={cn("mb-4 grid gap-px overflow-hidden rounded-2xl border border-border bg-border", founder ? "grid-cols-2 md:grid-cols-4" : "grid-cols-3", iosPhone && "hidden")}>
         {stat(
           "Abonnés",
           totalFollowers > 0 ? fmtCompact(totalFollowers) : (c?.followers ?? null),
@@ -1066,7 +1070,7 @@ export function CreatorDetail({
           mainEntry ? mainEntry.er : (c?.er ?? null),
           mainEntry ? `${mainEntry.platformLabel} · au ${mainEntry.date}` : undefined,
         )}
-        {stat("CA encaissé", caEncaisse > 0 ? formatEuro(caEncaisse) : null)}
+        {founder && stat("CA encaissé", caEncaisse > 0 ? formatEuro(caEncaisse) : null)}
         {stat("Couverture", c?.reach ?? null)}
       </div>
 

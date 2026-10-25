@@ -17,6 +17,7 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { Trash2, Check, RefreshCw, ChevronUp, ChevronDown } from "@/components/icons";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
+import { useIsFounder } from "@/lib/useFounder";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { useIgColumn, type IgCreator } from "@/lib/instagram";
 
@@ -121,21 +122,25 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
   }, [live]);
 
   // CA par créateur = somme de SES factures payées (auto, plus de saisie manuelle).
-  const [caByCreator, setCaByCreator] = useState<Record<string, number>>(() => getCache<Record<string, number>>("rosterCA") ?? {});
+  // L'argent n'est montré qu'aux fondateurs (comme Facturation) : rien n'est lu pour un membre.
+  const founder = useIsFounder() === true;
+  const [caByCreator, setCaByCreator] = useState<Record<string, number>>(() => getCache<Record<string, number>>("rosterCA2") ?? {});
   useEffect(() => {
+    if (!founder) return;
     supabase.from("invoices").select("amount,status,creator").eq("status", "payee").then(({ data, error }) => {
       // Erreur réseau : on garde le CA déjà affiché (et le cache) plutôt que « — » partout.
       if (error) return;
       const m: Record<string, number> = {};
       for (const iv of (data as { amount: string | null; creator: string | null }[]) ?? []) {
-        const c = (iv.creator ?? "").trim();
+        // Clé sans majuscules : « LÉNA TEST » et « Léna Test » sont le même créateur.
+        const c = (iv.creator ?? "").trim().toLowerCase();
         if (!c) continue;
         m[c] = (m[c] ?? 0) + parseAmount(iv.amount);
       }
-      setCache("rosterCA", m);
+      setCache("rosterCA2", m);
       setCaByCreator(m);
     });
-  }, [live]);
+  }, [live, founder]);
 
   // Abonnés CUMULÉS par créateur = somme du DERNIER relevé de chaque plateforme
   // (mesures d'engagement, blob `engagementHistory`). Clé = nom en minuscules.
@@ -272,11 +277,12 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
   const ers = actives.map((c) => numOf(c.er)).filter((n) => n > 0);
   const avgEr = ers.length ? ers.reduce((a, n) => a + n, 0) / ers.length : 0;
   const totalCa = Object.values(caByCreator).reduce((a, n) => a + n, 0);
+  const caOf = (name: string) => caByCreator[name.trim().toLowerCase()] ?? 0;
   const kpis = [
     { label: "Créateurs actifs", value: String(actives.length), foot: `sur ${rows.length} au roster` },
     { label: "Abonnés cumulés", value: totalFollowers ? fmtCompact(totalFollowers) : "—", foot: "tous réseaux, créateurs actifs" },
     { label: "Engagement moyen", value: avgEr ? `${avgEr.toFixed(2).replace(".", ",")} %` : "—", foot: `sur ${ers.length} mesure${ers.length > 1 ? "s" : ""}` },
-    { label: "CA encaissé", value: formatEuro(totalCa), foot: "factures payées" },
+    ...(founder ? [{ label: "CA encaissé", value: formatEuro(totalCa), foot: "factures payées" }] : []),
   ];
 
   // Dernière piste FIXE (72px) et non `auto` : sinon l'en-tête (col vide) et les
@@ -371,7 +377,7 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
             <span>Niche</span>
             <span className="text-right">Abonnés</span>
             <span className="text-right">Engagement</span>
-            <span className="text-right">CA encaissé</span>
+            <span className="text-right">{founder ? "CA encaissé" : ""}</span>
             <span className="text-right">Statut</span>
             <span />
           </div>
@@ -422,7 +428,7 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
                   {c.er}
                 </span>
                 <span className="hidden text-right text-[13px] font-medium tabular-nums text-foreground md:inline">
-                  {caByCreator[c.name] ? formatEuro(caByCreator[c.name]) : "—"}
+                  {founder ? (caOf(c.name) ? formatEuro(caOf(c.name)) : "—") : ""}
                 </span>
 
                 {/* Bloc droit mobile : à jour + statut (point de couleur) */}
