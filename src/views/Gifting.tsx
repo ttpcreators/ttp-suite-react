@@ -22,7 +22,7 @@ import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
-import { CollabField, ObjectCollabLink, useCollabLinkReady } from "@/components/collab-links";
+import { CollabField, ObjectCollabLink, linkNewToCollab, useCollabLinkReady } from "@/components/collab-links";
 import { getCollabLink, openCollab, setCollabLink } from "@/lib/collabLinksDb";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { BrandTile, DetailRows, MasterList } from "@/components/brand-tile";
@@ -103,8 +103,10 @@ export function Gifting({ embedded = false }: { embedded?: boolean } = {}) {
   const periods = periodsFrom(list.map((g) => g.received_on));
   const shown = period ? list.filter((g) => inPeriod(g.received_on, period)) : list;
 
+  const [collabId, setCollabId] = useState(""); // formulaire : collab à relier (après le SQL collab_id)
 
   function resetForm() {
+    setCollabId(""); // une collab choisie puis « Annuler » ne revient pas au formulaire suivant
     setEditId(null);
     setCreator("");
     setBrand("");
@@ -142,7 +144,6 @@ export function Gifting({ embedded = false }: { embedded?: boolean } = {}) {
     setFormOpen(true);
   }
 
-  const [collabId, setCollabId] = useState(""); // formulaire : collab à relier (après le SQL collab_id)
   async function save() {
     const b = brand.trim();
     const p = product.trim();
@@ -178,7 +179,7 @@ export function Gifting({ embedded = false }: { embedded?: boolean } = {}) {
       const created = await dbInsert("gifting", { ...patch, source: "agency", sort_order: nextOrder(list) });
       if (!created) return toast("Erreur — réessaie");
       setRows((prev) => [created as unknown as GiftRow, ...(prev ?? [])]);
-      if (collabId) void setCollabLink("gifting", (created as { id: string }).id, collabId);
+      void linkNewToCollab("gifting", (created as { id: string }).id, collabId);
       if (patch.creator) notifyCreator("gift", patch.creator, b || p);
       toast("Gifting ajouté ✓");
     }
@@ -610,10 +611,10 @@ function GiftPanel({ g, photoUrl, onStatus, onEdit, onRemove, onLinked }: {
       return toast("Erreur, réessaie");
     }
     const id = (created as { id: string }).id;
-    await setCollabLink("gifting", g.id, id);
+    const link = await setCollabLink("gifting", g.id, id);
     setBusy(false);
     onLinked();
-    toast("Collab créée ✓");
+    toast(link === "error" ? "Collab créée, mais le gifting n'y est pas relié : relie-le depuis sa fiche" : "Collab créée ✓");
     void openCollab(id);
   };
   const rows: [string, ReactNode][] = [

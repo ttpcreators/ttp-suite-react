@@ -36,8 +36,7 @@ import { useStickyState } from "@/lib/useStickyState";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { insertMention, mentionAt, mentionSuggestions, parseQuickAdd } from "@/lib/todoQuickAdd";
 import { creatorsLabel, creatorsPatch, hasCreator, joinNames, todoCreators } from "@/lib/todoCreators";
-import { CollabField, ObjectCollabLink } from "@/components/collab-links";
-import { setCollabLink } from "@/lib/collabLinksDb";
+import { CollabField, ObjectCollabLink, linkNewToCollab } from "@/components/collab-links";
 import { noteCreatorsColumn, todosHaveCreators } from "@/lib/todoCreatorsDb";
 import { appendPoint, latestPoint, parsePoints, progressColumnMissing } from "@/lib/todoProgress";
 import { TONE_DOT, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
@@ -603,7 +602,7 @@ export function Todo() {
     }
     const created = await createTodo({ text, descr, note, due, priority, creators: forceAgency ? [] : creatorList });
     if (!created) return;
-    if (collabId) void setCollabLink("todos", created.id, collabId);
+    void linkNewToCollab("todos", created.id, collabId);
     setCollabId("");
     setFormOpen(false);
     setForceAgency(false);

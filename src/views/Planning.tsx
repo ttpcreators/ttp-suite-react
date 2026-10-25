@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { EventCalendar, type Ev } from "@/components/ui/event-calendar";
-import { setCollabLink } from "@/lib/collabLinksDb";
+import { linkNewToCollab } from "@/components/collab-links";
 import { GoogleConnect } from "@/components/ui/google-connect";
 import { dbInsert, dbUpdate, dbDelete } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
@@ -221,7 +221,7 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
       toast("Erreur — réessaie");
       return false;
     }
-    if (e.collabId) void setCollabLink("events", String((created as { id: string }).id), e.collabId);
+    if (e.collabId) void linkNewToCollab("events", String((created as { id: string }).id), e.collabId);
     setRows((prev) => [{ ...e, collabId: undefined, date: dateVal, id: String((created as { id: string }).id) }, ...(prev ?? [])]);
     // Push à chaque créateur concerné (who peut être une liste "Nom A, Nom B").
     (e.who ?? "").split(",").map((c) => c.trim()).filter(Boolean).forEach((c) => notifyCreator("event", c, e.title));

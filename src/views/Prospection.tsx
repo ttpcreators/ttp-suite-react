@@ -16,7 +16,7 @@ import { ArrowRight, Handshake, Pencil, Trash2, PanelsTopLeft, Columns3, Chevron
 import { CreatorPickerField } from "@/components/ui/creator-picker";
 import { useCreators } from "@/lib/useCreators";
 import { cachetOf, collabFromProspect, type Proposal } from "@/lib/prospectProposal";
-import { markProspectSigned, proposalColumnsReady } from "@/lib/prospectsDb";
+import { markProspectSigned, proposalColumnsReady, prospectCollabId } from "@/lib/prospectsDb";
 import { openCollab } from "@/lib/collabLinksDb";
 import { fmtDay } from "@/lib/dates";
 import { titleCase } from "@/lib/utils";
@@ -130,15 +130,23 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
   const submitConvert = async () => {
     const r = convert;
     if (!r) return;
+    // Déjà signé par un collègue entre-temps : on ouvre sa collab au lieu d'en créer une deuxième.
+    const already = await prospectCollabId(r.id);
+    if (already) {
+      setRows((rs) => (rs ?? []).map((x) => (x.id === r.id ? { ...x, stage: "Signé", collab_id: already } : x)));
+      setConvert(null);
+      toast("Déjà signé : collab ouverte");
+      return void openCollab(already);
+    }
     const { data: last } = await supabase.from("collabs").select("sort_order").order("sort_order", { ascending: false }).limit(1);
     const order = ((last?.[0] as { sort_order?: number } | undefined)?.sort_order ?? 0) + 1;
     const created = await dbInsert("collabs", collabFromProspect(r, { creator: cvCreator, deliverables: cvDeliv, cachet: cvCachet }, order));
     if (!created) return toast("Erreur, réessaie");
     const collabId = (created as { id: string }).id;
     const ok = await markProspectSigned(r.id, collabId);
-    setRows((rs) => (rs ?? []).map((x) => (x.id === r.id ? { ...x, stage: "Signé", ...(ok ? { collab_id: collabId } : {}) } : x)));
+    if (ok) setRows((rs) => (rs ?? []).map((x) => (x.id === r.id ? { ...x, stage: "Signé", collab_id: collabId } : x)));
     setConvert(null);
-    toast("Collab créée ✓");
+    toast(ok ? "Collab créée ✓" : "Collab créée, mais le prospect n'est pas passé en « Signé »");
     void openCollab(collabId);
   };
 
