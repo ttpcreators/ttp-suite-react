@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { totalsOf, COMMISSION_FLOOR_EUR, type LineItem } from "./invoice";
+import { totalsOf, invoiceHT, COMMISSION_FLOOR_EUR, type LineItem } from "./invoice";
 
 const item = (unit: number, qty = 1): LineItem => ({ id: "x", label: "", qty, unit });
 
@@ -59,5 +59,16 @@ describe("totalsOf", () => {
     expect(t.ht).toBe(0);
     expect(t.commission).toBe(0);
     expect(t.reversal).toBe(0);
+  });
+});
+
+describe("invoiceHT (chiffre d'affaires hors taxes)", () => {
+  it("facture détaillée avec TVA : le HT des lignes, pas le TTC enregistré", () => {
+    const detail = { items: [{ id: "a", label: "Reel", qty: 1, unit: 1000 }], franchise: false, vatRate: 20, commissionRate: 15 };
+    expect(invoiceHT(1200, detail)).toBe(1000);
+  });
+  it("ancienne facture sans détail : le montant enregistré", () => {
+    expect(invoiceHT(850.5, null)).toBe(850.5);
+    expect(invoiceHT(850.5, { items: [] })).toBe(850.5);
   });
 });

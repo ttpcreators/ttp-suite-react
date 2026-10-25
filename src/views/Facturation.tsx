@@ -42,7 +42,7 @@ import { useCreators } from "@/lib/useCreators";
 import { commissionMap, rateFor } from "@/lib/commission";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
-import { invoiceTotals, totalsOf, type LineItem, type Totals } from "@/lib/invoice";
+import { invoiceHT, invoiceTotals, totalsOf, type LineItem, type Totals } from "@/lib/invoice";
 import { printHtml } from "@/lib/printPdf";
 import { docHead, pdfFileTitle, ttpLogoImg } from "@/lib/pdfDoc";
 import { notifyCreator } from "@/lib/push";
@@ -616,12 +616,14 @@ export function Facturation() {
   const bentoM = focusYm ? Number(focusYm.slice(5, 7)) : nowM;
   const periodName = periodRange ? rangeLabel(periodRange) : "";
   const paidScope = scope.filter((r) => r.status === "payee" && (period ? true : ymOf(r.date)?.y === nowY));
-  const encaisse = paidScope.reduce((s, r) => s + parseAmount(r.amount), 0);
+  // Chiffre d'affaires en HORS TAXES (choix de Marc, 2026-10-25) : la TVA est due à l'État.
+  const htOf = (r: Row) => invoiceHT(parseAmount(r.amount), details[r.id]);
+  const encaisse = paidScope.reduce((s, r) => s + htOf(r), 0);
   const monthly = Array.from({ length: 12 }, (_, i) =>
-    paidScope.filter((r) => ymOf(r.date)?.y === bentoY && ymOf(r.date)?.m === i + 1).reduce((s, r) => s + parseAmount(r.amount), 0),
+    paidScope.filter((r) => ymOf(r.date)?.y === bentoY && ymOf(r.date)?.m === i + 1).reduce((s, r) => s + htOf(r), 0),
   );
   // Barre « ce mois » : le mois choisi, sinon le mois courant ; plage libre = total par mois de l'année.
-  const barsLabel = focusYm ? `Encaissé · ${periodLabel(focusYm).toLowerCase()}` : periodRange ? `Encaissé par mois · ${bentoY}` : "Encaissé ce mois";
+  const barsLabel = focusYm ? `Encaissé HT · ${periodLabel(focusYm).toLowerCase()}` : periodRange ? `Encaissé HT par mois · ${bentoY}` : "Encaissé HT ce mois";
   const barsValue = periodRange && !focusYm ? monthly.reduce((s, v) => s + v, 0) : (monthly[bentoM - 1] ?? 0);
   // ── Marge agence : commission calculée sur le HT (jamais sur la TVA), séparée du TTC.
   // Facture détaillée → lignes + TVA + taux de la facture ; ancienne facture sans
@@ -1251,7 +1253,7 @@ export function Facturation() {
         <StatsBento phoneStrip
           className="mb-5"
           primary={{
-            eyebrow: `Encaissé · ${period ? periodName : nowY}`,
+            eyebrow: `Encaissé HT · ${period ? periodName : nowY}`,
             value: formatEuro(encaisse),
             caption: `${paidScope.length} facture${paidScope.length > 1 ? "s" : ""} réglée${paidScope.length > 1 ? "s" : ""} ${period ? "sur la période" : "cette année"}.`,
           }}
@@ -1260,7 +1262,7 @@ export function Facturation() {
             value: formatEuro(barsValue),
             series: monthly,
           }}
-          small={{ value: String(unpaid.length), label: period ? `À encaisser · ${periodName}` : "À encaisser · toutes périodes" }}
+          small={{ value: String(unpaid.length), label: period ? `À encaisser TTC · ${periodName}` : "À encaisser TTC · toutes périodes" }}
           accent={{
             value: formatEuro(aEncaisser),
             label: nbRetard > 0 ? `dont ${nbRetard} en retard` : "En attente de paiement",

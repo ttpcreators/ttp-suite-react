@@ -3,7 +3,8 @@ import { typeHandle } from "@/lib/touches";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { parseAmount, formatEuro } from "@/lib/money";
-import { useAppState, type AppState } from "@/lib/appState";
+import { getAppState, useAppState, type AppState } from "@/lib/appState";
+import { invoiceHT, type InvoiceDetailLike } from "@/lib/invoice";
 import { fmtCompact } from "@/lib/timeSeries";
 import { useSearch, matchQuery, matchWords } from "@/lib/search";
 import { PillSearch } from "@/components/ui/pill-search";
@@ -121,25 +122,33 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
       });
   }, [live]);
 
-  // CA par créateur = somme de SES factures payées (auto, plus de saisie manuelle).
+  // CA par créateur = somme HORS TAXES de SES factures payées (auto, plus de saisie manuelle).
   // L'argent n'est montré qu'aux fondateurs (comme Facturation) : rien n'est lu pour un membre.
   const founder = useIsFounder() === true;
-  const [caByCreator, setCaByCreator] = useState<Record<string, number>>(() => getCache<Record<string, number>>("rosterCA2") ?? {});
+  const [caByCreator, setCaByCreator] = useState<Record<string, number>>(() => getCache<Record<string, number>>("rosterCA3") ?? {});
   useEffect(() => {
     if (!founder) return;
-    supabase.from("invoices").select("amount,status,creator").eq("status", "payee").then(({ data, error }) => {
+    let alive = true;
+    Promise.all([
+      supabase.from("invoices").select("id,amount,status,creator").eq("status", "payee"),
+      getAppState().catch(() => null),
+    ]).then(([{ data, error }, app]) => {
       // Erreur réseau : on garde le CA déjà affiché (et le cache) plutôt que « — » partout.
-      if (error) return;
+      if (error || !app || !alive) return;
+      const details = (app.invoiceDetails as Record<string, InvoiceDetailLike> | undefined) ?? {};
       const m: Record<string, number> = {};
-      for (const iv of (data as { amount: string | null; creator: string | null }[]) ?? []) {
+      for (const iv of (data as { id: string; amount: string | null; creator: string | null }[]) ?? []) {
         // Clé sans majuscules : « LÉNA TEST » et « Léna Test » sont le même créateur.
         const c = (iv.creator ?? "").trim().toLowerCase();
         if (!c) continue;
-        m[c] = (m[c] ?? 0) + parseAmount(iv.amount);
+        m[c] = (m[c] ?? 0) + invoiceHT(parseAmount(iv.amount), details[iv.id]);
       }
-      setCache("rosterCA2", m);
+      setCache("rosterCA3", m);
       setCaByCreator(m);
     });
+    return () => {
+      alive = false;
+    };
   }, [live, founder]);
 
   // Abonnés CUMULÉS par créateur = somme du DERNIER relevé de chaque plateforme
@@ -282,7 +291,7 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
     { label: "Créateurs actifs", value: String(actives.length), foot: `sur ${rows.length} au roster` },
     { label: "Abonnés cumulés", value: totalFollowers ? fmtCompact(totalFollowers) : "—", foot: "tous réseaux, créateurs actifs" },
     { label: "Engagement moyen", value: avgEr ? `${avgEr.toFixed(2).replace(".", ",")} %` : "—", foot: `sur ${ers.length} mesure${ers.length > 1 ? "s" : ""}` },
-    ...(founder ? [{ label: "CA encaissé", value: formatEuro(totalCa), foot: "factures payées" }] : []),
+    ...(founder ? [{ label: "CA encaissé HT", value: formatEuro(totalCa), foot: "factures payées" }] : []),
   ];
 
   // Dernière piste FIXE (72px) et non `auto` : sinon l'en-tête (col vide) et les
@@ -377,7 +386,7 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
             <span>Niche</span>
             <span className="text-right">Abonnés</span>
             <span className="text-right">Engagement</span>
-            <span className="text-right">{founder ? "CA encaissé" : ""}</span>
+            <span className="text-right">{founder ? "CA HT" : ""}</span>
             <span className="text-right">Statut</span>
             <span />
           </div>

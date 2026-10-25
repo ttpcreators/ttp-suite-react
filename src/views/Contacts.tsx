@@ -1236,7 +1236,7 @@ export function Contacts() {
                     </div>
                     {rec.revenue != null && (
                       <div className={cn(stat, "border-l border-border")}>
-                        <span className="text-[11px] text-muted-foreground">Encaissé</span>
+                        <span className="text-[11px] text-muted-foreground">Encaissé HT</span>
                         <span className="truncate text-[17px] font-bold tabular-nums text-foreground">{formatEuro(rec.revenue)}</span>
                       </div>
                     )}

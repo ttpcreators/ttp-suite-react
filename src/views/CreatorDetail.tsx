@@ -15,6 +15,7 @@ import { dbUpdate } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useLiveKey } from "@/lib/useLive";
+import { invoiceHT, type InvoiceDetailLike } from "@/lib/invoice";
 import { useAppState, mergeAppStateKey, listAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 
 const CreatorMailsAgency = lazy(lazyImport(() => import("./CreatorMails").then((m) => ({ default: m.CreatorMailsAgency }))));
@@ -99,7 +100,7 @@ type Creator = {
 };
 /** Le media kit a-t-il une ligne YouTube ? (carte YouTube affichée même sans @). */
 const hasKitYouTube = (mk: Creator["mediakit"]) => !!mk?.platforms?.some((p) => p?.key === "youtube");
-type Inv = { ref: string; party: string; amount: string; date: string; status?: string | null };
+type Inv = { id: string; ref: string; party: string; amount: string; date: string; status?: string | null };
 type Td = { id: string; text: string; done: boolean };
 type Br = { brand: string; deliverables: string | null; due: string | null };
 type Idea = { text: string };
@@ -227,6 +228,8 @@ export function CreatorDetail({
   const [ctType, setCtType] = useState("représentation");
 
   const live = useLiveKey();
+  // Lignes des factures (blob) : le CA encaissé s'affiche en HORS TAXES (choix de Marc, 2026-10-25).
+  const { data: invDetails } = useAppState<Record<string, InvoiceDetailLike>>((s: AppState) => (s["invoiceDetails"] as Record<string, InvoiceDetailLike>) ?? {});
   const { data: deadlinesRemote } = useAppState<CtDeadline[]>((s: AppState) => (s["contractDeadlines"] as CtDeadline[]) ?? []);
   // Copie locale prioritaire après enregistrement du contrat (le blob ne se
   // resynchronise qu'au prochain tick live, ~20 s) — effacée dès que le remote arrive.
@@ -285,7 +288,7 @@ export function CreatorDetail({
       if (row && !editingRef.current) setForm(coordOf(row));
     });
     // Sans tenir compte des majuscules (« LÉNA TEST » = « Léna Test »), comme Reversements et creator-report.
-    supabase.from("invoices").select("ref,party,amount,date,status").ilike("creator", name.trim().replace(/[\\%_]/g, (m) => "\\" + m)).then(({ data, error }) => { if (error) console.error("Factures créateur:", error); if (alive) setInv((data as Inv[]) ?? []); });
+    supabase.from("invoices").select("id,ref,party,amount,date,status").ilike("creator", name.trim().replace(/[\\%_]/g, (m) => "\\" + m)).then(({ data, error }) => { if (error) console.error("Factures créateur:", error); if (alive) setInv((data as Inv[]) ?? []); });
     // Ses tâches + celles partagées avec d'autres créateurs (todos.creators).
     void selectTodosFor<Td>(name, "id,text,done").then(({ data, error }) => { if (error) console.error("À faire créateur:", error); if (alive) setTd(data ?? []); });
     supabase.from("briefs").select("brand,deliverables,due").eq("creator", name).then(({ data, error }) => { if (error) console.error("Briefs créateur:", error); if (alive) setBr((data as Br[]) ?? []); });
@@ -513,8 +516,8 @@ export function CreatorDetail({
   // Instagram : le chiffre du jour donné par Meta remplace la dernière mesure.
   const liveIg = c?.ig?.followers ?? 0;
   const totalFollowers = perPlatform.reduce((a, p) => a + (p.platform === "instagram" && liveIg > 0 ? 0 : numOf(p.followers)), 0) + liveIg;
-  // CA encaissé = somme des factures payées de ce créateur (auto, plus de saisie manuelle).
-  const caEncaisse = inv.filter((i) => i.status === "payee").reduce((a, i) => a + parseAmount(i.amount), 0);
+  // CA encaissé HT = somme hors taxes des factures payées de ce créateur (auto, plus de saisie manuelle).
+  const caEncaisse = inv.filter((i) => i.status === "payee").reduce((a, i) => a + invoiceHT(parseAmount(i.amount), invDetails?.[i.id]), 0);
   const latestMeasure = perPlatform.slice().sort((a, b) => frTime(b.date) - frTime(a.date))[0] ?? null;
   const nPlatforms = new Set([...perPlatform.map((p) => p.platform), ...(liveIg > 0 ? ["instagram"] : [])]).size;
   const followersSub =
@@ -1037,9 +1040,9 @@ export function CreatorDetail({
             {([
               ["Abonnés", totalFollowers > 0 ? fmtCompact(totalFollowers) : (c?.followers ?? null)],
               ["Engagement", mainEntry ? mainEntry.er : (c?.er ?? null)],
-              ["CA encaissé", caEncaisse > 0 ? formatEuro(caEncaisse) : null],
+              ["CA encaissé HT", caEncaisse > 0 ? formatEuro(caEncaisse) : null],
               ["Couverture", c?.reach ?? null],
-            ] as [string, string | null][]).filter(([l]) => founder || l !== "CA encaissé").map(([l, v]) => (
+            ] as [string, string | null][]).filter(([l]) => founder || l !== "CA encaissé HT").map(([l, v]) => (
               <div key={l} className="min-w-[118px] shrink-0 snap-start rounded-xl border border-border bg-surface px-3.5 py-2.5">
                 <div className="truncate text-[12px] text-muted-foreground">{l}</div>
                 <div className="mt-0.5 truncate text-[19px] font-semibold tabular-nums tracking-tight text-foreground">{v || "—"}</div>
@@ -1070,7 +1073,7 @@ export function CreatorDetail({
           mainEntry ? mainEntry.er : (c?.er ?? null),
           mainEntry ? `${mainEntry.platformLabel} · au ${mainEntry.date}` : undefined,
         )}
-        {founder && stat("CA encaissé", caEncaisse > 0 ? formatEuro(caEncaisse) : null)}
+        {founder && stat("CA encaissé HT", caEncaisse > 0 ? formatEuro(caEncaisse) : null)}
         {stat("Couverture", c?.reach ?? null)}
       </div>
 

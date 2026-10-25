@@ -59,3 +59,9 @@ export function invoiceTotals(amount: number, detail: InvoiceDetailLike | null |
   }
   return { ...totalsOf([{ id: "x", label: "", qty: 1, unit: finite(amount) }], true, 0, rosterRate), rate: rosterRate };
 }
+
+/** Montant HT d'une facture enregistrée (chiffre d'affaires) : ses lignes si elle est
+ *  détaillée, sinon le montant enregistré (ancienne facture, supposée HT sans TVA). */
+export function invoiceHT(amount: number, detail?: InvoiceDetailLike | null): number {
+  return invoiceTotals(amount, detail, 0).ht;
+}

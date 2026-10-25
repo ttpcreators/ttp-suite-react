@@ -1,4 +1,7 @@
 import { supabase } from "./supabase";
+import { getAppState } from "./appState";
+import { invoiceHT, type InvoiceDetailLike } from "./invoice";
+import { parseAmount } from "./money";
 import { collabIdMissing } from "./collabLinks";
 import type { ActivityRow, BrandCollab, BrandGift, BrandInvoice } from "./brandRecord";
 
@@ -19,7 +22,19 @@ async function isFounder(): Promise<boolean> {
   return !error && p?.agency_role === "founder";
 }
 
+/** Montant HT de chaque facture (lignes du blob agence) : le CA s'affiche hors taxes. */
+async function withHT(list: BrandInvoice[]): Promise<BrandInvoice[]> {
+  const app = await getAppState().catch(() => null);
+  const details = (app?.invoiceDetails as Record<string, InvoiceDetailLike> | undefined) ?? {};
+  return list.map((iv) => ({ ...iv, ht: invoiceHT(parseAmount(iv.amount), details[iv.id]) }));
+}
+
 async function loadInvoices(): Promise<BrandInvoice[] | null> {
+  const list = await loadInvoicesRaw();
+  return list ? withHT(list) : null;
+}
+
+async function loadInvoicesRaw(): Promise<BrandInvoice[] | null> {
   if (!(await isFounder())) return null;
   const withLink = await supabase.from("invoices").select("id,party,amount,status,date,collab_id");
   if (!withLink.error) return (withLink.data as BrandInvoice[]) ?? [];

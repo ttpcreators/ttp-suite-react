@@ -11,7 +11,8 @@ import { normBrand } from "./mailCollab";
 import { parseAmount } from "./money";
 
 export type BrandCollab = { id: string; brand: string; creator: string | null; step: number; status: string; cachet?: string | null; created_at?: string | null };
-export type BrandInvoice = { id: string; party: string | null; amount: string | null; status: string | null; date?: string | null; collab_id?: string | null };
+/** `ht` : montant hors taxes calculé au chargement (lignes du blob) ; sinon le montant enregistré. */
+export type BrandInvoice = { id: string; party: string | null; amount: string | null; status: string | null; date?: string | null; collab_id?: string | null; ht?: number };
 export type BrandGift = { id: string; brand: string | null; creator: string | null; product: string | null; value: string | null; received_on?: string | null };
 export type BrandMail = { id: string; subject: string; date: string; snippet: string; direction: "in" | "out" };
 export type ActivityRow = { id: string; gmail_message_id?: string | null; subject?: string | null; snippet?: string | null; direction?: string | null; created_at: string };
@@ -31,7 +32,7 @@ export function sameBrand(a: string | null | undefined, b: string | null | undef
 
 export type BrandRecord = {
   collabs: BrandCollab[];
-  /** Chiffre d'affaires encaissé (factures payées), null si les factures sont illisibles (membre). */
+  /** Chiffre d'affaires encaissé HT (factures payées), null si les factures sont illisibles (membre). */
   revenue: number | null;
   /** Factures payées comptées dans le CA. */
   paidCount: number;
@@ -55,7 +56,7 @@ export function brandRecord(
     for (const iv of data.invoices) {
       if (iv.status !== "payee") continue;
       if (!(iv.collab_id && ids.has(iv.collab_id)) && !sameBrand(partyBrand(iv.party), brand)) continue;
-      revenue += parseAmount(iv.amount);
+      revenue += iv.ht ?? parseAmount(iv.amount);
       paidCount += 1;
     }
     revenue = Math.round(revenue);

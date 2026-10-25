@@ -11,6 +11,7 @@ import { invMonthKey, monthsBetween, momDelta, monthLabel, fmtCompact } from "@/
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useIsFounder } from "@/lib/useFounder";
+import { invoiceHT, type InvoiceDetailLike } from "@/lib/invoice";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { StatCard } from "@/components/ui/stat-card";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -106,7 +107,7 @@ function RevenueChart({ points }: { points: RevenuePoint[] }) {
     <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-sm font-semibold text-foreground">Chiffre d'affaires</div>
+          <div className="text-sm font-semibold text-foreground">Chiffre d'affaires HT</div>
           <div className="mt-0.5 text-[11px] text-faint">Évolution mensuelle · facturé vs encaissé</div>
         </div>
         <Tabs
@@ -224,8 +225,9 @@ export function Stats() {
   // Instantanés mensuels (blob agence) → variation MoM des cartes « état du moment ».
   const { data: snaps } = useAppState<Record<string, Snap>>((s: AppState) => (s["statsSnapshots"] as Record<string, Snap>) ?? {});
   // Détails de facture (blob) : seule source de la DATE D'ÉMISSION (`invoices.date` = échéance), comme Aperçu.
-  const { data: invDetails } = useAppState<Record<string, { issueDate?: string }>>(
-    (s: AppState) => (s["invoiceDetails"] as Record<string, { issueDate?: string }>) ?? {},
+  // Et des lignes : le chiffre d'affaires s'affiche en HORS TAXES (choix de Marc, 2026-10-25).
+  const { data: invDetails } = useAppState<Record<string, InvoiceDetailLike & { issueDate?: string }>>(
+    (s: AppState) => (s["invoiceDetails"] as Record<string, InvoiceDetailLike & { issueDate?: string }>) ?? {},
   );
   const snapWrote = useRef(false);
 
@@ -307,9 +309,11 @@ export function Stats() {
   const prevLbl = prevKey ? monthLabel(prevKey) : "";
   const snapDelta = (curVal: number, key: keyof Snap) => (prevSnap && prevSnap[key] > 0 ? ((curVal - prevSnap[key]) / prevSnap[key]) * 100 : null);
 
+  // Montant HT d'une facture (ses lignes si détaillée, sinon le montant enregistré).
+  const htOf = (iv: InvRow) => invoiceHT(parseAmount(iv.amount), iv.id ? invDetails?.[iv.id] : null);
   const byStatus = { payee: 0, attente: 0, retard: 0, brouillon: 0 };
   for (const iv of data.invoices) {
-    const a = parseAmount(iv.amount);
+    const a = htOf(iv);
     if (iv.status in byStatus) byStatus[iv.status as keyof typeof byStatus] += a;
   }
   // « CA facturé » = factures RÉELLEMENT émises (payées + en attente + en retard).
@@ -324,7 +328,7 @@ export function Stats() {
   for (const iv of data.invoices) {
     const k = invMonth(iv);
     if (!k) continue;
-    const a = parseAmount(iv.amount);
+    const a = htOf(iv);
     const cur = monthAgg.get(k) ?? { tot: 0, paid: 0 };
     if (iv.status !== "brouillon") cur.tot += a; // « facturé » = hors brouillons
     if (iv.status === "payee") cur.paid += a;
@@ -393,7 +397,7 @@ export function Stats() {
   for (const iv of data.invoices) {
     if (iv.status === "brouillon") continue;
     const key = iv.creator || "—";
-    caByCreator.set(key, (caByCreator.get(key) ?? 0) + parseAmount(iv.amount));
+    caByCreator.set(key, (caByCreator.get(key) ?? 0) + htOf(iv));
   }
   const topCreators = [...caByCreator.entries()]
     .map(([name, ca]) => ({ name: titleCase(name), ca }))
@@ -418,17 +422,17 @@ export function Stats() {
           <>
             <StatCard
               icon={Receipt}
-              label="CA facturé"
+              label="CA facturé HT"
               value={formatEuro(totalCA)}
               hint={`${issuedCount} facture${issuedCount > 1 ? "s" : ""} émise${issuedCount > 1 ? "s" : ""}, toutes périodes`}
             />
             <StatCard
               icon={Wallet}
-              label="Encaissé"
+              label="Encaissé HT"
               value={formatEuro(byStatus.payee)}
               hint="payé, toutes périodes"
             />
-            <StatCard icon={Clock} label="En attente + retard" value={formatEuro(byStatus.attente + byStatus.retard)} hint="à suivre" />
+            <StatCard icon={Clock} label="En attente HT" value={formatEuro(byStatus.attente + byStatus.retard)} hint="à suivre" />
           </>
         )}
         <StatCard
@@ -501,8 +505,8 @@ export function Stats() {
         </div>
 
         <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <CompareCard label="CA facturé" current={formatEuro(cmpCur.tot)} previous={formatEuro(cmpPrev.tot)} delta={pctDelta(cmpCur.tot, cmpPrev.tot)} curLbl={curRange} prevLbl={compRange} />
-          <CompareCard label="Encaissé" current={formatEuro(cmpCur.paid)} previous={formatEuro(cmpPrev.paid)} delta={pctDelta(cmpCur.paid, cmpPrev.paid)} curLbl={curRange} prevLbl={compRange} />
+          <CompareCard label="CA facturé HT" current={formatEuro(cmpCur.tot)} previous={formatEuro(cmpPrev.tot)} delta={pctDelta(cmpCur.tot, cmpPrev.tot)} curLbl={curRange} prevLbl={compRange} />
+          <CompareCard label="Encaissé HT" current={formatEuro(cmpCur.paid)} previous={formatEuro(cmpPrev.paid)} delta={pctDelta(cmpCur.paid, cmpPrev.paid)} curLbl={curRange} prevLbl={compRange} />
           <CompareCard label="Factures" current={String(cmpCur.count)} previous={String(cmpPrev.count)} delta={pctDelta(cmpCur.count, cmpPrev.count)} curLbl={curRange} prevLbl={compRange} />
         </div>
 
@@ -542,7 +546,7 @@ export function Stats() {
       {money && hasRevenue && (
         <Suspense fallback={<div className="h-[320px] animate-pulse rounded-2xl bg-panel/50" />}>
           <GlassStatChart
-            title="Chiffre d'affaires facturé"
+            title="Chiffre d'affaires facturé HT"
             subtitle="Par mois d'émission, vue d'ensemble"
             points={revenuePoints.map((p) => ({ label: p.label, value: p.ca }))}
             format={(n) => formatEuro(n)}
@@ -559,7 +563,7 @@ export function Stats() {
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* CA par statut */}
         {money && (
-        <ChartCard title="Répartition du chiffre d'affaires" subtitle="Par statut de facture">
+        <ChartCard title="Répartition du CA HT" subtitle="Par statut de facture">
           {statusData.length === 0 ? (
             <div className="grid h-[240px] place-items-center text-sm text-faint">Aucune facture</div>
           ) : (
@@ -594,7 +598,7 @@ export function Stats() {
 
         {/* Top créateurs par CA */}
         {money && (
-        <ChartCard title="Top créateurs · CA facturé" subtitle="8 premiers par montant facturé">
+        <ChartCard title="Top créateurs · CA facturé HT" subtitle="8 premiers par montant facturé">
           {topCreators.length === 0 ? (
             <div className="grid h-[260px] place-items-center text-sm text-faint">Aucune donnée</div>
           ) : (

@@ -50,3 +50,10 @@ describe("fiche marque", () => {
     expect(mergeMailHistory(gmail, act).map((m) => m.id)).toEqual(["m1", "act:a3"]);
   });
 });
+
+describe("fiche marque : encaissé hors taxes", () => {
+  it("utilise le HT calculé au chargement quand il est connu", () => {
+    const inv = [{ id: "i1", party: "Nike", amount: "1 200 €", status: "payee", ht: 1000 }];
+    expect(brandRecord("Nike", { collabs: [], invoices: inv, gifting: [] }).revenue).toBe(1000);
+  });
+});
