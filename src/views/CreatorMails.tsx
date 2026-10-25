@@ -1204,29 +1204,34 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         ) : shown.length === 0 ? (
           <StatePanel icon={Mail} text={emptyText} />
         ) : simple ? (
-          <ul className="flex flex-col">
+          // Liste en cartes arrondies, bien lisibles : logo en grand, marque, date, objet,
+          // extrait sur 2 lignes et statut en pastille. Non lu : point bleu + gras.
+          <ul className="flex flex-col gap-2.5 px-3 pb-4 pt-1 sm:px-4 lg:px-3 lg:pt-3">
             {shown.map((th) => {
               const on = openId === th.id;
               const fresh = unseen.has(th.id) || activity.keys.has(`mail:${th.id}`);
               return (
-                <li key={th.id} className="border-b border-border/70 last:border-b-0">
+                <li key={th.id}>
                   <button type="button" aria-current={on || undefined} onClick={() => openFromList(th.id)}
-                    className={cn("flex w-full min-w-0 items-start gap-3 px-4 py-3 text-left transition-colors", on ? "bg-primary/[0.07]" : "hover:bg-rowhover")}>
-                    <span className="relative shrink-0 pt-0.5">
-                      <Initial name={prettyName(th.brand)} email={th.brandEmail} size="md" />
-                      {fresh && <span aria-label={t("Nouveau")} className="absolute -left-2.5 top-1/2 size-2 -translate-y-1/2 rounded-full bg-primary" />}
+                    className={cn("flex w-full min-w-0 items-start gap-3.5 rounded-[20px] border px-4 py-4 text-left shadow-sm shadow-black/[0.03] transition-colors",
+                      on ? "border-primary/40 bg-primary/[0.06]" : "border-border/60 bg-surface hover:bg-rowhover")}>
+                    <span className="relative shrink-0">
+                      <Initial name={prettyName(th.brand)} email={th.brandEmail} size="lg" />
+                      {fresh && <span aria-label={t("Nouveau")} className="absolute -right-0.5 -top-0.5 size-3 rounded-full border-2 border-surface bg-primary" />}
                     </span>
-                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                    <span className="flex min-w-0 flex-1 flex-col gap-1">
                       <span className="flex min-w-0 items-baseline gap-2">
-                        <span className={cn("min-w-0 flex-1 truncate text-[16px] text-foreground", fresh ? "font-bold" : "font-semibold")}>{prettyName(th.brand) || t("Marque")}</span>
-                        <span className={cn("shrink-0 text-[13px] tabular-nums", fresh ? "font-semibold text-primary" : "text-faint")}>{fmtWhen(th.ts, locale)}</span>
+                        <span className={cn("min-w-0 flex-1 truncate text-[17px] tracking-[-0.01em] text-foreground", fresh ? "font-bold" : "font-semibold")}>{prettyName(th.brand) || t("Marque")}</span>
+                        <span className={cn("shrink-0 text-[13px] tabular-nums", fresh ? "font-semibold text-primary" : "text-muted-foreground")}>{fmtWhen(th.ts, locale)}</span>
                       </span>
-                      <span className={cn("min-w-0 truncate text-[14px]", fresh ? "font-semibold text-foreground" : "text-foreground/85")}>{th.subject || t("(sans objet)")}</span>
-                      <span className="line-clamp-2 text-[14px] leading-snug text-muted-foreground">{th.excerpt}</span>
-                      <span className="mt-1 flex min-w-0 items-center gap-3">
-                        <StatusDot status={th.status} by={th.decidedBy ? authorName(th.decidedBy, mode, creatorName, t) : undefined} />
+                      <span className={cn("min-w-0 truncate text-[15px]", fresh ? "font-semibold text-foreground" : "font-medium text-foreground/90")}>{th.subject || t("(sans objet)")}</span>
+                      <span className="line-clamp-2 text-[15px] leading-[1.4] text-muted-foreground">{th.excerpt}</span>
+                      <span className="mt-1.5 flex min-w-0 items-center gap-2">
+                        <span className="inline-flex min-w-0 items-center rounded-full bg-field px-2.5 py-1">
+                          <StatusDot status={th.status} by={th.decidedBy ? authorName(th.decidedBy, mode, creatorName, t) : undefined} />
+                        </span>
                         {th.notes > 0 && (
-                          <span className="flex shrink-0 items-center gap-1 text-[12px] text-muted-foreground" title={t("Remarques")}>
+                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-field px-2.5 py-1 text-[12px] text-muted-foreground" title={t("Remarques")}>
                             <MessageSquare className="h-3 w-3" />{th.notes}
                           </span>
                         )}
