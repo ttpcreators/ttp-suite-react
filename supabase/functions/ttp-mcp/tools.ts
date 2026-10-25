@@ -9,6 +9,7 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { triggerSync } from "../_shared/google.ts";
+import { readAppState } from "../_shared/appState.ts";
 import type { Ctx } from "./oauth.ts";
 import { boxesFor, createDraft, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
@@ -81,14 +82,9 @@ const INVOICE_STATUS: Record<string, string> = { brouillon: "Brouillon", attente
 
 // FAIL-CLOSED : une lecture ratée ou illisible lève une erreur. Renvoyer {} ferait
 // réécrire une clé entière à partir de rien (ex. tout le suivi du scouting effacé).
+// Ligne commune + ligne argent des fondateurs (_shared/appState.ts).
 async function appState(sb: SupabaseClient): Promise<Json> {
-  const { data, error } = await sb.from("module_rows").select("a").eq("module", "__app_state__").order("created_at", { ascending: false }).limit(1);
-  if (error) throw new Error(`lecture des réglages impossible (${error.message})`);
-  const raw = (data?.[0] as { a?: string } | undefined)?.a;
-  if (!raw) return {};
-  const o = JSON.parse(raw);
-  if (!o || typeof o !== "object") throw new Error("réglages illisibles");
-  return o;
+  return (await readAppState(sb)) as Json;
 }
 
 // ── Lecture ────────────────────────────────────────────────────────────────

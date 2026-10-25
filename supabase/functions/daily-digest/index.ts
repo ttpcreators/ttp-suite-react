@@ -10,6 +10,7 @@
 // ============================================================================
 
 import { getServiceClient, corsHeaders, timingSafeEqualStr } from "../_shared/google.ts";
+import { readAppState } from "../_shared/appState.ts";
 import { deepLinkUrl, loadAppBlob, makePayload, pushReady, sendTo, type Audience } from "../_shared/push.ts";
 import type { PushKind } from "../_shared/pushPayload.ts";
 
@@ -451,12 +452,9 @@ Deno.serve(async (req: Request) => {
   let commBlob: Record<string, number> = {};
   let payoutsBlob: Record<string, { amount?: number }[]> = {};
   try {
-    const { data: blob } = await sb
-      .from("module_rows").select("a").eq("module", "__app_state__")
-      .order("created_at", { ascending: false }).limit(1);
-    const raw = (blob?.[0] as { a?: unknown } | undefined)?.a;
-    const obj = typeof raw === "string" ? JSON.parse(raw) : (raw ?? {});
-    const deadlines: CtDeadline[] = Array.isArray(obj?.contractDeadlines) ? obj.contractDeadlines : [];
+    // Ligne commune + ligne argent des fondateurs (commissions, versements).
+    const obj = (await readAppState(sb)) as Record<string, unknown>;
+    const deadlines: CtDeadline[] = Array.isArray(obj?.contractDeadlines) ? (obj.contractDeadlines as CtDeadline[]) : [];
     for (const d of deadlines) {
       const end = contractEnd(d.start ?? "", d.months ?? 0);
       if (end && daysUntil(end, today) <= 60) contractsSoon++;

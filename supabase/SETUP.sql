@@ -225,6 +225,12 @@ create or replace function public.is_founder() returns boolean
   );
 $$;
 
+-- Clés « argent » du blob agence, rangées dans la ligne '__finance_state__' (fondateurs).
+create or replace function public.app_finance_key(p_key text) returns boolean
+language sql immutable set search_path = public as $$
+  select p_key = any (array['invoiceDetails', 'invoiceBankAccounts', 'invoiceIssuer', 'creatorPayouts', 'creatorCommission']);
+$$;
+
 create or replace function public.my_creator() returns text
   language sql stable security definer as $$
   select creator_name from public.profiles where user_id = auth.uid();
@@ -716,7 +722,11 @@ create policy invoices_agency       on public.invoices for all    to authenticat
 create policy invoices_creator_read on public.invoices for select to authenticated
   using (public.is_founder() or creator = public.my_creator());
 create policy prospects_agency   on public.prospects   for all to authenticated using (public.is_agency()) with check (public.is_agency());
-create policy module_rows_agency on public.module_rows for all to authenticated using (public.is_agency()) with check (public.is_agency());
+-- module_rows : blob agence ; la ligne '__finance_state__' (argent) aux seuls fondateurs
+-- (sql/2026-10-25-finance-fondateurs.sql).
+create policy module_rows_agency on public.module_rows for all to authenticated
+  using (public.is_agency() and (module <> '__finance_state__' or public.is_founder()))
+  with check (public.is_agency() and (module <> '__finance_state__' or public.is_founder()));
 
 -- DONNÉES PAR CRÉATEUR : agence = tout ; créateur = uniquement les siennes
 create policy todos_scoped  on public.todos  for all to authenticated
@@ -1048,20 +1058,25 @@ language plpgsql
 security invoker              -- respecte la RLS module_rows (agence seule écrit)
 set search_path = public
 as $$
-declare v_id uuid;
+declare
+  v_id     uuid;
+  v_module text := case when public.app_finance_key(p_key) then '__finance_state__' else '__app_state__' end;
 begin
+  if v_module = '__finance_state__' and auth.uid() is not null and not public.is_founder() then
+    raise exception 'réservé aux fondateurs' using errcode = '42501';
+  end if;
   select id into v_id
     from public.module_rows
-   where module = '__app_state__'
+   where module = v_module
    order by created_at desc
    limit 1;
   if v_id is null then
     insert into public.module_rows (module, a)
-      values ('__app_state__', jsonb_build_object(p_key, coalesce(p_value, 'null'::jsonb))::text);
+      values (v_module, jsonb_build_object(p_key, coalesce(p_value, 'null'::jsonb))::text);
   else
     -- coalesce : jsonb_set(…, NULL) renverrait NULL et effacerait TOUT le blob (2026-10-15).
     update public.module_rows
-       set a = jsonb_set(coalesce(a, '{}')::jsonb, array[p_key], coalesce(p_value, 'null'::jsonb), true)::text
+       set a = jsonb_set(coalesce(nullif(a, ''), '{}')::jsonb, array[p_key], coalesce(p_value, 'null'::jsonb), true)::text
      where id = v_id;
   end if;
 end;
@@ -1094,13 +1109,17 @@ security invoker
 set search_path = public
 as $$
 declare
-  v_id  uuid;
-  v_all jsonb;
-  v_cur jsonb;
+  v_id     uuid;
+  v_all    jsonb;
+  v_cur    jsonb;
+  v_module text := case when public.app_finance_key(p_key) then '__finance_state__' else '__app_state__' end;
 begin
-  select id, coalesce(a, '{}')::jsonb into v_id, v_all
+  if v_module = '__finance_state__' and auth.uid() is not null and not public.is_founder() then
+    raise exception 'réservé aux fondateurs' using errcode = '42501';
+  end if;
+  select id, coalesce(nullif(a, ''), '{}')::jsonb into v_id, v_all
     from public.module_rows
-   where module = '__app_state__'
+   where module = v_module
    order by created_at desc
    limit 1
    for update;
@@ -1108,7 +1127,7 @@ begin
   if v_cur is null or jsonb_typeof(v_cur) <> 'object' then v_cur := '{}'::jsonb; end if;
   v_cur := (v_cur - coalesce(p_remove, '{}')) || coalesce(p_set, '{}'::jsonb);
   if v_id is null then
-    insert into public.module_rows (module, a) values ('__app_state__', jsonb_build_object(p_key, v_cur)::text);
+    insert into public.module_rows (module, a) values (v_module, jsonb_build_object(p_key, v_cur)::text);
   else
     update public.module_rows set a = jsonb_set(v_all, array[p_key], v_cur, true)::text where id = v_id;
   end if;
@@ -1123,18 +1142,22 @@ security invoker
 set search_path = public
 as $$
 declare
-  v_id   uuid;
-  v_all  jsonb;
-  v_cur  jsonb;
-  v_out  jsonb := '[]'::jsonb;
-  v_new  jsonb := '[]'::jsonb;
-  v_el   jsonb;
-  v_up   jsonb;
-  v_ids  text[];
+  v_id     uuid;
+  v_all    jsonb;
+  v_cur    jsonb;
+  v_out    jsonb := '[]'::jsonb;
+  v_new    jsonb := '[]'::jsonb;
+  v_el     jsonb;
+  v_up     jsonb;
+  v_ids    text[];
+  v_module text := case when public.app_finance_key(p_key) then '__finance_state__' else '__app_state__' end;
 begin
-  select id, coalesce(a, '{}')::jsonb into v_id, v_all
+  if v_module = '__finance_state__' and auth.uid() is not null and not public.is_founder() then
+    raise exception 'réservé aux fondateurs' using errcode = '42501';
+  end if;
+  select id, coalesce(nullif(a, ''), '{}')::jsonb into v_id, v_all
     from public.module_rows
-   where module = '__app_state__'
+   where module = v_module
    order by created_at desc
    limit 1
    for update;
@@ -1160,7 +1183,7 @@ begin
   end loop;
   v_out := case when p_prepend then v_new || v_out else v_out || v_new end;
   if v_id is null then
-    insert into public.module_rows (module, a) values ('__app_state__', jsonb_build_object(p_key, v_out)::text);
+    insert into public.module_rows (module, a) values (v_module, jsonb_build_object(p_key, v_out)::text);
   else
     update public.module_rows set a = jsonb_set(v_all, array[p_key], v_out, true)::text where id = v_id;
   end if;
@@ -1188,9 +1211,11 @@ set search_path = public
 as $$
 begin
   insert into public.app_state_backups (snapshot)
-    select a from public.module_rows
-     where module = '__app_state__' and a is not null
-     order by created_at desc limit 1;
+    select (coalesce(nullif(a.a, ''), '{}')::jsonb || coalesce(nullif(f.a, ''), '{}')::jsonb)::text
+      from (select a from public.module_rows where module = '__app_state__' and a is not null
+             order by created_at desc limit 1) a
+      left join lateral (select a from public.module_rows where module = '__finance_state__'
+             order by created_at desc limit 1) f on true;
   delete from public.app_state_backups where created_at < now() - interval '30 days';
 end;
 $$;
@@ -1538,7 +1563,7 @@ select e.key as creatrice, p->>'id' as id,
        case when (p->>'date') ~ '^\d{4}-\d{2}-\d{2}'
             then left(p->>'date', 10)::date else null end as paye_le
   from (select a from public.module_rows
-         where module = '__app_state__' order by created_at desc limit 1) m,
+         where module = '__finance_state__' order by created_at desc limit 1) m,
        jsonb_each(coalesce(nullif(m.a, '')::jsonb -> 'creatorPayouts', '{}'::jsonb)) as e(key, value),
        jsonb_array_elements(
          case when jsonb_typeof(e.value) = 'array' then e.value else '[]'::jsonb end) as p;

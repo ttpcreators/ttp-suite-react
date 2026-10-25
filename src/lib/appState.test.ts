@@ -6,13 +6,19 @@ const h = vi.hoisted(() => {
     loads: [] as Array<(v: { data: unknown; error: unknown }) => void>,
     rpcResult: { error: null as null | { code?: string; message: string } },
     updates: 0,
+    // Ligne finance (fondateurs) : répond tout de suite, vide par défaut.
+    finance: { data: [] as unknown[], error: null as unknown },
   };
   const loadBuilder = () => {
     const b: Record<string, unknown> = {};
+    let finance = false;
     b.select = () => b;
-    b.eq = () => b;
+    b.eq = (_c: string, v: string) => {
+      finance = v === "__finance_state__";
+      return b;
+    };
     b.order = () => b;
-    b.limit = () => new Promise((res) => state.loads.push(res));
+    b.limit = () => (finance ? Promise.resolve(state.finance) : new Promise((res) => state.loads.push(res)));
     b.update = () => {
       state.updates++;
       return { eq: () => Promise.resolve({ error: null }) };
@@ -40,6 +46,7 @@ beforeEach(() => {
   h.state.loads.length = 0;
   h.state.rpcResult = { error: null };
   h.state.updates = 0;
+  h.state.finance = { data: [], error: null };
   h.supabase.from.mockClear();
   h.supabase.rpc.mockClear();
 });
@@ -112,7 +119,11 @@ describe("appState", () => {
     expect(await p).toBe(true);
     expect(h.supabase.rpc).toHaveBeenCalledWith("app_state_set", { p_key: "notes", p_value: { c: "3", b: "B" } });
     expect(h.state.updates).toBe(1);
-    expect(await getAppState()).toEqual({ notes: { c: "3", b: "B" }, other: 1 });
+    // Après l'écriture legacy, le cache est vidé : la lecture suivante repasse par la base
+    // (avec la ligne finance), jamais un cache tiré de la seule ligne commune.
+    void getAppState();
+    await flush();
+    expect(h.state.loads.length).toBe(1);
   });
 
   it("listAppStateKey : remplace sur place, retire par id, ajoute en tête si prepend", async () => {
@@ -151,5 +162,22 @@ describe("appState", () => {
     expect(isMissingFunction({ message: "function public.app_state_set(text, jsonb) does not exist" })).toBe(true);
     expect(isMissingFunction({ code: "42501", message: "permission denied" })).toBe(false);
     expect(isMissingFunction(null)).toBe(false);
+  });
+});
+
+describe("appState : ligne finance (fondateurs)", () => {
+  it("ses clés recouvrent celles de la ligne commune", async () => {
+    h.state.finance = { data: [{ id: "f", a: JSON.stringify({ creatorPayouts: { lea: [1] } }) }], error: null };
+    const p = getAppState();
+    await flush();
+    h.state.loads.shift()!(row({ objectifs: [], creatorPayouts: { vieux: [] } }));
+    expect(await p).toEqual({ objectifs: [], creatorPayouts: { lea: [1] } });
+  });
+  it("lecture finance ratée = échec, jamais un argent lu vide", async () => {
+    h.state.finance = { data: null as unknown as unknown[], error: { message: "réseau" } };
+    const p = getAppState();
+    await flush();
+    h.state.loads.shift()!(row({ objectifs: [] }));
+    await expect(p).rejects.toBeTruthy();
   });
 });

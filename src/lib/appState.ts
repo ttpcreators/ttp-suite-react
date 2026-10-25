@@ -7,28 +7,39 @@ import { supabase } from "./supabase";
  * events, objectifs, pricing, media kit, accès…) est persistée dans UN seul
  * blob JSON : table `module_rows`, ligne `module = '__app_state__'`, colonne `a`.
  * Ce module charge ce blob une seule fois (cache) et l'expose aux vues.
+ *
+ * L'ARGENT (lignes des factures, comptes bancaires, émetteur, versements, commissions)
+ * vit dans une 2e ligne, `module = '__finance_state__'`, lisible des seuls fondateurs
+ * (SQL 2026-10-25-finance-fondateurs.sql). Elle est lue en même temps et ses clés
+ * recouvrent celles de la ligne commune ; les fonctions app_state_* y rangent d'office
+ * ces clés à l'écriture. Avant le SQL (ou pour un membre), elle n'existe pas : rien change.
  */
 export type AppState = Record<string, unknown>;
 
 let _cache: AppState | null = null;
 let _promise: Promise<AppState> | null = null;
 
-async function loadAppState(): Promise<AppState> {
-  const { data, error } = await supabase
-    .from("module_rows")
-    .select("id,a")
-    .eq("module", "__app_state__")
-    .order("created_at", { ascending: false })
-    .limit(1);
-  if (error) throw error;
-  const row = data && data[0];
-  if (!row) return {};
+const readRow = (module: string) =>
+  supabase.from("module_rows").select("id,a").eq("module", module).order("created_at", { ascending: false }).limit(1);
+
+function parseRow(data: unknown[] | null): AppState {
+  const row = data && (data[0] as { a?: string } | undefined);
+  if (!row?.a) return {};
   try {
-    const o = JSON.parse((row as { a: string }).a);
+    const o = JSON.parse(row.a);
     return o && typeof o === "object" ? (o as AppState) : {};
   } catch {
     return {};
   }
+}
+
+async function loadAppState(): Promise<AppState> {
+  const [app, fin] = await Promise.all([readRow("__app_state__"), readRow("__finance_state__")]);
+  // Lecture ratée ≠ ligne absente (y compris la ligne finance : une clé argent lue vide
+  // serait réécrite à partir de rien).
+  if (app.error) throw app.error;
+  if (fin.error) throw fin.error;
+  return { ...parseRow(app.data), ...parseRow(fin.data) };
 }
 
 // Compteur d'écritures : une écriture optimiste en cours "gagne" contre un
@@ -218,7 +229,8 @@ async function legacySaveAppStateKey(key: string, value: unknown): Promise<boole
     console.warn("[blob] save", key, res.error.message);
     return false;
   }
-  _cache = obj as AppState;
+  // Pas de cache tiré de la seule ligne commune (la ligne finance en serait absente).
+  invalidateAppState();
   return true;
 }
 

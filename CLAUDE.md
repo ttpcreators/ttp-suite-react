@@ -202,7 +202,10 @@ Plusieurs audits adversariaux menés (identité et privilège, OWASP). Détail d
   - Ne toucher que ses entrées : `mergeAppStateKey` pour un objet (`app_state_merge`),
     `listAppStateKey` pour une liste d'objets à `id` (`app_state_list`).
   - Toujours vérifier le booléen renvoyé.
-  - Le blob est réservé à l'agence (RLS).
+  - Le blob est réservé à l'agence (RLS). L'argent (lignes des factures, banques,
+    versements, commissions) vit dans la ligne `__finance_state__`, réservée aux
+    fondateurs : lue et écrite automatiquement par les mêmes fonctions (voir
+    `docs/ARCHITECTURE.md`). Côté serveur, lire le blob avec `_shared/appState.ts`.
 - **Événements Agenda** : toute modification depuis l'app repasse par `src/lib/db.ts` (qui
   pose `sync_source = 'agence'` pour la synchro Google).
 - **Mises en ligne sans écran d'erreur** :

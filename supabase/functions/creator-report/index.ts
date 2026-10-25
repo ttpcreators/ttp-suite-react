@@ -4,7 +4,7 @@
 // Données du RAPPORT MENSUEL d'un créateur (gains, collabs, chiffres, gifting),
 // filtrées côté serveur sur UN créateur. Le calcul se fait dans l'app
 // (src/lib/monthlyReport.ts) ; ici on ne fait que rassembler.
-// Le blob __app_state__ est agence-only (RLS) : on n'en sort que les détails des
+// Le blob agence est agence-only (RLS) : on n'en sort que les détails des
 // factures de CE créateur, SES versements et SES mesures d'engagement.
 //
 // AUTH (config.toml -> verify_jwt = true) : JWT requis.
@@ -15,6 +15,7 @@
 // ============================================================================
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
+import { readAppState } from "../_shared/appState.ts";
 
 type Json = Record<string, unknown>;
 const lc = (s: unknown) => String(s ?? "").trim().toLowerCase();
@@ -50,16 +51,15 @@ Deno.serve(async (req: Request) => {
   const money = prof.role === "creator" || prof.agency_role === "founder";
   const pat = exact(name);
 
-  const [cr, inv, col, gif, blob] = await Promise.all([
+  const [cr, inv, col, gif] = await Promise.all([
     sb.from("creators").select("name,commission,ig,tt,yt").ilike("name", pat).limit(1).maybeSingle(),
     money
       ? sb.from("invoices").select("id,ref,party,amount,date,status,created_at").ilike("creator", pat)
       : Promise.resolve({ data: [], error: null }),
     sb.from("collabs").select("id,brand,deliverables,cachet,step,status,created_at").ilike("creator", pat),
     sb.from("gifting").select("brand,product,value,received_on,created_at").ilike("creator", pat),
-    sb.from("module_rows").select("a").eq("module", "__app_state__").order("created_at", { ascending: false }).limit(1),
   ]);
-  const failed = [cr, inv, col, gif, blob].find((r) => r.error);
+  const failed = [cr, inv, col, gif].find((r) => r.error);
   if (failed) return jsonRes({ error: "lecture impossible" }, 500);
 
   const collabs = (col.data ?? []) as { id: string }[];
@@ -68,11 +68,12 @@ Deno.serve(async (req: Request) => {
     : { data: [], error: null };
   if (steps.error) return jsonRes({ error: "lecture impossible" }, 500);
 
-  let state: Json = {};
+  // Blob agence : ligne commune + ligne argent des fondateurs (_shared/appState.ts).
+  let state: Json;
   try {
-    state = JSON.parse((blob.data?.[0] as { a?: string } | undefined)?.a ?? "{}");
+    state = await readAppState(sb);
   } catch {
-    state = {};
+    return jsonRes({ error: "lecture impossible" }, 500);
   }
   // Détails des SEULES factures du créateur, réduits aux champs utiles au calcul.
   const invoices = (inv.data ?? []) as { id: string }[];

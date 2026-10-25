@@ -25,6 +25,7 @@
 
 import { zipSync, strToU8 } from "npm:fflate@0.8.2";
 import { CRON_SECRET, corsHeaders, getAccessToken, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
+import { readAppState } from "../_shared/appState.ts";
 import { backupMonth, mediakitPages, mediakitSlug, mimeMessage, pdfLinksIn, safeAppState, toCsv } from "../_shared/backup.ts";
 
 const SITE = "https://ttpcreators.pro";
@@ -98,10 +99,8 @@ Deno.serve(async (req: Request) => {
 
   // 2) Réglages de l'agence (sans le coffre)
   let state: Record<string, unknown> = {};
-  const { data: st } = await sb.from("module_rows").select("a").eq("module", "__app_state__").order("created_at", { ascending: false }).limit(1);
   try {
-    const raw = (st?.[0] as { a?: string } | undefined)?.a;
-    if (raw) state = JSON.parse(raw);
+    state = await readAppState(sb); // ligne commune + ligne argent des fondateurs
   } catch {
     state = {};
   }

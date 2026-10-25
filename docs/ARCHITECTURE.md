@@ -35,6 +35,14 @@ Beaucoup de réglages agence (objectifs, pricing, notifs, historique engagement,
 dans **un seul blob JSON** : table `module_rows`, ligne `module='__app_state__'`,
 colonne `a`. RLS : **agence uniquement**.
 
+**L'argent à part** (2026-10-25) : les clés `invoiceDetails`, `invoiceBankAccounts`,
+`invoiceIssuer`, `creatorPayouts` et `creatorCommission` vivent dans une 2e ligne,
+`module='__finance_state__'`, lisible des seuls **fondateurs** (RLS `module_rows_agency`).
+Les fonctions `app_state_set/merge/list` y rangent d'office ces clés (liste dans
+`app_finance_key()`), et l'app (`src/lib/appState.ts`) comme le serveur
+(`supabase/functions/_shared/appState.ts`) lisent les deux lignes, la ligne finance
+l'emportant. Nouvelle clé d'argent : l'ajouter à `app_finance_key()` (SQL) et la déplacer.
+
 Accès via [`src/lib/appState.ts`](../src/lib/appState.ts) :
 - `useAppState(select)` — lit une tranche (mémoïsé, re-sync au tick `useLive`).
 - `saveAppStateKey(key, value)` — **read-modify-write** ; renvoie un booléen.

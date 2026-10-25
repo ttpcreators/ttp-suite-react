@@ -68,6 +68,7 @@ import { sharedWithText } from "@/lib/todoCreators";
 import { selectTodosFor } from "@/lib/todoCreatorsDb";
 import { agencyAwaits, progressColumnMissing } from "@/lib/todoProgress";
 import { CreatorTodos } from "@/components/CreatorTodos";
+import { invoiceHT } from "@/lib/invoice";
 import { invoiceTone, netGains, netShare, partyBrand, PAYOUT_LABEL, payoutStatus, realGains, type RealPayout, type ReportDetail, type ReportInvoice } from "@/lib/creatorGains";
 import { DEFAULT_COMMISSION, parseCommissionPct } from "@/lib/commission";
 import { daysBetween as daysBetweenIso } from "@/lib/aujourdhui";
@@ -1536,8 +1537,13 @@ export function CreatorSpace({
   const setField = (k: keyof Creator, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const openTodos = todos.filter((t) => !t.done);
-  // CA encaissé = somme des factures payées du créateur (auto, cohérent avec l'agence).
-  const caEncaisse = invoices.filter((i) => i.status === "payee").reduce((a, i) => a + parseAmount(i.amount), 0);
+  // Chiffre d'affaires en HORS TAXES, comme côté agence (choix de Marc, 2026-10-25) : lignes de
+  // chaque facture envoyées par `creator-report`, sinon le montant enregistré (supposé HT).
+  const htInvoices = money
+    ? money.invoices.map((i) => ({ status: i.status, ht: invoiceHT(parseAmount(i.amount), money.details[i.id]) }))
+    : invoices.map((i) => ({ status: i.status, ht: parseAmount(i.amount) }));
+  // CA encaissé HT = factures payées du créateur (auto, cohérent avec l'agence).
+  const caEncaisse = htInvoices.filter((i) => i.status === "payee").reduce((a, i) => a + i.ht, 0);
   // Dernière mesure d'engagement PAR plateforme → abonnés cumulés + ER par réseau.
   const platformLatest = (() => {
     const m = new Map<string, SuiviEntry>();
@@ -1608,9 +1614,7 @@ export function CreatorSpace({
   // « Total facturé » = factures réellement émises. Un brouillon de l'agence n'est pas
   // encore facturé → ne doit pas être annoncé comme tel à la créatrice (même règle que
   // le KPI « CA facturé » côté agence).
-  const totalFacture = invoices
-    .filter((i) => i.status !== "brouillon")
-    .reduce((a, i) => a + parseAmount(i.amount), 0);
+  const totalFacture = htInvoices.filter((i) => i.status !== "brouillon").reduce((a, i) => a + i.ht, 0);
 
   const markTodo = async (td: Todo, next: boolean): Promise<boolean> => {
     // On écrit done ET status ensemble (comme l'agence) → l'affichage statut/kanban
@@ -2458,7 +2462,7 @@ export function CreatorSpace({
             const kpis: { label: string; value: string; foot: ReactNode }[] = [
               { label: t("Abonnés"), value: followersNow ? fmtCompact(followersNow) : "—", foot: <Delta value={followersDelta} suffix={t("vs relevé préc.")} /> },
               { label: t("Engagement"), value: topEr ? String(topEr) : "—", foot: platformLatest[0]?.platformLabel ?? t("Dernière mesure de ton agence") },
-              { label: t("CA encaissé"), value: formatEuro(caEncaisse), foot: t("sur {amount} facturés", { amount: formatEuro(totalFacture) }) },
+              { label: t("CA encaissé HT"), value: formatEuro(caEncaisse), foot: t("sur {amount} facturés", { amount: formatEuro(totalFacture) }) },
               { label: t("To-do"), value: String(openTodos.length), foot: `${plural(briefs.length, "{n} brief", "{n} briefs")} · ${plural(ideas.length, "{n} idée", "{n} idées")}` },
             ];
             if (!(ready.collabs && ready.briefs && ready.invoices)) {
@@ -3957,7 +3961,7 @@ export function CreatorSpace({
                                 {t("Abonnés cumulés")}{platformLatest.length > 1 ? ` · ${t("{n} réseaux", { n: platformLatest.length })}` : ""}
                               </div>
                             </div>
-                            <StatTile label={t("CA encaissé")} value={caEncaisse || null} kind="eur" />
+                            <StatTile label={t("CA encaissé HT")} value={caEncaisse || null} kind="eur" />
                           </div>
                           {/* Engagement par plateforme (on sait de quel réseau il s'agit) */}
                           <div className="rounded-xl bg-panel p-4">

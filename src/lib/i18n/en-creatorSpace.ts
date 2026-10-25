@@ -195,6 +195,7 @@ export const EN_CREATORSPACE: Record<string, string> = {
   "Engagement": "Engagement",
   "Dernière mesure de ton agence": "Latest measurement from your agency",
   "CA encaissé": "Revenue received",
+  "CA encaissé HT": "Revenue received (excl. VAT)",
   "sur {amount} facturés": "of {amount} invoiced",
   "{n} brief": "{n} brief",
   "{n} briefs": "{n} briefs",
