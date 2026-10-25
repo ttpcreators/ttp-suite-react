@@ -1320,7 +1320,7 @@ function CreatorFinder({ paused }: { paused: boolean }) {
 
             {/* Raccourcis clavier (grand écran) : seulement après « ? », pour ne pas couvrir la liste. */}
             {wide && keysOpen && visible.length > 0 && (
-              <div className="sticky bottom-0 z-10 mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border bg-background/90 px-1 py-3 text-[12px] text-muted-foreground backdrop-blur">
+              <div className="sticky bottom-0 z-10 mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border bg-background/90 px-1 py-3 text-[12px] text-muted-foreground backdrop-blur md:-bottom-7 md:pb-10">
                 <span className="flex items-center gap-1.5"><Kbd>J</Kbd> Suivant</span>
                 <span className="flex items-center gap-1.5"><Kbd>K</Kbd> Précédent</span>
                 <span className="flex items-center gap-1.5"><Kbd>S</Kbd> Scouting</span>

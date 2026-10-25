@@ -911,9 +911,10 @@ export function Aujourdhui() {
             )}
           </div>
 
-          {/* Raccourcis clavier (ordinateur) */}
+          {/* Raccourcis clavier (ordinateur). Collés au bord bas de la zone qui défile : elle a une
+              marge basse (md:pb-7) où la liste restait visible sous la barre ; -bottom-7 + pb-10 la couvrent. */}
           {flat.length > 0 && (
-            <div className="sticky bottom-0 z-10 mt-4 hidden flex-wrap items-center gap-x-5 gap-y-2 border-t border-border bg-background py-3 text-[13px] text-muted-foreground verre:bg-transparent lg:flex">
+            <div className="sticky -bottom-7 z-10 mt-4 hidden flex-wrap items-center gap-x-5 gap-y-2 border-t border-border bg-background pb-10 pt-3 text-[13px] text-muted-foreground verre:bg-surface/70 verre:backdrop-blur-xl lg:flex">
               <span className="flex items-center gap-1.5"><Kbd>J</Kbd> Suivant</span>
               <span className="flex items-center gap-1.5"><Kbd>K</Kbd> Précédent</span>
               <span className="flex items-center gap-1.5"><Kbd>E</Kbd> Traiter</span>
