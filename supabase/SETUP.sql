@@ -314,10 +314,11 @@ alter table public.creators add column if not exists lang text not null default 
 alter table public.creators drop constraint if exists creators_lang_check;
 alter table public.creators add constraint creators_lang_check check (lang in ('fr', 'en'));
 
+-- Sans compte connecté (serveur, SQL Editor) : rien n'est bloqué (sql/2026-10-25-audit).
 create or replace function public.creators_guard() returns trigger
-  language plpgsql security definer as $$
+  language plpgsql security definer set search_path = public as $$
 begin
-  if not public.is_agency() then
+  if auth.uid() is not null and not public.is_agency() then
     new.ca         := old.ca;
     new.commission := old.commission;
     new.status     := old.status;
@@ -802,10 +803,11 @@ grant execute on function public.creator_discussions(text) to authenticated;
 
 
 -- 2) Garde : hors agence, collab_id doit être vide ou une collab du créateur connecté.
+--    Sans compte connecté (serveur, SQL Editor) : rien n'est bloqué (sql/2026-10-25-audit).
 create or replace function public.collab_link_guard() returns trigger
   language plpgsql security definer set search_path = public, pg_temp as $$
 begin
-  if new.collab_id is null or public.is_agency() then return new; end if;
+  if new.collab_id is null or auth.uid() is null or public.is_agency() then return new; end if;
   if tg_op = 'UPDATE' and new.collab_id is not distinct from old.collab_id then return new; end if;
   if not exists (select 1 from public.collabs c where c.id = new.collab_id and c.creator = public.my_creator()) then
     raise exception 'collab_id interdit' using errcode = '42501';
@@ -909,9 +911,11 @@ create policy documents_obj_creator_read on storage.objects for select to authen
 -- Bucket PUBLIC pour les photos de profil (avatars) : lecture publique (URL
 -- permanente), écriture réservée aux comptes connectés. Permet que la photo
 -- posée par l'agence OU le créateur soit visible partout (cross-device).
-insert into storage.buckets (id, name, public)
-  values ('avatars','avatars', true)
-  on conflict (id) do nothing;
+-- Images seulement, 25 Mo maximum (sql/2026-10-25-audit).
+insert into storage.buckets (id, name, public, allowed_mime_types, file_size_limit)
+  values ('avatars','avatars', true, array['image/*'], 26214400)
+  on conflict (id) do update set allowed_mime_types = excluded.allowed_mime_types,
+                                 file_size_limit    = excluded.file_size_limit;
 
 -- Lecture : publique (bucket public), pas de policy nécessaire.
 -- Upload : tout compte connecté peut poser un avatar (chemins horodatés
@@ -1753,7 +1757,8 @@ create policy briefs_creator_update on public.briefs for update to authenticated
 create or replace function public.briefs_creator_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
-  if public.is_agency() then return new; end if;
+  -- Sans compte connecté (serveur : résumé déposé par Claude) : tout passe (sql/2026-10-25-audit).
+  if auth.uid() is null or public.is_agency() then return new; end if;
   -- Créatrice : tout reste comme avant, sauf status et consignes.
   return jsonb_populate_record(old, jsonb_build_object('status', new.status, 'consignes', new.consignes));
 end $$;

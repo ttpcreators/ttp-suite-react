@@ -1050,9 +1050,11 @@ const resumerBrief: Tool = {
     if (!isUuid(id)) return fail("Id de brief invalide.");
     const resume = { faire: listArg(a.a_faire), eviter: listArg(a.a_ne_pas_faire), livrables: listArg(a.livrables_et_dates), mentions: listArg(a.mentions_obligatoires), maj_le: new Date().toISOString(), par: "claude" };
     if (!resume.faire.length && !resume.eviter.length && !resume.livrables.length && !resume.mentions.length) return fail("Résumé vide.");
-    const { data, error } = await sb.from("briefs").update({ resume }).eq("id", id).select("brand, creator").maybeSingle<{ brand: string; creator: string | null }>();
+    const { data, error } = await sb.from("briefs").update({ resume }).eq("id", id).select("brand, creator, resume").maybeSingle<{ brand: string; creator: string | null; resume: { maj_le?: string } | null }>();
     if (error) return fail(/column|resume/i.test(error.message) ? "Le résumé des briefs n'est pas encore installé dans l'app (SQL à lancer)." : `Résumé non déposé : ${error.message}`);
     if (!data) return fail("Brief introuvable.");
+    // Relu : un ancien garde-fou de la base annulait l'écriture sans erreur (SQL 2026-10-25-audit).
+    if (data.resume?.maj_le !== resume.maj_le) return fail("Résumé non enregistré par la base : SQL 2026-10-25-audit à lancer.");
     return ok(`Résumé déposé sur le brief ${data.brand} × ${titleCase(data.creator)} : le créateur le voit en haut de son brief.`);
   },
 };
