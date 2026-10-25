@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activityPage, changeText, countsByPage, throttlePush, unreadKeys } from "./activityEvents";
+import { activityPage, changeText, countsByPage, dropReadLocally, throttlePush, unreadKeys } from "./activityEvents";
 
 const ev = (object_type: "todo" | "idea" | "brief" | "mail", object_id: string) => ({ object_type, object_id });
 
@@ -15,6 +15,18 @@ describe("repères « nouveau »", () => {
   it("texte de notification court et clair", () => {
     expect(changeText("subtask", "Tournage Gymshark")).toBe("Nouvelle sous-tâche · « Tournage Gymshark »");
     expect(changeText("progress", "x".repeat(60))).toBe(`Nouveau message · « ${"x".repeat(44)}… »`);
+  });
+  it("un repère marqué lu ne revient pas avec une lecture partie avant (sauf nouveau changement)", () => {
+    const at = Date.parse("2026-10-25T10:00:00Z");
+    const read = new Map([["todo:a", at]]);
+    const list = [
+      { object_type: "todo" as const, object_id: "a", updated_at: "2026-10-25T09:59:00Z" },
+      { object_type: "todo" as const, object_id: "b", updated_at: "2026-10-25T09:00:00Z" },
+    ];
+    expect(dropReadLocally(list, read).map((e) => e.object_id)).toEqual(["b"]);
+    expect(dropReadLocally([{ ...list[0], updated_at: "2026-10-25T10:05:00Z" }], read)).toHaveLength(1);
+    expect(dropReadLocally([{ ...list[0], updated_at: "pas une date" }], read)).toHaveLength(0);
+    expect(dropReadLocally(list, new Map())).toHaveLength(2);
   });
   it("un push par objet et par changement toutes les 10 minutes", () => {
     const a = throttlePush({}, "todo:a:subtask", 1000);
