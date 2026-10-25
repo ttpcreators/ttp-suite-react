@@ -118,7 +118,12 @@ export function isIOS(): boolean {
 
 async function getReg(): Promise<ServiceWorkerRegistration> {
   const existing = await navigator.serviceWorker.getRegistration();
-  return existing ?? (await navigator.serviceWorker.register("/sw.js"));
+  if (existing?.active) return existing;
+  // Service worker pas encore actif (premier lancement, clic très rapide) : l'abonnement
+  // échouerait (« no active Service Worker »). On attend qu'il le soit, 10 s au plus.
+  const reg = existing ?? (await navigator.serviceWorker.register("/sw.js"));
+  const ready = await Promise.race([navigator.serviceWorker.ready, new Promise<null>((r) => setTimeout(() => r(null), 10_000))]);
+  return ready ?? reg;
 }
 
 export type PushState =

@@ -528,6 +528,11 @@ body {
     -webkit-user-select: none;
     user-select: none;
   }
+  /* Clavier ouvert (classe posée par lib/iosUi.ts) : la barre d'onglets s'efface, comme
+     dans une app iOS, au lieu de flotter au-dessus du clavier sur le champ en cours. */
+  .ios-ui.kb-open .ios-tabbar-nav {
+    display: none;
+  }
 }
 
 /* Matière translucide des barres iOS (onglets, titre replié) : fond de page flouté. */

@@ -16,6 +16,23 @@ export function initIosUi(): void {
   } catch {
     /* stockage indisponible */
   }
+  // Clavier ouvert (un champ a le focus) : classe `kb-open`, qui cache la barre d'onglets
+  // du bas. Sinon, sur iPhone, elle remonte au-dessus du clavier et masque le champ.
+  const sync = () => document.documentElement.classList.toggle("kb-open", isTextEntry(document.activeElement));
+  document.addEventListener("focusin", sync);
+  // Au départ d'un champ, le focus passe parfois par <body> : on regarde au tour suivant.
+  document.addEventListener("focusout", () => window.setTimeout(sync, 0));
+}
+
+const NO_KEYBOARD = new Set(["checkbox", "radio", "range", "button", "submit", "reset", "file", "color", "image", "hidden"]);
+
+/** Ce champ ouvre-t-il le clavier (ou la roue de choix) de l'iPhone ? */
+export function isTextEntry(el: Element | null): boolean {
+  if (!el) return false;
+  const tag = el.tagName;
+  if (tag === "TEXTAREA" || tag === "SELECT") return true;
+  if (tag === "INPUT") return !NO_KEYBOARD.has(((el as HTMLInputElement).type || "text").toLowerCase());
+  return (el as HTMLElement).isContentEditable === true;
 }
 
 const phoneMq = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(max-width: 767px)") : null;

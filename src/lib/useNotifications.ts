@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
-import { getAppState, invalidateAppState, saveAppStateKey } from "./appState";
+import { getAppState, invalidateAppState, refreshAppState, saveAppStateKey } from "./appState";
 import { useLiveKey } from "./useLive";
-import { EMPTY, fmtAgoSince, todayISO } from "./dates";
+import { EMPTY, fmtAgoSince, fmtDay, todayISO } from "./dates";
 import { titleCase } from "./utils";
 import { toast } from "@/components/ui/toast";
 import type { NotificationItem } from "@/components/ui/notifications";
@@ -27,6 +27,8 @@ function agoLabel(iso: string | null): string {
 // File d'attente d'effacements (module-level) : sérialise les écritures du blob
 // `notifDismissed` pour éviter la course read-merge-write entre deux dismiss.
 let dismissQueue: Promise<void> = Promise.resolve();
+// Dernier blob agence bien lu (repli quand une relecture échoue).
+let lastApp: Record<string, unknown> = {};
 
 /** Notifications dérivées des vraies données : activité créateur, factures en retard, briefs à valider, événements.
  *  Les IDs sont STABLES (contenu, pas index) pour que l'effacement persiste :
@@ -50,7 +52,6 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       setItems([]);
       return;
     }
-    invalidateAppState();
     const todayStr = todayISO();
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
     const emailSince = new Date(Date.now() - 3 * 86400000).toISOString(); // emails reçus : 72 h
@@ -58,7 +59,13 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       supabase.from("invoices").select("id,party,amount,status").eq("status", "retard"),
       supabase.from("briefs").select("id,brand,creator,status").eq("status", "valider"),
       supabase.from("events").select("id,date,time,title").or("deleted.is.null,deleted.eq.false").gte("date", todayStr).order("date").limit(3),
-      getAppState().catch(() => ({}) as Record<string, unknown>),
+      // Blob frais, mais partagé avec le rafraîchissement des pages (une seule lecture par
+      // tick). Lecture échouée ≠ blob vide : on garde le dernier lu, sinon les
+      // notifications effacées (notifDismissed) réapparaissaient à la moindre coupure.
+      refreshAppState().then(
+        (st) => (lastApp = st),
+        () => lastApp,
+      ),
       supabase.from("todos").select("text,creator,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
       supabase.from("ideas").select("text,creator,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
       supabase.from("events").select("title,who,created_at").eq("source", "creator").or("deleted.is.null,deleted.eq.false").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
@@ -209,7 +216,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           id: `ev:${e.id}`,
           title: "Événement à venir",
           description: `${e.title}${e.time && e.time !== "—" ? ` · ${e.time}` : ""}`,
-          time: e.date,
+          time: fmtDay(e.date) || e.date,
           kind: "event",
         }),
       );
@@ -262,7 +269,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       } catch {
         /* relecture impossible (réseau) : signalé ci-dessous */
       }
-      if (!ok) toast("Effacement non synchronisé — réessaie");
+      if (!ok) toast("Effacement non synchronisé, réessaie");
     });
   };
 
