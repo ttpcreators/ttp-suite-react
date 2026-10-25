@@ -2218,25 +2218,25 @@ export function CreatorSpace({
           </button>
         </div>
       )}
+      {/* Téléphone : la barre d'aperçu est EN HAUT, dans le flux (avant : pastille flottante en bas,
+          qui recouvrait le champ « Écris à ton agence… » d'un échange ouvert). */}
       {preview && iosPhone && (
-        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-[60] flex justify-center px-4">
-          <div className="pointer-events-auto flex max-w-full items-center gap-2 rounded-full border border-border bg-surface/95 py-1.5 pl-3 pr-1.5 shadow-lg backdrop-blur">
-            <Eye className="h-4 w-4 shrink-0 text-primary" />
-            <CreatorPicker
-              value={name}
-              onChange={(n) => n && preview.onPick(n)}
-              creators={preview.creators}
-              ariaLabel="Changer de créateur"
-              className="w-[170px]"
-            />
-            <button
-              type="button"
-              onClick={preview.onExit}
-              className="flex h-10 shrink-0 items-center gap-1 rounded-full bg-primary px-3.5 text-[14px] font-semibold text-primary-foreground"
-            >
-              <ArrowLeft className="h-4 w-4" /> Agence
-            </button>
-          </div>
+        <div className="z-[60] flex shrink-0 items-center gap-2 border-b border-border bg-surface px-3 pb-2 pt-[calc(env(safe-area-inset-top)+0.5rem)]">
+          <Eye className="h-4 w-4 shrink-0 text-primary" />
+          <CreatorPicker
+            value={name}
+            onChange={(n) => n && preview.onPick(n)}
+            creators={preview.creators}
+            ariaLabel="Changer de créateur"
+            className="min-w-0 flex-1"
+          />
+          <button
+            type="button"
+            onClick={preview.onExit}
+            className="flex h-10 shrink-0 items-center gap-1 rounded-full bg-primary px-3.5 text-[14px] font-semibold text-primary-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" /> Agence
+          </button>
         </div>
       )}
       <div className={cn("flex min-h-0 flex-1 overflow-hidden", !iosPhone && "rounded-[22px]")}>
@@ -2320,7 +2320,7 @@ export function CreatorSpace({
         <main
           ref={mainRef}
           onScroll={iosPhone ? (e) => { lastScroll.current = e.currentTarget.scrollTop; } : undefined}
-          className={cn("flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-clip px-4 pb-4 [&>*]:shrink-0 md:px-6 md:pb-8 md:pt-6", iosPhone ? "pt-0" : "pt-4", preview && iosPhone && "pb-20")}
+          className={cn("flex min-w-0 flex-1 flex-col overflow-y-auto overflow-x-clip px-4 pb-4 [&>*]:shrink-0 md:px-6 md:pb-8 md:pt-6", iosPhone ? "pt-0" : "pt-4")}
         >
           {iosPhone && (
             <IosNavBar

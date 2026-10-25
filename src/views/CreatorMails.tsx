@@ -1293,7 +1293,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   // Champ « Écris à ton agence » collé en bas, au-dessus de la barre d'onglets (et de la
   // pastille d'aperçu de l'agence) au téléphone ; en bas du panneau sur ordinateur.
   // Le bloc va jusqu'en bas de l'écran (fond plein derrière la barre d'onglets) : rien ne dépasse dessous.
-  const composerBottom = mode === "preview" ? "max-lg:pb-[calc(env(safe-area-inset-bottom)+9.75rem)]" : "max-lg:pb-[calc(env(safe-area-inset-bottom)+5.75rem)]";
+  // (La barre d'aperçu agence est en haut de l'écran depuis le 2026-10-25 : même marge partout.)
+  const composerBottom = "max-lg:pb-[calc(env(safe-area-inset-bottom)+5.75rem)]";
   const view = openId ? (
     <section ref={viewRef} className="flex min-h-0 min-w-0 flex-col">
       <div className="flex h-12 shrink-0 items-center gap-0.5 px-1 lg:h-14 lg:border-b lg:border-border lg:px-3">
