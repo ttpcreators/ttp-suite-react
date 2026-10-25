@@ -1046,7 +1046,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     "envoyes",
   ] as const;
   const simpleHead = (
-    <div className={cn("shrink-0 px-4 pb-2 pt-1 lg:pt-3", openId && "max-lg:hidden")}>
+    <div className={cn("shrink-0 px-4 pb-3 pt-1 lg:pt-3", openId && "max-lg:hidden")}>
       {/* Son adresse, discrète, copiable d'un tap */}
       {shownAddresses.length > 0 && (
         <div className="flex min-w-0 flex-col gap-0.5">
@@ -1060,7 +1060,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           ))}
         </div>
       )}
-      <div className="mt-1 flex items-center gap-2">
+      <div className="mt-3 flex items-center gap-2">
         <div className="min-w-0 flex-1">
           <SearchField size="sm" value={query} onChange={setQuery} placeholder={t("Rechercher une marque, un objet…")} />
         </div>
@@ -1069,14 +1069,14 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         )}
         <ToolButton icon={RefreshCw} label={t("Actualiser")} spin={loading} disabled={loading} onClick={retry} className="h-11 w-11 max-lg:hidden" />
       </div>
-      <nav aria-label={t("Ranger les échanges")} className="mt-2 flex flex-wrap gap-1.5">
+      <nav aria-label={t("Ranger les échanges")} className="mt-4 flex flex-wrap gap-2">
         {simpleOrder.map((key) => {
           const f = FILTERS.find((x) => x.key === key)!;
           const on = filter === key;
           return (
             <button key={key} type="button" onClick={() => setFilter(key)} aria-pressed={on}
-              className={cn("inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[14px] font-medium transition-colors",
-                on ? "bg-foreground text-background" : "bg-field text-muted-foreground hover:text-foreground")}>
+              className={cn("inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-4 text-[14px] font-medium transition-colors",
+                on ? "bg-foreground text-background" : "bg-surface text-muted-foreground shadow-sm shadow-black/[0.03] ring-1 ring-border/60 hover:text-foreground")}>
               {t(f.short)}
               {key !== "envoyes" && <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{counts[key]}</span>}
             </button>
@@ -1086,7 +1086,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
       {/* Démarchage de l'agence : une ligne compacte, un tap filtre ces échanges */}
       {pitch.pitched > 0 && filter !== "envoyes" && (
         <button type="button" onClick={() => setFilter(filter === "demarchage" ? "tous" : "demarchage")} aria-pressed={filter === "demarchage"}
-          className="mt-2 flex min-h-11 w-full items-center gap-2 text-left text-[14px] text-muted-foreground transition-colors hover:text-foreground">
+          className="mt-4 flex min-h-11 w-full items-center gap-3 rounded-2xl bg-surface px-4 py-3 text-left text-[14px] text-muted-foreground shadow-sm shadow-black/[0.03] ring-1 ring-border/60 transition-colors hover:text-foreground">
           <Megaphone className="h-4 w-4 shrink-0 text-primary" />
           <span className="min-w-0 flex-1 leading-snug">
             {t(pitch.pitched > 1 ? "Ton agence a démarché {n} marques ce mois-ci" : "Ton agence a démarché {n} marque ce mois-ci", { n: pitch.pitched })}
@@ -1206,7 +1206,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         ) : simple ? (
           // Liste en cartes arrondies, bien lisibles : logo en grand, marque, date, objet,
           // extrait sur 2 lignes et statut en pastille. Non lu : point bleu + gras.
-          <ul className="flex flex-col gap-2.5 px-3 pb-4 pt-1 sm:px-4 lg:px-3 lg:pt-3">
+          <ul className="flex flex-col gap-3 px-4 pb-6 pt-2 lg:px-3 lg:pt-3">
             {shown.map((th) => {
               const on = openId === th.id;
               const fresh = unseen.has(th.id) || activity.keys.has(`mail:${th.id}`);
