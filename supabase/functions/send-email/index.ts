@@ -74,6 +74,7 @@ Deno.serve(async (req: Request) => {
         method: "POST",
         headers: { Authorization: `Bearer ${RESEND_API_KEY}`, "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(20_000),
       });
       if (r.ok) {
         sent++;

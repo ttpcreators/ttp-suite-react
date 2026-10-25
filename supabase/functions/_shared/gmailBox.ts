@@ -66,6 +66,7 @@ export async function serviceAccountToken(scope: string): Promise<string> {
       grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
       assertion: `${unsigned}.${b64url(sig)}`,
     }),
+    signal: AbortSignal.timeout(15_000),
   });
   const d = await r.json().catch(() => ({}));
   // unauthorized_client = ce champ d'application n'est pas autorisé dans admin.google.com.

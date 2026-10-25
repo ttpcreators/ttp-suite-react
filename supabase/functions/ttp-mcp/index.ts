@@ -134,6 +134,8 @@ Deno.serve(async (req: Request) => {
   };
 
   if (Array.isArray(payload)) {
+    // Lot borné : un seul appel ne lance jamais des centaines d'outils en parallèle.
+    if (payload.length > 20) return json({ jsonrpc: "2.0", id: null, error: { code: -32600, message: "Lot trop long (20 maximum)." } }, 400);
     const out = (await Promise.all(payload.map((m) => handle(m as Rpc)))).filter(Boolean);
     return out.length ? json(out) : new Response(null, { status: 202, headers: CORS });
   }

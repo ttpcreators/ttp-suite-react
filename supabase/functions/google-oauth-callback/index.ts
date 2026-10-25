@@ -122,6 +122,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
         code, client_id: clientId, client_secret: clientSecret,
         redirect_uri: redirectUri, grant_type: "authorization_code",
       }),
+      signal: AbortSignal.timeout(15_000),
     });
     const tokenJson = await tokenRes.json().catch(() => ({}));
 
