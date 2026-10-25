@@ -65,7 +65,7 @@ export function MissionCard({ m, dateText, whenText, late, onOpen, onAction, isN
   const action = m.done ? null : missionAction(m);
   const what = m.deliverables || m.title;
   return (
-    <div className="flex flex-col gap-4 rounded-[20px] bg-surface p-4 shadow-sm">
+    <div className="flex min-w-0 flex-col gap-4 rounded-[20px] bg-surface p-4 shadow-sm">
       <button type="button" onClick={onOpen} className="flex min-w-0 items-start gap-3 text-left">
         <IconTile tone="info"><span className="text-[17px] font-bold">{brandInitial(m.brand)}</span></IconTile>
         <span className="min-w-0 flex-1">

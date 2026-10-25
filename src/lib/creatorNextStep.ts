@@ -19,11 +19,11 @@ import { isDone } from "./collabs";
  * françaises (+ variables) traduites à l'affichage.
  */
 
-export type NsBrief = { id: string; brand: string; deliverables: string | null; due: string | null; status: string | null; consignes: string | null };
+export type NsBrief = { id: string; brand: string | null; deliverables: string | null; due: string | null; status: string | null; consignes: string | null };
 export type NsCollab = { id: string; brand: string; step: number; status: string | null; brief_id: string | null };
 export type NsTodo = { id: string; text: string; due: string | null; priority: string | null; done: boolean; status?: string | null };
-export type NsEvent = { id: string; date: string | null; day: number | null; time: string | null; title: string; type: string | null };
-export type NsInvoice = { party: string };
+export type NsEvent = { id: string; date: string | null; day: number | null; time: string | null; title: string | null; type: string | null };
+export type NsInvoice = { party: string | null };
 
 export type NextStepKind = "deliverable" | "validate" | "script" | "event" | "todo" | "stats" | "invoice";
 export type NextStepTarget =
@@ -62,6 +62,8 @@ export type NextStepInput = {
 };
 
 const norm = (s: string | null | undefined) => String(s ?? "").trim().toLowerCase();
+/** Texte repris tel quel dans un titre : jamais vide (« — » si la base n'a rien). */
+const shown = (s: string | null | undefined) => String(s ?? "").trim() || "—";
 const text = (s: string | null | undefined, fallback: string): { detail: string; detailVars: Record<string, string> } =>
   s && s.trim() && s.trim() !== "—" ? { detail: "{text}", detailVars: { text: s.trim() } } : { detail: fallback, detailVars: {} };
 
@@ -77,7 +79,7 @@ export function creatorSteps(input: NextStepInput): NextStep[] {
     const due = toISODate(b.due) || null;
     const days = due ? daysTo(due) : null;
     const target: NextStepTarget = { tab: "missions", briefId: b.id };
-    const base = { due, days, target, vars: { brand: b.brand } };
+    const base = { due, days, target, vars: { brand: shown(b.brand) } };
     if (days != null && days < 0) {
       out.push({ ...base, id: `brief-late:${b.id}`, kind: "deliverable", title: "Rendre ton contenu {brand}", ...text(b.deliverables, "Livrables à préciser"), bucket: 0 });
     } else if (k === "valider") {
@@ -111,7 +113,8 @@ export function creatorSteps(input: NextStepInput): NextStep[] {
     if (days < 0 || days > 7) continue;
     const time = e.time && e.time.trim() && e.time.trim() !== "—" ? e.time.trim() : "";
     out.push({
-      id: `event:${e.id}`, kind: "event", title: "{text}", vars: { text: e.title || "Rendez-vous" },
+      // Sans titre : la clé « Rendez-vous » elle-même, pour qu'elle soit traduite.
+      id: `event:${e.id}`, kind: "event", ...(e.title?.trim() ? { title: "{text}", vars: { text: e.title.trim() } } : { title: "Rendez-vous", vars: {} }),
       detail: time ? "Rendez-vous à {time}" : "Rendez-vous", detailVars: time ? { time } : {},
       due: iso, days, bucket: days <= 1 ? 1 : 4, target: { tab: "planning" },
     });
@@ -133,7 +136,7 @@ export function creatorSteps(input: NextStepInput): NextStep[] {
     const urgent = days != null && days <= 1;
     const bucket = urgent ? 1 : td.priority === "haute" ? 6 : 7;
     out.push({
-      id: `todo:${td.id}`, kind: "todo", title: "{text}", vars: { text: td.text },
+      id: `todo:${td.id}`, kind: "todo", title: "{text}", vars: { text: shown(td.text) },
       detail: td.priority === "haute" ? "Tâche prioritaire" : "Tâche", detailVars: {},
       due, days, bucket, target: { tab: "todo", todoId: td.id },
     });

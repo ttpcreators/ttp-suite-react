@@ -68,7 +68,7 @@ import { sharedWithText } from "@/lib/todoCreators";
 import { selectTodosFor } from "@/lib/todoCreatorsDb";
 import { agencyAwaits, progressColumnMissing } from "@/lib/todoProgress";
 import { CreatorTodos } from "@/components/CreatorTodos";
-import { invoiceTone, netGains, netShare, PAYOUT_LABEL, payoutStatus, realGains, type RealPayout, type ReportDetail, type ReportInvoice } from "@/lib/creatorGains";
+import { invoiceTone, netGains, netShare, partyBrand, PAYOUT_LABEL, payoutStatus, realGains, type RealPayout, type ReportDetail, type ReportInvoice } from "@/lib/creatorGains";
 import { DEFAULT_COMMISSION, parseCommissionPct } from "@/lib/commission";
 import { daysBetween as daysBetweenIso } from "@/lib/aujourdhui";
 import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
@@ -121,10 +121,10 @@ type Idea = { id: string; text: string; status: string | null; sort_order?: numb
 // Barre d'accent (bord gauche de la carte idée) selon le statut.
 const IDEA_ACCENT: Record<string, string> = { "À explorer": "bg-indigo", "À faire": "bg-primary", "En cours": "bg-cyan", "Publiée": "bg-signal" };
 const ideaAccent = (s: string | null) => IDEA_ACCENT[s ?? "À faire"] ?? "bg-primary";
-type Brief = { id: string; brand: string; deliverables: string | null; due: string | null; status: string | null; consignes: string | null; resume?: BriefResume | null };
-type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string; type: string; who?: string | null; description?: string | null };
+type Brief = { id: string; brand: string | null; deliverables: string | null; due: string | null; status: string | null; consignes: string | null; resume?: BriefResume | null };
+type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string | null; type: string | null; who?: string | null; description?: string | null };
 type Doc = { id: string; name: string; type: string | null; size: string | null; path: string | null; created_at: string | null };
-type Invoice = { ref: string; party: string; amount: string | null; date: string | null; status: string | null };
+type Invoice = { ref: string | null; party: string | null; amount: string | null; date: string | null; status: string | null };
 type Contact = { id: string; brand: string; person: string | null; role: string | null; email: string | null; phone: string | null; sort_order?: number };
 
 type Tab = CsTab;
@@ -783,6 +783,8 @@ export function CreatorSpace({
     const refresh = shownFor.current === name;
     shownFor.current = name;
     const apply = (error: unknown) => alive && !(error && refresh);
+    // Vrais versements : jamais ceux du créateur affiché avant (aperçu agence), même si la lecture échoue.
+    if (!refresh) setMoney(null);
     supabase
       .from("creators")
       .select("*")
@@ -917,8 +919,8 @@ export function CreatorSpace({
       toast(t("Ça n'a pas marché. Réessaie dans un instant."));
       return;
     }
-    pingAgency("idee", `Script — ${briefs.find((b) => b.id === id)?.brand ?? ""}`);
-    toast(t("Script enregistré ✓ — ton agence le voit"));
+    pingAgency("idee", `Script · ${briefs.find((b) => b.id === id)?.brand ?? ""}`);
+    toast(t("Script enregistré ✓ Ton agence le voit"));
   };
 
   // ── Gifting côté créateur : voir ses cadeaux, marquer publié, signaler un cadeau reçu.
@@ -1007,7 +1009,7 @@ export function CreatorSpace({
       }
       const created = await dbInsert("documents", {
         creator: name,
-        name: `Facture — ${titleCase(name)} — ${new Date().toLocaleDateString("fr-FR")}`,
+        name: `Facture · ${titleCase(name)} · ${fmtDay(new Date())}`,
         type: "facture",
         size: `${Math.max(1, Math.round(file.size / 1024))} Ko`,
         path,
@@ -1020,7 +1022,7 @@ export function CreatorSpace({
         return;
       }
       setDocs((prev) => [created as unknown as Doc, ...prev]);
-      pingAgency("facture", `Facture déposée — ${titleCase(name)}`);
+      pingAgency("facture", `Facture déposée · ${titleCase(name)}`);
       toast(t("Facture envoyée à ton agence ✓"));
     } finally {
       setInvUploading(false);
@@ -1200,7 +1202,7 @@ export function CreatorSpace({
         }
         const created = await dbInsert("documents", {
           creator: name,
-          name: `Stats — ${titleCase(name)} — ${new Date().toLocaleDateString("fr-FR")}`,
+          name: `Stats · ${titleCase(name)} · ${fmtDay(new Date())}`,
           type: "stats",
           size: `${Math.max(1, Math.round(file.size / 1024))} Ko`,
           path,
@@ -1214,7 +1216,7 @@ export function CreatorSpace({
         ok += 1;
       }
       if (ok > 0) {
-        pingAgency("stats", `${ok} capture${ok > 1 ? "s" : ""} de stats — ${titleCase(name)}`);
+        pingAgency("stats", `${ok} capture${ok > 1 ? "s" : ""} de stats · ${titleCase(name)}`);
         toast(plural(ok, "{n} capture envoyée à ton agence ✓", "{n} captures envoyées à ton agence ✓"));
         setStatsModalOpen(false);
       }
@@ -1237,7 +1239,7 @@ export function CreatorSpace({
       const { data, error } = await supabase.storage.from("documents").createSignedUrl(path, 3600);
       return error || !data?.signedUrl ? null : data.signedUrl;
     });
-    if (!ok) toast(t("Lien indisponible — réessaie"));
+    if (!ok) toast(t("Lien indisponible, réessaie"));
   };
   const resetGiftForm = () => {
     setGiOpen(false);
@@ -1765,7 +1767,7 @@ export function CreatorSpace({
       const { data, error } = await supabase.storage.from("documents").createSignedUrl(att.path, 3600);
       return error || !data?.signedUrl ? null : data.signedUrl;
     });
-    if (!ok) toast(t("Lien indisponible — réessaie"));
+    if (!ok) toast(t("Lien indisponible, réessaie"));
   };
   // Base d'abord, fichier ensuite : un échec ne laisse pas une pièce jointe pointant vers rien.
   const removeAttachment = async (todo: Todo, path: string) => {
@@ -2032,10 +2034,12 @@ export function CreatorSpace({
   };
 
   /** « Gymshark x Lea » → « Gymshark » : son propre nom est inutile dans son espace. */
-  const brandOnly = (party: string | null | undefined) => {
-    const p = (party ?? "").trim();
-    const first = (name.split(/\s+/)[0] ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return (first ? p.replace(new RegExp(`\\s*[x×]\\s*${first}(?:\\s.*)?$`, "i"), "") : p) || p;
+  const brandOnly = (party: string | null | undefined) => partyBrand(party, name);
+  /** « Dernier versement : 1 200 € · Gymshark », sans le « · » final quand la marque manque. */
+  const lastPayoutText = (last: { amount: number; party: string }) => {
+    const brand = brandOnly(last.party);
+    const amount = formatEuro(last.amount);
+    return brand ? t("Dernier versement : {amount} · {brand}", { amount, brand }) : t("Dernier versement : {amount}", { amount });
   };
   /** Ouvre la fiche d'une mission (et, au besoin, l'éditeur de script de son brief). */
   const goMission = (m: Mission, writeScript = false) => {
@@ -2447,7 +2451,7 @@ export function CreatorSpace({
             ) : openTodos.length > 0 ? (
               rich(t("Il te reste {a} à faire. Commence par la plus ancienne."), { a: hi(plural(openTodos.length, "{n} tâche", "{n} tâches")) })
             ) : nextBrief ? (
-              rich(t("Prochain brief\u00A0: {brand} pour le {date}."), { brand: hi(nextBrief.brand), date: hi(frDate(nextBrief.due)) })
+              rich(t("Prochain brief\u00A0: {brand} pour le {date}."), { brand: hi(nextBrief.brand?.trim() || "—"), date: hi(frDate(nextBrief.due)) })
             ) : (
               rich(t("Tout est à jour. {a}"), { a: hi(t("Belle journée\u00A0!")) })
             );
@@ -2536,7 +2540,7 @@ export function CreatorSpace({
                     <ChevronRight className="h-4 w-4 shrink-0 text-faint" />
                   </span>
                   <span className="mt-0.5 truncate text-[13px] text-muted-foreground">
-                    {net.last ? t("Dernier versement : {amount} · {brand}", { amount: formatEuro(net.last.amount), brand: net.last.party }) : t("Pas encore de versement.")}
+                    {net.last ? lastPayoutText(net.last) : t("Pas encore de versement.")}
                   </span>
                 </button>
                 {(() => {
@@ -3029,7 +3033,7 @@ export function CreatorSpace({
                 <>
                   <InlineForm open={tdOpen} title={t("Nouvelle tâche")} onClose={() => setTdOpen(false)} onSubmit={addTodo}>
                     <TextField label={t("Tâche")} value={tdText} onChange={setTdText} />
-                    <AutoGrowTextField label={t("Description")} value={tdDesc} onChange={setTdDesc} placeholder={t("Détaille — le champ s'agrandit tout seul…")} className="min-w-full" />
+                    <AutoGrowTextField label={t("Description")} value={tdDesc} onChange={setTdDesc} placeholder={t("Détaille, le champ s'agrandit tout seul…")} className="min-w-full" />
                     <TextField label={t("Échéance")} type="date" value={tdDue} onChange={setTdDue} />
                     <SelectField label={t("Priorité")} value={tdPrio} onChange={setTdPrio} options={opts.prio} />
                   </InlineForm>
@@ -3089,7 +3093,7 @@ export function CreatorSpace({
                 </div>
               </PageHeaderRow>
               <InlineForm open={idOpen} title={t("Nouvelle idée")} onClose={() => setIdOpen(false)} onSubmit={addIdea}>
-                <AutoGrowTextField label={t("Idée de contenu")} value={idText} onChange={setIdText} placeholder={t("Décris ton idée — le champ s'agrandit tout seul…")} className="min-w-full" />
+                <AutoGrowTextField label={t("Idée de contenu")} value={idText} onChange={setIdText} placeholder={t("Décris ton idée, le champ s'agrandit tout seul…")} className="min-w-full" />
               </InlineForm>
               {ideas.length === 0 ? (
                 <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">{t("Aucune idée. Ajoute la première")}</div>
@@ -3141,7 +3145,7 @@ export function CreatorSpace({
               <div className="flex flex-col gap-3">
                 {contacts.length === 0 ? (
                   <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">
-                    {t("Aucun contact. Ajoute une marque ou une personne que tu connais — ton agence les verra 👋")}
+                    {t("Aucun contact. Ajoute une marque ou une personne que tu connais. Ton agence les verra 👋")}
                   </div>
                 ) : (
                   contacts.map((c) =>
@@ -3528,7 +3532,10 @@ export function CreatorSpace({
                   const status = String(iv.status ?? "");
                   const date = toISODate(iv.date);
                   if (!date || status === "payee" || status === "brouillon") return [];
-                  return [{ id: `facture:${iv.ref}:${i}`, date, time: "", title: `${t("Facture {ref}", { ref: String(iv.ref ?? "").trim() })}${iv.party ? ` · ${iv.party}` : ""}`.trim(), type: "deadline", who: titleCase(name), kind: "facture" }];
+                  const ref = String(iv.ref ?? "").trim();
+                  const party = String(iv.party ?? "").trim();
+                  const title = [ref ? t("Facture {ref}", { ref }) : t("Facture"), party].filter(Boolean).join(" · ");
+                  return [{ id: `facture:${ref}:${i}`, date, time: "", title, type: "deadline", who: titleCase(name), kind: "facture" }];
                 }),
               ]}
               onNavigate={(kind) => setTab(kind === "brief" ? "briefs" : kind === "facture" ? "facturation" : "todo")}
@@ -3620,7 +3627,7 @@ export function CreatorSpace({
                     {mkUnpublished
                       ? t("Ton media kit n'est pas encore publié")
                       : mkLive === true
-                        ? t("Ta page publique — à partager aux marques")
+                        ? t("Ta page publique, à partager aux marques")
                         : mkLive === null
                           ? t("Vérification de ta page…")
                           : t("En préparation avec ton agence")}
@@ -4015,7 +4022,7 @@ export function CreatorSpace({
                 <div className="text-[14px] font-semibold text-muted-foreground">{t("Ce qui arrive")}</div>
                 <div className="mt-1 truncate text-[44px] font-bold leading-tight tracking-[-0.03em] tabular-nums md:text-[48px]">{formatEuro(net.coming)}</div>
                 <div className="mt-1 text-[14px] text-muted-foreground">
-                  {net.last ? t("Dernier versement : {amount} · {brand}", { amount: formatEuro(net.last.amount), brand: brandOnly(net.last.party) }) : t("Pas encore de versement.")}
+                  {net.last ? lastPayoutText(net.last) : t("Pas encore de versement.")}
                 </div>
                 {net.late > 0 && (
                   <div className="mt-3 flex items-start gap-2.5 rounded-[14px] bg-field px-3.5 py-3 text-[14px] leading-snug text-foreground">
@@ -4064,7 +4071,7 @@ export function CreatorSpace({
                       const st = payoutStatus(inv);
                       const brand = brandOnly(inv.party);
                       return (
-                        <div key={inv.ref + i} className={cn("flex min-h-[60px] items-center gap-3 px-4 py-2.5", i > 0 && "border-t border-border")}>
+                        <div key={(inv.ref ?? "") + i} className={cn("flex min-h-[60px] items-center gap-3 px-4 py-2.5", i > 0 && "border-t border-border")}>
                           <IconTile tone="info"><span className="text-[17px] font-bold">{brandInitial(brand)}</span></IconTile>
                           <div className="min-w-0 flex-1 truncate text-[16px] font-semibold text-foreground">{brand}</div>
                           <div className="flex shrink-0 flex-col items-end gap-1">
@@ -4204,7 +4211,7 @@ export function CreatorSpace({
         onClose={() => setStatsModalOpen(false)}
         icon={<BarChart3 className="h-5 w-5 text-primary" />}
         title={t("Envoyer mes stats")}
-        description={t("Les captures des 30 derniers jours — c'est ce qui prouve ton audience aux marques.")}
+        description={t("Les captures des 30 derniers jours : c'est ce qui prouve ton audience aux marques.")}
         primaryLabel={statsUploading ? t("Envoi en cours…") : t("Envoyer mes captures")}
         onPrimary={() => statsFileRef.current?.click()}
         primaryDisabled={statsUploading}
@@ -4235,7 +4242,7 @@ export function CreatorSpace({
           </ol>
         </div>
 
-        <div className="mb-2 text-center text-[12px] font-medium text-muted-foreground">{t("Ou capture toi-même — ce qu'on regarde")}</div>
+        <div className="mb-2 text-center text-[12px] font-medium text-muted-foreground">{t("Ou capture toi-même : ce qu'on regarde")}</div>
         <div className="rounded-xl bg-panel/50 p-3.5 text-[12px] leading-relaxed text-muted-foreground">
           <div className="mb-2 flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
             <PlatformIcon platform="instagram" className="h-3.5 w-3.5 text-foreground" /> {t("Instagram · Statistiques (Insights) · 30 j")}
