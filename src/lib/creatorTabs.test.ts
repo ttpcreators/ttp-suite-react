@@ -17,6 +17,10 @@ describe("onglets de l'espace créateur", () => {
     expect(normalizeCsTab("mails")).toBe("mails");
     expect(normalizeCsTab("onglet-inconnu")).toBe("accueil");
     expect(normalizeCsTab(null)).toBe("accueil");
+    // Lien tapé à la main (/?open=cs-tab&tab=constructor) : jamais une fonction comme onglet.
+    expect(normalizeCsTab("constructor")).toBe("accueil");
+    expect(normalizeCsTab("toString")).toBe("accueil");
+    expect(parseCsFavorites('["constructor","ideas"]')).not.toContain("constructor");
   });
 
   it("aucune ancienne rubrique perdue", () => {
