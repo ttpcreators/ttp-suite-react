@@ -30,7 +30,8 @@ export function parseDueDate(s: string | null): Date | null {
 /** Jours écoulés depuis `d` (date locale, à minuit). */
 export function daysSinceDue(d: Date, now: Date = new Date()): number {
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return Math.floor((today.getTime() - d.getTime()) / 86400000);
+  // Arrondi : deux minuits locaux sont séparés de 23 h ou 25 h aux changements d'heure.
+  return Math.round((today.getTime() - d.getTime()) / 86400000);
 }
 
 /** Facture à relancer : « retard », ou « attente » dont l'échéance est passée. */

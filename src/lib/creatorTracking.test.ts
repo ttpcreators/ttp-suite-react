@@ -94,6 +94,14 @@ describe("dérivés dashboard", () => {
     expect(nextPoint(j)).toBe(future);
     expect(nextPoint([])).toBeNull();
   });
+  it("nextPoint compte en jour local (le point d'hier n'est plus à venir après minuit)", () => {
+    const j: JournalEntry[] = [
+      { id: "1", date: "2026-10-20", type: "appel", resume: "", decisions: "", actions: "", prochainPoint: "2026-10-25" },
+      { id: "2", date: "2026-10-20", type: "appel", resume: "", decisions: "", actions: "", prochainPoint: "2026-10-30" },
+    ];
+    expect(nextPoint(j, "2026-10-26")).toBe("2026-10-30");
+    expect(nextPoint(j, "2026-10-25")).toBe("2026-10-25");
+  });
 });
 
 describe("feuille de route partagée", () => {

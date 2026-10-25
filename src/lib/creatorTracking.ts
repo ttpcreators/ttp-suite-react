@@ -5,6 +5,8 @@
  * Clé = nom du créateur en minuscules (même convention que creatorExclusive / engagement).
  */
 
+import { todayISO } from "./dates";
+
 export const norm = (name: string): string => String(name ?? "").trim().toLowerCase();
 
 // ─────────────────────────────── cadence ───────────────────────────────
@@ -201,8 +203,8 @@ export function lastContact(journal: JournalEntry[] | undefined): string | null 
 }
 
 /** Prochaine date de « prochain point » à venir (>= aujourd'hui), ou null. */
-export function nextPoint(journal: JournalEntry[] | undefined): string | null {
-  const today = new Date().toISOString().slice(0, 10);
+export function nextPoint(journal: JournalEntry[] | undefined, today: string = todayISO()): string | null {
+  // Jour LOCAL : en UTC, entre minuit et 2 h à Paris, le point d'hier passait pour « à venir ».
   const upcoming = (journal ?? []).map((j) => j.prochainPoint).filter((d) => d && d >= today).sort();
   return upcoming[0] ?? null;
 }

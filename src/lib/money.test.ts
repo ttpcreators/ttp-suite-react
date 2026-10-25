@@ -61,6 +61,16 @@ describe("formatEuro", () => {
     expect(formatEuro(0).endsWith("€")).toBe(true);
   });
 
+  it("arrondit au centime, jamais trois décimales ni « -0 »", () => {
+    expect(formatEuro(5.0049).replace(/\s/g, " ")).toBe("5 €");
+    expect(formatEuro(5.006).replace(/\s/g, " ")).toBe("5,01 €");
+    expect(formatEuro(999.9996).replace(/\s/g, " ")).toBe("1 000 €");
+    expect(formatEuro(-0.001).replace(/\s/g, " ")).toBe("0 €");
+    expect(formatEuro(0.1 + 0.2).replace(/\s/g, " ")).toBe("0,30 €");
+    expect(formatEuro(-1250.5).replace(/\s/g, " ")).toBe("-1 250,50 €");
+    expect(formatEuro(Number.NaN).replace(/\s/g, " ")).toBe("0 €");
+  });
+
   it("round-trip parseAmount(formatEuro(n)) === n (invariant clé)", () => {
     for (const n of [0, 500, 3000, 1200.5, 42000, 1_500_000]) {
       expect(parseAmount(formatEuro(n))).toBe(n);

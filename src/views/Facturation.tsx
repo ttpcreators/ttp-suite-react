@@ -146,7 +146,7 @@ function parseDueDate(s: string | null): Date | null {
 function daysSinceDue(d: Date): number {
   const t = new Date();
   const today = new Date(t.getFullYear(), t.getMonth(), t.getDate());
-  return Math.floor((today.getTime() - d.getTime()) / 86400000);
+  return Math.round((today.getTime() - d.getTime()) / 86400000); // 23 h ou 25 h aux changements d'heure
 }
 /** Facture en retard : statut « retard », ou « En attente » dont l'échéance est passée
  *  (même règle que la page Relances). Règle UNIQUE du badge, du filtre et du compteur. */

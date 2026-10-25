@@ -3542,7 +3542,7 @@ export function CreatorSpace({
                   toast(t("Renseigne le titre"));
                   return false;
                 }
-                const dateVal = e.date && e.date.trim() ? e.date : new Date().toISOString().slice(0, 10);
+                const dateVal = e.date && e.date.trim() ? e.date : todayISO();
                 const day = Number(dateVal.split("-")[2]) || 1;
                 const description = e.description ?? null;
                 const created = await dbInsert("events", {
