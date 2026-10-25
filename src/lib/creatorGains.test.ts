@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gainsSummary, invoiceNet, invoiceTone, realGains, type GainInvoice } from "./creatorGains";
+import { gainsSummary, invoiceNet, invoiceTone, partyBrand, realGains, type GainInvoice } from "./creatorGains";
 
 const NOW = new Date(2026, 9, 20, 9, 30);
 const inv = (over: Partial<GainInvoice>): GainInvoice => ({ ref: "F1", party: "JNPR", amount: "100", date: null, status: "attente", ...over });
@@ -83,5 +83,20 @@ describe("vrais versements (creator-report)", () => {
     expect(g.coming).toBe(700 + 800);
     expect(g.last).toEqual({ amount: 600, party: "Virement Hoka" });
     expect(g.lines.map((l) => [l.status, l.amount])).toEqual([["encours", 700], ["avenir", 800], ["verse", 600]]);
+  });
+});
+
+describe("marque seule d'une facture", () => {
+  it("retire son prénom, accents et casse compris", () => {
+    expect(partyBrand("Gymshark x Lea", "lea martin")).toBe("Gymshark");
+    expect(partyBrand("Hoka x Léa", "lea martin")).toBe("Hoka");
+    expect(partyBrand("Hoka X LÉA MARTIN", "Léa Martin")).toBe("Hoka");
+    expect(partyBrand("Alo×Léa", "lea")).toBe("Alo");
+  });
+  it("ne coupe jamais une marque qui contient « x » ni le prénom d'un autre", () => {
+    expect(partyBrand("Max Lea", "lea martin")).toBe("Max Lea");
+    expect(partyBrand("Nike x Leane", "lea martin")).toBe("Nike x Leane");
+    expect(partyBrand("x Lea", "lea")).toBe("x Lea");
+    expect(partyBrand(null, "lea")).toBe("");
   });
 });

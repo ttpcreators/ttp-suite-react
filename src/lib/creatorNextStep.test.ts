@@ -93,4 +93,17 @@ describe("prochaine étape du créateur", () => {
     expect(whenLabel(4)).toEqual({ key: "Dans {n} jours", vars: { n: 4 } });
     expect(whenLabel(10)).toBeNull();
   });
+
+  it("colonnes vides en base : jamais de titre vide ni de mot français en dur", () => {
+    const steps = creatorSteps({
+      ...base,
+      briefs: [brief({ id: "x", brand: null, status: "valider" })],
+      todos: [{ id: "t", text: " ", due: null, priority: null, done: false }],
+      events: [{ id: "e", date: "2026-10-21", day: null, time: null, title: null, type: null }],
+    });
+    expect(steps.find((s) => s.id === "brief-validate:x")?.vars.brand).toBe("—");
+    expect(steps.find((s) => s.id === "todo:t")?.vars.text).toBe("—");
+    // Rendez-vous sans titre : la clé elle-même (traduite à l'affichage), pas une variable.
+    expect(steps.find((s) => s.id === "event:e")).toMatchObject({ title: "Rendez-vous", vars: {} });
+  });
 });

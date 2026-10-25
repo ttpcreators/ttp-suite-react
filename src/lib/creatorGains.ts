@@ -14,7 +14,7 @@ import { cents, invoiceTotals, PAYOUT_TOLERANCE_EUR } from "./invoice";
  *     de la page Relances). Le rouge « late » est réservé à cet argent en retard.
  */
 
-export type GainInvoice = { ref: string; party: string; amount: string | null; date: string | null; status: string | null };
+export type GainInvoice = { ref: string | null; party: string | null; amount: string | null; date: string | null; status: string | null };
 
 export type GainsSummary = {
   /** Payé. */
@@ -175,6 +175,24 @@ export function realGains(
   }
   const last = done[0] ? { amount: cents(Number(done[0].amount)), party: (done[0].note ?? "").trim() } : null;
   return { coming: cents(owed + upcoming), paid, late: cents(late), last, owed, lines };
+}
+
+/** Lettre sans accent, une pour une (garde les positions du texte d'origine). */
+const foldChar = (c: string) => c.normalize("NFD").replace(/\p{Diacritic}/gu, "").charAt(0) || c;
+
+/**
+ * « Gymshark x Lea » → « Gymshark » : son propre prénom est inutile dans son espace.
+ * Insensible aux accents et à la casse (« Hoka x Léa » pour « lea martin »). Sans marque
+ * devant, le libellé reste entier.
+ */
+export function partyBrand(party: string | null | undefined, creatorName: string): string {
+  const p = String(party ?? "").trim();
+  const first = [...(creatorName.trim().split(/\s+/)[0] ?? "")].map(foldChar).join("").toLowerCase();
+  if (!p || !first) return p;
+  const chars = [...p];
+  const folded = chars.map(foldChar).join("").toLowerCase();
+  const m = new RegExp(`(?:\\s+x\\s*|\\s*×\\s*)${first.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?:\\s.*)?$`).exec(folded);
+  return (m ? chars.slice(0, m.index).join("").trim() : p) || p;
 }
 
 /** Libellé et couleur d'un statut de versement (mêmes mots que `payoutStatus`). */

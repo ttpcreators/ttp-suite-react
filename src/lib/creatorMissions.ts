@@ -21,7 +21,7 @@ export type MissionCollab = {
   brief_id: string | null;
   created_at?: string | null;
 };
-export type MissionBrief = { id: string; brand: string; deliverables: string | null; due: string | null; status: string | null; consignes: string | null; resume?: BriefResume | null };
+export type MissionBrief = { id: string; brand: string | null; deliverables: string | null; due: string | null; status: string | null; consignes: string | null; resume?: BriefResume | null };
 
 export type Mission = {
   /** « c:<id> » pour une collab, « b:<id> » pour un brief seul. */
@@ -94,7 +94,7 @@ export function buildMissions(collabs: MissionCollab[], briefs: MissionBrief[]):
     if (used.has(b.id)) continue;
     out.push({
       id: `b:${b.id}`,
-      brand: b.brand,
+      brand: b.brand ?? "",
       title: b.deliverables?.trim() || null,
       deliverables: b.deliverables?.trim() || null,
       step: null,

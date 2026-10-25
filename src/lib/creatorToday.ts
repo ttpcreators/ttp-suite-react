@@ -49,7 +49,7 @@ export function creatorTodayItems(input: CreatorTodayInput): CtItem[] {
     if (days <= 14 || days > LATER_TO) continue;
     const detail = b.deliverables && b.deliverables.trim() && b.deliverables.trim() !== "—" ? b.deliverables.trim() : "";
     extra.push({
-      id: `brief-later:${b.id}`, kind: "deliverable", title: "Contenu à rendre pour {brand}", vars: { brand: b.brand },
+      id: `brief-later:${b.id}`, kind: "deliverable", title: "Contenu à rendre pour {brand}", vars: { brand: b.brand?.trim() || "—" },
       detail: detail ? "{text}" : "Livrables à préciser", detailVars: detail ? { text: detail } : {},
       due, days, bucket: 8, target: { tab: "missions", briefId: b.id },
     });

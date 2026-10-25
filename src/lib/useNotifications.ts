@@ -134,12 +134,12 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
         );
       }
       if (bellCreator && evC && !evC.error) {
-        ((evC.data as { title: string; who: string | null; created_at: string | null }[]) ?? []).forEach((e) =>
+        ((evC.data as { title: string | null; who: string | null; created_at: string | null }[]) ?? []).forEach((e) =>
           out.push({
-            id: `cev:${e.created_at}:${e.title.slice(0, 40)}`,
+            id: `cev:${e.created_at}:${(e.title ?? "").slice(0, 40)}`,
             title: "Nouvel évènement d'un créateur",
             page: "planning",
-            description: `${e.who ? titleCase(e.who) : "Créateur"} · ${e.title}`,
+            description: `${e.who ? titleCase(e.who) : "Créateur"} · ${e.title ?? ""}`,
             time: agoLabel(e.created_at),
             kind: "creator",
           }),

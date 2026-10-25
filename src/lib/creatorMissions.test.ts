@@ -19,6 +19,12 @@ describe("missions du créateur", () => {
     expect(m.find((x) => x.id === "b:y")?.step).toBeNull();
   });
 
+  it("un brief sans marque (colonne vide en base) ne fait pas planter le tri", () => {
+    const m = buildMissions([collab({ brand: "Seoni" })], [brief({ id: "n1", brand: null }), brief({ id: "n2", brand: null, due: "2026-10-30" })]);
+    expect(m.map((x) => x.id)).toEqual(["b:n2", "b:n1", "c:c1"]);
+    expect(m.find((x) => x.id === "b:n1")?.brand).toBe("");
+  });
+
   it("collabs perdues ou archivées cachées ; terminées en dernier ; échéance la plus proche d'abord", () => {
     const m = buildMissions(
       [collab({ id: "lost", status: "perdue" }), collab({ id: "won", brand: "Won", step: 11 })],
