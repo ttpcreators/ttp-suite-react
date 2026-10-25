@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Plus, Trash2, Copy, Users, Sparkles, SlidersHorizontal, RotateCcw, Minus, Search, Check, FileText, Handshake, ChevronDown, PenLine, Send, X, Image as ImageIcon } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { useCreators, type CreatorLite } from "@/lib/useCreators";
-import { formatEuro, getAppState, invalidateAppState, saveAppStateKey, useAppState } from "@/lib/appState";
+import { formatEuro, getAppState, invalidateAppState, parseAmount, saveAppStateKey, useAppState } from "@/lib/appState";
 import { cn, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -14,20 +14,28 @@ import { HelpTip } from "@/components/ui/help-tip";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { dbUpdate } from "@/lib/db";
+import { fmtDay } from "@/lib/dates";
+import { DEFAULT_COMMISSION, parseCommissionPct } from "@/lib/commission";
 import {
-  INF_PLATFORMS, NICHES, nicheMult, infFormat, computeInfluence, parseFollowers, parseEr, cpmViews, EXCLUSIVITY, USAGE_RIGHTS,
+  INF_PLATFORMS, infFormat, parseFollowers, parseEr, cpmViews,
   UGC_TYPES, UGC_LEVELS, UGC_USAGE, ugcLevelMult, computeUgc,
-  type PlatKey, type InfItem, type UgcItem, type RateOverrides,
+  type PlatKey, type UgcItem, type RateOverrides,
 } from "@/lib/pricing";
-import { deliverablesText, missingAudienceText, priceRange, quoteInvoiceLines, ugcDeliverablesText } from "@/lib/pricingForm";
+import { deliverablesText, priceRange, quoteInvoiceLines, ugcDeliverablesText } from "@/lib/pricingForm";
+import {
+  CREDIBILITY, PROD_LEVELS, TARIF_FORMATS, creatorFloor, francePctOf, gridDiff, mainAgeOf, pastRates, preChecks, priceTarif, readTarifGrid,
+  splitHT, suggestedCoef, tarifAlerts, tarifCopyText, tarifGaps, tarifQuoteLines, tarifViews,
+  type Credibility, type Exclusivity, type ProdLevel,
+} from "@/lib/pricingTTP";
+import { loadInvoiceHistory, saveCreatorFloor, type InvoiceHistory } from "@/lib/pricingTTPDb";
 import { putInvoicePrefill } from "@/lib/invoicePrefill";
 import { saveProposal } from "@/lib/prospectsDb";
 import { Overlay } from "@/components/mobile/ios-sheet";
-import { fmtCompact } from "@/lib/timeSeries";
-import { audienceForAll, creatorAudience, NO_AUD, VIDEO_FORMATS, viewsFor, type Aud, type AudienceRow } from "@/lib/creatorAudience";
-import { mergeRates, ratesForItems, type KitRate, type RatesMerge } from "@/lib/mediakitRates";
+import { audienceForAll, creatorAudience, NO_AUD, type Aud, type AudienceRow } from "@/lib/creatorAudience";
+import { kitRatesFromPrices, mergeRates, type KitRate, type RatesMerge } from "@/lib/mediakitRates";
 import { readKit, writeKitRates } from "@/lib/mediakitRatesDb";
 import { KitRatesDialog } from "@/components/kit-rates-dialog";
+import { CheckRow, QualityBlock, Stepper, T_INPUT, TarifDetail, TarifGridEditor, TarifPrice, TarifWarnings, type Justifs } from "./PricingTarif";
 
 /** Créateur choisi : aucun (recherche), saisie libre, ou l'id d'un créateur du roster. */
 const NONE = "";
@@ -36,44 +44,85 @@ let _rid = 0;
 const rid = () => `p${Date.now().toString(36)}${(_rid += 1)}`;
 
 const LBL = "text-[12px] font-medium text-muted-foreground";
-const INPUT = "h-9 w-full min-w-0 rounded-[10px] border border-border bg-surface px-2.5 text-[13px] tabular-nums outline-none focus:border-primary";
 const BLOCK = "rounded-2xl border border-border bg-surface p-5";
 const BLOCK_TITLE = "mb-3 text-[14px] font-semibold text-foreground";
+const SMALL = "text-[11px] text-muted-foreground";
 
 type Mode = "influence" | "ugc";
 /** Un livrable d'influence : plateforme, format, quantité. L'audience vit par plateforme. */
 type InfRow = { id: string; platform: PlatKey; format: string; qty: number };
 const SRC_LABEL: Record<string, string> = {
-  tiktok: "Vues mesurées sur TikTok (12 dernières vidéos)",
-  youtube: "Vues mesurées sur YouTube (dernières vidéos, Shorts à part)",
+  tiktok: "Moyenne mesurée sur TikTok (12 dernières vidéos)",
+  youtube: "Moyenne mesurée sur YouTube (dernières vidéos, Shorts à part)",
   instagram: "Chiffres Instagram du jour",
-  igreels: "Vues mesurées sur Instagram (derniers reels)",
-  kit: "Vues du media kit",
+  igreels: "Moyenne mesurée sur Instagram (derniers reels)",
+  kit: "Moyenne du media kit",
   fiche: "Chiffres de la fiche",
-  saisie: "Vues saisies à la main",
+  saisie: "Saisi à la main",
 };
 type UgcRow = { id: string; type: string; qty: number };
 type CollabPick = { id: string; brand: string | null; creator: string | null; cachet: string | null; deliverables: string | null };
 
+/** Données du deal (méthode TARIF). */
+type Deal = {
+  brand: string;
+  production: ProdLevel;
+  includedRetouches: number;
+  extraRetouches: number;
+  /** Jours entre le brief et la publication, tels que saisis ("" = inconnu). */
+  delay: string;
+  rightsBlocks: number;
+  paidMonths: number;
+  exclusivity: Exclusivity;
+  exclusivityMonths: number;
+  linkOrCode: boolean;
+  partnership: boolean;
+  volumeWritten: boolean;
+};
+const NEW_DEAL: Deal = {
+  brand: "", production: "simple", includedRetouches: 1, extraRetouches: 0, delay: "", rightsBlocks: 0, paidMonths: 0,
+  exclusivity: "none", exclusivityMonths: 0, linkOrCode: false, partnership: false, volumeWritten: false,
+};
+/** Audience du media kit (saisissable) et commission de la fiche. */
+type Meta = { francePct: string; femalePct: string; mainAge: string; commission: number | null };
+const NO_META: Meta = { francePct: "", femalePct: "", mainAge: "", commission: null };
+
 const platLabel = (k: PlatKey) => INF_PLATFORMS.find((p) => p.key === k)?.label ?? k;
 const fold = (s: string | null | undefined) => (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+const pctOrNull = (s: string) => (s.trim() ? Math.max(0, Math.min(100, parseEr(s))) : null);
+/** Champ de vues d'un format (pour savoir s'il a été saisi à la main). */
+const viewsField = (format: string) => (format === "story" ? "storyViews" : format === "short" ? "shortViews" : format === "post" || format === "carrousel" ? "postViews" : "views");
+const VIEWS_LABEL: Record<string, string> = { views: "Vues médianes", storyViews: "Vues story", shortViews: "Vues Shorts", postViews: "Vues carrousel ou post" };
+const lineLabel = (platform: PlatKey, format: string) =>
+  TARIF_FORMATS.find((f) => f.key === `${platform}.${format}`)?.label ?? `${infFormat(platform, format)?.label ?? format} ${platLabel(platform)}`;
+const monthsLabel = (n: number) => (n ? `${n} mois` : "Aucun");
 
 export function Pricing() {
   const creators = useCreators();
   const [mode, setMode] = useState<Mode>("influence");
   const [creatorId, setCreatorId] = useState<string>(NONE);
-  const [niche, setNiche] = useState<string>("lifestyle");
   const [level, setLevel] = useState<string>("confirme");
 
   // Audience PAR PLATEFORME, pré-remplie depuis les vraies données du créateur
   // (TikTok connecté, Instagram du jour, media kit), sinon depuis sa fiche.
   const [aud, setAud] = useState<Record<string, Aud>>({});
+  // Champs de vues tapés à la main (« instagram:views ») : les autres sont des moyennes reprises.
+  const [typed, setTyped] = useState<string[]>([]);
+  const [meta, setMeta] = useState<Meta>(NO_META);
+  const [credibility, setCredibility] = useState<Credibility>("");
+  const [justifEdit, setJustifEdit] = useState<Partial<Justifs>>({});
+  const [coefManual, setCoefManual] = useState<number | null>(null);
+  const [deal, setDeal] = useState<Deal>(NEW_DEAL);
+  const setD = (patch: Partial<Deal>) => setDeal((d) => ({ ...d, ...patch }));
 
   const [infRows, setInfRows] = useState<InfRow[]>([{ id: rid(), platform: "instagram", format: "reel", qty: 1 }]);
-  const [infOpts, setInfOpts] = useState<{ exclusivite: string; droitsUsage: string; whitelisting: boolean; remisePct: number }>({ exclusivite: "none", droitsUsage: "none", whitelisting: false, remisePct: 0 });
-  // Barème de l'agence (partagé par l'équipe) : remplace celui par défaut format par format.
-  const { data: rates } = useAppState((st) => (st.pricingRates as RateOverrides | undefined) ?? {});
+  // Barème de l'agence (partagé par l'équipe) : `ttp` = méthode TARIF, `ttpFloors` = planchers
+  // par créateur ; les clés « plateforme.format » = ancien barème par abonnés (media kit).
+  const { data: rates } = useAppState((st) => (st.pricingRates as Record<string, unknown> | undefined) ?? {});
   const [ratesOpen, setRatesOpen] = useState(false);
+  const [floorDraft, setFloorDraft] = useState<string | null>(null);
+  // Factures (fondateurs) : tarifs déjà facturés. undefined = en cours, null = pas accessible.
+  const [history, setHistory] = useState<InvoiceHistory | null | undefined>(undefined);
 
   const [ugcRows, setUgcRows] = useState<UgcRow[]>([{ id: rid(), type: "video_court", qty: 2 }]);
   const [ugcOpts, setUgcOpts] = useState({ usage: "none", exclusivite: false, rushes: false, montage: false, express: false });
@@ -84,58 +133,94 @@ export function Pricing() {
   const [pendingCollab, setPendingCollab] = useState<CollabPick | null>(null);
   // « Proposer » : la proposition va sur le prospect de la marque (Prospection).
   const [proposeOpen, setProposeOpen] = useState(false);
+  // Copier / Proposer : aucun prix ne part vers une marque sans validation de Marc.
+  const [pendingSend, setPendingSend] = useState<"copy" | "propose" | null>(null);
   // « Mettre au kit » : prix d'un contenu de chaque livrable → grille du media kit du créateur.
   const [kitPlan, setKitPlan] = useState<{ computed: KitRate[]; merge: RatesMerge; hideRates: boolean } | null>(null);
   const [kitBusy, setKitBusy] = useState(false);
 
-  // Charge le créateur → audience par plateforme (vraies données d'abord) + niche.
   useEffect(() => {
-    if (creatorId === NONE || creatorId === EXTERNAL) {
-      // Pas d'audience ni de niche héritées du créateur précédent : retour au neutre.
-      setAud({});
-      setNiche("lifestyle");
-      return;
-    }
+    let alive = true;
+    void loadInvoiceHistory().then((h) => alive && setHistory(h));
+    return () => { alive = false; };
+  }, []);
+
+  // Charge le créateur → audience par plateforme (vraies données d'abord), audience du kit, commission.
+  useEffect(() => {
+    // Rien d'hérité du créateur précédent : retour au neutre.
+    setAud({});
+    setTyped([]);
+    setMeta(NO_META);
+    setCredibility("");
+    setJustifEdit({});
+    setCoefManual(null);
+    setFloorDraft(null);
+    if (creatorId === NONE || creatorId === EXTERNAL) return;
     let alive = true;
     supabase.from("creators").select("*").eq("id", creatorId).limit(1).then(({ data }) => {
       if (!alive) return;
-      const row = data?.[0] as AudienceRow | undefined;
+      const row = data?.[0] as (AudienceRow & { commission?: string | null; mediakit?: { audience?: { age?: { label?: string; pct?: string }[]; gender?: { femmes?: string }; pays?: { name?: string; pct?: string }[] } } | null }) | undefined;
       if (!row) return;
-      // Plateformes sans chiffres dédiés : ceux de la fiche ; niche de la fiche, sinon Lifestyle
-      // (jamais celle du créateur précédent). Logique partagée : src/lib/creatorAudience.ts.
-      const a = creatorAudience(row);
-      setAud(audienceForAll(a));
-      setNiche(a.niche);
+      // Plateformes sans chiffres dédiés : ceux de la fiche. Logique partagée : src/lib/creatorAudience.ts.
+      setAud(audienceForAll(creatorAudience(row)));
+      const au = row.mediakit?.audience;
+      const fr = francePctOf(au?.pays);
+      const fem = String(au?.gender?.femmes ?? "").trim();
+      setMeta({ francePct: fr === null ? "" : String(fr), femalePct: fem, mainAge: mainAgeOf(au?.age), commission: parseCommissionPct(row.commission) });
     });
     return () => { alive = false; };
   }, [creatorId]);
 
   const audOf = (k: PlatKey): Aud => aud[k] ?? NO_AUD;
   const setAudOf = (k: PlatKey, patch: Partial<Aud>) => setAud((m) => ({ ...m, [k]: { ...(m[k] ?? NO_AUD), ...patch } }));
+  const typeViews = (k: PlatKey, field: string, value: string) => {
+    setAudOf(k, { [field]: value });
+    setTyped((t) => (t.includes(`${k}:${field}`) ? t : [...t, `${k}:${field}`]));
+  };
 
-  const infItems: InfItem[] = infRows.map((r) => {
+  // ── Méthode TARIF ──
+  const grid = useMemo(() => readTarifGrid(rates?.ttp), [rates]);
+  const rosterId = creatorId !== NONE && creatorId !== EXTERNAL ? creatorId : null;
+  const floorInfo = creatorFloor(rates?.ttpFloors, rosterId, grid);
+  const commissionPct = meta.commission ?? DEFAULT_COMMISSION;
+  const delayDays = deal.delay.trim() ? Math.max(0, Math.round(parseEr(deal.delay))) : null;
+  const pre = preChecks({ francePct: pctOrNull(meta.francePct), femalePct: pctOrNull(meta.femalePct), credibility });
+  const justifs: Justifs = { audience: justifEdit.audience ?? pre.audience, expertise: justifEdit.expertise ?? pre.expertise, engagement: justifEdit.engagement ?? false };
+  const suggested = suggestedCoef([justifs.audience, justifs.expertise, justifs.engagement].filter(Boolean).length);
+  const coef = coefManual ?? suggested;
+
+  const tarifLines = infRows.map((r) => {
     const a = audOf(r.platform);
-    return { platform: r.platform, format: r.format, qty: r.qty, followers: parseFollowers(a.followers), er: parseEr(a.er), views: parseFollowers(viewsFor(r.format, a)), erBase: a.erBase };
+    const v = tarifViews(r.format, a);
+    return { key: `${r.platform}.${r.format}`, label: lineLabel(r.platform, r.format), qty: r.qty, views: parseFollowers(v), average: !!v.trim() && !typed.includes(`${r.platform}:${viewsField(r.format)}`) };
   });
-  const inf = useMemo(() => computeInfluence(infItems, nicheMult(niche), infOpts, rates ?? {}), [infItems, niche, infOpts, rates]);
+  // Calcul léger : refait à chaque rendu.
+  const tarif = priceTarif({ ...deal, lines: tarifLines, delayDays, coef }, grid, floorInfo.value);
+  const usedPlatforms = [...new Set(infRows.map((r) => r.platform))];
+  const gaps = tarifGaps({
+    lines: tarifLines,
+    platforms: usedPlatforms.map((k) => {
+      const a = audOf(k);
+      return { label: platLabel(k), followers: parseFollowers(a.followers), erViews: a.erBase === "views" ? parseEr(a.er) : 0 };
+    }),
+    francePct: pctOrNull(meta.francePct),
+    femalePct: pctOrNull(meta.femalePct),
+    mainAge: meta.mainAge,
+    credibility,
+    delayDays,
+  });
+  const selName = rosterId ? creators.find((c) => c.id === creatorId)?.name : undefined;
+  const past = useMemo(() => (history ? pastRates(history.invoices, history.items, selName ?? null, deal.brand, parseAmount) : null), [history, selName, deal.brand]);
+  const alerts = tarifAlerts(tarif, past, grid, formatEuro, (d) => fmtDay(d));
+  const split = splitHT(tarif.target, commissionPct);
+
   const ugcItems: UgcItem[] = ugcRows.map((r) => ({ type: r.type, qty: r.qty }));
   const ugc = useMemo(() => computeUgc(ugcItems, ugcLevelMult(level), ugcOpts), [ugcItems, level, ugcOpts]);
 
-  const result = mode === "influence" ? inf : ugc;
-  const hasResult = result.max > 0;
-  const selName = creatorId !== NONE && creatorId !== EXTERNAL ? creators.find((c) => c.id === creatorId)?.name : undefined;
+  const hasResult = mode === "influence" ? tarif.priced : ugc.max > 0;
   const who = selName ? titleCase(selName) : "";
-  const usedPlatforms = [...new Set(infRows.map((r) => r.platform))];
-
-  // Ce qui manque pour chiffrer (remplace un texte d'explication).
-  const missing =
-    mode === "influence"
-      ? infRows.length === 0
-        ? "Ajoute un livrable"
-        : missingAudienceText(inf.itemsPriced.filter((r) => r.max <= 0).map((r) => platLabel(r.item.platform)))
-      : ugcRows.length === 0
-        ? "Ajoute un livrable"
-        : null;
+  /** Prix enregistrés ailleurs (proposition, collab) : cible, ancrage, plancher en influence. */
+  const price = mode === "influence" ? { min: tarif.floor, max: tarif.anchor, mid: tarif.target } : { min: ugc.min, max: ugc.max, mid: ugc.mid };
 
   // ── Livrables ──
   const setInf = (id: string, patch: Partial<InfRow>) =>
@@ -153,75 +238,59 @@ export function Pricing() {
       return [...rows, { id: rid(), platform, format: INF_PLATFORMS.find((p) => p.key === platform)!.formats[0].key, qty: 1 }];
     });
 
-  const infLineLabel = (item: InfItem) => `${platLabel(item.platform)} · ${infFormat(item.platform, item.format)?.label} × ${item.qty}`;
   const ugcLineLabel = (item: UgcItem) => `${UGC_TYPES.find((t) => t.key === item.type)?.label} × ${item.qty}`;
 
-  // Majorations affichées une par une (leur somme = « Options » du calcul).
-  const ex = EXCLUSIVITY.find((x) => x.value === infOpts.exclusivite);
-  const us = USAGE_RIGHTS.find((x) => x.value === infOpts.droitsUsage);
+  // Majorations UGC affichées une par une (leur somme = « Options » du calcul).
   const ugcUs = UGC_USAGE.find((x) => x.value === ugcOpts.usage);
-  const majorations: { label: string; pct: number }[] =
-    mode === "influence"
-      ? [
-          ...(ex && ex.m ? [{ label: `Exclusivité ${ex.label}`, pct: Math.round(ex.m * 100) }] : []),
-          ...(us && us.m ? [{ label: `Droits · ${us.label}`, pct: Math.round(us.m * 100) }] : []),
-          ...(infOpts.whitelisting ? [{ label: "Pub depuis le compte du créateur", pct: 20 }] : []),
-        ]
-      : [
-          ...(ugcUs && ugcUs.m ? [{ label: `Droits · ${ugcUs.label}`, pct: Math.round(ugcUs.m * 100) }] : []),
-          ...(ugcOpts.exclusivite ? [{ label: "Exclusivité", pct: 25 }] : []),
-          ...(ugcOpts.rushes ? [{ label: "Fichiers bruts", pct: 15 }] : []),
-          ...(ugcOpts.montage ? [{ label: "Montage avancé", pct: 20 }] : []),
-          ...(ugcOpts.express ? [{ label: "Livraison express", pct: 20 }] : []),
-        ];
+  const ugcMajorations: { label: string; pct: number }[] = [
+    ...(ugcUs && ugcUs.m ? [{ label: `Droits · ${ugcUs.label}`, pct: Math.round(ugcUs.m * 100) }] : []),
+    ...(ugcOpts.exclusivite ? [{ label: "Exclusivité", pct: 25 }] : []),
+    ...(ugcOpts.rushes ? [{ label: "Fichiers bruts", pct: 15 }] : []),
+    ...(ugcOpts.montage ? [{ label: "Montage avancé", pct: 20 }] : []),
+    ...(ugcOpts.express ? [{ label: "Livraison express", pct: 20 }] : []),
+  ];
 
   /**
-   * Proposition copiée pour la marque : lignes à 0 € exclues, sous-total = somme des
-   * lignes, puis majorations et remise en euros, puis le total. Mêmes chiffres qu'à l'écran
-   * (quoteTotals), à l'euro près, tout HT.
+   * Texte copié. Influence : calcul complet de la méthode, chaque montant « À VÉRIFIER »,
+   * pour validation par Marc. UGC : proposition (lignes, majorations, total), tout HT.
    */
   const copyQuote = () => {
-    const name = who || "Créateur";
-    const rng = (r: { min: number; max: number }) => (r.min === r.max ? formatEuro(r.min) : `${formatEuro(r.min)} à ${formatEuro(r.max)}`);
-    const sign = (r: { min: number; max: number }, s: string) => (r.min === r.max ? `${s}${formatEuro(r.min)}` : `${s}${formatEuro(r.min)} à ${s}${formatEuro(r.max)}`);
-    const lines: string[] = [];
+    let txt: string;
     if (mode === "influence") {
-      inf.itemsPriced.filter((r) => r.max > 0).forEach(({ item, min, max, views, estimated, capped }) => {
-        // Vues plafonnées : on annonce les vues RETENUES pour le prix, pas une moyenne virale.
-        const v = views > 0 ? `, ${estimated ? "≈ " : ""}${fmtCompact(views)} vues ${capped ? "retenues " : ""}par contenu` : "";
-        lines.push(`• ${infLineLabel(item)}${v} : ${rng({ min, max })}`);
+      txt = tarifCopyText(tarif, who, formatEuro, {
+        missing: gaps.missing,
+        alerts: alerts.map((a) => a.text),
+        split: { ...split, pct: commissionPct },
       });
+      const extra = [
+        deal.brand.trim() ? `Marque : ${deal.brand.trim()}` : "",
+        `Production ${PROD_LEVELS.find((p) => p.value === deal.production)?.label.toLowerCase()}, ${deal.includedRetouches} retouche${deal.includedRetouches > 1 ? "s" : ""} incluse${deal.includedRetouches > 1 ? "s" : ""}`,
+      ].filter(Boolean);
+      txt = txt.replace("\n", `\n${extra.join("\n")}\n`);
     } else {
-      ugc.itemsPriced.filter((r) => r.max > 0).forEach(({ item, min, max }) => lines.push(`• ${ugcLineLabel(item)} : ${rng({ min, max })}`));
+      const rng = (r: { min: number; max: number }) => (r.min === r.max ? formatEuro(r.min) : `${formatEuro(r.min)} à ${formatEuro(r.max)}`);
+      const sign = (r: { min: number; max: number }, s: string) => (r.min === r.max ? `${s}${formatEuro(r.min)}` : `${s}${formatEuro(r.min)} à ${s}${formatEuro(r.max)}`);
+      const lines = ugc.itemsPriced.filter((r) => r.max > 0).map(({ item, min, max }) => `• ${ugcLineLabel(item)} : ${rng({ min, max })}`);
+      txt = `Proposition UGC : ${who || "Créateur"}, montants HT\n\n${lines.join("\n")}\n`;
+      if (ugc.options.max > 0) txt += `\nSous-total : ${rng(ugc.sub)}\n• Majorations, ${ugcMajorations.map((m) => m.label.toLowerCase()).join(", ")} : +${ugc.optionsPct} % soit ${sign(ugc.options, "+")}\n`;
+      txt += `\nTotal : ${rng(ugc)} HT, cible ${formatEuro(ugc.mid)} HT.`;
     }
-    const q = result;
-    let txt = `${mode === "influence" ? "Proposition tarifaire" : "Proposition UGC"} : ${name}, montants HT\n\n${lines.join("\n")}\n`;
-    if (q.options.max > 0 || q.discount.max > 0) {
-      txt += `\nSous-total : ${rng(q.sub)}\n`;
-      if (q.options.max > 0) txt += `• Majorations, ${majorations.map((m) => m.label.toLowerCase()).join(", ")} : +${q.optionsPct} % soit ${sign(q.options, "+")}\n`;
-      if (q.discount.max > 0) txt += `• Remise pack −${q.discountPct} % : ${sign(q.discount, "−")}\n`;
-    }
-    txt += `\nTotal : ${rng(q)} HT, cible ${formatEuro(q.mid)} HT.`;
-    navigator.clipboard?.writeText(txt).then(() => toast("Proposition copiée ✓")).catch(() => toast("Copie impossible"));
+    navigator.clipboard?.writeText(txt).then(() => toast("Copié ✓")).catch(() => toast("Copie impossible"));
   };
 
-  /** « Créer le devis » : nouvelle facture en brouillon dans Facturation, lignes au prix cible. */
+  /** « Créer le devis » : nouvelle facture en brouillon dans Facturation, au prix cible. */
   const createQuote = () => {
     const lines = mode === "influence"
-      ? inf.itemsPriced.map((r) => ({ label: infLineLabel(r.item), mid: r.mid }))
-      : ugc.itemsPriced.map((r) => ({ label: ugcLineLabel(r.item), mid: r.mid }));
-    const ok = putInvoicePrefill({
-      creator: selName ?? "",
-      brand: "",
-      lines: quoteInvoiceLines(lines, { pct: result.optionsPct, mid: result.options.mid }, { pct: result.discountPct, mid: result.discount.mid }),
-    });
+      ? tarifQuoteLines(tarif)
+      : quoteInvoiceLines(ugc.itemsPriced.map((r) => ({ label: ugcLineLabel(r.item), mid: r.mid })), { pct: ugc.optionsPct, mid: ugc.options.mid }, { pct: ugc.discountPct, mid: ugc.discount.mid });
+    const ok = putInvoicePrefill({ creator: selName ?? "", brand: mode === "influence" ? deal.brand.trim() : "", lines });
     if (!ok) return toast("Impossible de préparer le devis");
     window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "facturation" }));
   };
 
   // Livrables et cachet écrits dans la collab (forme lue par la page Collabs).
   const collabDeliverables = mode === "influence" ? deliverablesText(infRows) : ugcDeliverablesText(ugcRows.map((r) => ({ label: UGC_TYPES.find((t) => t.key === r.type)?.label ?? r.type, qty: r.qty })));
-  const collabCachet = formatEuro(result.mid);
+  const collabCachet = formatEuro(price.mid);
 
   const loadCollabs = () => {
     setCollabs(null);
@@ -241,7 +310,7 @@ export function Pricing() {
   }, [collabs, selName]);
   const propose = async (brand: string, contact: string) => {
     const r = await saveProposal(
-      { mode, creator: selName ?? null, deliverables: collabDeliverables, min: result.min, max: result.max, target: result.mid, at: new Date().toISOString() },
+      { mode, creator: selName ?? null, deliverables: collabDeliverables, min: price.min, max: price.max, target: price.mid, at: new Date().toISOString() },
       brand,
       contact.trim() || null,
     );
@@ -252,12 +321,15 @@ export function Pricing() {
     toast(r.created ? `Prospect ${brand.trim()} créé ✓` : `Proposition ajoutée à ${brand.trim()} ✓`);
     return true;
   };
-  // Seulement pour un créateur du roster, en influence (le kit liste des prix par contenu).
+  // Seulement pour un créateur du roster, en influence : prix de base d'UN contenu par format.
   const kitCreatorId = mode === "influence" && selName ? creatorId : null;
   const prepareKit = async () => {
     if (!kitCreatorId || kitBusy) return;
-    const computed = ratesForItems(infRows.map((r) => ({ platform: r.platform, format: r.format, aud: audOf(r.platform) })), niche, rates ?? {});
-    if (!computed.length) return toast("Rien à mettre au kit : il manque l'audience");
+    const computed = kitRatesFromPrices(tarif.lines.filter((l) => l.priced).map((l) => {
+      const [platform, format] = l.key.split(".") as [PlatKey, string];
+      return { platform, format, price: l.unitBase };
+    }));
+    if (!computed.length) return toast("Rien à mettre au kit : il manque les vues");
     setKitBusy(true);
     const kit = await readKit(kitCreatorId);
     setKitBusy(false);
@@ -281,24 +353,65 @@ export function Pricing() {
     toast(ok ? "Collab mise à jour ✓" : "Erreur, réessaie");
   };
 
+  const saveFloor = async () => {
+    if (!rosterId || floorDraft === null) return;
+    const v = Math.max(0, Math.round(parseEr(floorDraft)));
+    const ok = await saveCreatorFloor(rosterId, v);
+    toast(ok ? `Plancher de ${who} enregistré ✓` : "Erreur, réessaie");
+    if (ok) setFloorDraft(null);
+  };
+
+  const nMissing = gaps.missing.length;
+  const missingFirst = mode === "influence" ? (infRows.length === 0 ? "Ajoute un livrable" : nMissing ? `${nMissing} donnée${nMissing > 1 ? "s" : ""} manquante${nMissing > 1 ? "s" : ""}` : null) : ugcRows.length === 0 ? "Ajoute un livrable" : null;
+
   const priceCard = (
     <>
       <div className="text-[12px] font-medium text-muted-foreground">
         {[mode === "influence" ? "Influence" : "UGC", who].filter(Boolean).join(" · ")}
       </div>
       {hasResult ? (
-        <>
-          <div className="mt-1 text-[30px] font-semibold leading-tight tracking-tight tabular-nums text-foreground xl:text-[36px]">
-            {priceRange(result.min, result.max)}
-          </div>
-          <div className="mt-1 text-[13px] text-muted-foreground">
-            Cible <span className="font-semibold tabular-nums text-foreground">{formatEuro(result.mid)} HT</span>
-          </div>
-          {missing && <div className="mt-2 text-[12px] font-medium text-wait">{missing}</div>}
-        </>
+        mode === "influence" ? (
+          <TarifPrice r={tarif} />
+        ) : (
+          <>
+            <div className="mt-1 text-[30px] font-semibold leading-tight tracking-tight tabular-nums text-foreground xl:text-[36px]">{priceRange(ugc.min, ugc.max)}</div>
+            <div className="mt-1 text-[13px] text-muted-foreground">
+              Cible <span className="font-semibold tabular-nums text-foreground">{formatEuro(ugc.mid)} HT</span>
+            </div>
+          </>
+        )
       ) : (
-        <div className="mt-1 text-[20px] font-semibold leading-snug tracking-tight text-muted-foreground">{missing ?? "Ajoute un livrable"}</div>
+        <div className="mt-1 text-[20px] font-semibold leading-snug tracking-tight text-muted-foreground">{missingFirst ?? "Ajoute un livrable"}</div>
       )}
+    </>
+  );
+  const warnings = mode === "influence" ? <TarifWarnings missing={gaps.missing} verify={gaps.verify} alerts={alerts} notes={tarif.notes} /> : null;
+  const detail =
+    mode === "influence" ? (
+      hasResult ? <TarifDetail r={tarif} split={split} commissionPct={commissionPct} /> : null
+    ) : (
+      <ResultDetail lines={ugc.itemsPriced.map((r) => ({ label: ugcLineLabel(r.item), min: r.min, max: r.max }))} majorations={ugcMajorations} result={ugc} />
+    );
+  const actions = (
+    <>
+      <Actions
+        disabled={!hasResult}
+        onCopy={() => setPendingSend("copy")}
+        onQuote={createQuote}
+        onPropose={() => setPendingSend("propose")}
+        onKit={kitCreatorId ? () => void prepareKit() : undefined}
+        collabOpen={collabOpen}
+        onCollabOpen={(v) => {
+          setCollabOpen(v);
+          if (v) loadCollabs();
+        }}
+        collabs={collabs === null ? null : collabList}
+        onPickCollab={(c) => {
+          setCollabOpen(false);
+          setPendingCollab(c);
+        }}
+      />
+      <div className="mt-3 text-[11px] text-faint">Aucun prix transmis à une marque sans validation de Marc.</div>
     </>
   );
 
@@ -308,12 +421,12 @@ export function Pricing() {
         <PageHeaderRow>
           <Popover open={ratesOpen} onOpenChange={setRatesOpen}>
             <PopoverTrigger asChild>
-              <button type="button" className="flex h-10 items-center gap-1.5 rounded-full bg-surface px-4 text-[13px] font-medium text-foreground transition-colors hover:bg-rowhover">
-                <SlidersHorizontal className="h-4 w-4" /> Barème de l'agence{rates && Object.keys(rates).length ? " · personnalisé" : ""}
+              <button type="button" className="flex h-10 items-center gap-1.5 rounded-full bg-surface px-4 text-[13px] font-medium text-foreground transition-colors hover:bg-rowhover max-md:h-11">
+                <SlidersHorizontal className="h-4 w-4" /> Barème de l'agence{Object.keys(gridDiff(grid)).length ? " · personnalisé" : ""}
               </button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-[min(30rem,calc(100vw-2rem))] p-0">
-              <RatesEditor rates={rates ?? {}} onClose={() => setRatesOpen(false)} />
+              <BaremeTabs grid={grid} rates={(rates ?? {}) as RateOverrides} onClose={() => setRatesOpen(false)} />
             </PopoverContent>
           </Popover>
         </PageHeaderRow>
@@ -336,7 +449,7 @@ export function Pricing() {
       <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-border bg-background/95 px-4 py-3 backdrop-blur max-md:top-[calc(env(safe-area-inset-top)+2.75rem)] lg:hidden">{priceCard}</div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-12">
-        {/* ============ ENTRÉES : Qui, Quoi, Conditions ============ */}
+        {/* ============ ENTRÉES ============ */}
         <div className="flex min-w-0 flex-col gap-4 lg:col-span-7">
           <section className={BLOCK}>
             <div className={BLOCK_TITLE}>Qui</div>
@@ -347,8 +460,8 @@ export function Pricing() {
               </div>
               {mode === "influence" ? (
                 <div className="flex flex-col gap-1.5">
-                  <span className={LBL}>Niche</span>
-                  <Picker ariaLabel="Niche" value={niche} onChange={setNiche} options={NICHES.map((n) => ({ value: n.value, label: n.label }))} />
+                  <span className={LBL}>Crédibilité</span>
+                  <Picker ariaLabel="Crédibilité" value={credibility} onChange={(v) => setCredibility(v as Credibility)} placeholder="À choisir" options={CREDIBILITY.map((c) => ({ value: c.value, label: c.label }))} />
                 </div>
               ) : (
                 <div className="flex flex-col gap-1.5">
@@ -357,68 +470,114 @@ export function Pricing() {
                 </div>
               )}
             </div>
+            {mode === "influence" && (
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1.5">
+                  <span className={cn(LBL, "flex items-center gap-1.5")}>
+                    Plancher par contenu
+                    <HelpTip title="Plancher">
+                      <p>Prix minimum d'un contenu pour ce créateur : la base n'est jamais en dessous.</p>
+                      <p>Sans réglage, celui du barème ({formatEuro(grid.floor)}).</p>
+                    </HelpTip>
+                  </span>
+                  <span className="flex gap-2">
+                    <input
+                      inputMode="decimal"
+                      value={floorDraft ?? String(floorInfo.value)}
+                      disabled={!rosterId}
+                      onChange={(e) => setFloorDraft(e.target.value)}
+                      aria-label="Plancher par contenu en euros"
+                      className={T_INPUT}
+                    />
+                    {floorDraft !== null && (
+                      <button type="button" onClick={() => void saveFloor()} className="h-9 shrink-0 rounded-full bg-primary px-3.5 text-[12px] font-semibold text-primary-foreground max-md:h-11">Enregistrer</button>
+                    )}
+                  </span>
+                </label>
+                <div className="flex flex-col gap-1.5">
+                  <span className={LBL}>Commission de l'agence</span>
+                  <span className="flex h-9 items-center text-[13px] tabular-nums text-foreground max-md:h-11">
+                    {commissionPct} %<span className="ml-1.5 text-faint">{meta.commission === null ? "par défaut" : "de la fiche"}</span>
+                  </span>
+                </div>
+              </div>
+            )}
           </section>
 
+          {mode === "influence" && (
+            <section className={BLOCK}>
+              <div className={cn(BLOCK_TITLE, "flex items-center gap-1.5")}>
+                Données du créateur
+                <HelpTip title="Données du créateur">
+                  <p>Vues médianes des 10 derniers contenus, hors viraux et boostés. Les chiffres repris du media kit ou des relevés automatiques sont des moyennes : à vérifier.</p>
+                  <p>Une donnée manquante est signalée dans le résultat, jamais estimée.</p>
+                </HelpTip>
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {usedPlatforms.map((k) => {
+                  const a = audOf(k);
+                  const fields = [...new Set(infRows.filter((r) => r.platform === k).map((r) => viewsField(r.format)))];
+                  return (
+                    <div key={k} className="rounded-xl bg-panel p-3">
+                      <div className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
+                        <PlatformIcon platform={k} className="h-3.5 w-3.5 text-muted-foreground" /> {platLabel(k)}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <label className="flex flex-col gap-1">
+                          <span className={SMALL}>Abonnés</span>
+                          <input inputMode="decimal" value={a.followers} onChange={(e) => setAudOf(k, { followers: e.target.value })} placeholder="12 000" className={T_INPUT} />
+                        </label>
+                        <label className="flex flex-col gap-1">
+                          <span className={SMALL}>Engagement vues %</span>
+                          <input
+                            inputMode="decimal"
+                            value={a.er}
+                            onChange={(e) => setAudOf(k, { er: e.target.value, erBase: "views" })}
+                            placeholder="3,5"
+                            title={a.er && a.erBase === "followers" ? "Repris sur les abonnés : à remplacer par l'engagement sur les vues" : undefined}
+                            className={cn(T_INPUT, a.er && a.erBase === "followers" && "text-faint line-through")}
+                          />
+                        </label>
+                        {fields.map((f) => {
+                          const v = (a as Record<string, string | undefined>)[f] ?? "";
+                          const avg = !!v.trim() && !typed.includes(`${k}:${f}`);
+                          return (
+                            <label key={f} className="flex flex-col gap-1">
+                              <span className={SMALL}>{VIEWS_LABEL[f]}{avg && <span className="text-wait"> · moyenne</span>}</span>
+                              <input inputMode="decimal" value={v} onChange={(e) => typeViews(k, f, e.target.value)} placeholder="10 derniers" title={avg ? `${SRC_LABEL[a.src] ?? "Moyenne reprise"} : pas une médiane, à vérifier` : undefined} className={T_INPUT} />
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                <label className="flex flex-col gap-1">
+                  <span className={SMALL}>% France</span>
+                  <input inputMode="decimal" value={meta.francePct} onChange={(e) => setMeta((m) => ({ ...m, francePct: e.target.value }))} placeholder="70" className={T_INPUT} />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className={SMALL}>% femmes</span>
+                  <input inputMode="decimal" value={meta.femalePct} onChange={(e) => setMeta((m) => ({ ...m, femalePct: e.target.value }))} placeholder="75" className={T_INPUT} />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className={SMALL}>Âge principal</span>
+                  <input value={meta.mainAge} onChange={(e) => setMeta((m) => ({ ...m, mainAge: e.target.value }))} placeholder="25-34" className={T_INPUT} />
+                </label>
+              </div>
+              {history && (
+                <PastBlock past={past} who={who} brand={deal.brand.trim()} />
+              )}
+            </section>
+          )}
+
           <section className={BLOCK}>
-            <div className={BLOCK_TITLE}>Quoi</div>
+            <div className={BLOCK_TITLE}>Livrables</div>
             {mode === "influence" ? (
               <>
-                <span className={LBL}>Audience</span>
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {usedPlatforms.map((k) => {
-                    const a = audOf(k);
-                    const story = infRows.some((r) => r.platform === k && r.format === "story");
-                    const short = k === "youtube" && infRows.some((r) => r.platform === k && r.format === "short");
-                    const video = infRows.find((r) => r.platform === k && VIDEO_FORMATS.includes(r.format));
-                    const fmt = video ? infFormat(k, video.format, rates ?? {}) : undefined;
-                    const estimate = fmt ? Math.round(parseFollowers(a.followers) * fmt.rate) : 0;
-                    return (
-                      <div key={k} className="rounded-xl bg-panel p-3">
-                        <div className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold text-foreground">
-                          <PlatformIcon platform={k} className="h-3.5 w-3.5 text-muted-foreground" /> {platLabel(k)}
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <label className="flex flex-col gap-1">
-                            <span className="text-[11px] text-muted-foreground">Abonnés</span>
-                            <input inputMode="decimal" value={a.followers} onChange={(e) => setAudOf(k, { followers: e.target.value })} placeholder="12 000" className={INPUT} />
-                          </label>
-                          <label className="flex flex-col gap-1">
-                            <span className="text-[11px] text-muted-foreground">Engagement %</span>
-                            <input inputMode="decimal" value={a.er} onChange={(e) => setAudOf(k, { er: e.target.value })} placeholder="3,5" title={a.erBase === "views" ? "Sur les vues" : "Sur les abonnés"} className={INPUT} />
-                          </label>
-                          {video && (
-                            <label className="flex flex-col gap-1">
-                              <span className="text-[11px] text-muted-foreground">Vues par contenu</span>
-                              <input
-                                inputMode="decimal"
-                                value={a.views}
-                                onChange={(e) => setAudOf(k, { views: e.target.value, src: e.target.value ? "saisie" : a.src })}
-                                placeholder={estimate ? `≈ ${fmtCompact(estimate)}` : "estimées"}
-                                title={a.views ? SRC_LABEL[a.src] : undefined}
-                                className={INPUT}
-                              />
-                            </label>
-                          )}
-                          {story && (
-                            <label className="flex flex-col gap-1">
-                              <span className="text-[11px] text-muted-foreground">Vues story</span>
-                              <input inputMode="decimal" value={a.storyViews} onChange={(e) => setAudOf(k, { storyViews: e.target.value })} placeholder="estimées" className={INPUT} />
-                            </label>
-                          )}
-                          {short && (
-                            <label className="flex flex-col gap-1">
-                              <span className="text-[11px] text-muted-foreground">Vues Shorts</span>
-                              <input inputMode="decimal" value={a.shortViews ?? ""} onChange={(e) => setAudOf(k, { shortViews: e.target.value })} placeholder="estimées" className={INPUT} />
-                            </label>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <span className={cn(LBL, "mt-4 block")}>Livrables</span>
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {infRows.map((r) => {
                     const plat = INF_PLATFORMS.find((p) => p.key === r.platform)!;
                     return (
@@ -436,11 +595,33 @@ export function Pricing() {
                   })}
                 </div>
                 <AddLine onClick={addInf} />
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <span className={cn(LBL, "flex items-center gap-1.5")}>
+                      Production
+                      <HelpTip title="Production">
+                        {PROD_LEVELS.map((p) => (
+                          <p key={p.value}><b>{p.label}</b> ({formatEuro(grid.production[p.value])} par contenu) : {p.help.toLowerCase()}.</p>
+                        ))}
+                      </HelpTip>
+                    </span>
+                    <Picker ariaLabel="Production" value={deal.production} onChange={(v) => setD({ production: v as ProdLevel })} options={PROD_LEVELS.map((p) => ({ value: p.value, label: `${p.label} · ${formatEuro(grid.production[p.value])}` }))} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="flex flex-col gap-1.5">
+                      <span className={LBL}>Retouches incluses</span>
+                      <Stepper label="Retouches incluses" value={deal.includedRetouches} onChange={(n) => setD({ includedRetouches: n })} max={5} />
+                    </div>
+                    <div className="flex flex-col gap-1.5">
+                      <span className={LBL}>En plus</span>
+                      <Stepper label="Retouches en plus" value={deal.extraRetouches} onChange={(n) => setD({ extraRetouches: n })} max={10} />
+                    </div>
+                  </div>
+                </div>
               </>
             ) : (
               <>
-                <span className={LBL}>Livrables</span>
-                <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {ugcRows.map((r) => (
                     <div key={r.id} className="flex flex-col gap-2 rounded-xl bg-panel p-3">
                       <Picker size="sm" ariaLabel="Type de livrable" value={r.type} onChange={(v) => setUgcRows((rows) => rows.map((x) => (x.id === r.id ? { ...x, type: v } : x)))} options={UGC_TYPES.map((t) => ({ value: t.key, label: t.label }))} />
@@ -459,22 +640,72 @@ export function Pricing() {
           <section className={BLOCK}>
             <div className={BLOCK_TITLE}>Conditions</div>
             {mode === "influence" ? (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <label className="flex flex-col gap-1.5">
-                  <span className={LBL}>Exclusivité</span>
-                  <Picker ariaLabel="Exclusivité" value={infOpts.exclusivite} onChange={(v) => setInfOpts((o) => ({ ...o, exclusivite: v }))}
-                    options={EXCLUSIVITY.map((x) => ({ value: x.value, label: `${x.label}${x.m ? ` (+${Math.round(x.m * 100)} %)` : ""}` }))} />
-                </label>
-                <div className="flex flex-col gap-1.5">
-                  <span className={LBL}>Droits d'usage</span>
-                  <UsageMenu
-                    value={infOpts.droitsUsage}
-                    whitelisting={infOpts.whitelisting}
-                    onChange={(droitsUsage) => setInfOpts((o) => ({ ...o, droitsUsage }))}
-                    onWhitelisting={(whitelisting) => setInfOpts((o) => ({ ...o, whitelisting }))}
-                  />
+              <>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="flex flex-col gap-1.5">
+                    <span className={LBL}>Marque</span>
+                    <input value={deal.brand} onChange={(e) => setD({ brand: e.target.value })} placeholder="Nom de la marque" className={T_INPUT} />
+                  </label>
+                  <label className="flex flex-col gap-1.5">
+                    <span className={cn(LBL, "flex items-center gap-1.5")}>
+                      Délai brief → publication
+                      <HelpTip title="Délai">
+                        <p>En jours. Sous {grid.rushDays} jours : urgence, +{grid.rushPct} %.</p>
+                      </HelpTip>
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <input inputMode="numeric" value={deal.delay} onChange={(e) => setD({ delay: e.target.value })} placeholder="14" className={T_INPUT} />
+                      <span className="text-[13px] text-muted-foreground">jours</span>
+                    </span>
+                  </label>
+                  <div className="flex flex-col gap-1.5">
+                    <span className={LBL}>Droits organiques (+{grid.rightsPct} % par 3 mois)</span>
+                    <Stepper label="Droits organiques" value={deal.rightsBlocks} onChange={(n) => setD({ rightsBlocks: n })} max={8} unit={(n) => (n ? `${n * 3} mois` : "Aucun")} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <span className={cn(LBL, "flex items-center gap-1.5")}>
+                      Paid media (+{grid.paidPct} % par mois)
+                      <HelpTip title="Paid media">
+                        <p>Pub depuis le compte du créateur : whitelisting, Spark Ads, partenariat sponsorisé. Ligne séparée du devis.</p>
+                      </HelpTip>
+                    </span>
+                    <Stepper label="Paid media" value={deal.paidMonths} onChange={(n) => setD({ paidMonths: n })} max={12} unit={monthsLabel} />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <span className={cn(LBL, "flex items-center gap-1.5")}>
+                      Exclusivité
+                      <HelpTip title="Exclusivité">
+                        <p>Restreinte : concurrents directs, +{grid.exclRestrictedPct} % par mois. Large : toute la catégorie, +{grid.exclWidePct} % par mois.</p>
+                      </HelpTip>
+                    </span>
+                    <Picker
+                      ariaLabel="Exclusivité"
+                      value={deal.exclusivity}
+                      onChange={(v) => setD({ exclusivity: v as Exclusivity, exclusivityMonths: v === "none" ? 0 : Math.max(1, deal.exclusivityMonths) })}
+                      options={[{ value: "none", label: "Aucune" }, { value: "restreinte", label: "Restreinte" }, { value: "large", label: "Large" }]}
+                    />
+                  </div>
+                  {deal.exclusivity !== "none" && (
+                    <div className="flex flex-col gap-1.5">
+                      <span className={LBL}>Durée de l'exclusivité</span>
+                      <Stepper label="Durée de l'exclusivité" value={deal.exclusivityMonths} onChange={(n) => setD({ exclusivityMonths: n })} min={1} max={24} unit={monthsLabel} />
+                    </div>
+                  )}
                 </div>
-              </div>
+                <div className="mt-3 flex flex-col">
+                  <CheckRow checked={deal.linkOrCode} onChange={(v) => setD({ linkOrCode: v })}>
+                    Lien en bio ou code promo <span className="text-faint">+{grid.linkPct} %</span>
+                  </CheckRow>
+                  <CheckRow checked={deal.partnership} onChange={(v) => setD({ partnership: v, volumeWritten: v ? deal.volumeWritten : false })}>
+                    Partenariat de {grid.partnerMonths} mois ou plus <span className="text-faint">−{grid.partnerPct} %</span>
+                  </CheckRow>
+                  <div className="pl-6">
+                    <CheckRow checked={deal.volumeWritten} disabled={!deal.partnership} onChange={(v) => setD({ volumeWritten: v })}>
+                      Volume garanti par écrit
+                    </CheckRow>
+                  </div>
+                </div>
+              </>
             ) : (
               <>
                 <label className="flex max-w-sm flex-col gap-1.5">
@@ -484,7 +715,7 @@ export function Pricing() {
                 </label>
                 <div className="mt-4 flex flex-wrap items-center gap-4">
                   {([["exclusivite", "Exclusivité", "+25 %"], ["rushes", "Fichiers bruts", "+15 %"], ["montage", "Montage avancé", "+20 %"], ["express", "Livraison express", "+20 %"]] as const).map(([k, label, pct]) => (
-                    <label key={k} className="flex cursor-pointer items-center gap-2 text-[13px] text-foreground">
+                    <label key={k} className="flex cursor-pointer items-center gap-2 text-[13px] text-foreground max-md:min-h-11">
                       <input type="checkbox" checked={ugcOpts[k]} onChange={(e) => setUgcOpts((o) => ({ ...o, [k]: e.target.checked }))} className="h-4 w-4 accent-[var(--primary)]" />
                       {label} <span className="text-faint">{pct}</span>
                     </label>
@@ -493,79 +724,61 @@ export function Pricing() {
               </>
             )}
           </section>
+
+          {mode === "influence" && (
+            <section className={BLOCK}>
+              <QualityBlock
+                coef={coef}
+                suggested={suggested}
+                manual={coefManual !== null}
+                justifs={justifs}
+                onCoef={(c) => setCoefManual(c)}
+                onJustif={(k, v) => setJustifEdit((j) => ({ ...j, [k]: v }))}
+                onReset={() => setCoefManual(null)}
+                hints={{
+                  audience: meta.francePct || meta.femalePct ? `France ${meta.francePct || "?"} %, femmes ${meta.femalePct || "?"} %` : "France et femmes à 60 % ou plus",
+                  expertise: credibility ? CREDIBILITY.find((c) => c.value === credibility)?.label ?? "" : "athlète, coach, en compétition",
+                }}
+              />
+            </section>
+          )}
         </div>
 
         {/* ============ RÉSULTAT (collé en haut au défilement) ============ */}
-        <section className="hidden min-w-0 flex-col rounded-2xl border border-border bg-surface p-5 lg:sticky lg:top-4 lg:col-span-5 lg:flex lg:self-start">
+        <section className="hidden min-w-0 flex-col rounded-2xl border border-border bg-surface p-5 lg:sticky lg:top-4 lg:col-span-5 lg:flex lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto">
           {priceCard}
-          <ResultDetail
-            mode={mode}
-            lines={
-              mode === "influence"
-                ? inf.itemsPriced.map((r) => ({ label: infLineLabel(r.item), min: r.min, max: r.max, explain: r.explain }))
-                : ugc.itemsPriced.map((r) => ({ label: ugcLineLabel(r.item), min: r.min, max: r.max }))
-            }
-            majorations={majorations}
-            result={result}
-            remisePct={infOpts.remisePct}
-            onRemise={(remisePct) => setInfOpts((o) => ({ ...o, remisePct }))}
-          />
-          <Actions
-            disabled={!hasResult}
-            onCopy={copyQuote}
-            onQuote={createQuote}
-            onPropose={() => setProposeOpen(true)}
-            onKit={kitCreatorId ? () => void prepareKit() : undefined}
-            collabOpen={collabOpen}
-            onCollabOpen={(v) => {
-              setCollabOpen(v);
-              if (v) loadCollabs();
-            }}
-            collabs={collabs === null ? null : collabList}
-            onPickCollab={(c) => {
-              setCollabOpen(false);
-              setPendingCollab(c);
-            }}
-          />
+          {warnings}
+          {detail}
+          {actions}
         </section>
 
         {/* Téléphone : détail et actions sous le formulaire. */}
         <section className="min-w-0 rounded-2xl border border-border bg-surface p-5 lg:hidden">
-          <ResultDetail
-            mode={mode}
-            lines={
-              mode === "influence"
-                ? inf.itemsPriced.map((r) => ({ label: infLineLabel(r.item), min: r.min, max: r.max, explain: r.explain }))
-                : ugc.itemsPriced.map((r) => ({ label: ugcLineLabel(r.item), min: r.min, max: r.max }))
-            }
-            majorations={majorations}
-            result={result}
-            remisePct={infOpts.remisePct}
-            onRemise={(remisePct) => setInfOpts((o) => ({ ...o, remisePct }))}
-          />
-          <Actions
-            disabled={!hasResult}
-            onCopy={copyQuote}
-            onQuote={createQuote}
-            onPropose={() => setProposeOpen(true)}
-            onKit={kitCreatorId ? () => void prepareKit() : undefined}
-            collabOpen={collabOpen}
-            onCollabOpen={(v) => {
-              setCollabOpen(v);
-              if (v) loadCollabs();
-            }}
-            collabs={collabs === null ? null : collabList}
-            onPickCollab={(c) => {
-              setCollabOpen(false);
-              setPendingCollab(c);
-            }}
-          />
+          {warnings}
+          {detail}
+          {actions}
         </section>
       </div>
 
+      {pendingSend && (
+        <ConfirmDialog
+          title="Prix validé par Marc ?"
+          message={`Aucun prix n'est transmis à une marque sans la validation de Marc. ${mode === "influence" ? `Cible ${formatEuro(tarif.target)} HT, à vérifier.` : `Cible ${formatEuro(ugc.mid)} HT.`}`}
+          confirmLabel="Validé"
+          onCancel={() => setPendingSend(null)}
+          onConfirm={() => {
+            const what = pendingSend;
+            setPendingSend(null);
+            if (what === "copy") copyQuote();
+            else setProposeOpen(true);
+          }}
+        />
+      )}
+
       {proposeOpen && (
         <ProposeDialog
-          price={priceRange(result.min, result.max)}
+          price={mode === "influence" ? `${formatEuro(price.mid)} HT` : priceRange(price.min, price.max)}
+          initialBrand={mode === "influence" ? deal.brand.trim() : ""}
           onClose={() => setProposeOpen(false)}
           onSave={async (brand, contact) => {
             if (await propose(brand, contact)) setProposeOpen(false);
@@ -600,6 +813,54 @@ export function Pricing() {
     </div>
   );
 }
+
+/** Tarifs déjà facturés (fondateurs) : dernier prix d'un contenu par format, dernier total à la marque. */
+function PastBlock({ past, who, brand }: { past: ReturnType<typeof pastRates> | null; who: string; brand: string }) {
+  if (!past || (!who && !brand)) return null;
+  const rows = TARIF_FORMATS.filter((f) => past.formats[f.key]);
+  return (
+    <div className="mt-3 rounded-xl bg-panel p-3 text-[12px]">
+      <div className="mb-1 font-semibold text-foreground">Déjà facturé</div>
+      {who ? (
+        rows.length ? (
+          rows.map((f) => {
+            const p = past.formats[f.key];
+            return (
+              <div key={f.key} className="flex justify-between gap-3 py-0.5">
+                <span className="min-w-0 truncate text-muted-foreground">{f.label} · {p.party}{p.date ? ` · ${fmtDay(p.date)}` : ""}</span>
+                <span className="shrink-0 tabular-nums text-foreground">{formatEuro(p.amount)}</span>
+              </div>
+            );
+          })
+        ) : (
+          <div className="text-muted-foreground">{who} : {past.creatorInvoices ? "aucune ligne de facture par format" : "aucune facture"}</div>
+        )
+      ) : null}
+      {brand && (
+        <div className="flex justify-between gap-3 py-0.5">
+          <span className="min-w-0 truncate text-muted-foreground">{past.brand ? `${past.brand.party}, dernier total${past.brand.date ? ` · ${fmtDay(past.brand.date)}` : ""}` : `${brand} : nouvelle cliente`}</span>
+          {past.brand && <span className="shrink-0 tabular-nums text-foreground">{formatEuro(past.brand.amount)} {past.brand.ht ? "HT" : "TTC"}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Barème de l'agence : méthode TARIF (page Tarifs, Claude) et ancien barème par abonnés (media kit). */
+function BaremeTabs({ grid, rates, onClose }: { grid: ReturnType<typeof readTarifGrid>; rates: RateOverrides; onClose: () => void }) {
+  const [tab, setTab] = useState<"tarif" | "kit">("tarif");
+  const t = (on: boolean) => cn("h-9 rounded-full px-3 text-[12px] font-medium transition-colors max-md:h-11", on ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-rowhover");
+  return (
+    <div>
+      <div className="flex gap-1 border-b border-border p-2">
+        <button type="button" className={t(tab === "tarif")} onClick={() => setTab("tarif")}>Méthode TARIF</button>
+        <button type="button" className={t(tab === "kit")} onClick={() => setTab("kit")}>Calcul du media kit</button>
+      </div>
+      {tab === "tarif" ? <TarifGridEditor grid={grid} onClose={onClose} /> : <RatesEditor rates={rates} onClose={onClose} />}
+    </div>
+  );
+}
+
 
 /** Créateur : recherche avec les photos du roster, « Saisie libre » en dernier choix. */
 function CreatorSearch({ creators, value, onChange }: { creators: CreatorLite[]; value: string; onChange: (id: string) => void }) {
@@ -668,87 +929,24 @@ function CreatorSearch({ creators, value, onChange }: { creators: CreatorLite[];
   );
 }
 
-/** Droits d'usage : une durée au choix, et la pub depuis le compte du créateur, cumulable. */
-function UsageMenu({ value, whitelisting, onChange, onWhitelisting }: {
-  value: string;
-  whitelisting: boolean;
-  onChange: (v: string) => void;
-  onWhitelisting: (v: boolean) => void;
-}) {
-  const cur = USAGE_RIGHTS.find((x) => x.value === value) ?? USAGE_RIGHTS[0];
-  const label = [cur.value !== "none" || !whitelisting ? cur.label : "", whitelisting ? "Pub créateur" : ""].filter(Boolean).join(" + ");
-  const pct = (m: number) => (m ? ` (+${Math.round(m * 100)} %)` : "");
-  const row = "flex w-full items-center gap-2.5 rounded-[12px] px-2.5 py-2 text-left text-[13px] outline-none transition-colors hover:bg-rowhover focus-visible:bg-rowhover";
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button type="button" aria-label="Droits d'usage" className="flex h-[42px] w-full min-w-0 items-center gap-2 rounded-[10px] border border-border bg-surface px-3 text-[13px] text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-1 focus-visible:ring-ring">
-          <span className="min-w-0 flex-1 truncate text-left">{label}</span>
-          <ChevronDown className="h-4 w-4 shrink-0 text-faint" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-[min(20rem,calc(100vw-2rem))] p-1.5">
-        {USAGE_RIGHTS.map((x) => (
-          <button key={x.value} type="button" onClick={() => onChange(x.value)} className={row}>
-            <span className="min-w-0 flex-1 truncate">{x.label}{pct(x.m)}</span>
-            {x.value === value && <Check className="h-4 w-4 shrink-0 text-primary" />}
-          </button>
-        ))}
-        <div className="my-1 border-t border-border" />
-        <button type="button" onClick={() => onWhitelisting(!whitelisting)} className={row} aria-pressed={whitelisting}>
-          <span className={cn("grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px]", whitelisting ? "bg-primary text-primary-foreground" : "border-2 border-faint")}>
-            {whitelisting && <Check className="h-3 w-3" strokeWidth={3} />}
-          </span>
-          <span className="min-w-0 flex-1 truncate">Pub depuis le compte du créateur (+20 %)</span>
-        </button>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-/** Détail du calcul : une ligne par livrable, les majorations, la remise, le total. */
-function ResultDetail({ mode, lines, majorations, result, remisePct, onRemise }: {
-  mode: Mode;
-  lines: { label: string; min: number; max: number; explain?: string }[];
+/** Détail du calcul UGC : une ligne par livrable, les majorations, le total. */
+function ResultDetail({ lines, majorations, result }: {
+  lines: { label: string; min: number; max: number }[];
   majorations: { label: string; pct: number }[];
-  result: { min: number; max: number; sub: { min: number; max: number }; options: { min: number; max: number }; discount: { min: number; max: number } };
-  remisePct: number;
-  onRemise: (pct: number) => void;
+  result: { min: number; max: number; sub: { min: number; max: number }; options: { min: number; max: number } };
 }) {
-  const showSub = majorations.length > 0 || result.discount.max > 0;
   return (
     <div className="mt-4 divide-y divide-border border-t border-border text-[13px]">
       {lines.map((l, i) => (
         <div key={i} className="py-2">
           <Line l={l.label} v={l.max > 0 ? priceRange(l.min, l.max, false) : "—"} />
-          {l.explain && <div className="mt-0.5 text-[11px] leading-snug text-faint">{l.explain}</div>}
         </div>
       ))}
-      {showSub && <Line l="Sous-total" v={priceRange(result.sub.min, result.sub.max, false)} />}
+      {majorations.length > 0 && <Line l="Sous-total" v={priceRange(result.sub.min, result.sub.max, false)} />}
       {majorations.map((m) => (
         <Line key={m.label} l={m.label} v={`+${m.pct} %`} />
       ))}
       {result.options.max > 0 && <Line l="Majorations" v={`+${priceRange(result.options.min, result.options.max, false)}`} />}
-      {/* Remise pack : juste au-dessus du total, là où elle a un sens (influence seulement). */}
-      {mode === "influence" && (
-        <div className="flex items-center justify-between gap-3 py-2">
-          <label className="flex items-center gap-2 text-muted-foreground">
-            Remise
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={50}
-              value={remisePct}
-              onChange={(e) => onRemise(Math.min(50, Math.max(0, parseInt(e.target.value, 10) || 0)))}
-              aria-label="Remise pack en %"
-              className="h-8 w-14 rounded-[8px] border border-border bg-surface px-1.5 text-center text-[13px] tabular-nums text-foreground outline-none focus:border-primary"
-            />
-            %
-          </label>
-          <span className="shrink-0 font-medium tabular-nums text-foreground">{result.discount.max > 0 ? `−${priceRange(result.discount.min, result.discount.max, false)}` : "—"}</span>
-        </div>
-      )}
       <div className="flex justify-between gap-3 py-2.5">
         <span className="font-semibold text-foreground">Total</span>
         <span className="shrink-0 font-semibold tabular-nums text-foreground">{result.max > 0 ? priceRange(result.min, result.max) : "—"}</span>
@@ -816,7 +1014,7 @@ function Actions({ disabled, onCopy, onQuote, onPropose, onKit, collabOpen, onCo
 
 /** Compteur « − 1 + » d'un livrable. */
 function Counter({ value, onChange }: { value: number; onChange: (n: number) => void }) {
-  const b = "grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-40";
+  const b = "grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-40 max-md:h-11 max-md:w-11";
   return (
     <div className="flex items-center gap-1 rounded-full bg-surface p-0.5" role="group" aria-label="Quantité">
       <button type="button" className={b} disabled={value <= 1} onClick={() => onChange(Math.max(1, value - 1))} aria-label="Un de moins">
@@ -832,7 +1030,7 @@ function Counter({ value, onChange }: { value: number; onChange: (n: number) => 
 
 function RemoveButton({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} aria-label="Retirer ce livrable" className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive">
+    <button type="button" onClick={onClick} aria-label="Retirer ce livrable" className="grid h-8 w-8 max-md:h-11 max-md:w-11 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-destructive">
       <Trash2 className="h-4 w-4" />
     </button>
   );
@@ -877,11 +1075,12 @@ function RatesEditor({ rates, onClose }: { rates: RateOverrides; onClose: () => 
     }
     setSaving(true);
     try {
-      let next: RateOverrides = {};
+      invalidateAppState();
+      const raw = (await getAppState())["pricingRates"];
+      const fresh = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+      // « Rétablir » ne vide que ce barème : la méthode TARIF (`ttp`, `ttpFloors`) reste.
+      let next: Record<string, unknown> = Object.fromEntries(Object.entries(fresh).filter(([k]) => k === "ttp" || k === "ttpFloors"));
       if (!reset) {
-        invalidateAppState();
-        const raw = (await getAppState())["pricingRates"];
-        const fresh = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as RateOverrides) : {};
         next = { ...fresh };
         for (const k of touched) if (draft[k]) next[k] = draft[k];
       }
@@ -952,8 +1151,8 @@ function Line({ l, v }: { l: string; v: string }) {
 }
 
 /** « Proposer » : marque (et contact) du prospect qui reçoit la proposition. */
-function ProposeDialog({ price, onClose, onSave }: { price: string; onClose: () => void; onSave: (brand: string, contact: string) => Promise<void> }) {
-  const [brand, setBrand] = useState("");
+function ProposeDialog({ price, initialBrand, onClose, onSave }: { price: string; initialBrand: string; onClose: () => void; onSave: (brand: string, contact: string) => Promise<void> }) {
+  const [brand, setBrand] = useState(initialBrand);
   const [contact, setContact] = useState("");
   const [busy, setBusy] = useState(false);
   const field = "h-11 w-full rounded-[12px] border border-border bg-surface px-3.5 text-[16px] text-foreground outline-none transition-colors placeholder:text-faint focus:border-primary sm:text-[14px]";

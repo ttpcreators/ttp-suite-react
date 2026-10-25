@@ -69,6 +69,17 @@ export function ratesForItems(items: { platform: PlatKey; format: string; aud: A
   return out;
 }
 
+/** Lignes de tarifs à partir d'un prix par contenu déjà calculé (page Tarifs, méthode TARIF). */
+export function kitRatesFromPrices(items: { platform: PlatKey; format: string; price: number }[]): KitRate[] {
+  const out: KitRate[] = [];
+  for (const it of items) {
+    if (!(it.price > 0)) continue;
+    const row = withDef(it.platform, it.format, String(Math.round(it.price)));
+    if (!out.some((r) => sameLabel(r.label, row.label))) out.push(row);
+  }
+  return out;
+}
+
 /**
  * Grille complète du media kit : chaque plateforme où le créateur a des abonnés (chiffres
  * propres à la plateforme, ou ceux de la fiche pour sa plateforme principale). `missing` =

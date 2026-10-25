@@ -62,7 +62,7 @@ pour toute l'équipe dans Paramètres → Apparence → « Couleurs des classeur
 | `Engagement.tsx` | `engagement` | Calculateur de taux d'engagement par plateforme. |
 | `EngagementSuivi.tsx` | `suivi` | Évolution des abonnés et de l'engagement (exporte aussi `SuiviPanel`, réutilisé côté créateur). |
 | `Mediakit.tsx` | `mediakit` (`creatrices`, `agence`, `files`) | Media kits : éditeur en ligne par créateur (`MediakitEditor.tsx`), deck agence (`MediakitAgence.tsx`), fichiers. L'id de sous-page `creatrices` est historique et ne change pas. |
-| `Pricing.tsx` | `pricing` | Tarifs : prix d'une collab calculé sur les vraies vues et le barème. |
+| `Pricing.tsx` (+ `PricingTarif.tsx`) | `pricing` | Tarifs : influence selon la méthode TARIF (`pricingTTP.ts`, barème `pricingRates.ttp`), UGC au forfait. |
 | `Contacts.tsx` | `contacts` | Carnet de marques et d'agences, journal des échanges (« touches »), historique Gmail. |
 | `Sourcing.tsx` | `sourcing` | Trouver des créateurs (Instagram, YouTube), radars à marques, agences concurrentes. |
 | `Whatsapp.tsx` | `whatsapp` | « À contacter » : qui relancer aujourd'hui, statut calculé depuis le journal. |
@@ -190,7 +190,7 @@ Règle : la logique pure (sans React ni Supabase) vit dans `src/lib/<nom>.ts`, a
 | Mails | `mailSend.ts` (envoi, « Annuler l'envoi », brouillons), `mailSignature.ts`, `useMailSignatures.ts`, `useMailSettings.ts`, `mailTemplates.ts`, `mailThreadContext.ts` (contexte donné à Claude), `mailCollab.ts`, `mailAvatar.ts`, `useMailUnread.ts`, `useAttachments.ts`, `mailAddresses.ts` |
 | Espace créateur | `creatorTabs.ts`, `creatorMissions.ts`, `creatorNextStep.ts`, `creatorGains.ts`, `creatorMail.ts`, `creatorMailCounts.ts`, `creatorTracking.ts`, `monthlyReport.ts` |
 | Traduction | `i18n.tsx`, `i18n/en.ts`, `i18n/en-shared.ts`, `i18n/en-creatorSpace.ts`, `i18n/en-creatorPages.ts` |
-| Facturation et argent | `invoice.ts` (calcul unique HT, TVA, commission, reversement), `commission.ts`, `pricing.ts` (moteur de tarifs) |
+| Facturation et argent | `invoice.ts` (calcul unique HT, TVA, commission, reversement), `commission.ts`, `pricing.ts` (ancien moteur : UGC, calcul du media kit), `pricingTTP.ts` + `_shared/tarif.ts` (méthode TARIF, aussi lue par l'outil Claude `methode_tarif`) |
 | Contrats | `contractRegistry.ts` + `contractRegistryDb.ts`, `contractDuration.ts`, `representationContract.ts`, `agencySignature.ts` |
 | PDF | `pdfDoc.ts` (identité commune des documents), `printPdf.ts` (`printHtml`) |
 | Briefs, collabs, bilans | `briefResume.ts`, `collabs.ts` (11 étapes), `campaignRecap.ts`, `engagement.ts`, `objectivesTrend.ts`, `platform.ts` |

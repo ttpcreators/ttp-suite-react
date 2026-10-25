@@ -2,7 +2,7 @@
 // ttp-mcp/tools.ts : les outils de TTP Suite pour Claude.
 // Lecture : point du jour, recherche, roster, fiche créateur, mails, DM Instagram,
 // scouting (créateurs / sportifs), contacts, pipeline, collabs, planning, tâches,
-// factures (fondateurs), briefs. Actions : tâche, rendez-vous, brouillon de mail, contact,
+// factures et méthode TARIF (fondateurs), briefs. Actions : tâche, rendez-vous, brouillon de mail, contact,
 // échange noté, scouting, étape de collab, résumé de brief. Claude demande l'accord avant chaque action.
 // Jamais exposés : coffre des mots de passe, IBAN, jetons de connexion.
 // ============================================================================
@@ -11,6 +11,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4
 import { triggerSync } from "../_shared/google.ts";
 import type { Ctx } from "./oauth.ts";
 import { boxesFor, createDraft, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
+import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
 type Json = Record<string, unknown>;
 type Args = Record<string, unknown>;
@@ -441,6 +442,60 @@ const factures: Tool = {
       `Totaux : ${Object.entries(totals).map(([k, v]) => `${INVOICE_STATUS[k] ?? k} ${v.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} €`).join(" · ") || "—"}`,
       ...rows.map((r) => `- ${r.ref} · ${r.party} · ${r.amount} € · échéance ${r.date} · ${INVOICE_STATUS[String(r.status)] ?? r.status}`),
     ].join("\n"));
+  },
+};
+
+// Méthode TARIF : la méthode, le barème en vigueur (blob `pricingRates`), les chiffres connus
+// du créateur et les tarifs déjà facturés. Lecture seule ; le calcul est fait par Claude.
+const methodeTarif: Tool = {
+  name: "methode_tarif",
+  title: "Méthode TARIF",
+  description:
+    "À appeler dès que l'utilisateur tape « TARIF » ou demande combien facturer une collab d'influence. Renvoie la méthode de tarification de l'agence avec le barème en vigueur, et, si on les donne, les chiffres connus du créateur, ses tarifs déjà facturés et le dernier tarif facturé à la marque. Calcule ensuite exactement selon la méthode. N'écris aucun message pour la marque. Signale en tête chaque donnée manquante (marquée MANQUANT), sans jamais l'estimer ni la tirer de ta mémoire. Chaque montant porte « À VÉRIFIER » : aucun prix n'est transmis à une marque sans la validation de Marc.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      createur: { type: "string", description: "Nom du créateur du roster (même partiel)" },
+      marque: { type: "string", description: "Marque qui demande le prix" },
+    },
+    additionalProperties: false,
+  },
+  founder: true,
+  run: async (sb, _c, a) => {
+    const st = await appState(sb);
+    const rates = (st.pricingRates ?? {}) as Json;
+    const grid = readTarifGrid(rates.ttp);
+    const changed = Object.keys(gridDiff(grid)).length > 0;
+    const out = [
+      methodText(grid),
+      changed ? "Barème : valeurs réglées par l'agence (page Tarifs)." : "Barème : valeurs de départ, pas encore ajustées par l'agence. Le dire à Marc.",
+    ];
+    const marque = str(a.marque, 80);
+    const n = str(a.createur, 80);
+    let name: string | null = null;
+    if (n) {
+      const found = await rosterName(sb, n);
+      if ("error" in found) return fail(found.error);
+      const { data, error } = await sb.from("creators").select("*").eq("name", found.name).limit(1);
+      if (error) return fail(`Lecture impossible : ${error.message}`);
+      const c = (data as CreatorForTarif[] | null)?.[0];
+      if (!c) return fail(`Aucun créateur du roster ne correspond à « ${n} ».`);
+      name = String(c.name);
+      out.push(`\n# Données de ${titleCase(name)}`, creatorTarifText(c, creatorFloor(rates.ttpFloors, c.id, grid)));
+    }
+    if (name || marque) {
+      let q = sb.from("invoices").select("id, ref, party, amount, date, status, creator").order("created_at", { ascending: false }).limit(300);
+      const ors = [name ? `creator.ilike.${JSON.stringify(exact(name))}` : "", marque ? `party.ilike.${JSON.stringify(exact(marque))}` : ""].filter(Boolean);
+      q = q.or(ors.join(","));
+      const { data, error } = await q;
+      if (error) return fail(`Factures illisibles : ${error.message}`);
+      const details = (st.invoiceDetails ?? {}) as Record<string, { items?: InvoiceItemForPast[] } | undefined>;
+      const items: Record<string, InvoiceItemForPast[]> = {};
+      for (const inv of (data as { id: string }[] | null) ?? []) items[inv.id] = Array.isArray(details[inv.id]?.items) ? details[inv.id]!.items! : [];
+      const num = (v: unknown) => Number(String(v ?? "").replace(/\s/g, "").replace(",", ".").replace(/[^0-9.-]/g, "")) || 0;
+      out.push("\n# Tarifs déjà facturés (hors brouillons et annulées)", pastRatesText(pastRates((data as never[]) ?? [], items, name, marque, num), marque));
+    }
+    return ok(out.join("\n"));
   },
 };
 
@@ -1003,7 +1058,7 @@ const resumerBrief: Tool = {
 };
 
 export const TOOLS: Tool[] = [
-  pointDuJour, rechercher, roster, ficheCreateur, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, planning, taches, factures,
+  pointDuJour, rechercher, roster, ficheCreateur, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, planning, taches, factures, methodeTarif,
   creerTache, creerEvenement, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur,
   lireBrief, resumerBrief,
