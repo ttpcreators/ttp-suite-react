@@ -11,7 +11,7 @@ import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { useLiveKey } from "@/lib/useLive";
 import { myDisplayName } from "@/lib/team";
-import { doneThisWeek, weekStart, type Routine } from "@/lib/routines";
+import { doneThisWeek, nextDoneLog, weekStart, type Routine } from "@/lib/routines";
 import { TONE_SOFT, TONE_TEXT } from "@/lib/statusTone";
 import { useStickyState } from "@/lib/useStickyState";
 import { EMPTY, fmtDay as fmtDayShared, fmtDayTime } from "@/lib/dates";
@@ -75,29 +75,42 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
     ref.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [addSignal, setOpenState]);
 
+  // Anti double envoi : Entrée deux fois (ou Entrée + clic) ne crée qu'une tâche.
+  const addingRef = useRef(false);
   const add = async () => {
     const t = text.trim();
-    if (!t) return;
-    const created = await dbInsert("todo_routines", { text: t, weekday: day, sort_order: nextOrder(rows ?? []) });
-    if (!created) return toast("Les tâches hebdomadaires ne sont pas encore activées.");
-    setRows((l) => [...(l ?? []), created as unknown as Routine]);
-    setText("");
-    setDay(null);
-    toast("Tâche hebdomadaire ajoutée ✓");
+    if (!t || addingRef.current) return;
+    addingRef.current = true;
+    try {
+      const created = await dbInsert("todo_routines", { text: t, weekday: day, sort_order: nextOrder(rows ?? []) });
+      if (!created) return toast("Les tâches hebdomadaires ne sont pas encore activées.");
+      setRows((l) => [...(l ?? []), created as unknown as Routine]);
+      setText("");
+      setDay(null);
+      toast("Tâche hebdomadaire ajoutée ✓");
+    } finally {
+      addingRef.current = false;
+    }
   };
 
   /** Case cochée : « Fait » cette semaine (avec date et prénom), ou annulation. */
   const toggle = async (r: Routine) => {
     if (busy) return;
     setBusy(r.id);
-    const log = Array.isArray(r.done_log) ? r.done_log : [];
-    const undo = doneThisWeek(r);
-    const next = undo ? log.slice(0, -1) : [...log, { at: new Date().toISOString(), by: await myDisplayName() }].slice(-100);
-    const ok = await dbUpdate("todo_routines", r.id, { done_log: next });
+    const wantDone = !doneThisWeek(r);
+    // Historique relu frais : l'écran d'un collègue a pu cocher depuis le dernier chargement.
+    const { data, error } = await supabase.from("todo_routines").select("done_log").eq("id", r.id).maybeSingle<{ done_log: Routine["done_log"] }>();
+    if (error || !data) {
+      setBusy(null);
+      return toast("Non enregistré, réessaie");
+    }
+    const next = nextDoneLog(data.done_log, wantDone, { at: new Date().toISOString(), by: wantDone ? await myDisplayName() : undefined });
+    const ok = next === null || (await dbUpdate("todo_routines", r.id, { done_log: next }));
     setBusy(null);
     if (!ok) return toast("Non enregistré, réessaie");
-    setRows((l) => (l ?? []).map((x) => (x.id === r.id ? { ...x, done_log: next } : x)));
-    toast(undo ? "Remise à faire pour cette semaine" : "Fait ✓ C'est noté avec la date");
+    setRows((l) => (l ?? []).map((x) => (x.id === r.id ? { ...x, done_log: next ?? data.done_log } : x)));
+    if (next === null) return toast(wantDone ? "Déjà faite cette semaine" : "Déjà remise à faire");
+    toast(wantDone ? "Fait ✓ C'est noté avec la date" : "Remise à faire pour cette semaine");
   };
 
   const saveEdit = async (r: Routine) => {
