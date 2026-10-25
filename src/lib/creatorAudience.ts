@@ -8,7 +8,7 @@ import { INF_PLATFORMS, NICHES, type PlatKey } from "./pricing";
  */
 
 /** Audience d'une plateforme (saisie une fois, ou reprise de la fiche du créateur). */
-export type Aud = { followers: string; er: string; views: string; storyViews: string; shortViews?: string; src: string; erBase: "views" | "followers" };
+export type Aud = { followers: string; er: string; views: string; storyViews: string; shortViews?: string; postViews?: string; src: string; erBase: "views" | "followers" };
 export const NO_AUD: Aud = { followers: "", er: "", views: "", storyViews: "", src: "", erBase: "followers" };
 
 /** Formats dont les vues moyennes de la plateforme mesurent un contenu. */

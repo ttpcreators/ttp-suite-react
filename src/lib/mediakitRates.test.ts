@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { creatorAudience, audienceForAll, NO_AUD } from "./creatorAudience";
-import { mergeRates, ratesForItems, ratesFromPricing, sameLabel, unitRatePrice } from "./mediakitRates";
+import { kitRatesFromPrices, mergeRates, ratesForItems, ratesFromPricing, sameLabel, unitRatePrice } from "./mediakitRates";
 import { infItemRange } from "./pricing";
 
 describe("tarifs → media kit", () => {
@@ -39,5 +39,19 @@ describe("tarifs → media kit", () => {
     expect(m.added.map((r) => r.label)).toEqual(["Vidéo TikTok"]);
     expect(mergeRates(m.rates, [{ label: "Vidéo TikTok", price: "800" }]).replaced).toEqual([]);
     expect(sameLabel("Réel  Instagram", "reel-instagram")).toBe(true);
+  });
+});
+
+describe("tarifs → media kit, méthode TARIF", () => {
+  it("prix d'un contenu par format, sans doublon ni prix nul", () => {
+    expect(kitRatesFromPrices([
+      { platform: "instagram", format: "reel", price: 975 },
+      { platform: "instagram", format: "reel", price: 990 },
+      { platform: "instagram", format: "story", price: 441.4 },
+      { platform: "tiktok", format: "video", price: 0 },
+    ])).toEqual([
+      { label: "Réel Instagram", price: "975" },
+      { label: "Story Instagram", price: "441", detail: "Lot de 3 stories", detailEn: "Set of 3 stories" },
+    ]);
   });
 });
