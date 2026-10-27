@@ -29,8 +29,11 @@
 // Appels Gmail : délai max + nouvelles tentatives (gfetch). Gmail injoignable pendant
 // une note / un avis : accepté si le fil est déjà connu (ligne creator_mail_threads).
 //
-// Entrée (POST JSON) : { action: "list" | "thread" | "attachment" | "note" | "decision" | "labels",
-//                        creator?, threadId?, messageId?, attachmentId?, body?, decision?, comment? }
+// Entrée (POST JSON) : { action: "list" | "thread" | "attachment" | "note" | "decision" | "labels" | "reply",
+//                        creator?, threadId?, messageId?, attachmentId?, body?, decision?, comment?, text? }
+// « reply » (créatrice) : text = sa réponse à la marque, envoyée depuis talent@ à son nom
+// (alias en copie et en Répondre à), dans le fil ; une remarque prévient l'agence.
+// Sortie : { ok, to } ; erreurs pas_de_destinataire (409), gmail_scope_manquant / envoi_echoue (502).
 // `list` renvoie aussi `alias` (adresse principale) et `aliases` (toutes ses adresses).
 // « decision » (créatrice) : decision = "encours" | "valide" | "refuse", comment facultatif,
 // noté dans creator_mail_status_log (l'agence, elle, écrit directement via la RLS).
@@ -39,6 +42,7 @@
 import sanitizeHtml from "npm:sanitize-html@2.13.0";
 import { getServiceClient, getAccessToken, corsHeaders } from "../_shared/google.ts";
 import { serviceAccountToken, talentAddress } from "../_shared/gmailBox.ts";
+import { replyHtml, replyRaw, replyRecipient, replyReferences, replySubject } from "../_shared/creatorReply.ts";
 import { gfetch, classifyGmail, mapPool, charsetOf, decodeGmailBody, type GfetchOptions } from "../_shared/gfetch.ts";
 import { REACTION_MIME, parseReactionJson } from "../_shared/emailReaction.ts";
 import {
@@ -608,6 +612,48 @@ Deno.serve(async (req: Request) => {
       });
     }
     if (action === "thread") return res({ ok: true, thread: await threadView(sb, token, s, threadId) });
+
+    // Réponse du créateur à la marque (quand l'agence n'est pas dispo) : part de la boîte
+    // talent@ À SON NOM, son alias en copie et en « Répondre à » (la suite reste dans son
+    // espace), dans le même fil Gmail. Une remarque prévient l'agence dans le suivi.
+    if (action === "reply") {
+      if (me.agency) return res({ error: "non_autorise" }, 403);
+      const text = String(body.text ?? "").trim();
+      if (!text || text.length > 20_000) return res({ error: "reponse_invalide" }, 400);
+      const t = await ownedThread(token, s, threadId);
+      const shown = shownMessages(t, s);
+      // On répond au dernier message de la marque (sinon au dernier message du fil).
+      const target = [...shown].reverse().find((m) => !fromAgency(m)) ?? shown[shown.length - 1];
+      if (!target) return res({ error: "introuvable" }, 404);
+      const h = (n: string) => header(target.payload?.headers ?? [], n);
+      const to = replyRecipient(h("From"), h("Reply-To"), AGENCY_DOMAIN, h("To"));
+      if (!to) return res({ error: "pas_de_destinataire" }, 409);
+      const alias = s.alias ?? s.addresses[0] ?? "";
+      const raw = replyRaw({
+        fromName: creator, fromAddress: talentAddress(), to, cc: alias ? [alias] : [], replyTo: alias,
+        subject: replySubject(h("Subject")), inReplyTo: h("Message-ID"), references: replyReferences(h("References"), h("Message-ID")),
+        html: replyHtml(text),
+      });
+      const sendToken = talentAddress() ? await serviceAccountToken("https://www.googleapis.com/auth/gmail.send") : await getAccessToken(sb);
+      const r = await gfetch(`${GMAIL}/messages/send`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${sendToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ raw, threadId }),
+      }, { timeoutMs: 30_000 }).catch(() => null);
+      if (!r?.ok) {
+        console.error("creator-mail reply", r?.status, r ? (await r.text()).slice(0, 300) : "réseau");
+        return res({ error: r?.status === 403 ? "gmail_scope_manquant" : "envoi_echoue" }, 502);
+      }
+      cache.delete(`t:${threadId}`);
+      for (const k of [...cache.keys()]) if (k.startsWith("l:")) cache.delete(k);
+      // L'agence est prévenue dans le suivi de l'échange (remarque non lue).
+      const extract = text.replace(/\s+/g, " ").slice(0, 300);
+      const { error: noteError } = await sb.from("creator_mail_notes").insert({
+        creator, thread_id: threadId, author_user_id: me.userId, body: `J'ai répondu à la marque (${to}) : « ${extract}${text.length > 300 ? "…" : ""} »`,
+      });
+      if (noteError) console.error("creator-mail reply note", noteError.message);
+      return res({ ok: true, to });
+    }
     if (action === "attachment") {
       return res({ ok: true, ...(await attachment(token, s, threadId, String(body.messageId ?? ""), String(body.attachmentId ?? ""))) });
     }

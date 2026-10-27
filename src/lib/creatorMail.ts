@@ -350,6 +350,11 @@ const CREATOR_ERRORS: Record<string, string> = {
   decision_non_enregistree: "Réponse non enregistrée, réessaie.",
   migration_manquante: "Réponse non enregistrée, réessaie.",
   section_desactivee: "Cette section n'est plus activée.",
+  reponse_invalide: "Message vide ou trop long.",
+  pas_de_destinataire: "Impossible de trouver l'adresse de la marque dans cet échange.",
+  envoi_echoue: "Ta réponse n'est pas partie, réessaie.",
+  gmail_scope_manquant: "Ta réponse n'est pas partie, préviens ton agence.",
+  action_inconnue: "La réponse à la marque n'est pas encore disponible, préviens ton agence.",
 };
 
 /** Erreur de la fonction creator-mail : `code` brut du serveur, `message` prêt à afficher. */
@@ -418,6 +423,15 @@ export const sendDecision = (threadId: string, choice: "encours" | "valide" | "r
   }).then((r) => {
     if (!r.status) throw mailError("decision_non_enregistree", false);
     return { ...r, status: r.status };
+  });
+/**
+ * Réponse du créateur à la marque (agence pas dispo) : part de la boîte de l'agence à son
+ * nom, son adresse en copie, dans le même fil. Renvoie l'adresse de la marque.
+ */
+export const replyToBrand = (threadId: string, text: string) =>
+  call<{ to?: string }>({ action: "reply", threadId, text }).then((r) => {
+    if (!r.to) throw mailError("envoi_echoue", false);
+    return r.to;
   });
 export const listGmailLabels = () =>
   call<{ labels: { id: string; name: string }[] }>({ action: "labels" }).then((r) => r.labels);

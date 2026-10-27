@@ -23,7 +23,8 @@ import {
   hasRemoteImages, withoutRemoteImages, remoteImagesAllowed, allowRemoteImages,
   reportMailList, reportAgencyActivity, markThreadSeen, useUnseenMail,
   type Decision, type FeedItem, type MailChoice, type MailNote, type MailStatus, type MailStatusEvent, type MailThread,
-  type MailThreadLite, type MailSettings, prospectStats } from "@/lib/creatorMail";
+  type MailThreadLite, type MailSettings, prospectStats, replyToBrand } from "@/lib/creatorMail";
+import { scheduleSend } from "@/lib/mailSend";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
 import { RailButton, SearchField, ToolButton, UnreadToggle, mailCardBtnCls, mailCardCls, mailCardListCls, pillCls } from "@/components/mail-shell";
 import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
@@ -419,6 +420,8 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [note, setNote] = useState("");
   const [sending, setSending] = useState(false);
+  // Champ du bas (créateur) : écrire à son agence, ou répondre lui-même à la marque.
+  const [noteTarget, setNoteTarget] = useState<"agency" | "brand">("agency");
   const [reloadKey, setReloadKey] = useState(0); // relit l'échange ouvert dans Gmail
   const [dbKey, setDbKey] = useState(0); // relit son suivi en base
   const [deciding, setDeciding] = useState(false);
@@ -792,7 +795,33 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
     setThreads((l) => l?.map((t) => (t.id === threadId ? { ...t, notes: t.notes + 1 } : t)) ?? l);
   };
 
+  // Réponse du créateur à la marque (agence pas dispo) : annulable quelques secondes,
+  // comme les envois de l'agence ; l'agence est prévenue dans le suivi de l'échange.
+  const submitReply = () => {
+    if (!thread || !note.trim() || sending) return;
+    const id = thread.id;
+    const body = note.trim();
+    const what = prettyName(thread.brand) || thread.subject;
+    setNote("");
+    scheduleSend(t("Réponse à {brand}", { brand: what }), 8, async () => {
+      setSending(true);
+      try {
+        const to = await replyToBrand(id, body);
+        toast(t("Réponse envoyée à {to} ✓", { to }));
+        notifyAgency("mail", creator, `${creatorName} a répondu à ${what} : ${body}`);
+        setReloadKey((n) => n + 1);
+        setDbKey((n) => n + 1);
+      } catch (e) {
+        setNote((cur) => cur || body);
+        if (!handleGone(e)) toast(t(errText(e)));
+      } finally {
+        setSending(false);
+      }
+    }, { onCancel: () => setNote((cur) => cur || body) });
+  };
+
   const submitNote = async () => {
+    if (mode === "creator" && noteTarget === "brand") return submitReply();
     if (!thread || !note.trim() || sending) return;
     setSending(true);
     const body = note.trim();
@@ -1290,11 +1319,14 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   const split = thread ? splitThreadReactions(thread.messages) : null;
   const realCount = split ? split.shown.length : 0;
   const threadLite = thread ? threads?.find((x) => x.id === thread.id) : undefined;
-  // Champ « Écris à ton agence » collé en bas, au-dessus de la barre d'onglets (et de la
-  // pastille d'aperçu de l'agence) au téléphone ; en bas du panneau sur ordinateur.
-  // Le bloc va jusqu'en bas de l'écran (fond plein derrière la barre d'onglets) : rien ne dépasse dessous.
-  // (La barre d'aperçu agence est en haut de l'écran depuis le 2026-10-25 : même marge partout.)
-  const composerBottom = "max-lg:pb-[calc(env(safe-area-inset-bottom)+5.75rem)]";
+  // Champ « Écris à ton agence » FIXÉ en bas au téléphone, au-dessus de la barre d'onglets ;
+  // en bas du panneau sur ordinateur. Le bloc va jusqu'en bas de l'écran (fond plein derrière
+  // la barre d'onglets). Avant : collant (sticky) dans la page, il remontait en fin de défilement
+  // et laissait un vide sous lui. Clavier ouvert : la barre d'onglets s'efface (`kb-open`), le
+  // champ descend juste au-dessus du clavier.
+  const composerBottom = "max-lg:pb-[calc(env(safe-area-inset-bottom)+5.75rem)] [.kb-open_&]:max-lg:pb-[calc(env(safe-area-inset-bottom)+0.5rem)]";
+  const toBrand = mode === "creator" && noteTarget === "brand";
+  const brandName = thread ? prettyName(thread.brand) || thread.subject : "";
   const view = openId ? (
     <section ref={viewRef} className="flex min-h-0 min-w-0 flex-col">
       <div className="flex h-12 shrink-0 items-center gap-0.5 px-1 lg:h-14 lg:border-b lg:border-border lg:px-3">
@@ -1321,7 +1353,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         )}
       </div>
 
-      <div className="min-h-0 flex-1 lg:overflow-y-auto">
+      <div className={cn("min-h-0 flex-1 lg:overflow-y-auto", thread && "max-lg:pb-[calc(env(safe-area-inset-bottom)+11rem)]")}>
         {threadErr ? (
           <div className="p-4 sm:p-6">
             <div className="rounded-xl border border-border bg-panel/60">
@@ -1433,7 +1465,25 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
       </div>
 
       {thread && (
-        <div className={cn("z-10 shrink-0 border-t border-border bg-panel px-3 py-2 max-lg:sticky max-lg:bottom-0 max-lg:-mb-4", composerBottom)}>
+        <div className={cn("z-10 shrink-0 border-t border-border bg-panel px-3 py-2 max-lg:fixed max-lg:inset-x-0 max-lg:bottom-0", composerBottom)}>
+          {mode === "creator" && (
+            <div role="group" aria-label={t("Destinataire")} className="mb-1.5 flex items-center gap-1 px-1">
+              {(["agency", "brand"] as const).map((k) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={noteTarget === k}
+                  onClick={() => {
+                    setNoteTarget(k);
+                    noteRef.current?.focus({ preventScroll: true });
+                  }}
+                  className={cn("h-8 rounded-full px-3 text-[13px] font-medium transition-colors", noteTarget === k ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}
+                >
+                  {k === "agency" ? t("À ton agence") : t("Répondre à la marque")}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex items-end gap-2">
             <textarea
               ref={noteRef}
@@ -1443,20 +1493,23 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submitNote();
               }}
               rows={1}
-              aria-label={asAgency ? t("Écrire une remarque") : t("Écrire à ton agence")}
-              placeholder={asAgency ? t("Écris à {name}…", { name: creatorName.split(" ")[0] }) : t("Écris à ton agence…")}
+              aria-label={asAgency ? t("Écrire une remarque") : toBrand ? t("Répondre à la marque") : t("Écrire à ton agence")}
+              placeholder={asAgency ? t("Écris à {name}…", { name: creatorName.split(" ")[0] }) : toBrand ? t("Ta réponse à {brand}…", { brand: brandName }) : t("Écris à ton agence…")}
               className="max-h-40 min-h-11 min-w-0 flex-1 resize-none rounded-[22px] border border-border bg-surface px-4 py-2.5 text-[16px] leading-snug text-foreground outline-none [field-sizing:content] placeholder:text-faint focus:border-primary"
             />
             <button
               type="button"
               onClick={() => void submitNote()}
               disabled={!note.trim() || sending}
-              aria-label={t("Envoyer")}
+              aria-label={toBrand ? t("Envoyer à la marque") : t("Envoyer")}
               className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-35"
             >
               {sending ? <Spin size={16} /> : <Send className="h-[18px] w-[18px]" />}
             </button>
           </div>
+          {toBrand && (
+            <p className="mt-1 px-2 text-[12px] text-faint">{t("Part à ton nom, ton adresse en copie. Ton agence est prévenue.")}</p>
+          )}
           {(mode === "preview" || (asAgency && !creatorSees)) && (
             <p className="mt-1 px-2 text-[12px] text-faint">
               {mode === "preview" ? t("Aperçu : envoyée à ton nom (agence), pas au nom de {name}", { name: creatorName }) : t("Sa section Mails n'est pas encore activée")}
