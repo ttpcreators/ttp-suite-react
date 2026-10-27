@@ -20,6 +20,7 @@ import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { toast } from "@/components/ui/toast";
 import { openLater } from "@/lib/openLater";
 import { consumeIgReturn, igConnect, igDisconnect, type IgCreator } from "@/lib/instagram";
+import { IgFeedStats } from "@/components/ig-feed-stats";
 import { consumeTtReturn, ttConnect, ttDisconnect, type TtCreator } from "@/lib/tiktok";
 import { consumeYtReturn, ytConnect, ytDisconnect, type YtCreator } from "@/lib/youtube";
 import { AddButton, InlineForm, TextField, SelectField, AutoGrowTextField } from "@/components/ui/form";
@@ -180,7 +181,7 @@ const CREATOR_GROUPS: {
     icon: TrendingUp,
     items: [
       { id: "guide", label: "Guide", icon: TtpGuide },
-      { id: "evolution", label: "Évolution", icon: TtpEvolution },
+      { id: "evolution", label: "Mes stats", icon: TtpEvolution },
       { id: "rapport", label: "Mon rapport", icon: TtpStats },
       { id: "debrief", label: "Bilans", icon: TtpReport },
       { id: "roadmap", label: "Ma feuille de route", icon: TtpRoad },
@@ -299,7 +300,7 @@ function greetingWord(): string {
 /** À quoi sert chaque onglet, en une phrase (comme les pages agence, viewHints.ts). */
 const TAB_HINTS: Partial<Record<Tab, string>> = {
   infos: "Tes coordonnées et tes chiffres. Tu peux les modifier ici.",
-  evolution: "Tes abonnés et ton taux d'engagement dans le temps, d'après les mesures de ton agence.",
+  evolution: "Ton Instagram en un coup d'œil (derniers posts, ce qui marche, vues et audience), puis tes chiffres sur tous tes réseaux.",
   rapport: "Ton mois en un coup d'œil : tes gains, tes collabs, tes chiffres et ce que l'agence t'a apporté.",
   debrief: "Les bilans de tes campagnes envoyés aux marques : chiffres et points forts.",
   roadmap: "Ta stratégie définie avec ton agence, et ce que tu publies chaque mois.",
@@ -2908,9 +2909,12 @@ export function CreatorSpace({
             );
           })()}
 
-          {/* Évolution (suivi engagement, mesures de l'agence — lecture seule) */}
-          {tab === "evolution" &&
-            (suiviErr ? (
+          {/* Mes stats (id « evolution ») : feed Instagram et chiffres du jour (ig-sync), puis le
+              suivi d'engagement de tous ses réseaux (mesures de l'agence, lecture seule). */}
+          {tab === "evolution" && (
+            <div className="flex flex-col gap-8">
+            <IgFeedStats ig={creator?.ig} onConnect={preview ? undefined : () => void connectIg()} connectBusy={igBusy} />
+            {suiviErr ? (
               <div className="rounded-2xl border border-border bg-surface p-8 text-center shadow-sm">
                 <div className="text-sm font-medium text-foreground">{t("Chargement impossible")}</div>
                 <p className="mt-1 text-xs text-muted-foreground">{t("Ton évolution n'a pas pu être récupérée.")}</p>
@@ -2932,6 +2936,7 @@ export function CreatorSpace({
               </AnimatedBadge>
             ) : (
               <div className="flex flex-col gap-4">
+                <h3 className="-mb-1 px-1 text-[15px] font-semibold text-foreground">{t("Tous tes réseaux")}</h3>
                 {mySuivi.length > 0 && (
                   <Suspense fallback={<div className="h-[320px] animate-pulse rounded-2xl bg-panel/50" />}>
                     <CreatorStatsCard entries={mySuivi} />
@@ -2951,7 +2956,9 @@ export function CreatorSpace({
                 )}
                 <SuiviPanel entries={mySuivi} lockedCreator={name} />
               </div>
-            ))}
+            )}
+            </div>
+          )}
 
           {/* Rapport mensuel : gains, collabs, chiffres et apport de l'agence */}
           {tab === "rapport" && <MonthlyReport name={name} agencyView={!!preview} />}

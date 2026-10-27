@@ -23,8 +23,9 @@
 // ============================================================================
 
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
-import { discover, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, type IgPost, type IgResult } from "../_shared/instagram.ts";
-import { accountTotals, audience, freshToken, loginReady, postInsights, recentReels, type IgAccount, type Split } from "../_shared/instagram-login.ts";
+import { discover, discoverImages, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, type IgPost, type IgResult } from "../_shared/instagram.ts";
+import { accountTotals, audience, freshToken, loginReady, ownMediaImages, postInsights, recentReels, type IgAccount, type Split } from "../_shared/instagram-login.ts";
+import { buildFeed, feedDir, feedThumbPath, missingThumbs, staleThumbs, type FeedPost, type PostStats } from "../_shared/igFeed.ts";
 import { citesHandle } from "../_shared/mentions.ts";
 import { isMain, markStatsMonth, recordAutoMeasure } from "../_shared/autoStats.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -155,12 +156,14 @@ async function syncCreator(ctx: Ctx, c: CreatorRow): Promise<Json> {
   const h = creatorHandle(c);
   const patch: Json = {};
   let next: Json;
+  let media: IgPost[] | null = null; // derniers posts lus à l'instant (feed de « Mes stats »)
   if (!h) next = { ...prev, at: now, why: "sans_handle" };
   else {
     const r = await profileOf(ctx, h);
     if (!r.ok) next = { ...prev, at: now, why: r.why };
     else {
       const p = r.profile;
+      media = p.media;
       const last12 = p.media.slice(0, 12);
       next = {
         ...prev, at: now, ok: now, why: null,
@@ -173,13 +176,22 @@ async function syncCreator(ctx: Ctx, c: CreatorRow): Promise<Json> {
   }
   // Statistiques privées : seulement si la créatrice a connecté son compte.
   const acc = ctx.accounts.get(c.id);
+  let own: { token: string; igId: string } | null = null;
   if (acc && loginReady()) {
     const token = await freshToken(ctx.sb, acc);
+    own = { token, igId: acc.ig_user_id };
     const [tot, aud, reels] = await Promise.all([accountTotals(token, acc.ig_user_id), audience(token, acc.ig_user_id), recentReels(token, acc.ig_user_id)]);
     if ("error" in tot) next.insightsWhy = /token|session|oauth/i.test(tot.error) ? "jeton" : "insights";
     else {
       next.insights = { at: now, reach: tot.reach, views: tot.views, interactions: tot.interactions, engaged: tot.engaged, ...(aud ?? {}), ...(reels ?? {}) };
       next.insightsWhy = null;
+    }
+  }
+  if (media && inBudget(ctx)) {
+    try {
+      next.feed = await syncFeed(ctx, c, h, media, prev.feed, own);
+    } catch (e) {
+      console.error("ig-sync feed", c.name, e); // le feed d'hier reste affiché
     }
   }
   if (c.mediakit && typeof c.mediakit === "object") {
@@ -203,6 +215,56 @@ async function syncCreator(ctx: Ctx, c: CreatorRow): Promise<Json> {
     if (isMain(c.platform, "instagram")) await markStatsMonth(ctx.sb, c.id);
   }
   return next;
+}
+
+// ── 1 bis. Feed de « Mes stats » : 12 derniers posts, chiffres et images ──────
+const FEED_BUCKET = "avatars"; // public, images seulement (les posts sont publics sur Instagram)
+const THUMB_MAX = 3 * 1024 * 1024;
+
+/** Copie une image de Meta (adresse qui expire) dans le bucket ; false si rien n'est copié. */
+async function copyImage(sb: SupabaseClient, src: string, path: string): Promise<boolean> {
+  try {
+    const r = await fetch(src, { signal: AbortSignal.timeout(10_000) });
+    const type = r.headers.get("content-type") ?? "";
+    if (!r.ok || !type.startsWith("image/")) return false;
+    const bytes = new Uint8Array(await r.arrayBuffer());
+    if (!bytes.length || bytes.length > THUMB_MAX) return false;
+    const { error } = await sb.storage.from(FEED_BUCKET).upload(path, bytes, { contentType: type, upsert: true });
+    return !error;
+  } catch {
+    return false;
+  }
+}
+
+async function syncFeed(ctx: Ctx, c: CreatorRow, handle: string, media: IgPost[], prevFeed: unknown, own: { token: string; igId: string } | null): Promise<FeedPost[]> {
+  const posts = media.slice(0, 12);
+  // Chiffres privés de chaque post : seulement si la créatrice a connecté son compte.
+  const stats = new Map<string, PostStats | null>();
+  if (own) {
+    const got = await Promise.all(posts.map(async (p) => [p.id, await postInsights(own.token, p.id)] as const));
+    for (const [id, s] of got) stats.set(id, s);
+  }
+  // Images : seulement celles des nouveaux posts (déjà copiées sinon).
+  const thumbs = new Map<string, string>();
+  const need = missingThumbs(posts, prevFeed);
+  if (need.length) {
+    const images = own ? await ownMediaImages(own.token, own.igId) : new Map<string, string>();
+    if (need.some((id) => !images.has(id)) && !ctx.stop) for (const [k, v] of await discoverImages(handle)) if (!images.has(k)) images.set(k, v);
+    const todo = need.filter((id) => images.has(id));
+    for (let i = 0; i < todo.length; i += 4) {
+      await Promise.all(todo.slice(i, i + 4).map(async (id) => {
+        const path = feedThumbPath(c.id, id);
+        if (await copyImage(ctx.sb, images.get(id) as string, path)) thumbs.set(id, path);
+      }));
+    }
+  }
+  const feed = buildFeed(posts, prevFeed, stats, thumbs);
+  // Ménage : les images des posts sortis du feed.
+  const dir = feedDir(c.id);
+  const { data: files } = await ctx.sb.storage.from(FEED_BUCKET).list(dir, { limit: 100 });
+  const drop = staleThumbs(dir, (files ?? []).map((f) => f.name), feed);
+  if (drop.length) await ctx.sb.storage.from(FEED_BUCKET).remove(drop);
+  return feed;
 }
 
 // ── 2. Collabs : publications de la marque ───────────────────────────────────

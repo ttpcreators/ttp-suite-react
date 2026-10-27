@@ -149,6 +149,7 @@ pour toute l'équipe dans Paramètres → Apparence → « Couleurs des classeur
 | `meet-invite.tsx` | Rendez-vous Google Meet depuis un mail. |
 | `mail-*.tsx` | Briques mail : `mail-shell` (mise en page), `mail-reader` (lecture), `mail-tools` (réponse, transfert, réglages), `mail-composer` (prospection, modèles), `mail-attach` (pièces jointes), `mail-avatar`, `mail-box-chip` (boîte), `mail-collab` (collab liée), `mail-claude` (« Rédiger avec Claude »). |
 | `InstagramCard.tsx`, `TikTokCard.tsx`, `YouTubeCard.tsx`, `BrandInstagram.tsx` | Chiffres réseaux d'un créateur ou d'une marque. |
+| `ig-feed-stats.tsx` | « Mes stats » : feed Instagram (12 derniers posts), ce qui marche, chiffres 28 j, audience. Onglet créateur `evolution` et fiche créateur agence. |
 | `HashtagSearch.tsx`, `RivalWatch.tsx`, `TikTokRadar.tsx`, `YouTubeRadar.tsx`, `RadarFrame.tsx`, `SourcingGuide.tsx`, `OutreachComposer.tsx`, `MetaQuotaBadge.tsx` | Outils du Sourcing et du Scouting. |
 | `IgPlanner.tsx` | Planning → Posts Instagram. |
 
@@ -196,7 +197,7 @@ Règle : la logique pure (sans React ni Supabase) vit dans `src/lib/<nom>.ts`, a
 | Briefs, collabs, bilans | `briefResume.ts`, `collabs.ts` (11 étapes), `campaignRecap.ts`, `engagement.ts`, `objectivesTrend.ts`, `platform.ts` |
 | Contacts et prospection | `touches.ts` + `touchesDb.ts`, `contactRelance.ts` |
 | Scouting et sourcing | `scouting.ts`, `niche.ts`, `sourcingScore.ts`, `igRivals.ts`, `ttRadar.ts` |
-| Réseaux sociaux | `instagram.ts`, `igPlanner.ts`, `tiktok.ts`, `youtube.ts` |
+| Réseaux sociaux | `instagram.ts`, `igFeed.ts`, `igPlanner.ts`, `tiktok.ts`, `youtube.ts` |
 | Media kits | `mediakitSlug.ts` (même calcul que le site), `mediakitThemes.ts` (mêmes ids que le site), `mediakitBiosEn.ts` |
 | Équipe, agents, notifications | `team.ts`, `useMyName.ts`, `agentAvatars.ts`, `push.ts`, `appBadge.ts`, `useNotifications.ts`, `notifLocal.ts`, `notifTexts.ts` |
 | Agenda et divers | `googleCalendar.ts`, `gifting.ts`, `openLater.ts` (ouvrir un onglet après un `await` sur iPhone) |
@@ -241,7 +242,7 @@ fonction avec `Authorization: Bearer <CRON_SECRET>`.
 |---|---|---|---|---|---|
 | `ig-avatar` | Profils Instagram du Scouting | `Vivier.tsx` | oui | rôle agence | |
 | `ig-hashtag` | Posts par hashtag | `HashtagSearch.tsx` | oui | rôle agence | |
-| `ig-sync` | Chiffres Instagram du roster, des collabs, des marques | pg_cron, `instagram.ts`, `ig-callback` | non | CRON_SECRET ou agence | `20 5 * * *` |
+| `ig-sync` | Chiffres Instagram du roster (+ feed des 12 derniers posts, images copiées dans `avatars/feed/`), des collabs, des marques | pg_cron, `instagram.ts`, `ig-callback` | non | CRON_SECRET ou agence | `20 5 * * *` |
 | `ig-connect` / `ig-callback` | Un créateur connecte son Instagram | `instagram.ts` / navigateur | oui / non | créateur ou agence / state signé | |
 | `ig-sourcing` | Sourcing, radar à marques, concurrents | pg_cron, `Sourcing.tsx`, `RivalWatch.tsx` | non | CRON_SECRET ou agence | `40 */2 * * *` |
 | `ig-inbox` | DM du compte de l'agence | pg_cron, `Messages.tsx`, `ig-webhook` | non | CRON_SECRET ou agence | `25 * * * *` |
@@ -288,6 +289,7 @@ hiver : la fonction ne garde que le bon passage. Hors fonction : `ttp-app-state-
 | `tiktok.ts` | TikTok Login Kit | `tt-*` |
 | `youtube.ts`, `youtube-login.ts` | YouTube Data API (quota) et connexion d'un créateur | `yt-*` |
 | `mentions.ts` | Comptes cités dans un post (Meta retire les @) | `ig-sync`, `ig-sourcing` |
+| `igFeed.ts` | Feed Instagram d'un créateur (posts, chiffres, chemins d'images) | `ig-sync`, `ig-connect` |
 | `signals.ts` | Partenariat payé, emails, « déjà en agence » | `ig-inbox`, `ig-sourcing`, `yt-*` |
 | `brandmatch.ts` | Une publication cite-t-elle la marque ? | `tt-sync`, `yt-sync` |
 | `autoStats.ts` | Stats du mois relevées toutes seules | `ig-sync`, `tt-sync` |

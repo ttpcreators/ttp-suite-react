@@ -11,6 +11,7 @@ import { useCallback, useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import { useLiveKey } from "./useLive";
 import { getCache, setCache } from "./viewCache";
+import type { FeedPost } from "./igFeed";
 
 export type IgSplit = { label: string; pct: number }[];
 export type IgPostLite = {
@@ -55,6 +56,8 @@ export type IgCreator = {
     country?: IgSplit;
   } | null;
   insightsWhy?: string | null;
+  /** Ses 12 derniers posts (page « Mes stats ») : lus avec readFeed (src/lib/igFeed.ts). */
+  feed?: FeedPost[];
 };
 export type IgCollab = { at?: string; ok?: string; why?: string | null; posts?: IgPostLite[] };
 export type IgBrand = {

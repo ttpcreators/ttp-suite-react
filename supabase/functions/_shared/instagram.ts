@@ -187,6 +187,39 @@ export async function discover(handle: string, mediaLimit = 12): Promise<IgResul
 }
 
 /**
+ * Images des derniers posts d'un compte pro (page « Mes stats » : grille du feed).
+ * Demande à part, avec repli : si Meta refuse `thumbnail_url` dans business discovery,
+ * on retente sans ; en cas d'échec, aucune image (jamais d'erreur pour l'appelant).
+ * Renvoie id du post → adresse de l'image (temporaire chez Meta : à copier).
+ */
+export async function discoverImages(handle: string, limit = 12): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const user = igUser(handle);
+  if (!metaReady() || !user) return out;
+  for (const f of ["id,media_type,media_url,thumbnail_url", "id,media_type,media_url"]) {
+    const fields = `business_discovery.username(${user}){media.limit(${limit}){${f}}}`;
+    const body = await getJson(`${GRAPH}/${META_IG_ID}?fields=${encodeURIComponent(fields)}&access_token=${encodeURIComponent(META_TOKEN)}`);
+    if (body.error) continue;
+    const bd = body.business_discovery as Record<string, unknown> | undefined;
+    for (const m of (bd?.media as { data?: Record<string, unknown>[] } | undefined)?.data ?? []) {
+      const src = postImage(m);
+      if (m.id && src) out.set(String(m.id), src);
+    }
+    return out;
+  }
+  return out;
+}
+
+/** Image d'un post : la vignette d'une vidéo, sinon l'image elle-même (jamais un fichier vidéo). */
+export function postImage(m: Record<string, unknown>): string {
+  const thumb = typeof m.thumbnail_url === "string" ? m.thumbnail_url : "";
+  if (thumb) return thumb;
+  const url = typeof m.media_url === "string" ? m.media_url : "";
+  if (!url || m.media_type === "VIDEO" || /\.mp4(\?|$)/i.test(url)) return "";
+  return url;
+}
+
+/**
  * Engagement public moyen (likes + commentaires) / abonnés, en %, sur les posts
  * donnés ; les posts aux likes masqués sont ignorés. null si rien à mesurer.
  */

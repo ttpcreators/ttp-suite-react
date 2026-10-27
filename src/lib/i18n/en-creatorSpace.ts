@@ -48,8 +48,8 @@ export const EN_CREATORSPACE: Record<string, string> = {
   "Bonsoir": "Good evening",
 
   // ── Phrases d'aide des onglets
-  "Tes abonnés et ton taux d'engagement dans le temps, d'après les mesures de ton agence.":
-    "Your followers and engagement rate over time, based on your agency's measurements.",
+  "Ton Instagram en un coup d'œil (derniers posts, ce qui marche, vues et audience), puis tes chiffres sur tous tes réseaux.":
+    "Your Instagram at a glance (latest posts, what works, views and audience), then your numbers on all your networks.",
   "Ton mois en un coup d'œil : tes gains, tes collabs, tes chiffres et ce que l'agence t'a apporté.":
     "Your month at a glance: your earnings, your collabs, your numbers and what the agency brought you.",
   "Les bilans de tes campagnes envoyés aux marques : chiffres et points forts.":

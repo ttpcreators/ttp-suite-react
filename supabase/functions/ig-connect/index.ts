@@ -15,6 +15,7 @@
 import { corsHeaders, getServiceClient } from "../_shared/google.ts";
 import { genNonce, signState } from "../_shared/state.ts";
 import { authorizeUrl, loginReady } from "../_shared/instagram-login.ts";
+import { publicFeed } from "../_shared/igFeed.ts";
 
 function allowedOrigin(raw: string): boolean {
   const allowed = (Deno.env.get("APP_ALLOWED_ORIGINS") ?? "").split(",").map((o) => o.trim()).filter(Boolean);
@@ -55,7 +56,8 @@ Deno.serve(async (req: Request) => {
 
   if (body.action === "disconnect") {
     await sb.from("ig_accounts").delete().eq("creator_id", creator.id);
-    const ig = { ...(creator.ig ?? {}), link: null, insights: null, insightsWhy: null };
+    // Chiffres privés effacés, y compris ceux de chaque post du feed (« Mes stats »).
+    const ig = { ...(creator.ig ?? {}), link: null, insights: null, insightsWhy: null, feed: publicFeed(creator.ig?.feed) };
     await sb.from("creators").update({ ig }).eq("id", creator.id);
     return res({ ok: true });
   }

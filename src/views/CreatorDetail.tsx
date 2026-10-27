@@ -64,6 +64,7 @@ import { MonthlyReport } from "@/components/MonthlyReport";
 import { DateInput } from "@/components/ui/date-range-picker";
 import { SelectField } from "@/components/ui/form";
 import { InstagramCard } from "@/components/InstagramCard";
+import { IgFeedStats } from "@/components/ig-feed-stats";
 import { TikTokCard } from "@/components/TikTokCard";
 import { YouTubeCard } from "@/components/YouTubeCard";
 import type { TtCreator } from "@/lib/tiktok";
@@ -617,6 +618,9 @@ export function CreatorDetail({
                 onChange={(ig) => setC((prev) => (prev ? { ...prev, ig } : prev))}
               />
             )}
+
+            {/* Feed Instagram : ce qui marche, derniers posts, audience (même vue que « Mes stats » du créateur). */}
+            {c?.ig?.feed?.length ? <IgFeedStats ig={c.ig} withKpis={false} /> : null}
 
             {c?.id && (c.tt || socialLinks.some((l) => l.label === "TikTok")) && (
               <TikTokCard

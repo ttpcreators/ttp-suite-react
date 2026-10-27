@@ -13,7 +13,7 @@
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { getJson, GRAPH_VERSION, tidySecret } from "./instagram.ts";
+import { getJson, GRAPH_VERSION, postImage, tidySecret } from "./instagram.ts";
 
 const IG_APP_ID = tidySecret(Deno.env.get("IG_APP_ID"));
 const IG_APP_SECRET = tidySecret(Deno.env.get("IG_APP_SECRET"));
@@ -120,6 +120,18 @@ export async function postInsights(token: string, mediaId: string): Promise<{ re
   const by = new Map(((r.data as Val[] | undefined) ?? []).map((v) => [v.name, valueOf(v)]));
   const n = (k: string) => (typeof by.get(k) === "number" ? (by.get(k) as number) : undefined);
   return { reach: n("reach"), saves: n("saved"), shares: n("shares"), views: n("views") };
+}
+
+/** Images de ses derniers posts (compte connecté) : id du post → adresse de l'image. */
+export async function ownMediaImages(token: string, igId: string, limit = 12): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const list = await getJson(`${IG_GRAPH}/${igId}/media?fields=id,media_type,media_url,thumbnail_url&limit=${limit}&access_token=${encodeURIComponent(token)}`);
+  if (list.error) return out;
+  for (const m of (list.data as Record<string, unknown>[] | undefined) ?? []) {
+    const src = postImage(m);
+    if (m.id && src) out.set(String(m.id), src);
+  }
+  return out;
 }
 
 /**
