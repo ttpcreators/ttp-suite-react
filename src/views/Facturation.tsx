@@ -35,6 +35,7 @@ import { AddButton, TextField, Field, Picker } from "@/components/ui/form";
 import { Loader, Spin } from "@/components/ui/loader";
 import { InvoiceSheet, EditorCard, EditorSection, ClientChip } from "@/components/invoice-editor";
 import { ActionMenu, type ActionItem } from "@/components/ui/action-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { FilterBar } from "@/components/ui/filter-bar";
 import { PeriodFilter, periodsFrom, inPeriod, periodToRange, periodLabel } from "@/components/ui/period-filter";
 import { fullMonthOf, rangeLabel } from "@/lib/dateRange";
@@ -431,6 +432,41 @@ const editorPrimaryBtn =
   "inline-flex h-10 items-center justify-center gap-1.5 rounded-lg bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60";
 const ghostBtn =
   "rounded-lg border border-border bg-surface px-4 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground";
+
+/**
+ * Badge de statut cliquable (liste des factures) : un clic ouvre les 4 statuts. Le badge
+ * montre le statut AFFICHÉ (« En retard » si l'échéance est passée) ; la coche, le statut
+ * enregistré.
+ */
+function StatusPicker({ row, onPick }: { row: { status: string; date: string | null }; onPick: (s: InvoiceStatus) => void }) {
+  const [open, setOpen] = useState(false);
+  const meta = shownMetaOf(row);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" onClick={(e) => e.stopPropagation()} title="Changer le statut" aria-label={`Statut : ${meta.label}. Changer`} className="rounded-full transition-opacity hover:opacity-80">
+          <AnimatedBadge status={meta.badge} size="sm">{meta.label}</AnimatedBadge>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-44 p-1" onClick={(e) => e.stopPropagation()}>
+        {STATUS_OPTIONS.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              if (o.value !== row.status) onPick(o.value);
+            }}
+            className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-rowhover"
+          >
+            {o.label}
+            {o.value === row.status && <Check className="h-3.5 w-3.5 text-primary" />}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 /** Nouvelle facture vide (brouillon, TVA 20 % par défaut, modifiable par facture). */
 function blankDraft(refs: string[], bankId: string): Draft {
@@ -1326,7 +1362,6 @@ export function Facturation() {
           </div>
         ) : (
           filtered.map((r) => {
-            const meta = shownMetaOf(r);
             // Taux de CETTE facture si un taux spécifique a été saisi (invoiceDetails),
             // sinon le taux vivant du roster. Cohérent avec Reversements (paie).
             const fin = finOf(r);
@@ -1340,6 +1375,17 @@ export function Facturation() {
               }
             };
             const openPreview = () => setPreview({ html: buildHTML(r), ref: r.ref, email: detailsFor(r).clientEmail, brand: r.party });
+            // Changement de statut depuis le badge : affiché tout de suite, annulé si la base refuse.
+            const pickStatus = async (status: InvoiceStatus) => {
+              const before = r.status;
+              setRows((list) => list?.map((x) => (x.id === r.id ? { ...x, status } : x)) ?? list);
+              if (!(await dbUpdate("invoices", r.id, { status }))) {
+                setRows((list) => list?.map((x) => (x.id === r.id ? { ...x, status: before } : x)) ?? list);
+                return toast("Statut non enregistré, réessaie");
+              }
+              toast(`Facture ${r.ref} : ${metaOf(status).label}`);
+              if (status === "payee" && before !== "payee" && r.creator) notifyCreator("invoice", r.creator, `Ta facture ${r.ref} a été réglée 💸`);
+            };
             const menuItems: ActionItem[] = [
               { key: "edit", label: "Modifier", icon: Pencil, onClick: () => void openEdit(r) },
               { key: "preview", label: "Aperçu", icon: Eye, onClick: openPreview },
@@ -1369,7 +1415,7 @@ export function Facturation() {
                   <span className="text-right text-[12px] tabular-nums text-muted-foreground">{euroUi(fin.ttc)}</span>
                   <span className="text-center text-[11px] font-medium text-muted-foreground">{uiDate(r.date)}</span>
                   <span className="flex items-center justify-end gap-2">
-                    <AnimatedBadge status={meta.badge} size="sm">{meta.label}</AnimatedBadge>
+                    <StatusPicker row={r} onPick={(st) => void pickStatus(st)} />
                     <span onClick={(e) => e.stopPropagation()}>
                       <ActionMenu items={menuItems} />
                     </span>
@@ -1385,7 +1431,7 @@ export function Facturation() {
                       </div>
                       <div className="mt-0.5 truncate text-[15px] font-semibold text-foreground">{r.party}</div>
                     </div>
-                    <AnimatedBadge status={meta.badge} size="sm">{meta.label}</AnimatedBadge>
+                    <StatusPicker row={r} onPick={(st) => void pickStatus(st)} />
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <span className="flex flex-col">
