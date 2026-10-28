@@ -1,9 +1,11 @@
 // ============================================================================
-// ttp-mcp/oauth.ts : connexion de Claude à TTP Suite (OAuth 2.1 + PKCE S256).
+// ttp-mcp/oauth.ts : connexion d'un assistant IA à TTP Suite (OAuth 2.1 + PKCE S256).
 // ----------------------------------------------------------------------------
-//   • Claude s'enregistre tout seul (/register, enregistrement dynamique RFC 7591),
-//     uniquement avec des adresses de retour Claude (claude.ai / claude.com) ou locales
-//     (Claude Code sur l'ordinateur).
+//   • L'assistant s'enregistre tout seul (/register, enregistrement dynamique RFC 7591),
+//     uniquement avec des adresses de retour connues : Claude (claude.ai / claude.com),
+//     ChatGPT (chatgpt.com, depuis le 2026-10-28) ou locales (Claude Code, agents sur
+//     l'ordinateur). Chaque membre de l'agence se connecte avec SON compte : ses droits
+//     s'appliquent (fondateur = accès complet).
 //   • La page « Autoriser Claude » (app.ttpcreators.pro/connecteur/) envoie le compte
 //     TTP Suite connecté (/authorize/approve) : on crée une connexion (mcp_grants) et un
 //     code à usage unique (10 min).
@@ -35,11 +37,11 @@ async function sha256b64url(s: string): Promise<string> {
 const randomToken = (prefix: string) => prefix + b64url(crypto.getRandomValues(new Uint8Array(32)));
 const inSeconds = (s: number) => new Date(Date.now() + s * 1000).toISOString();
 
-/** Adresses de retour acceptées : Claude (web, ordinateur, téléphone) et Claude Code en local. */
+/** Adresses de retour acceptées : Claude (web, ordinateur, téléphone), ChatGPT, et les agents en local. */
 export function allowedRedirect(u: string): boolean {
   try {
     const x = new URL(u);
-    if (x.protocol === "https:" && ["claude.ai", "claude.com", "www.claude.ai", "www.claude.com"].includes(x.hostname)) return true;
+    if (x.protocol === "https:" && ["claude.ai", "claude.com", "www.claude.ai", "www.claude.com", "chatgpt.com", "chat.openai.com"].includes(x.hostname)) return true;
     if (x.protocol === "http:" && ["localhost", "127.0.0.1"].includes(x.hostname)) return true;
     return false;
   } catch {
@@ -81,7 +83,7 @@ const oauthErr = (error: string, description: string, status = 400): Out => ({ s
 export async function register(sb: SupabaseClient, body: Json): Promise<Out> {
   const uris = Array.isArray(body.redirect_uris) ? body.redirect_uris.map(String) : [];
   if (!uris.length || uris.length > 10 || !uris.every(allowedRedirect)) {
-    return oauthErr("invalid_redirect_uri", "Adresse de retour non autorisée (Claude uniquement).");
+    return oauthErr("invalid_redirect_uri", "Adresse de retour non autorisée (Claude, ChatGPT ou agent sur l'ordinateur uniquement).");
   }
   // Ménage : les enregistrements de plus de 24 h jamais utilisés (aucune connexion)
   // ne doivent pas remplir le plafond et bloquer les vraies connexions.

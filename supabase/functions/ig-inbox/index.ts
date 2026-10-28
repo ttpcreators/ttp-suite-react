@@ -48,6 +48,9 @@ async function readAll<T>(page: (from: number, to: number) => PromiseLike<{ data
 
 const PAGE_SIZE = 25; // conversations par demande (liste seule : rapide)
 const MAX_PAGES = 6; // 150 conversations max par passage
+const CATCH_UP_PAGES = 20; // rattrapage (conversations laissées au passage précédent) : 500 max
+const MAX_CHAIN = 8; // rattrapage enchaîné tout seul : 8 passages de plus au maximum
+const SELF = `${Deno.env.get("SUPABASE_URL") ?? ""}/functions/v1/ig-inbox`;
 const PROFILES_PER_RUN = 20; // fiches (nom, photo, abonnés) lues par passage
 const BUDGET_MS = 100_000; // au-delà, la suite au passage suivant (les fonctions sont coupées à 150 s)
 const MSG_FIELDS = "id,created_time,from,to,message";
@@ -83,7 +86,7 @@ Deno.serve(async (req: Request) => {
   const probe = await sb.from("ig_threads").select("id").limit(1);
   if (probe.error) return res({ error: "migration_manquante" });
   if (!metaReady()) return res({ error: "meta_non_configure" });
-  let body: { users?: unknown } = {};
+  let body: { users?: unknown; chain?: unknown } = {};
   try {
     body = (await req.json()) ?? {};
   } catch {
@@ -91,6 +94,7 @@ Deno.serve(async (req: Request) => {
   }
   const targets = Array.isArray(body.users) ? [...new Set(body.users.map(String).filter((x) => /^\d{5,25}$/.test(x)))].slice(0, 10) : [];
   const stateKey = targets.length ? "inbox_direct" : "inbox";
+  const chain = Math.max(0, Math.min(MAX_CHAIN, Number(body.chain) || 0));
   // En attente de la validation Meta : le cron ne réessaie qu'une fois par jour (le bouton, toujours).
   if (who === "cron" && !targets.length) {
     const { data: st } = await sb.from("ig_sync_state").select("data, at").eq("key", "inbox").maybeSingle<{ data: { why?: string }; at: string }>();
@@ -139,6 +143,11 @@ Deno.serve(async (req: Request) => {
   // Lecture ratée : on s'arrête (sinon les emails déjà notés seraient remplacés par les seuls nouveaux).
   if (knownErr) return fail("reseau", `conversations connues illisibles : ${knownErr.message}`);
   const known = new Map(((knownRaw as ThreadRow[] | null) ?? []).map((t) => [t.id, t]));
+  // Rattrapage : des conversations n'ont pas pu être lues au passage précédent (« left »).
+  // On parcourt alors toute la liste au lieu de s'arrêter à la 1re page sans nouveauté
+  // (avant : 111 conversations sur 149 n'étaient jamais lues, et leurs emails non plus).
+  const { data: prevInbox } = await sb.from("ig_sync_state").select("data").eq("key", "inbox").maybeSingle<{ data: { left?: number } }>();
+  const catchUp = !targets.length && (chain > 0 || Number(prevInbox?.data?.left) > 0);
   let url: string | null = targets.length ? null : `${GRAPH}/${page.pageId}/conversations?platform=instagram&limit=${PAGE_SIZE}&fields=${enc("id,updated_time,participants")}&access_token=${enc(page.token)}`;
   const todo: Conv[] = [];
   // Lecture ciblée : la conversation de chaque compte signalé par le webhook.
@@ -151,7 +160,7 @@ Deno.serve(async (req: Request) => {
     }
     for (const conv of (one.data as Conv[] | undefined) ?? []) if (!todo.some((c) => c.id === conv.id)) todo.push(conv);
   }
-  for (let n = 0; url && n < MAX_PAGES && Date.now() - t0 < 40_000; n++) {
+  for (let n = 0; url && n < (catchUp ? CATCH_UP_PAGES : MAX_PAGES) && Date.now() - t0 < 40_000; n++) {
     const body = await getJson(url, 30_000);
     if (body.error) {
       const e = body.error as GraphError;
@@ -169,7 +178,7 @@ Deno.serve(async (req: Request) => {
       fresh++;
       todo.push(conv);
     }
-    if (!fresh) break;
+    if (!fresh && !catchUp) break;
     url = ((body.paging as { next?: string } | undefined)?.next) ?? null;
   }
 
@@ -364,5 +373,15 @@ Deno.serve(async (req: Request) => {
   const out = { ok: true, threads: changed.length, left: skipped, saved, linked, touches: touchesAdded, emails: emailsAdded, notified, me: meUser || null, ms: Date.now() - t0 };
   await saveState(sb, stateKey, out);
   console.log("ig-inbox", JSON.stringify(out));
+  // Il en reste : le passage suivant est lancé tout de suite, en arrière-plan (8 au plus).
+  if (!targets.length && skipped > 0 && chain < MAX_CHAIN && CRON_SECRET && SELF.startsWith("http")) {
+    const next = fetch(SELF, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${CRON_SECRET}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ chain: chain + 1 }),
+    }).catch((e) => console.log("ig-inbox relance", (e as Error).message));
+    const rt = (globalThis as { EdgeRuntime?: { waitUntil?: (p: Promise<unknown>) => void } }).EdgeRuntime;
+    if (rt?.waitUntil) rt.waitUntil(next);
+  }
   return res({ ...out, quota: await saveUsage(sb) });
 });

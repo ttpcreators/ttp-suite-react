@@ -37,16 +37,16 @@ async function post(path: string, body: unknown, jwt?: string) {
 
 const CAN = [
   "Lire les mails de partnerships@ et talent@, et les DM Instagram",
-  "Voir le roster, le scouting (créateurs et sportifs), les contacts, le pipeline et les collabs",
-  "Voir le planning, les tâches et, pour les fondateurs, les factures",
+  "Voir le roster, le scouting, les contacts, le pipeline, les collabs, le planning et les tâches",
   "Avec ton accord à chaque fois : créer une tâche, un rendez-vous, un brouillon de mail, noter un échange, ajouter au scouting",
+  "Fondateurs, avec ton accord à chaque fois : tout créer, modifier ou mettre à la Corbeille, régler l'app, préparer les factures, envoyer un mail ou un DM",
 ];
-const NEVER = ["Envoyer un mail à ta place", "Voir les mots de passe du coffre, les IBAN ou les accès Google / Meta"];
+const NEVER = ["Agir sans ton accord", "Effacer définitivement (tout passe par la Corbeille)", "Voir les mots de passe du coffre, les IBAN ou les accès Google / Meta"];
 
 function App() {
   const [step, setStep] = useState<"check" | "login" | "consent" | "busy" | "error">("check");
   const [err, setErr] = useState("");
-  const [client, setClient] = useState("Claude");
+  const [client, setClient] = useState("ton assistant IA");
   const [email, setEmail] = useState("");
   const [who, setWho] = useState("");
   const [password, setPassword] = useState("");
@@ -54,15 +54,15 @@ function App() {
   useEffect(() => {
     void (async () => {
       if (!req.client_id || !req.redirect_uri || !req.code_challenge) {
-        setErr("Lien incomplet : relance la connexion depuis Claude (Paramètres → Connecteurs).");
+        setErr("Lien incomplet : relance la connexion depuis ton assistant (Claude, ChatGPT…).");
         return setStep("error");
       }
       const c = await post("/authorize/check", { client_id: req.client_id, redirect_uri: req.redirect_uri });
       if (!c.ok) {
-        setErr(c.data.error_description ?? "Connexion inconnue : relance-la depuis Claude.");
+        setErr(c.data.error_description ?? "Connexion inconnue : relance-la depuis ton assistant.");
         return setStep("error");
       }
-      setClient(c.data.client_name || "Claude");
+      setClient(c.data.client_name || "ton assistant IA");
       const { data } = await supabase.auth.getSession();
       if (data.session) {
         setWho(data.session.user.email ?? "");
@@ -150,7 +150,7 @@ function App() {
               </ul>
             </div>
             <p className="text-[12px] leading-relaxed text-muted-foreground">
-              Chaque consultation et chaque action sont notées. Tu peux couper cet accès à tout moment dans Paramètres → Claude.
+              Chaque consultation et chaque action sont notées. Tu peux couper cet accès à tout moment dans Paramètres → Assistants IA.
             </p>
             {err && <p className="text-[13px] text-dangertext">{err}</p>}
             <div className="flex flex-col-reverse gap-2 sm:flex-row">

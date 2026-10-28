@@ -4,7 +4,7 @@
 // (vers la Corbeille de l'app, restaurable 30 jours) presque tout, régler l'app,
 // préparer les factures, et ENVOYER mails et DM Instagram quand on le lui demande.
 // Claude demande l'accord avant chaque écriture (consignes du serveur) ; chaque appel
-// est noté dans le journal (Paramètres → Claude) ; une modification renvoie l'avant /
+// est noté dans le journal (Paramètres → Assistants IA) ; une modification renvoie l'avant /
 // l'après, pour pouvoir revenir en arrière.
 // Jamais : coffre des mots de passe, IBAN, jetons de connexion (_shared/mcpAdmin.ts).
 // ============================================================================

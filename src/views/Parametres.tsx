@@ -86,14 +86,14 @@ const ENTRIES: Entry[] = [
     sections: [{ title: "Signature", keywords: ["contrat", "signer", "gribouiller"] }],
   },
   {
-    id: "prospection", label: "Prospection", group: "Prospection et Claude", icon: MessageCircle, tile: TONE_SOLID.ok,
+    id: "prospection", label: "Prospection", group: "Prospection et IA", icon: MessageCircle, tile: TONE_SOLID.ok,
     hint: "Le rythme des relances (page À contacter) et la façon d'ouvrir WhatsApp.",
     sections: [{ title: "Prospection", keywords: ["relance", "recontact", "rythme", "jours", "whatsapp"] }],
   },
   {
-    id: "claude", label: "Claude", group: "Prospection et Claude", icon: Bot, tile: TONE_SOLID.wait,
-    hint: "Branche TTP Suite sur ton compte Claude (ordinateur et téléphone). Claude lit tes données et agit avec ton accord.",
-    sections: [{ title: "Claude", keywords: ["connecteur", "assistant", "ia", "accès", "connexion"] }],
+    id: "claude", label: "Assistants IA", group: "Prospection et IA", icon: Bot, tile: TONE_SOLID.wait,
+    hint: "Branche TTP Suite sur ton assistant IA (Claude, ChatGPT, agents) avec ton propre compte : il lit tes données et agit avec ton accord.",
+    sections: [{ title: "Assistants IA", keywords: ["claude", "chatgpt", "openai", "connecteur", "assistant", "ia", "agent", "mcp", "accès", "connexion"] }],
   },
   {
     id: "appareil", label: "Cet appareil", group: "Notifications", icon: Smartphone, tile: TONE_SOLID.progress,
@@ -759,8 +759,9 @@ function TonePicker({ label, shown, chosen, onPick }: { label: string; shown: Fo
 }
 
 /**
- * Connecteur Claude : adresse à ajouter dans Claude, connexions actives de CE compte
- * (coupables en un clic) et journal de ce que Claude a consulté ou fait.
+ * Assistants IA (Claude, ChatGPT, agents) : adresse du connecteur et marche à suivre,
+ * connexions actives de CE compte (coupables en un clic) et journal de ce que
+ * l'assistant a consulté ou fait.
  */
 const MCP_URL = "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ttp-mcp";
 type Grant = { id: string; client_name: string | null; created_at: string; last_used_at: string | null };
@@ -772,6 +773,9 @@ const TOOL_LABELS: Record<string, string> = {
   creer_tache: "Tâche créée", creer_evenement: "Rendez-vous ajouté", creer_brouillon_mail: "Brouillon de mail",
   ajouter_contact: "Contact ajouté", noter_echange_contact: "Échange noté", ajouter_au_scouting: "Ajout au scouting",
   changer_statut_scouting: "Statut de scouting", avancer_collab: "Étape de collab",
+  lire_donnees: "Lecture des données", creer_element: "Élément créé", modifier_element: "Élément modifié",
+  supprimer_element: "Mis à la Corbeille", reglages_app: "Réglages", preparer_facture: "Facture préparée",
+  envoyer_mail: "Mail envoyé", envoyer_dm: "DM Instagram envoyé",
 };
 const fmtWhen = (iso: string) => fmtDayTime(iso);
 
@@ -813,7 +817,7 @@ function ClaudePane() {
   };
   return (
     <>
-      <Card anchor="Claude" title="Adresse du connecteur">
+      <Card anchor="Assistants IA" title="Adresse du connecteur">
         <div className="flex items-center gap-2">
           <code className="min-w-0 flex-1 truncate rounded-[10px] bg-field px-3 py-2 text-[12px]">{MCP_URL}</code>
           <button type="button" onClick={() => void copy()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium hover:bg-rowhover">
@@ -821,8 +825,13 @@ function ClaudePane() {
           </button>
         </div>
         <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground">
-          Dans Claude (sur claude.ai) : Paramètres → Connecteurs → Ajouter un connecteur personnalisé, colle l'adresse, puis « Se connecter » et « Autoriser ». Il est ensuite disponible aussi sur l'app Claude du téléphone.
+          Chaque membre de l'agence branche SON assistant avec SON compte TTP Suite : ses droits s'appliquent (un fondateur a l'accès complet). L'assistant demande toujours l'accord avant d'écrire ou d'envoyer quoi que ce soit.
         </p>
+        <ul className="mt-3 flex flex-col gap-2.5 text-[12px] leading-relaxed text-muted-foreground">
+          <li><span className="font-semibold text-foreground">Claude</span> (claude.ai, ordinateur, téléphone) : Paramètres → Connecteurs → « Ajouter un connecteur personnalisé » → nom « TTP Suite », colle l'adresse → « Se connecter » → connecte-toi avec ton compte TTP Suite → « Autoriser ».</li>
+          <li><span className="font-semibold text-foreground">ChatGPT</span> (offre Plus, Pro ou Business) : Paramètres → Applications et connecteurs → Paramètres avancés → active le mode développeur, puis « Créer » → nom « TTP Suite », colle l'adresse, authentification OAuth → connecte-toi avec ton compte TTP Suite → « Autoriser ».</li>
+          <li><span className="font-semibold text-foreground">Agents sur l'ordinateur</span> (Claude Code, Cursor…) : ajoute un serveur MCP « TTP Suite » de type HTTP avec cette adresse ; la connexion s'ouvre dans le navigateur au premier usage.</li>
+        </ul>
       </Card>
       {off ? (
         <Card hint="Pas encore activé : une mise à jour est en attente." />
@@ -838,7 +847,7 @@ function ClaudePane() {
                 {grants.map((g) => (
                   <li key={g.id} className="flex flex-wrap items-center gap-3 rounded-[12px] bg-panel px-3 py-2">
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[13px] font-medium text-foreground">{g.client_name || "Claude"}</span>
+                      <span className="block truncate text-[13px] font-medium text-foreground">{g.client_name || "Assistant IA"}</span>
                       <span className="block text-[11px] text-muted-foreground">Depuis le {fmtWhen(g.created_at)}{g.last_used_at ? ` · utilisé le ${fmtWhen(g.last_used_at)}` : ""}</span>
                     </span>
                     <button type="button" onClick={() => void cut(g.id)} disabled={busy === g.id} className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-destructive hover:bg-rowhover disabled:opacity-50">

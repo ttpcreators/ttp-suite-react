@@ -314,7 +314,10 @@ export function Messages() {
           </span>
           <div className="min-w-0 flex-1">
             <p className="text-[13px] font-semibold text-ok">Instagram connecté{state.data.me ? ` · @${state.data.me}` : ""}</p>
-            <p className="text-[12.5px] text-muted-foreground">DM reçus en direct, relecture complète toutes les 5 h · dernière {since(direct && Date.parse(direct.at) > Date.parse(state.at) ? direct.at : state.at)}</p>
+            <p className="text-[12.5px] text-muted-foreground">
+              DM reçus en direct, relecture complète toutes les 5 h · dernière {since(direct && Date.parse(direct.at) > Date.parse(state.at) ? direct.at : state.at)}
+              {(state.data.left ?? 0) > 0 && <> · {state.data.left} conversation{(state.data.left ?? 0) > 1 ? "s" : ""} encore à lire (en cours, tout seul)</>}
+            </p>
           </div>
         </div>
       ) : null}

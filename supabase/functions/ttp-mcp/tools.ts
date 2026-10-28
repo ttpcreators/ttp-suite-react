@@ -1088,7 +1088,7 @@ export async function callTool(sb: SupabaseClient, ctx: Ctx, name: string, args:
   } catch (e) {
     res = fail(`Erreur : ${(e as Error).message}`);
   }
-  // Journal : qui, quoi, quand (Paramètres → Claude).
+  // Journal : qui, quoi, quand (Paramètres → Assistants IA).
   const summary = JSON.stringify(args ?? {}).slice(0, 300);
   await sb.from("mcp_log").insert({ user_id: ctx.userId, grant_id: ctx.grantId, tool: name, summary, ok: !res.isError }).then(() => {}, () => {});
   return res;
