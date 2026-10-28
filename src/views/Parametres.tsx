@@ -52,6 +52,7 @@ export type NotifPrefs = {
   digestStats?: boolean; // rappel quotidien : données créateurs à mettre à jour ce mois
   emailReceivedBell?: boolean; // cloche : mail reçu sur la boîte agence
   emailReceivedPush?: boolean; // push : mail reçu sur la boîte agence
+  dmReceivedPush?: boolean; // push : DM Instagram reçu sur le compte de l'agence
   pushErrors?: boolean; // push : un bug (crash de rendu) est survenu dans l'app
   pushTeamActivity?: boolean; // push : un autre compte agence a ajouté / terminé / supprimé qqch
   bellTeamActivity?: boolean; // cloche : actions des autres comptes agence
@@ -1258,6 +1259,9 @@ export function Parametres() {
             <Card title="Emails" hint="Quand un email arrive sur la boîte de l'agence (Gmail connecté).">
               <PrefRow label="Notification sur le téléphone" hint="Un push par fil dès qu'un mail arrive (expéditeur, objet, début du message), un résumé au-delà de 3." checked={on(prefs.emailReceivedPush)} onChange={(v) => setPref("emailReceivedPush", v)} />
               <PrefRow label="Afficher dans la cloche" hint="Les nouveaux emails en haut des notifications de l'app." checked={on(prefs.emailReceivedBell)} onChange={(v) => setPref("emailReceivedBell", v)} />
+            </Card>
+            <Card title="DM Instagram" hint="Quand quelqu'un écrit au compte Instagram de l'agence.">
+              <PrefRow label="Notification sur le téléphone" hint="Un push par conversation dès qu'un DM arrive (le @ et le début du message), un résumé au-delà de 3." checked={on(prefs.dmReceivedPush)} onChange={(v) => setPref("dmReceivedPush", v)} />
             </Card>
             <Card title="Alertes techniques" hint="Pour être prévenu si un bug survient dans l'app : chez toi, un collègue ou un créateur.">
               <PrefRow label="Notification en cas de bug" hint="Un seul avertissement par bug, détails dans Diagnostic." checked={on(prefs.pushErrors)} onChange={(v) => setPref("pushErrors", v)} />

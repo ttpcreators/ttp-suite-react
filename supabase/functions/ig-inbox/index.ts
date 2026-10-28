@@ -1,7 +1,7 @@
 // ============================================================================
 // ig-inbox/index.ts : les messages privés (DM) du compte Instagram de TTP.
 // ----------------------------------------------------------------------------
-// Toutes les heures (pg_cron) ou bouton « Actualiser » de la page DM Instagram :
+// Toutes les 5 heures (pg_cron), à chaque DM reçu (ig-webhook) ou bouton « Actualiser » :
 //   1. lit les conversations récentes du compte TTP (API Messenger pour Instagram,
 //      jeton de la Page liée) et leurs 20 derniers messages (limite Meta)
 //      → ig_threads + ig_messages (recherche dans l'app) ;
@@ -19,6 +19,10 @@
 // À régler une fois : permissions instagram_manage_messages + pages_manage_metadata
 // sur le jeton de l'utilisateur système, et dans l'app Instagram de TTP :
 // Paramètres → Messages → Outils connectés → « Autoriser l'accès aux messages ».
+// Nouveau DM reçu (moins de 6 h, pas encore enregistré) : notification push à l'agence
+// (réglage notifPrefs.dmReceivedPush, activé par défaut), une par conversation, un
+// résumé au-delà de 3. Les messages envoyés depuis l'app (ig-send, id « sent:… ») sont
+// remplacés par leur version Meta dès qu'elle est lue.
 // AUTH : verify_jwt = false (config.toml) ; Bearer CRON_SECRET (cron) OU JWT agence.
 // ============================================================================
 
@@ -26,6 +30,8 @@ import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "
 import { GRAPH, META_IG_ID, getJson, graphWhy, igUser, metaReady, ownAccount, pageAccess, postGraph, saveState, saveUsage, storePicture } from "../_shared/instagram.ts";
 import { dmTouches, NO_TEXT, type DmMsg, type Touch } from "../_shared/inbox.ts";
 import { emailsIn } from "../_shared/signals.ts";
+import { loadNotifPrefs, pushReady, sendTo } from "../_shared/push.ts";
+import { deepLinkUrl, makePayload, type PushPayload } from "../_shared/pushPayload.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 /** Lit TOUTES les lignes par pages de 1 000 (au-delà, Supabase coupe sans prévenir). */
@@ -205,6 +211,10 @@ Deno.serve(async (req: Request) => {
   // 3. Enregistre conversations et messages.
   const now = new Date().toISOString();
   let saved = 0;
+  // Nouveaux DM reçus (pour la notification) : messages de l'interlocuteur pas encore
+  // enregistrés et récents (une première lecture d'anciennes conversations ne sonne pas).
+  const incoming: { conv: string; who: string; text: string; count: number }[] = [];
+  const fresh = Date.now() - 6 * 3600e3;
   for (const { conv, other, msgs } of changed) {
     const prev = known.get(conv.id);
     const username = igUser(other.username).toLowerCase() || prev?.username || null;
@@ -221,9 +231,26 @@ Deno.serve(async (req: Request) => {
       last_text: last ? last.text.slice(0, 300) : null, last_from_me: last ? last.me : null,
       emails, synced_at: now,
     };
+    // Messages déjà connus (avant l'enregistrement) : seuls les autres peuvent notifier.
+    const theirs = msgs.filter((m) => !m.me && Date.parse(m.at) > fresh);
+    const { data: seenRows } = theirs.length
+      ? await sb.from("ig_messages").select("id").in("id", theirs.map((m) => m.id))
+      : { data: [] };
+    const seen = new Set(((seenRows as { id: string }[] | null) ?? []).map((r) => r.id));
     const { error } = await sb.from("ig_threads").upsert(row);
     if (error) continue;
     if (msgs.length) await sb.from("ig_messages").upsert(msgs.map((m) => ({ id: m.id, thread_id: conv.id, at: m.at, me: m.me, text: m.text.slice(0, 4000) })));
+    // Envoyés depuis l'app (ig-send) : la version Meta est là, on retire la copie provisoire.
+    const mine = new Set(msgs.filter((m) => m.me).map((m) => m.text.trim()));
+    if (mine.size) {
+      const { data: pending } = await sb.from("ig_messages").select("id, text").eq("thread_id", conv.id).like("id", "sent:%");
+      const done = ((pending as { id: string; text: string }[] | null) ?? []).filter((m) => mine.has(m.text.trim())).map((m) => m.id);
+      if (done.length) await sb.from("ig_messages").delete().in("id", done);
+    }
+    const added = theirs.filter((m) => !seen.has(m.id)).sort((a, b) => a.at.localeCompare(b.at));
+    if (added.length && !(prev?.hidden && !unhide)) {
+      incoming.push({ conv: conv.id, who: username ? `@${username}` : "Instagram", text: added[added.length - 1].text, count: added.length });
+    }
     known.set(conv.id, { id: conv.id, username, contact_id: prev?.contact_id ?? null, emails, picture: prev?.picture ?? null, updated_at: row.updated_at, hidden: unhide ? false : prev?.hidden });
     saved++;
   }
@@ -314,7 +341,27 @@ Deno.serve(async (req: Request) => {
     await sb.from("ig_messages").delete().lt("at", limit);
   }
 
-  const out = { ok: true, threads: changed.length, left: skipped, saved, linked, touches: touchesAdded, emails: emailsAdded, me: meUser || null, ms: Date.now() - t0 };
+  // 7. Notification : un push par conversation (3 max), sinon un résumé.
+  let notified = 0;
+  if (incoming.length && pushReady()) {
+    const prefs = await loadNotifPrefs(sb).catch(() => ({} as Record<string, boolean | undefined>));
+    if (prefs.dmReceivedPush !== false) {
+      const url = deepLinkUrl({ open: "view", view: "messages" });
+      const payloads: PushPayload[] = incoming.length <= 3
+        ? incoming.map((d) => makePayload({
+          kind: "dm", title: `DM Instagram · ${d.who}`, body: d.text === NO_TEXT ? "Nouveau message (photo, vidéo ou réaction)" : d.text,
+          url, tag: `dm-${d.conv.slice(-40)}`, count: d.count,
+        }))
+        : [makePayload({
+          kind: "dm", title: `${incoming.length} nouveaux DM Instagram`,
+          body: incoming.slice(0, 4).map((d) => d.who).join(", ") + (incoming.length > 4 ? "…" : ""), url, tag: "dm-resume",
+        })];
+      await sendTo(sb, { agency: true }, payloads).catch((e) => console.log("ig-inbox push", (e as Error).message));
+      notified = incoming.length;
+    }
+  }
+
+  const out = { ok: true, threads: changed.length, left: skipped, saved, linked, touches: touchesAdded, emails: emailsAdded, notified, me: meUser || null, ms: Date.now() - t0 };
   await saveState(sb, stateKey, out);
   console.log("ig-inbox", JSON.stringify(out));
   return res({ ...out, quota: await saveUsage(sb) });

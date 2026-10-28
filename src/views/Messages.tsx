@@ -1,7 +1,9 @@
 import { EMPTY } from "@/lib/dates";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Loader, Spin } from "@/components/ui/loader";
-import { AlertTriangle, ArrowLeft, AtSign, Check, Contact, Copy, EyeOff, Inbox, Mail, MessagesSquare, RefreshCw, Search, Send, X } from "@/components/icons";
+import { AlertTriangle, ArrowLeft, AtSign, Check, Contact, Copy, EyeOff, Inbox, Mail, MessagesSquare, Plus, RefreshCw, Search, Send, Tag, X } from "@/components/icons";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { mergeAppStateKey, useAppState, type AppState } from "@/lib/appState";
 import { supabase } from "@/lib/supabase";
 import { cn, initials } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -16,7 +18,13 @@ import { fmtAgo, igWhyText, noteQuota } from "@/lib/instagram";
 
 /**
  * DM INSTAGRAM (agence) : les messages privés du compte Instagram de TTP, lus toutes
- * les heures par la fonction ig-inbox (API officielle de Meta).
+ * les 5 heures et à chaque DM reçu par la fonction ig-inbox (API officielle de Meta),
+ * avec une notification push à l'agence pour chaque nouveau DM.
+ *  • réponse depuis l'app (fonction ig-send) dans les 24 h qui suivent le dernier message
+ *    de la personne (règle de Meta ; au-delà, réponse dans l'app Instagram) ;
+ *  • dossiers : « Créateurs », « Marques », « Refus », « Sans réponse » et les titres créés
+ *    par l'agence (réglages partagés : dmLabels = titres et ordre, dmThreadLabels =
+ *    titres de chaque conversation) ;
  *  • recherche dans toutes les conversations (nom, @, texte des messages) ;
  *  • emails donnés en message → ajoutés tout seuls à la fiche contact (même @) ;
  *  • chaque échange → noté dans le suivi de prospection de la fiche (canal Instagram) ;
@@ -30,7 +38,10 @@ type Thread = {
 };
 type Msg = { id: string; at: string; me: boolean; text: string };
 type SyncState = { ok?: boolean; why?: string; detail?: string | null; threads?: number; left?: number; touches?: number; emails?: number; me?: string | null };
-type Filter = "toutes" | "fiches" | "emails" | "sans" | "masquees";
+type Filter = "toutes" | "fiches" | "emails" | "sans" | "masquees" | `label:${string}`;
+/** Dossiers proposés tant que l'agence n'a rien changé. */
+const DEFAULT_LABELS = ["Créateurs", "Marques", "Refus", "Sans réponse"];
+const toOrder = (names: string[]) => Object.fromEntries(names.map((n, i) => [n, i]));
 
 const FILTERS: { v: Filter; label: string }[] = [
   { v: "toutes", label: "Toutes" },
@@ -96,6 +107,54 @@ export function Messages() {
   const [syncing, setSyncing] = useState(false);
   const [reload, setReload] = useState(0);
   const live = useLiveKey();
+
+  // Dossiers (titres) : partagés par toute l'agence, avec un affichage immédiat.
+  const { data: labelOrder } = useAppState<Record<string, number> | null>((s: AppState) => (s["dmLabels"] as Record<string, number> | undefined) ?? null);
+  const { data: threadLabelsData } = useAppState<Record<string, string[]>>((s: AppState) => (s["dmThreadLabels"] as Record<string, string[]> | undefined) ?? {});
+  const [labelsLocal, setLabelsLocal] = useState<string[] | null>(null);
+  const [tlLocal, setTlLocal] = useState<Record<string, string[]> | null>(null);
+  const labels = labelsLocal ?? (labelOrder ? Object.entries(labelOrder).sort((a, b) => a[1] - b[1]).map(([n]) => n) : DEFAULT_LABELS);
+  const threadLabels = tlLocal ?? threadLabelsData ?? {};
+  const labelsOf = (id: string) => (threadLabels[id] ?? []).filter((l) => labels.includes(l));
+  const setThreadLabels = async (id: string, list: string[]) => {
+    const before = threadLabels;
+    setTlLocal({ ...threadLabels, [id]: list });
+    const ok = await mergeAppStateKey("dmThreadLabels", list.length ? { [id]: list } : {}, list.length ? [] : [id]);
+    if (!ok) {
+      setTlLocal(before);
+      toast("Dossier non enregistré, réessaie");
+    }
+  };
+  const addLabel = async (raw: string) => {
+    const name = raw.replace(/\s+/g, " ").trim().slice(0, 40);
+    if (!name) return false;
+    if (labels.some((l) => l.toLowerCase() === name.toLowerCase())) {
+      toast("Ce titre existe déjà");
+      return false;
+    }
+    const next = [...labels, name];
+    setLabelsLocal(next);
+    const ok = await mergeAppStateKey("dmLabels", toOrder(next));
+    if (!ok) {
+      setLabelsLocal(null);
+      toast("Titre non enregistré, réessaie");
+    }
+    return ok;
+  };
+  const removeLabel = async (name: string) => {
+    const next = labels.filter((l) => l !== name);
+    setLabelsLocal(next);
+    const ok = await mergeAppStateKey("dmLabels", toOrder(next), [name]);
+    if (!ok) {
+      setLabelsLocal(null);
+      return toast("Titre non supprimé, réessaie");
+    }
+    if (filter === `label:${name}`) setFilter("toutes");
+    // Retiré aussi des conversations qui le portaient.
+    const touched = Object.entries(threadLabels).filter(([, l]) => l.includes(name));
+    for (const [id, l] of touched) await setThreadLabels(id, l.filter((x) => x !== name));
+    toast(`Titre « ${name} » supprimé`);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -169,10 +228,16 @@ export function Messages() {
       if (filter === "fiches" && !t.contact_id) return false;
       if (filter === "emails" && !t.emails?.length) return false;
       if (filter === "sans" && t.contact_id) return false;
+      if (filter.startsWith("label:") && !(threadLabels[t.id] ?? []).includes(filter.slice(6))) return false;
       if (!needle) return true;
       return `${t.name ?? ""} ${t.username ?? ""}`.toLowerCase().includes(needle) || !!hits?.has(t.id);
     });
-  }, [threads, filter, q, hits]);
+  }, [threads, filter, q, hits, threadLabels]);
+  const labelCounts = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const t of threads ?? []) if (!t.hidden) for (const l of threadLabels[t.id] ?? []) m.set(l, (m.get(l) ?? 0) + 1);
+    return m;
+  }, [threads, threadLabels]);
   const counts = useMemo(() => {
     const list = (threads ?? []).filter((t) => !t.hidden);
     return { all: list.length, linked: list.filter((t) => t.contact_id).length, emails: list.filter((t) => t.emails?.length).length };
@@ -195,7 +260,9 @@ export function Messages() {
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           {state?.at ? `Mis à jour ${fmtAgo(state.at)}` : EMPTY}
           <HelpTip title="Comment ça marche ?" align="end">
-            <p>Toutes les heures, l'app lit les conversations du compte Instagram de TTP (les 20 derniers messages de chacune : c'est la limite de Meta).</p>
+            <p>Chaque DM reçu arrive en direct, avec une notification. En plus, toutes les 5 heures, l'app relit les conversations du compte Instagram de TTP (les 20 derniers messages de chacune : c'est la limite de Meta).</p>
+            <p><span className="font-medium text-foreground">Répondre</span> : possible depuis l'app dans les 24 h qui suivent le dernier message de la personne (règle de Meta). Au-delà, « Répondre sur Instagram ».</p>
+            <p><span className="font-medium text-foreground">Dossiers</span> : range une conversation avec « Classer » ; crée tes propres titres avec « + ».</p>
             <p><span className="font-medium text-foreground">Fiches contact</span> : si le @ correspond à une fiche, l'email donné en message y est ajouté s'il manque, et chaque échange est noté dans son suivi de prospection (canal Instagram).</p>
             <p><span className="font-medium text-foreground">Radar à marques</span> : les marques avec qui tu as déjà une conversation sont mises de côté.</p>
           </HelpTip>
@@ -240,6 +307,19 @@ export function Messages() {
                 </button>
               ))}
             </div>
+            {/* Dossiers : les titres de l'agence, avec leur nombre de conversations. */}
+            <div className="flex flex-wrap items-center gap-1 max-md:-mx-1 max-md:flex-nowrap max-md:overflow-x-auto max-md:px-1 max-md:[scrollbar-width:none] max-md:[&::-webkit-scrollbar]:hidden">
+              <Tag className="mr-0.5 h-3 w-3 shrink-0 text-faint" />
+              {labels.map((l) => {
+                const on = filter === `label:${l}`;
+                return (
+                  <button key={l} type="button" onClick={() => setFilter(on ? "toutes" : `label:${l}`)} className={cn("shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors", on ? "border-foreground bg-foreground text-background" : "border-border text-muted-foreground hover:text-foreground")}>
+                    {l}{labelCounts.get(l) ? <span className={cn("ml-1 tabular-nums", on ? "opacity-70" : "text-faint")}>{labelCounts.get(l)}</span> : null}
+                  </button>
+                );
+              })}
+              <NewLabel onAdd={addLabel} />
+            </div>
           </div>
           <div className="max-h-[70vh] min-h-0 flex-1 overflow-y-auto">
             {view.length ? view.map((t) => {
@@ -256,6 +336,7 @@ export function Messages() {
                       {hit ? <Rich text={hit} q={q} /> : <>{t.last_from_me ? "Toi : " : ""}{t.last_text}</>}
                     </p>
                     <div className="mt-1 flex flex-wrap gap-1">
+                      {labelsOf(t.id).map((l) => <span key={l} className="rounded-full bg-panel px-1.5 py-px text-[10px] font-medium text-muted-foreground">{l}</span>)}
                       {t.contact_id && <span className="inline-flex items-center gap-0.5 rounded-full bg-signal/10 px-1.5 py-px text-[10px] font-medium text-signaltext"><Check className="h-2.5 w-2.5" /> Fiche</span>}
                       {!!t.emails?.length && <span className="inline-flex items-center gap-0.5 rounded-full bg-primary/10 px-1.5 py-px text-[10px] font-medium text-primary"><Mail className="h-2.5 w-2.5" /> Email</span>}
                     </div>
@@ -280,6 +361,11 @@ export function Messages() {
               contact={current.contact_id ? contacts.get(current.contact_id) ?? null : null}
               onBack={() => setSel(null)}
               onChange={() => setReload((n) => n + 1)}
+              labels={labels}
+              mine={labelsOf(current.id)}
+              onLabels={(list) => void setThreadLabels(current.id, list)}
+              onAddLabel={addLabel}
+              onRemoveLabel={(l) => void removeLabel(l)}
             />
           ) : (
             <div className="grid h-full place-items-center p-8 text-center text-[13px] text-muted-foreground">
@@ -307,9 +393,108 @@ function Kpi({ icon: Icon, n, label }: { icon: typeof Mail; n: number; label: st
   );
 }
 
-function Conversation({ t, q, contact, onBack, onChange }: { t: Thread; q: string; contact: { brand: string; email: string | null } | null; onBack: () => void; onChange: () => void }) {
+/** « + » : crée un titre de dossier (champ en ligne). */
+function NewLabel({ onAdd }: { onAdd: (name: string) => Promise<boolean> }) {
+  const [open, setOpen] = useState(false);
+  const [v, setV] = useState("");
+  if (!open) {
+    return (
+      <button type="button" onClick={() => setOpen(true)} title="Créer un titre" aria-label="Créer un titre" className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-dashed border-border text-muted-foreground hover:text-foreground">
+        <Plus className="h-3 w-3" />
+      </button>
+    );
+  }
+  const done = async () => {
+    if (v.trim() && !(await onAdd(v))) return;
+    setV("");
+    setOpen(false);
+  };
+  return (
+    <input
+      autoFocus
+      value={v}
+      onChange={(e) => setV(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") void done();
+        if (e.key === "Escape") {
+          setV("");
+          setOpen(false);
+        }
+      }}
+      onBlur={() => void done()}
+      placeholder="Nouveau titre"
+      maxLength={40}
+      className="h-6 w-32 shrink-0 rounded-full border border-primary bg-surface px-2.5 text-[11px] outline-none"
+    />
+  );
+}
+
+/** « Classer » : coche les dossiers de la conversation, crée ou supprime un titre. */
+function LabelPicker({ labels, mine, onChange, onAdd, onRemove }: {
+  labels: string[]; mine: string[]; onChange: (l: string[]) => void; onAdd: (name: string) => Promise<boolean>; onRemove: (l: string) => void;
+}) {
+  const [ask, setAsk] = useState<string | null>(null);
+  const [v, setV] = useState("");
+  const add = async () => {
+    const name = v.replace(/\s+/g, " ").trim();
+    if (!name) return;
+    if (await onAdd(name)) {
+      onChange([...mine, name]);
+      setV("");
+    }
+  };
+  return (
+    <Popover onOpenChange={() => setAsk(null)}>
+      <PopoverTrigger asChild>
+        <button type="button" className={BTN}><Tag className="h-3 w-3" /> {mine.length ? mine.join(", ") : "Classer"}</button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-64 p-1.5">
+        {labels.map((l) => {
+          const on = mine.includes(l);
+          return (
+            <div key={l} className="group/l flex items-center rounded-lg hover:bg-rowhover">
+              <button type="button" onClick={() => onChange(on ? mine.filter((x) => x !== l) : [...mine, l])} className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left text-[13px] text-foreground">
+                <span className={cn("grid h-4 w-4 shrink-0 place-items-center rounded border", on ? "border-primary bg-primary text-primary-foreground" : "border-border")}>{on && <Check className="h-3 w-3" />}</span>
+                <span className="truncate">{l}</span>
+              </button>
+              {ask === l ? (
+                <button type="button" onClick={() => { setAsk(null); onRemove(l); }} className="mr-1 shrink-0 rounded px-1.5 py-0.5 text-[11px] font-semibold text-dangertext hover:underline">Supprimer ?</button>
+              ) : (
+                <button type="button" onClick={() => setAsk(l)} aria-label={`Supprimer le titre ${l}`} title="Supprimer ce titre" className="mr-1 grid h-6 w-6 shrink-0 place-items-center rounded text-faint opacity-0 hover:text-foreground group-hover/l:opacity-100 focus-visible:opacity-100 max-sm:opacity-100">
+                  <X className="h-3 w-3" />
+                </button>
+              )}
+            </div>
+          );
+        })}
+        <div className="mt-1 flex items-center gap-1 border-t border-border px-1 pt-1.5">
+          <input value={v} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void add(); }} maxLength={40} placeholder="Nouveau titre…" className="h-8 min-w-0 flex-1 rounded-md bg-transparent px-1.5 text-[13px] outline-none placeholder:text-faint" />
+          <button type="button" onClick={() => void add()} disabled={!v.trim()} className="h-7 shrink-0 rounded-md px-2 text-[12px] font-medium text-primary disabled:opacity-40">Créer</button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Message d'erreur d'envoi (fonction ig-send). */
+const SEND_ERRORS: Record<string, string> = {
+  hors_fenetre: "Plus de 24 h depuis son dernier message : Instagram oblige à répondre depuis l'app Instagram.",
+  indisponible: "Ce compte n'accepte pas ce message (bloqué ou réglages de confidentialité).",
+  texte_invalide: "Message vide ou trop long (1 000 caractères max).",
+  destinataire_inconnu: "Conversation pas encore synchronisée : clique « Actualiser » puis réessaie.",
+  meta_autorisation: "Meta refuse l'envoi : une autorisation manque (voir Réglages › Diagnostic).",
+  meta_jeton: "Connexion à Meta expirée (voir Réglages › Diagnostic).",
+  meta_limite: "Trop d'envois d'un coup : réessaie dans un moment.",
+};
+
+function Conversation({ t, q, contact, onBack, onChange, labels, mine, onLabels, onAddLabel, onRemoveLabel }: {
+  t: Thread; q: string; contact: { brand: string; email: string | null } | null; onBack: () => void; onChange: () => void;
+  labels: string[]; mine: string[]; onLabels: (l: string[]) => void; onAddLabel: (name: string) => Promise<boolean>; onRemoveLabel: (l: string) => void;
+}) {
   const [msgs, setMsgs] = useState<Msg[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+  const [sending, setSending] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -325,6 +510,32 @@ function Conversation({ t, q, contact, onBack, onChange }: { t: Thread; q: strin
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [msgs]);
+  useEffect(() => setDraft(""), [t.id]);
+
+  // Règle de Meta : réponse depuis l'app dans les 24 h qui suivent son dernier message.
+  const lastIn = useMemo(() => [...(msgs ?? [])].reverse().find((m) => !m.me)?.at ?? null, [msgs]);
+  const [now] = useState(() => Date.now());
+  const replyOpen = !!lastIn && now - Date.parse(lastIn) < 24 * 3600e3;
+  const send = async () => {
+    const text = draft.trim();
+    if (!text || sending) return;
+    setSending(true);
+    const { data, error } = await supabase.functions.invoke("ig-send", { body: { threadId: t.id, text } });
+    let r = (data ?? null) as { ok?: boolean; id?: string; at?: string; error?: string } | null;
+    if (error && !r) {
+      const ctx = (error as { context?: { json?: () => Promise<unknown> } }).context;
+      r = ctx?.json ? ((await ctx.json().catch(() => null)) as typeof r) : null;
+    }
+    setSending(false);
+    if (!r?.ok || !r.id) {
+      if (!r?.error && error) return toast("Envoi pas encore disponible (fonction à déployer) ou réseau coupé");
+      return toast(SEND_ERRORS[r?.error ?? ""] ?? "Envoi impossible, réessaie");
+    }
+    setMsgs((cur) => [...(cur ?? []), { id: r!.id!, at: r!.at ?? new Date().toISOString(), me: true, text }]);
+    setDraft("");
+    toast("DM envoyé ✓");
+    onChange();
+  };
 
   const createContact = async () => {
     setBusy("contact");
@@ -403,7 +614,8 @@ function Conversation({ t, q, contact, onBack, onChange }: { t: Thread; q: strin
       <div className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3">
         <button type="button" onClick={onBack} className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground hover:bg-rowhover md:hidden" aria-label="Retour"><ArrowLeft className="h-4 w-4" /></button>
         <Avatar t={t} size={42} />
-        <div className="min-w-0 flex-1">
+        {/* Nom lisible : les boutons passent à la ligne plutôt que d'écraser le nom. */}
+        <div className="min-w-[180px] flex-1">
           <div className="truncate text-[14px] font-semibold text-foreground">{display(t)}</div>
           <div className="truncate text-[12px] text-muted-foreground">
             {t.username ? `@${t.username}` : ""}
@@ -411,6 +623,7 @@ function Conversation({ t, q, contact, onBack, onChange }: { t: Thread; q: strin
           </div>
         </div>
         <div className="flex flex-wrap gap-1.5">
+          <LabelPicker labels={labels} mine={mine} onChange={onLabels} onAdd={onAddLabel} onRemove={onRemoveLabel} />
           {t.username && (
             <a href={`https://ig.me/m/${encodeURIComponent(t.username)}`} target="_blank" rel="noreferrer" className={BTN}><Send className="h-3 w-3" /> Répondre sur Instagram</a>
           )}
@@ -469,6 +682,34 @@ function Conversation({ t, q, contact, onBack, onChange }: { t: Thread; q: strin
           </>
         )}
       </div>
+      {/* Répondre depuis l'app (dans les 24 h qui suivent son dernier message, règle de Meta). */}
+      {msgs !== null && (
+        replyOpen ? (
+          <div className="flex items-end gap-2 border-t border-border bg-surface px-3 py-2.5">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value.slice(0, 1000))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void send();
+              }}
+              rows={1}
+              aria-label="Répondre en DM"
+              placeholder={`Répondre à ${display(t)}…`}
+              className="max-h-40 min-h-10 min-w-0 flex-1 resize-none rounded-[20px] border border-border bg-surface px-4 py-2 text-[14px] leading-snug text-foreground outline-none [field-sizing:content] placeholder:text-faint focus:border-primary max-md:text-[16px]"
+            />
+            <button type="button" onClick={() => void send()} disabled={!draft.trim() || sending} aria-label="Envoyer le DM" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-35">
+              {sending ? <Spin size={14} /> : <Send className="h-4 w-4" />}
+            </button>
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border bg-muted/50 px-4 py-2.5 text-[12px] text-muted-foreground">
+            <span className="min-w-0 flex-1">
+              {lastIn ? "Plus de 24 h depuis son dernier message : Instagram n'autorise la réponse que depuis son app." : "Instagram n'autorise à écrire depuis l'app qu'après un message de la personne."}
+            </span>
+            {t.username && <a href={`https://ig.me/m/${encodeURIComponent(t.username)}`} target="_blank" rel="noreferrer" className="shrink-0 font-medium text-foreground underline-offset-2 hover:underline">Répondre sur Instagram</a>}
+          </div>
+        )
+      )}
     </div>
   );
 }

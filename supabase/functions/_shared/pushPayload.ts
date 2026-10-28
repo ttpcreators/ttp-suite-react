@@ -17,6 +17,7 @@ export type PushKind =
   | "digest" // résumés (matin, 14 h, lundi, stats, anniversaires)
   | "creator-activity" // un créateur a ajouté quelque chose
   | "agency-activity" // l'agence a ajouté quelque chose au créateur
+  | "dm" // nouveau DM Instagram sur le compte de l'agence
   | "error"
   | "test";
 
