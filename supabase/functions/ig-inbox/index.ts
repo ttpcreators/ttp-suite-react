@@ -19,6 +19,9 @@
 // À régler une fois : permissions instagram_manage_messages + pages_manage_metadata
 // sur le jeton de l'utilisateur système, et dans l'app Instagram de TTP :
 // Paramètres → Messages → Outils connectés → « Autoriser l'accès aux messages ».
+// Photos, vidéos, vocaux, partages (messages sans texte) : lus à part (25 par passage, les
+// plus récents d'abord, anciens compris), fichiers recopiés dans le bucket privé « ig-media »
+// (25 Mo max) → ig_messages.media (SQL 2026-10-28-dm-instagram-medias.sql).
 // Nouveau DM reçu (moins de 6 h, pas encore enregistré) : notification push à l'agence
 // (réglage notifPrefs.dmReceivedPush, activé par défaut), une par conversation, un
 // résumé au-delà de 3. Les messages envoyés depuis l'app (ig-send, id « sent:… ») sont
@@ -29,6 +32,7 @@
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { GRAPH, META_IG_ID, getJson, graphWhy, igUser, metaReady, ownAccount, pageAccess, postGraph, saveState, saveUsage, storePicture } from "../_shared/instagram.ts";
 import { dmTouches, NO_TEXT, type DmMsg, type Touch } from "../_shared/inbox.ts";
+import { extFor, mediaFromMessage, metaFileUrl, type DmMedia } from "../_shared/igMedia.ts";
 import { emailsIn } from "../_shared/signals.ts";
 import { loadNotifPrefs, pushReady, sendTo } from "../_shared/push.ts";
 import { deepLinkUrl, makePayload, type PushPayload } from "../_shared/pushPayload.ts";
@@ -51,6 +55,37 @@ const MAX_PAGES = 6; // 150 conversations max par passage
 const CATCH_UP_PAGES = 20; // rattrapage (conversations laissées au passage précédent) : 500 max
 const MAX_CHAIN = 8; // rattrapage enchaîné tout seul : 8 passages de plus au maximum
 const SELF = `${Deno.env.get("SUPABASE_URL") ?? ""}/functions/v1/ig-inbox`;
+const MEDIA_PER_RUN = 25; // messages sans texte dont on lit les photos / vidéos par passage
+const MEDIA_MAX_BYTES = 25 * 1024 * 1024;
+
+/** Photos, vidéos et partages d'un message ; fichiers recopiés dans « ig-media ». null = Meta n'a pas répondu. */
+async function readMedia(sb: SupabaseClient, token: string, id: string): Promise<DmMedia[] | null> {
+  let m = await getJson(`${GRAPH}/${enc(id)}?fields=attachments,shares,story,sticker&access_token=${enc(token)}`, 15_000);
+  // Un champ refusé par Meta : on retente avec les pièces jointes seules.
+  if (m.error) m = await getJson(`${GRAPH}/${enc(id)}?fields=attachments&access_token=${enc(token)}`, 15_000);
+  if (m.error) return null;
+  const media = mediaFromMessage(m);
+  for (const [i, it] of media.entries()) {
+    if (!it.src || !metaFileUrl(it.src)) continue;
+    try {
+      const r = await fetch(it.src, { signal: AbortSignal.timeout(30_000) });
+      const len = Number(r.headers.get("content-length") ?? 0);
+      if (!r.ok || len > MEDIA_MAX_BYTES) continue;
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      if (!bytes.length || bytes.length > MEDIA_MAX_BYTES) continue;
+      const type = r.headers.get("content-type") ?? "application/octet-stream";
+      const path = `${id.replace(/[^A-Za-z0-9_-]/g, "_").slice(-120)}/${i}.${extFor(type)}`;
+      const up = await sb.storage.from("ig-media").upload(path, bytes, { upsert: true, contentType: type });
+      if (!up.error) {
+        it.path = path;
+        delete it.src;
+      }
+    } catch {
+      /* fichier non recopié : l'adresse Meta reste (elle peut expirer) */
+    }
+  }
+  return media;
+}
 const PROFILES_PER_RUN = 20; // fiches (nom, photo, abonnés) lues par passage
 const BUDGET_MS = 100_000; // au-delà, la suite au passage suivant (les fonctions sont coupées à 150 s)
 const MSG_FIELDS = "id,created_time,from,to,message";
@@ -277,6 +312,22 @@ Deno.serve(async (req: Request) => {
     await sb.from("ig_threads").update(patch).eq("id", conv.id);
   }));
 
+  // 4 bis. Photos, vidéos et partages des messages sans texte (nouveaux et anciens).
+  let mediaMore = false; // il en reste : le passage suivant continue
+  if (Date.now() - t0 < BUDGET_MS - 25_000) {
+    const { data: noText, error: ntErr } = await sb.from("ig_messages").select("id").eq("text", NO_TEXT).is("media", null)
+      .not("id", "like", "sent:%").order("at", { ascending: false }).limit(MEDIA_PER_RUN);
+    if (!ntErr) {
+      mediaMore = ((noText as unknown[] | null) ?? []).length === MEDIA_PER_RUN;
+      for (const { id } of (noText as { id: string }[] | null) ?? []) {
+        if (Date.now() - t0 > BUDGET_MS - 15_000) break;
+        const media = await readMedia(sb, page.token, id);
+        // Rien chez Meta (ou message supprimé) : liste vide, pour ne pas le relire sans fin.
+        await sb.from("ig_messages").update({ media: media ?? [] }).eq("id", id);
+      }
+    }
+  }
+
   // 5. Fiches contact : même @Instagram → conversation reliée, email, journal de prospection.
   const { data: ctRaw } = await sb.from("contacts").select("id, instagram, email, touches, last_contacted").not("instagram", "is", null);
   const contacts = (ctRaw as ContactRow[] | null) ?? [];
@@ -374,7 +425,7 @@ Deno.serve(async (req: Request) => {
   await saveState(sb, stateKey, out);
   console.log("ig-inbox", JSON.stringify(out));
   // Il en reste : le passage suivant est lancé tout de suite, en arrière-plan (8 au plus).
-  if (!targets.length && skipped > 0 && chain < MAX_CHAIN && CRON_SECRET && SELF.startsWith("http")) {
+  if (!targets.length && (skipped > 0 || mediaMore) && chain < MAX_CHAIN && CRON_SECRET && SELF.startsWith("http")) {
     const next = fetch(SELF, {
       method: "POST",
       headers: { Authorization: `Bearer ${CRON_SECRET}`, "Content-Type": "application/json" },

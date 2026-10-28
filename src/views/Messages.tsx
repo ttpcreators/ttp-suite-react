@@ -37,7 +37,11 @@ type Thread = {
   updated_at: string | null; last_text: string | null; last_from_me: boolean | null; emails: string[] | null;
   contact_id: string | null; hidden: boolean;
 };
-type Msg = { id: string; at: string; me: boolean; text: string };
+/** Photo, vidéo, vocal ou partage d'un DM (lu par ig-inbox ; fichier dans le bucket privé « ig-media »). */
+type Media = { kind: "image" | "video" | "audio" | "file" | "share" | "story" | "sticker"; path?: string; src?: string; link?: string; name?: string };
+type Msg = { id: string; at: string; me: boolean; text: string; media?: Media[] | null };
+/** Texte posé par ig-inbox sur un message sans texte (photo, vidéo, story…). */
+const NO_TEXT = "(photo, vidéo ou story)";
 type SyncState = { ok?: boolean; why?: string; detail?: string | null; threads?: number; left?: number; touches?: number; emails?: number; me?: string | null };
 type Filter = "toutes" | "fiches" | "emails" | "sans" | "masquees" | `label:${string}`;
 /** Dossiers proposés tant que l'agence n'a rien changé. */
@@ -648,7 +652,8 @@ function Conversation({ t, q, contact, onBack, onChange, labels, mine, onLabels,
   useEffect(() => {
     let alive = true;
     setMsgs(null);
-    void supabase.from("ig_messages").select("id, at, me, text").eq("thread_id", t.id).order("at").then(({ data }) => {
+    // « * » : marche avant et après l'ajout de la colonne `media` (photos, vidéos).
+    void supabase.from("ig_messages").select("*").eq("thread_id", t.id).order("at").then(({ data }) => {
       if (alive) setMsgs((data as Msg[] | null) ?? []);
     });
     return () => {
@@ -659,6 +664,20 @@ function Conversation({ t, q, contact, onBack, onChange, labels, mine, onLabels,
     endRef.current?.scrollIntoView({ block: "end" });
   }, [msgs]);
   useEffect(() => setDraft(""), [t.id]);
+  // Fichiers des photos / vidéos : liens signés d'une heure (bucket privé).
+  const [signed, setSigned] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    const paths = [...new Set((msgs ?? []).flatMap((m) => (m.media ?? []).map((x) => x.path).filter((p): p is string => !!p)))];
+    if (!paths.length) return;
+    let alive = true;
+    void supabase.storage.from("ig-media").createSignedUrls(paths, 3600).then(({ data }) => {
+      if (!alive || !data) return;
+      setSigned(new Map(data.filter((d) => d.signedUrl && d.path).map((d) => [d.path as string, d.signedUrl as string])));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [msgs]);
 
   // Règle de Meta : réponse depuis l'app dans les 24 h qui suivent son dernier message.
   const lastIn = useMemo(() => [...(msgs ?? [])].reverse().find((m) => !m.me)?.at ?? null, [msgs]);
@@ -819,7 +838,15 @@ function Conversation({ t, q, contact, onBack, onChange, labels, mine, onLabels,
                 {g.list.map((m) => (
                   <div key={m.id} className={cn("flex", m.me ? "justify-end" : "justify-start")}>
                     <div className={cn("max-w-[80%] whitespace-pre-wrap break-words rounded-2xl px-3 py-2 text-[13px] leading-snug", m.me ? "rounded-br-md bg-primary text-primary-foreground" : "rounded-bl-md bg-panel text-foreground")}>
-                      {m.me ? m.text : <Rich text={m.text} q={q} />}
+                      {m.media?.length ? (
+                        <MediaList media={m.media} signed={signed} me={m.me} />
+                      ) : m.text === NO_TEXT ? (
+                        <span>
+                          {m.media ? "Contenu non disponible (supprimé ou expiré)" : "Photo, vidéo ou story : chargement au prochain passage"}
+                          {t.username && <> · <a href={`https://ig.me/m/${encodeURIComponent(t.username)}`} target="_blank" rel="noreferrer" className="underline underline-offset-2">voir dans Instagram</a></>}
+                        </span>
+                      ) : null}
+                      {m.text !== NO_TEXT && (m.me ? m.text : <Rich text={m.text} q={q} />)}
                       <div className={cn("mt-0.5 text-right text-[10px]", m.me ? "text-primary-foreground/70" : "text-faint")}>{hour(m.at)}</div>
                     </div>
                   </div>
@@ -861,4 +888,31 @@ function Conversation({ t, q, contact, onBack, onChange, labels, mine, onLabels,
     </div>
   );
 }
+/** Photos, vidéos, vocaux et partages d'un message. */
+function MediaList({ media, signed, me }: { media: Media[]; signed: Map<string, string>; me: boolean }) {
+  const link = cn("underline underline-offset-2", me ? "text-primary-foreground" : "text-primary");
+  return (
+    <div className="flex flex-col gap-1.5">
+      {media.map((x, i) => {
+        const url = x.path ? signed.get(x.path) : x.src;
+        if ((x.kind === "image" || x.kind === "sticker") && url) {
+          return (
+            <a key={i} href={url} target="_blank" rel="noreferrer" className="block">
+              <img src={url} alt="" loading="lazy" className={cn("max-h-72 w-auto max-w-full rounded-xl object-contain", x.kind === "sticker" && "max-h-24")} />
+            </a>
+          );
+        }
+        if (x.kind === "video" && url) return <video key={i} src={url} controls preload="metadata" playsInline className="max-h-80 w-full max-w-sm rounded-xl bg-black" />;
+        if (x.kind === "audio" && url) return <audio key={i} src={url} controls preload="metadata" className="w-64 max-w-full" />;
+        if (x.kind === "share" && x.link) {
+          return <a key={i} href={x.link} target="_blank" rel="noreferrer" className={link}>{x.name ? `Publication partagée : ${x.name}` : "Publication partagée"} ↗</a>;
+        }
+        if (x.kind === "story" && x.link) return <a key={i} href={x.link} target="_blank" rel="noreferrer" className={link}>{x.name ?? "Story"} ↗</a>;
+        if (x.kind === "file" && url) return <a key={i} href={url} target="_blank" rel="noreferrer" className={link}>{x.name ?? "Fichier"} ↗</a>;
+        return <span key={i} className="opacity-80">{x.kind === "video" ? "Vidéo" : x.kind === "audio" ? "Message vocal" : "Photo"} (chargement…)</span>;
+      })}
+    </div>
+  );
+}
+
 const BTN = "inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50";
