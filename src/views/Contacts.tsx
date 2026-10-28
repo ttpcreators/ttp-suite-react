@@ -1,6 +1,6 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { supabase } from "@/lib/supabase";
-import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, MapPin, MessageCircle, AtSign, Phone, BriefcaseBusiness, Check, Plus, ChevronDown, NotebookPen, type LucideIcon } from "@/components/icons";
+import { Copy, X, Download, Upload, Trash2, Pencil, Mail, Send, ArrowDownLeft, ArrowUpRight, Paperclip, MapPin, MessageCircle, AtSign, Phone, BriefcaseBusiness, Check, Plus, ChevronDown, NotebookPen, Search, UserPlus, type LucideIcon } from "@/components/icons";
 import {
   parseTouches, sortTouches, lastTouch, needsRelance, nextKind, waLink, waHref, touchId, buildTouchesPatch, typeHandle,
   CANAL_LABELS, KIND_LABELS, RELANCE_DAYS, type Touch, type TouchCanal, type TouchKind, type WaMode, type ProspectSettings,
@@ -40,6 +40,9 @@ import { PageHeaderRow } from "@/components/ui/page-header";
 import { PhoneMenu, PhonePills, PhoneStrip } from "@/components/ui/phone-bar";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { NewMailDialog } from "@/components/mail-tools";
+import { FindContactsDialog } from "@/components/find-contacts";
+import { Spin } from "@/components/ui/loader";
+import { feEnrich } from "@/lib/fullenrich";
 import { contactCard } from "@/lib/contactCard";
 import { brandRecord, mergeMailHistory, sameBrand, type BrandMail } from "@/lib/brandRecord";
 import { loadBrandData, loadEmailActivity, type BrandData } from "@/lib/brandRecordDb";
@@ -358,6 +361,10 @@ export function Contacts() {
   const { query } = useSearch();
   const [pageQ, setPageQ] = useState("");
   const live = useLiveKey();
+  // FullEnrich : « Trouver des contacts » (fenêtre) et email trouvé pour une fiche.
+  const [findOpen, setFindOpen] = useState(false);
+  const [reloadTick, setReloadTick] = useState(0);
+  const [findingEmail, setFindingEmail] = useState<string | null>(null);
 
   // Réglages prospection (Paramètres → Prospection) : rythme + mode WhatsApp.
   const { data: prospectCfg } = useAppState<ProspectSettings>((s: AppState) => (s["prospectSettings"] as ProspectSettings) ?? {});
@@ -600,7 +607,7 @@ export function Contacts() {
     return () => {
       active = false;
     };
-  }, [live]);
+  }, [live, reloadTick]);
 
   // Liste dynamique des tags réellement présents (préserve l'ordre des TAG_OPTIONS,
   // puis ajoute les tags custom découverts dans les rows).
@@ -1172,6 +1179,25 @@ export function Contacts() {
     const primary = write
       ? { label: write.label, title: write.title, icon: row.email ? Mail : MessageCircle, run: write.run, urgent: write.urgent }
       : { label: "Ajouter l'email", title: "Compléter la fiche", icon: Pencil, run: () => editRow(row), urgent: true };
+    // FullEnrich : email pro introuvable sur la fiche → on le cherche (1 crédit s'il est trouvé).
+    const parts = (row.person && row.person !== "—" ? row.person : "").trim().split(/\s+/);
+    const feFirst = row.first_name || parts[0] || "";
+    const feLast = row.last_name || parts.slice(1).join(" ");
+    const canFind = !row.email && !!feFirst && !!feLast && !!row.brand && row.brand !== "—";
+    const findEmail = async () => {
+      setFindingEmail(row.id);
+      try {
+        const r = await feEnrich({ first: feFirst, last: feLast, company: row.brand });
+        if (!r.email) return toast(`Email de ${feFirst} introuvable chez ${row.brand}`);
+        if (!(await dbUpdate("contacts", row.id, { email: r.email }))) return toast("Email trouvé mais non enregistré, réessaie");
+        setRows((prev) => (prev ? prev.map((x) => (x.id === row.id ? { ...x, email: r.email } : x)) : prev));
+        toast(`Email trouvé ✓ ${r.email}`);
+      } catch (e) {
+        toast((e as Error).message);
+      } finally {
+        setFindingEmail(null);
+      }
+    };
     return (
       <>
         <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-1 [&>*]:shrink-0">
@@ -1528,6 +1554,18 @@ export function Contacts() {
             <primary.icon className="h-4 w-4 shrink-0" />
             <span className="truncate">{primary.label}</span>
           </button>
+          {canFind && (
+            <button
+              type="button"
+              onClick={() => void findEmail()}
+              disabled={findingEmail === row.id}
+              title="Cherche son email pro avec FullEnrich (1 crédit s'il est trouvé)"
+              className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-field px-4 text-[14px] font-semibold text-foreground transition-colors hover:bg-rowhover disabled:opacity-60"
+            >
+              {findingEmail === row.id ? <Spin size={15} /> : <Search className="h-4 w-4 shrink-0" />}
+              {findingEmail === row.id ? "Recherche de l'email…" : "Trouver son email"}
+            </button>
+          )}
           {/* Copie nom, rôle, marque, email et téléphone d'un coup. */}
           <button
             type="button"
@@ -1584,11 +1622,21 @@ export function Contacts() {
           {/* Téléphone : « Écrire » et Importer / Exporter passent dans le « ⋯ » de la barre de titre. */}
           <PhoneMenu
             items={[
+              { key: "find", label: "Trouver des contacts", icon: UserPlus, onClick: () => setFindOpen(true) },
               { key: "write", label: "Écrire", icon: Mail, onClick: () => openMail() },
               { key: "import", label: importing ? "Import…" : "Importer un CSV", icon: Upload, onClick: () => { if (!importing) csvInputRef.current?.click(); } },
               { key: "export", label: "Exporter en CSV", icon: Download, onClick: exportCsv },
             ]}
           />
+          <button
+            type="button"
+            onClick={() => setFindOpen(true)}
+            className="ios-phone-hide flex h-10 items-center gap-1.5 rounded-full bg-surface px-4 text-[13px] font-medium text-foreground transition-colors hover:bg-rowhover"
+            title="Les bonnes personnes d'une marque, avec leur email pro (FullEnrich)"
+          >
+            <UserPlus className="h-4 w-4" />
+            <span>Trouver des contacts</span>
+          </button>
           <button
             type="button"
             onClick={() => openMail()}
@@ -1846,6 +1894,13 @@ export function Contacts() {
       )}
 
       {/* Composeur d'email (envoi direct via Resend) */}
+      {findOpen && (
+        <FindContactsDialog
+          knownEmails={new Set((rows ?? []).map((r) => (r.email ?? "").trim().toLowerCase()).filter(Boolean))}
+          onClose={() => setFindOpen(false)}
+          onAdded={() => setReloadTick((n) => n + 1)}
+        />
+      )}
       <NewMailDialog
         open={!!contactMail}
         floating
