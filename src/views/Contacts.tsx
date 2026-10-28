@@ -41,6 +41,7 @@ import { PhoneMenu, PhonePills, PhoneStrip } from "@/components/ui/phone-bar";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { NewMailDialog } from "@/components/mail-tools";
 import { FindContactsDialog } from "@/components/find-contacts";
+import { PlatformIcon } from "@/components/ui/platform-icon";
 import { Spin } from "@/components/ui/loader";
 import { feEnrich } from "@/lib/fullenrich";
 import { contactCard } from "@/lib/contactCard";
@@ -69,6 +70,7 @@ type Row = {
   email: string;
   phone: string;
   instagram?: string | null;
+  linkedin?: string | null; // profil LinkedIn (FullEnrich), SQL 2026-10-28-contacts-linkedin
   city?: string | null;
   sort_order: number;
   creator?: string | null; // renseigné = contact ajouté par ce créateur
@@ -1485,6 +1487,13 @@ export function Contacts() {
               <CopyField label="Email" value={row.email} />
               <CopyField label="Téléphone" value={row.phone} />
               {row.instagram && <CopyField label="Instagram" value={row.instagram} />}
+              {row.linkedin && (
+                <a href={row.linkedin} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 rounded-[14px] bg-field px-3.5 py-3 text-[14px] font-medium text-foreground transition-colors hover:bg-rowhover">
+                  <PlatformIcon platform="linkedin" className="h-4 w-4 text-[#0a66c2]" />
+                  <span className="min-w-0 flex-1 truncate">Profil LinkedIn</span>
+                  <span className="text-[12px] text-muted-foreground">Ouvrir</span>
+                </a>
+              )}
               {row.city && <CopyField label="Ville" value={row.city} />}
             </div>
           </section>

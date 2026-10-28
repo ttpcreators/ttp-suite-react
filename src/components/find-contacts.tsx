@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { Check, ExternalLink, Plus, Search, UserPlus, X } from "@/components/icons";
+import { Check, Plus, Search, UserPlus, X } from "@/components/icons";
 import { Spin } from "@/components/ui/loader";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { MailAvatar } from "@/components/mail-avatar";
+import { PlatformIcon } from "@/components/ui/platform-icon";
 import { toast } from "@/components/ui/toast";
 import { dbInsert } from "@/lib/db";
 import { mergeAppStateKey, useAppState, type AppState } from "@/lib/appState";
@@ -132,10 +133,12 @@ export function FindContactsDialog({ initialCompany = "", knownEmails, knownPeop
         remember({ [p.id]: { ...(seenOf(p.id) ?? p), ...p, at: Date.now(), email, added: true } });
         return toast(`${p.name} est déjà dans tes contacts (${email})`);
       }
-      const created = await dbInsert("contacts", {
+      const fields = {
         brand: p.company || company.trim(), person: p.name, first_name: p.first || null, last_name: p.last || null,
         role: p.title || null, email: email || null, city: p.location.split(",")[0]?.trim() || null, tag: "Marque", tone: "cyan",
-      });
+      };
+      // Profil LinkedIn gardé sur la fiche (colonne contacts.linkedin, SQL 2026-10-28) ; sans la colonne, fiche sans lui.
+      const created = (p.linkedin ? await dbInsert("contacts", { ...fields, linkedin: p.linkedin }) : null) ?? await dbInsert("contacts", fields);
       if (!created) return toast("Contact non créé, réessaie");
       setAdded((a) => ({ ...a, [p.id]: email }));
       remember({ [p.id]: { ...(seenOf(p.id) ?? p), ...p, at: Date.now(), email, added: true } });
@@ -161,7 +164,7 @@ export function FindContactsDialog({ initialCompany = "", knownEmails, knownPeop
           <div className="flex items-center gap-1.5">
             <span className="truncate text-[14.5px] font-semibold text-foreground">{p.name}</span>
             {p.linkedin && (
-              <a href={p.linkedin} target="_blank" rel="noreferrer" title="Voir le profil LinkedIn" className="shrink-0 text-faint transition-colors hover:text-foreground"><ExternalLink className="h-3.5 w-3.5" /></a>
+              <a href={p.linkedin} target="_blank" rel="noreferrer" title="Voir le profil LinkedIn" aria-label="Profil LinkedIn" className="shrink-0 text-faint transition-colors hover:text-[#0a66c2]"><PlatformIcon platform="linkedin" className="h-3.5 w-3.5" /></a>
             )}
           </div>
           <div className="truncate text-[13px] text-muted-foreground">{p.title || "Poste non précisé"}</div>

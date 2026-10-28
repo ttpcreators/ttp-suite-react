@@ -4,6 +4,7 @@ import { fmtCompact } from "@/lib/timeSeries";
 import { Spin } from "@/components/ui/loader";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { FolderTabs } from "@/components/ui/folder-tabs";
+import { CreatorLookup, cleanHandle } from "@/components/creator-lookup";
 import { useVisitedTabs } from "@/lib/useVisitedTabs";
 import { supabase } from "@/lib/supabase";
 import { cn, initials } from "@/lib/utils";
@@ -908,6 +909,25 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
       )}
       {header(true)}
       {FEATURES.hashtagSearch && hashOpen && <HashtagSearch onClose={() => setHashOpen(false)} />}
+      {/* « Tape un @ et vois ses stats » (créateurs) */}
+      {!athletes && (
+        <CreatorLookup
+          inScouting={new Set(rows.map((r) => cleanHandle(r.handle ?? "")).filter(Boolean))}
+          onAdd={async (u, st) => {
+            const note = [st.followers != null ? `${fmtCompact(st.followers)} abonnés` : "", st.er != null ? `engagement ${fmtEr(st.er)}` : "", st.agency ? `agence : ${st.agency}` : ""].filter(Boolean).join(" · ");
+            const created = await dbInsert(K.table, { name: st.name?.trim() || `@${u}`, handle: `@${u}`, email: st.email || null, tag: null, note: note ? `Analysé le ${new Date().toLocaleDateString("fr-FR")} : ${note}` : null, sort_order: nextOrder(rows) });
+            if (!created) {
+              toast("Erreur, réessaie");
+              return false;
+            }
+            const next = [created as unknown as Row, ...rows];
+            setRows(next);
+            setCache(K.cache, next);
+            toast(`@${u} ajouté au Scouting ✓`);
+            return true;
+          }}
+        />
+      )}
 
       <div className={cn("grid items-start gap-5", showInspector && "grid-cols-[minmax(0,1fr)_320px]")}>
         <div className="@container min-w-0">
