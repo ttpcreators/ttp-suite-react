@@ -1897,6 +1897,7 @@ export function Contacts() {
       {findOpen && (
         <FindContactsDialog
           knownEmails={new Set((rows ?? []).map((r) => (r.email ?? "").trim().toLowerCase()).filter(Boolean))}
+          knownPeople={new Set((rows ?? []).filter((r) => r.person && r.person !== "—").map((r) => `${r.person.trim().toLowerCase()}|${(r.brand ?? "").trim().toLowerCase()}`))}
           onClose={() => setFindOpen(false)}
           onAdded={() => setReloadTick((n) => n + 1)}
         />
