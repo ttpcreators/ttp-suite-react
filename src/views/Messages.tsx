@@ -16,6 +16,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { dbInsert } from "@/lib/db";
 import { fmtCompact } from "@/lib/timeSeries";
 import { fmtAgo, igWhyText, noteQuota } from "@/lib/instagram";
+import { useIntent } from "@/lib/openIntent";
 
 /**
  * DM INSTAGRAM (agence) : les messages privés du compte Instagram de TTP, lus toutes
@@ -126,6 +127,14 @@ export function Messages() {
   const [emailsOpen, setEmailsOpen] = useState(false);
   const [reload, setReload] = useState(0);
   const live = useLiveKey();
+  // « Écrire à @marque » ailleurs dans l'app (comptes cités d'un créateur) : ouvre ce fil.
+  useIntent("dm:open", (id) => {
+    if (!id) return;
+    setEmailsOpen(false);
+    setFilter("toutes");
+    setQ("");
+    setSel(id);
+  });
 
   // Dossiers (titres) : partagés par toute l'agence, avec un affichage immédiat.
   const { data: labelOrder } = useAppState<Record<string, number> | null>((s: AppState) => (s["dmLabels"] as Record<string, number> | undefined) ?? null);

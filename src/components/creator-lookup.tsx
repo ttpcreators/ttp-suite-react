@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { fmtAgo, fmtEr, igWhyText, noteQuota } from "@/lib/instagram";
 import { fmtCompact } from "@/lib/timeSeries";
 import { cn, initials } from "@/lib/utils";
+import { IgDmStart } from "@/components/ig-dm-start";
 
 /** Un post de collab (ig-sourcing mode « collabs ») et le résumé par marque. */
 type CollabPost = { id: string; url: string; at: string; kind: string; likes: number | null; comments: number; er: number | null; paid: boolean; brands: string[]; caption: string };
@@ -20,7 +21,8 @@ const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { day
  * « Ses collabs » : les posts de ses 50 derniers où elle cite une marque ou signale un
  * partenariat (#ad, code promo…). Filtres : marque, payés seulement, période. Export Excel.
  */
-function CreatorCollabs({ u }: { u: string }) {
+function CreatorCollabs({ u, onLeave }: { u: string; onLeave?: () => void }) {
+  const [dm, setDm] = useState<string | null>(null); // compte cité à qui écrire
   const [data, setData] = useState<Collabs | null>(null);
   const [err, setErr] = useState("");
   const [brand, setBrand] = useState<string | null>(null);
@@ -72,6 +74,7 @@ function CreatorCollabs({ u }: { u: string }) {
 
   return (
     <section className="mt-6">
+      {dm && <IgDmStart username={dm} onClose={() => setDm(null)} onLeave={onLeave} />}
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-[15px] font-semibold text-foreground">Ses collabs</h3>
         <span className="text-[12px] text-muted-foreground">
@@ -127,7 +130,12 @@ function CreatorCollabs({ u }: { u: string }) {
                   </div>
                   {p.brands.length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">
-                      {p.brands.map((b) => <span key={b} className="rounded-full bg-surface px-2 py-0.5 text-[12px] font-medium text-foreground">@{b}</span>)}
+                      {p.brands.map((b) => (
+                        <button key={b} type="button" onClick={() => setDm(b)} title={`Écrire à @${b}`}
+                          className="rounded-full bg-surface px-2 py-0.5 text-[12px] font-medium text-foreground transition-colors hover:bg-primary hover:text-primary-foreground">
+                          @{b}
+                        </button>
+                      ))}
                     </div>
                   )}
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] tabular-nums text-muted-foreground">
@@ -310,7 +318,7 @@ function StatsSheet({ u, s, roster, inScouting, adding, onClose, onAdd }: {
             )}
           </div>
 
-          <CreatorCollabs u={u} />
+          <CreatorCollabs u={u} onLeave={onClose} />
 
         </div>
         <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-border p-4 sm:flex-row">
