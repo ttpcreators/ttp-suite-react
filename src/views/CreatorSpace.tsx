@@ -27,6 +27,7 @@ import { AddButton, InlineForm, TextField, SelectField, AutoGrowTextField } from
 import { CreatorPicker } from "@/components/ui/creator-picker";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { PlatformIcon } from "@/components/ui/platform-icon";
+import { CreatorNetworks } from "@/components/creator-networks";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
@@ -2411,6 +2412,16 @@ export function CreatorSpace({
                 return td ? markTodo(td, true) : false;
               }}
               isHigh={(id) => todos.some((x) => x.id === id && x.priority === "haute")}
+              footer={
+                <CreatorNetworks
+                  ig={creator?.ig} tt={creator?.tt} yt={creator?.yt}
+                  canConnect={{ instagram: FEATURES.connect.instagram, tiktok: FEATURES.connect.tiktok, youtube: FEATURES.connect.youtube }}
+                  busy={igBusy ? "instagram" : ttBusy ? "tiktok" : ytBusy ? "youtube" : null}
+                  preview={!!preview}
+                  onConnect={(n) => void (n === "instagram" ? connectIg() : n === "tiktok" ? connectTt() : connectYt())}
+                  onOpenStats={() => setTab("evolution")}
+                />
+              }
             />
           )}
 

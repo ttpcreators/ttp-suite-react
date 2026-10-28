@@ -1,8 +1,9 @@
 import { EMPTY } from "@/lib/dates";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Loader, Spin } from "@/components/ui/loader";
-import { AlertTriangle, ArrowLeft, AtSign, Check, Contact, Copy, EyeOff, Inbox, Mail, MessagesSquare, Plus, RefreshCw, Search, Send, Tag, X } from "@/components/icons";
+import { ArrowLeft, AtSign, Check, Contact, Copy, EyeOff, Inbox, Mail, MessagesSquare, Plus, RefreshCw, Search, Send, Tag, X } from "@/components/icons";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Overlay } from "@/components/mobile/ios-sheet";
 import { mergeAppStateKey, useAppState, type AppState } from "@/lib/appState";
 import { supabase } from "@/lib/supabase";
 import { cn, initials } from "@/lib/utils";
@@ -56,6 +57,17 @@ const dayLabel = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { we
 const hour = (iso: string) => new Date(iso).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
 const display = (t: Thread) => t.name?.trim() || (t.username ? `@${t.username}` : "Compte Instagram");
 
+/** « à l'instant », « il y a 12 min », « il y a 3 h », puis en jours. */
+function since(iso?: string | null): string {
+  const t = iso ? Date.parse(iso) : NaN;
+  if (!Number.isFinite(t)) return "";
+  const min = Math.round((Date.now() - t) / 60000);
+  if (min < 1) return "à l'instant";
+  if (min < 60) return `il y a ${min} min`;
+  if (min < 24 * 60) return `il y a ${Math.round(min / 60)} h`;
+  return fmtAgo(iso);
+}
+
 function inboxWhy(s: SyncState | null): string {
   if (!s || s.ok !== false) return "";
   // Réglage à faire côté Meta (Page Facebook non attribuée, autorisations manquantes) : détail dans Diagnostic.
@@ -63,7 +75,7 @@ function inboxWhy(s: SyncState | null): string {
     return "Un réglage est à faire côté Meta (Page Facebook ou autorisations). Détails dans Réglages › Diagnostic.";
   // « meta_-2 » / Timeout : ancienne réponse de la fonction pour le même blocage.
   if (s.why === "meta_validation" || s.why === "meta_-2" || /timeout/i.test(s.detail ?? ""))
-    return "Meta n'a pas encore autorisé TTP Suite à lire les DM. Rien à faire de ton côté : la page se remplira dès que l'accès sera validé.";
+    return "Meta bloque encore la lecture complète des conversations (accès avancé). Si la validation vient d'être accordée, clique « Réessayer ».";
   return igWhyText(s.why) || "Lecture des messages impossible pour l'instant.";
 }
 
@@ -99,12 +111,15 @@ export function Messages() {
   const [threads, setThreads] = useState<Thread[] | null>(null);
   const [missing, setMissing] = useState(false);
   const [state, setState] = useState<{ data: SyncState; at: string } | null>(null);
+  // Lecture en direct (un DM reçu → ig-webhook → lecture de cette conversation).
+  const [direct, setDirect] = useState<{ data: SyncState; at: string } | null>(null);
   const [contacts, setContacts] = useState<Map<string, { brand: string; email: string | null }>>(new Map());
   const [sel, setSel] = useState<string | null>(null);
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Map<string, string> | null>(null); // conversation → message trouvé
   const [filter, setFilter] = useState<Filter>("toutes");
   const [syncing, setSyncing] = useState(false);
+  const [emailsOpen, setEmailsOpen] = useState(false);
   const [reload, setReload] = useState(0);
   const live = useLiveKey();
 
@@ -161,7 +176,7 @@ export function Messages() {
     void (async () => {
       const [t, s] = await Promise.all([
         supabase.from("ig_threads").select("id, username, name, picture, followers, updated_at, last_text, last_from_me, emails, contact_id, hidden").order("updated_at", { ascending: false, nullsFirst: false }).limit(1000),
-        supabase.from("ig_sync_state").select("data, at").eq("key", "inbox").maybeSingle(),
+        supabase.from("ig_sync_state").select("key, data, at").in("key", ["inbox", "inbox_direct"]),
       ]);
       if (!alive) return;
       if (t.error) {
@@ -171,7 +186,9 @@ export function Messages() {
       }
       const list = (t.data as Thread[] | null) ?? [];
       setThreads(list);
-      setState((s.data as { data: SyncState; at: string } | null) ?? null);
+      const rows = (s.data as { key: string; data: SyncState; at: string }[] | null) ?? [];
+      setState(rows.find((r) => r.key === "inbox") ?? null);
+      setDirect(rows.find((r) => r.key === "inbox_direct") ?? null);
       const ids = [...new Set(list.map((x) => x.contact_id).filter((x): x is string => !!x))];
       const m = new Map<string, { brand: string; email: string | null }>();
       for (let i = 0; i < ids.length; i += 150) {
@@ -258,7 +275,7 @@ export function Messages() {
     <>
       <PageHeaderRow>
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          {state?.at ? `Mis à jour ${fmtAgo(state.at)}` : EMPTY}
+          {state?.at ? `Mis à jour ${since(state.at)}` : EMPTY}
           <HelpTip title="Comment ça marche ?" align="end">
             <p>Chaque DM reçu arrive en direct, avec une notification. En plus, toutes les 5 heures, l'app relit les conversations du compte Instagram de TTP (les 20 derniers messages de chacune : c'est la limite de Meta).</p>
             <p><span className="font-medium text-foreground">Répondre</span> : possible depuis l'app dans les 24 h qui suivent le dernier message de la personne (règle de Meta). Au-delà, « Répondre sur Instagram ».</p>
@@ -273,22 +290,53 @@ export function Messages() {
         </button>
       </PageHeaderRow>
 
-      {problem && (
-        <div className="mb-4 flex items-start gap-3 rounded-2xl border border-amber/40 bg-amber/[0.06] p-3.5 text-[12px] leading-relaxed text-muted-foreground">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber" />
-          <div>
-            <p className="font-semibold text-foreground">Messages pas encore lisibles</p>
+      {/* État de la liaison avec Instagram : vert = tout marche, rouge = bloqué (avec la raison). */}
+      {problem ? (
+        <div role="status" className="mb-4 flex flex-wrap items-center gap-x-4 gap-y-2.5 rounded-2xl border border-danger/30 bg-danger/[0.07] px-4 py-3">
+          <span aria-hidden className="h-2.5 w-2.5 shrink-0 self-start rounded-full bg-danger [margin-top:5px]" />
+          <div className="min-w-[220px] flex-1">
+            <p className="text-[13px] font-semibold text-dangertext">Instagram : lecture des DM bloquée</p>
             {/* Réponse brute de Meta : gardée en infobulle, pas dans le texte. */}
-            <p title={state?.data.detail ? `Meta : ${state.data.detail}` : undefined}>{problem}</p>
+            <p className="text-[12.5px] leading-relaxed text-muted-foreground" title={state?.data.detail ? `Meta : ${state.data.detail}` : undefined}>
+              {problem}
+              {direct?.data.ok && Date.parse(direct.at) > Date.parse(state?.at ?? "") && <> Les nouveaux DM arrivent quand même en direct (dernier {since(direct.at)}).</>}
+            </p>
+          </div>
+          <button type="button" onClick={() => void sync()} disabled={syncing} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-surface px-3.5 text-[12.5px] font-medium text-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50">
+            <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} /> Réessayer
+          </button>
+        </div>
+      ) : state?.data.ok ? (
+        <div role="status" className="mb-4 flex items-center gap-3 rounded-2xl border border-ok/30 bg-ok/[0.08] px-4 py-3">
+          <span aria-hidden className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-ok opacity-40 motion-reduce:hidden" />
+            <span className="relative h-2.5 w-2.5 rounded-full bg-ok" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[13px] font-semibold text-ok">Instagram connecté{state.data.me ? ` · @${state.data.me}` : ""}</p>
+            <p className="text-[12.5px] text-muted-foreground">DM reçus en direct, relecture complète toutes les 5 h · dernière {since(direct && Date.parse(direct.at) > Date.parse(state.at) ? direct.at : state.at)}</p>
           </div>
         </div>
-      )}
+      ) : null}
 
       <div className="mb-3 grid grid-cols-3 gap-2">
-        <Kpi icon={MessagesSquare} n={counts.all} label="conversations" />
-        <Kpi icon={Contact} n={counts.linked} label="avec fiche" />
-        <Kpi icon={Mail} n={counts.emails} label="emails trouvés" />
+        <Kpi icon={MessagesSquare} n={counts.all} label="conversations" onClick={() => setFilter("toutes")} />
+        <Kpi icon={Contact} n={counts.linked} label="avec fiche" onClick={() => setFilter("fiches")} />
+        <Kpi icon={Mail} n={counts.emails} label="emails trouvés" onClick={() => setEmailsOpen(true)} hint="Voir et copier" />
       </div>
+      {emailsOpen && (
+        <EmailsPanel
+          threads={threads}
+          contacts={contacts}
+          onClose={() => setEmailsOpen(false)}
+          onOpen={(id) => {
+            setEmailsOpen(false);
+            setFilter("toutes");
+            setQ("");
+            setSel(id);
+          }}
+        />
+      )}
 
       <div className="grid min-h-[60vh] grid-cols-1 overflow-hidden rounded-2xl border border-border bg-surface md:grid-cols-[340px_minmax(0,1fr)]">
         {/* Liste */}
@@ -381,15 +429,112 @@ export function Messages() {
   );
 }
 
-function Kpi({ icon: Icon, n, label }: { icon: typeof Mail; n: number; label: string }) {
+function Kpi({ icon: Icon, n, label, onClick, hint }: { icon: typeof Mail; n: number; label: string; onClick?: () => void; hint?: string }) {
   return (
-    <div className="flex items-center gap-2.5 rounded-2xl border border-border bg-surface px-3 py-2.5">
+    <button type="button" onClick={onClick} title={hint} className="group/k flex items-center gap-2.5 rounded-2xl border border-border bg-surface px-3 py-2.5 text-left transition-colors hover:border-primary/40 hover:bg-rowhover">
       <span className="hidden h-8 w-8 shrink-0 place-items-center rounded-full bg-panel text-muted-foreground sm:grid"><Icon className="h-4 w-4" /></span>
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="text-[18px] font-bold leading-none tabular-nums text-foreground">{n}</div>
         <div className="mt-0.5 text-[11px] leading-tight text-muted-foreground">{label}</div>
       </div>
-    </div>
+      {hint && <span className="hidden shrink-0 text-[11px] font-medium text-primary sm:inline">{hint}</span>}
+    </button>
+  );
+}
+
+/**
+ * « Emails trouvés » : toutes les adresses données en DM, avec la personne, la fiche
+ * contact et la date. Copier une adresse, tout copier, exporter pour Excel, ou ouvrir
+ * la conversation.
+ */
+function EmailsPanel({ threads, contacts, onClose, onOpen }: {
+  threads: Thread[]; contacts: Map<string, { brand: string; email: string | null }>; onClose: () => void; onOpen: (threadId: string) => void;
+}) {
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [onClose]);
+  const rows = useMemo(() => {
+    const out: { email: string; t: Thread; fiche: string | null }[] = [];
+    const seen = new Set<string>();
+    for (const t of [...threads].sort((a, b) => (b.updated_at ?? "").localeCompare(a.updated_at ?? ""))) {
+      for (const e of t.emails ?? []) {
+        const k = e.toLowerCase();
+        if (seen.has(k)) continue;
+        seen.add(k);
+        out.push({ email: k, t, fiche: t.contact_id ? contacts.get(t.contact_id)?.brand ?? null : null });
+      }
+    }
+    return out;
+  }, [threads, contacts]);
+  const needle = q.trim().toLowerCase();
+  const shown = needle ? rows.filter((r) => `${r.email} ${r.t.name ?? ""} ${r.t.username ?? ""} ${r.fiche ?? ""}`.toLowerCase().includes(needle)) : rows;
+  const copy = async (text: string, msg: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast(msg);
+    } catch {
+      toast("Copie impossible");
+    }
+  };
+  const exportCsv = () => {
+    const cell = (v: string) => (/[";\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+    const lines = [["Email", "Nom", "Instagram", "Fiche contact", "Dernier échange"], ...shown.map((r) => [
+      r.email, r.t.name ?? "", r.t.username ? `@${r.t.username}` : "", r.fiche ?? "", r.t.updated_at ? new Date(r.t.updated_at).toLocaleDateString("fr-FR") : "",
+    ])].map((l) => l.map(cell).join(";"));
+    const url = URL.createObjectURL(new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `emails-dm-instagram-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+  };
+  return (
+    <Overlay className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClose={onClose} label="Emails trouvés">
+      <div className="flex max-h-[85dvh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 border-b border-border px-5 py-3.5">
+          <Mail className="h-4 w-4 text-muted-foreground" />
+          <div className="min-w-0 flex-1">
+            <div className="text-[15px] font-semibold text-foreground">Emails trouvés dans les DM</div>
+            <div className="text-[12px] text-muted-foreground">{rows.length} adresse{rows.length > 1 ? "s" : ""} donnée{rows.length > 1 ? "s" : ""} en message</div>
+          </div>
+          <button type="button" onClick={onClose} aria-label="Fermer" className="grid h-8 w-8 place-items-center rounded-full text-faint hover:bg-rowhover hover:text-foreground"><X className="h-4 w-4" /></button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-5 py-2.5">
+          <div className="relative min-w-[200px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-faint" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Chercher un email, un nom, une marque…" className="w-full rounded-md border border-border bg-surface py-2 pl-8 pr-3 text-[13px] outline-none focus:border-primary max-md:text-[16px]" />
+          </div>
+          <button type="button" onClick={() => void copy(shown.map((r) => r.email).join(", "), `${shown.length} adresse${shown.length > 1 ? "s" : ""} copiée${shown.length > 1 ? "s" : ""}`)} disabled={!shown.length} className={BTN}><Copy className="h-3 w-3" /> Tout copier</button>
+          <button type="button" onClick={exportCsv} disabled={!shown.length} className={BTN}>Exporter (Excel)</button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {shown.length ? shown.map((r) => (
+            <div key={r.email} className="flex items-center gap-3 border-b border-border/60 px-5 py-2.5">
+              <Avatar t={r.t} size={34} />
+              <div className="min-w-0 flex-1">
+                <button type="button" onClick={() => void copy(r.email, "Adresse copiée")} title="Copier l'adresse" className="flex max-w-full items-center gap-1.5 text-left text-[13.5px] font-semibold text-primary hover:underline">
+                  <span className="truncate">{r.email}</span><Copy className="h-3 w-3 shrink-0" />
+                </button>
+                <div className="truncate text-[12px] text-muted-foreground">
+                  {display(r.t)}{r.t.username && r.t.name ? ` · @${r.t.username}` : ""}{r.t.updated_at ? ` · ${fmtAgo(r.t.updated_at)}` : ""}
+                </div>
+              </div>
+              {r.fiche ? (
+                <span className="hidden shrink-0 items-center gap-1 rounded-full bg-signal/10 px-2 py-0.5 text-[11px] font-medium text-signaltext sm:inline-flex"><Check className="h-3 w-3" /> {r.fiche}</span>
+              ) : (
+                <span className="hidden shrink-0 text-[11px] text-faint sm:inline">Sans fiche</span>
+              )}
+              <button type="button" onClick={() => onOpen(r.t.id)} className={BTN}>Conversation</button>
+            </div>
+          )) : (
+            <p className="px-5 py-10 text-center text-[13px] text-muted-foreground">{rows.length ? "Aucun email ne correspond." : "Aucun email trouvé pour l'instant : dès qu'une personne donne son adresse en DM, elle apparaît ici."}</p>
+          )}
+        </div>
+      </div>
+    </Overlay>
   );
 }
 

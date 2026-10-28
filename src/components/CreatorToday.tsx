@@ -69,9 +69,11 @@ type Props = {
   onDoneTodo: (todoId: string) => Promise<boolean>;
   /** Prioritaire dans le titre : la priorité haute des tâches (point rouge). */
   isHigh?: (todoId: string) => boolean;
+  /** En bas de la liste : « Mes réseaux » (connexions et chiffres clés). */
+  footer?: ReactNode;
 };
 
-export function CreatorToday({ data, onOpen, onDoneTodo, isHigh }: Props) {
+export function CreatorToday({ data, onOpen, onDoneTodo, isHigh, footer }: Props) {
   const t = useT();
   const lang = useLang();
   const locale = useLocale();
@@ -354,6 +356,7 @@ export function CreatorToday({ data, onOpen, onDoneTodo, isHigh }: Props) {
               <span className="flex items-center gap-1.5"><Kbd>E</Kbd> {t("Traiter")}</span>
             </div>
           )}
+          {footer}
         </div>
 
         {/* Détail : à droite sur grand écran */}
