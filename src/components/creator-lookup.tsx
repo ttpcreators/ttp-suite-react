@@ -7,7 +7,153 @@ import { toast } from "@/components/ui/toast";
 import { supabase } from "@/lib/supabase";
 import { fmtAgo, fmtEr, igWhyText, noteQuota } from "@/lib/instagram";
 import { fmtCompact } from "@/lib/timeSeries";
-import { initials } from "@/lib/utils";
+import { cn, initials } from "@/lib/utils";
+
+/** Un post de collab (ig-sourcing mode « collabs ») et le résumé par marque. */
+type CollabPost = { id: string; url: string; at: string; kind: string; likes: number | null; comments: number; er: number | null; paid: boolean; brands: string[]; caption: string };
+type BrandRow = { brand: string; posts: number; paid: number; last: string; er: number | null };
+type Collabs = { scanned: number; posts: CollabPost[]; brands: BrandRow[] };
+const fmtPct = (n: number) => `${n.toFixed(n < 10 ? 2 : 1).replace(".", ",")} %`;
+const fmtDate = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "2-digit" });
+
+/**
+ * « Ses collabs » : les posts de ses 50 derniers où elle cite une marque ou signale un
+ * partenariat (#ad, code promo…). Filtres : marque, payés seulement, période. Export Excel.
+ */
+function CreatorCollabs({ u }: { u: string }) {
+  const [data, setData] = useState<Collabs | null>(null);
+  const [err, setErr] = useState("");
+  const [brand, setBrand] = useState<string | null>(null);
+  const [paidOnly, setPaidOnly] = useState(false);
+  const [days, setDays] = useState<30 | 90 | 0>(0);
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    let alive = true;
+    void supabase.functions.invoke("ig-sourcing", { body: { mode: "collabs", creator: u } }).then(({ data: d, error }) => {
+      if (!alive) return;
+      noteQuota(d);
+      const r = (d ?? {}) as Collabs & { error?: string };
+      if (error || r.error || !Array.isArray(r.posts)) return setErr(r.error ? igWhyText(r.error) || "lecture impossible" : "lecture impossible pour le moment");
+      setData({ scanned: r.scanned ?? 0, posts: r.posts, brands: r.brands ?? [] });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [u]);
+
+  if (err) return <p className="mt-5 rounded-[14px] bg-field px-4 py-3 text-[13px] text-muted-foreground">Collabs : {err}.</p>;
+  if (!data) {
+    return (
+      <div className="mt-6 flex flex-col gap-2">
+        <div className="h-4 w-40 animate-pulse rounded bg-field" />
+        {[0, 1, 2].map((i) => <div key={i} className="h-20 animate-pulse rounded-[16px] bg-panel" />)}
+      </div>
+    );
+  }
+  const since = days ? Date.now() - days * 86400e3 : 0;
+  const shown = data.posts.filter((p) => (!brand || p.brands.includes(brand)) && (!paidOnly || p.paid) && (!since || Date.parse(p.at) >= since));
+  const paidCount = data.posts.filter((p) => p.paid).length;
+  const exportCsv = () => {
+    const cell = (v: unknown) => {
+      const t = String(v ?? "");
+      return /[";\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+    };
+    const lines = [["Date", "Marques", "Format", "Payé", "Likes", "Commentaires", "Engagement %", "Lien", "Texte"], ...shown.map((p) => [
+      fmtDate(p.at), p.brands.map((b) => `@${b}`).join(" "), p.kind, p.paid ? "oui" : "non", p.likes ?? "masqués", p.comments, p.er ?? "", p.url, p.caption,
+    ])].map((l) => l.map(cell).join(";"));
+    const url = URL.createObjectURL(new Blob(["\ufeff" + lines.join("\r\n")], { type: "text/csv;charset=utf-8" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `collabs-${u}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+  };
+  const seg = (on: boolean) => cn("h-8 rounded-full px-3 text-[12.5px] font-medium transition-colors", on ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground");
+
+  return (
+    <section className="mt-6">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-[15px] font-semibold text-foreground">Ses collabs</h3>
+        <span className="text-[12px] text-muted-foreground">
+          {data.posts.length} post{data.posts.length > 1 ? "s" : ""} avec une marque sur ses {data.scanned} derniers · {paidCount} payé{paidCount > 1 ? "s" : ""}
+        </span>
+      </div>
+      {data.posts.length === 0 ? (
+        <p className="mt-2 text-[13px] text-muted-foreground">Aucune marque citée dans ses derniers posts.</p>
+      ) : (
+        <>
+          {/* Marques : un clic filtre les posts */}
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {data.brands.map((b) => {
+              const on = brand === b.brand;
+              return (
+                <button key={b.brand} type="button" onClick={() => setBrand(on ? null : b.brand)} aria-pressed={on}
+                  title={`${b.posts} post${b.posts > 1 ? "s" : ""}, dont ${b.paid} payé${b.paid > 1 ? "s" : ""} · dernier le ${fmtDate(b.last)}${b.er != null ? ` · engagement moyen ${fmtPct(b.er)}` : ""}`}
+                  className={cn("flex h-8 items-center gap-1.5 rounded-full px-3 text-[12.5px] font-medium transition-colors", on ? "bg-foreground text-background" : "bg-field text-foreground hover:bg-rowhover")}>
+                  @{b.brand}
+                  <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{b.posts}</span>
+                  {b.paid > 0 && <span className={cn("rounded-full px-1.5 text-[10.5px] font-semibold", on ? "bg-background/20" : "bg-surface text-muted-foreground")}>payé</span>}
+                </button>
+              );
+            })}
+          </div>
+          {/* Filtres */}
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <div role="group" aria-label="Type" className="flex rounded-full bg-field p-0.5">
+              <button type="button" aria-pressed={!paidOnly} onClick={() => setPaidOnly(false)} className={seg(!paidOnly)}>Toutes</button>
+              <button type="button" aria-pressed={paidOnly} onClick={() => setPaidOnly(true)} className={seg(paidOnly)}>Payées</button>
+            </div>
+            <div role="group" aria-label="Période" className="flex rounded-full bg-field p-0.5">
+              {([[30, "30 j"], [90, "90 j"], [0, "Tout"]] as const).map(([d, l]) => (
+                <button key={l} type="button" aria-pressed={days === d} onClick={() => setDays(d)} className={seg(days === d)}>{l}</button>
+              ))}
+            </div>
+            <span className="flex-1" />
+            <button type="button" onClick={exportCsv} disabled={!shown.length} className="h-8 rounded-full bg-field px-3 text-[12.5px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-40">Exporter (Excel)</button>
+          </div>
+          {/* Posts */}
+          <div className="mt-3 flex flex-col gap-2">
+            {shown.length ? shown.map((p) => {
+              const long = p.caption.length > 140;
+              const isOpen = open.has(p.id);
+              return (
+                <div key={p.id} className="rounded-[16px] bg-panel p-3.5">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12.5px]">
+                    <span className="font-semibold text-foreground">{fmtDate(p.at)}</span>
+                    <span className="text-muted-foreground">· {p.kind}</span>
+                    {p.paid && <span className="rounded-full bg-foreground px-2 py-0.5 text-[11px] font-semibold text-background">Partenariat payé</span>}
+                    <span className="flex-1" />
+                    <a href={p.url} target="_blank" rel="noreferrer" className="text-[12.5px] font-medium text-primary hover:underline">Voir le post ↗</a>
+                  </div>
+                  {p.brands.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {p.brands.map((b) => <span key={b} className="rounded-full bg-surface px-2 py-0.5 text-[12px] font-medium text-foreground">@{b}</span>)}
+                    </div>
+                  )}
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] tabular-nums text-muted-foreground">
+                    <span><span className="font-semibold text-foreground">{p.likes != null ? fmtCompact(p.likes) : "masqués"}</span> likes</span>
+                    <span><span className="font-semibold text-foreground">{fmtCompact(p.comments)}</span> commentaires</span>
+                    {p.er != null && <span>engagement <span className="font-semibold text-foreground">{fmtPct(p.er)}</span></span>}
+                  </div>
+                  {p.caption && (
+                    <p className={cn("mt-2 text-[13px] leading-relaxed text-muted-foreground", !isOpen && "line-clamp-2")}>
+                      {p.caption}
+                      {long && (
+                        <button type="button" onClick={() => setOpen((cur) => { const n = new Set(cur); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })} className="ml-1 font-medium text-foreground underline-offset-2 hover:underline">
+                          {isOpen ? "moins" : "plus"}
+                        </button>
+                      )}
+                    </p>
+                  )}
+                </div>
+              );
+            }) : <p className="py-4 text-center text-[13px] text-muted-foreground">Aucun post pour ces filtres.</p>}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
 
 /** Chiffres d'un compte Instagram (fonction ig-sourcing, mode « list »). */
 export type IgStats = {
@@ -112,12 +258,9 @@ function StatsSheet({ u, s, roster, inScouting, adding, onClose, onAdd }: {
       toast("Copie impossible");
     }
   };
-  const tag = (x: string) => (
-    <a key={x} href={`https://www.instagram.com/${x}/`} target="_blank" rel="noreferrer" className="rounded-full bg-field px-2.5 py-1 text-[12.5px] font-medium text-foreground transition-colors hover:bg-rowhover">@{x}</a>
-  );
   return (
     <Overlay className="fixed inset-0 z-[110] flex items-center justify-center bg-black/40 p-4" onClose={onClose} label={`Stats de @${u}`}>
-      <div className="flex max-h-[90dvh] w-full max-w-xl flex-col overflow-hidden rounded-[22px] bg-surface shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-[22px] bg-surface shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="min-h-0 flex-1 overflow-y-auto p-6">
           {/* En-tête : photo, nom, @ */}
           <div className="flex items-start gap-4">
@@ -167,25 +310,14 @@ function StatsSheet({ u, s, roster, inScouting, adding, onClose, onAdd }: {
             )}
           </div>
 
-          {/* Marques */}
-          {!!s.deals?.length && (
-            <div className="mt-5">
-              <div className="mb-2 text-[13px] font-semibold text-foreground">Partenariats payés repérés</div>
-              <div className="flex flex-wrap gap-1.5">{s.deals.map(tag)}</div>
-            </div>
-          )}
-          {!!s.cites?.filter((x) => !s.deals?.includes(x)).length && (
-            <div className="mt-4">
-              <div className="mb-2 text-[13px] font-semibold text-foreground">Marques et comptes cités</div>
-              <div className="flex flex-wrap gap-1.5">{s.cites.filter((x) => !s.deals?.includes(x)).slice(0, 10).map(tag)}</div>
-            </div>
-          )}
+          <CreatorCollabs u={u} />
+
         </div>
         <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-border p-4 sm:flex-row">
-          <a href={`https://www.instagram.com/${u}/`} target="_blank" rel="noreferrer" className="flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-field text-[14px] font-semibold text-foreground transition-colors hover:bg-rowhover">
+          <a href={`https://www.instagram.com/${u}/`} target="_blank" rel="noreferrer" className="flex h-11 min-h-11 shrink-0 flex-1 items-center justify-center gap-2 rounded-full bg-field text-[14px] font-semibold text-foreground transition-colors hover:bg-rowhover">
             <PlatformIcon platform="instagram" className="h-4 w-4" /> Ouvrir sur Instagram
           </a>
-          <button type="button" onClick={onAdd} disabled={inScouting || adding} className={inScouting ? "flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-ok/10 text-[14px] font-semibold text-ok" : "flex h-11 flex-1 items-center justify-center gap-2 rounded-full bg-primary text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"}>
+          <button type="button" onClick={onAdd} disabled={inScouting || adding} className={inScouting ? "flex h-11 min-h-11 shrink-0 flex-1 items-center justify-center gap-2 rounded-full bg-ok/10 text-[14px] font-semibold text-ok" : "flex h-11 min-h-11 shrink-0 flex-1 items-center justify-center gap-2 rounded-full bg-primary text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"}>
             {adding ? <Spin size={15} /> : inScouting ? <Check className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
             {inScouting ? "Dans le Scouting" : "Ajouter au Scouting"}
           </button>

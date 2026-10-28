@@ -5,6 +5,9 @@
 //   { mode: "brand", brand: "@gymshark" } → les @ cités dans les 50 derniers posts
 //      de la marque (les créatrices avec qui elle travaille), avec leurs chiffres.
 //   { mode: "list", handles: [...] } → chiffres d'une liste de @ (30 max par appel).
+//   { mode: "collabs", creator: "@lea" } → ses collabs post par post (50 derniers posts) :
+//      date, format, likes, commentaires, engagement, payé ou non, marques citées, texte,
+//      plus un résumé par marque (fiche « Analyser un créateur » du Scouting).
 //   { mode: "similar", creator: "@lea" } → les créatrices qui travaillent avec les
 //      mêmes marques qu'elle (« Comme une créatrice »).
 // Pour chaque profil : email (bio, sinon page du lien en bio), indice « déjà en
@@ -27,6 +30,7 @@ import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "
 import { discover, engagementRate, igUser, metaReady, ownAccount, postsPerWeek, quotaPct, saveUsage, type IgProfile } from "../_shared/instagram.ts";
 import { handleCandidates, isCommonWord } from "../_shared/mentions.ts";
 import { agencyHint, emailsIn, isPaid } from "../_shared/signals.ts";
+import { brandSummary, postEr, postKind, type CollabPost } from "../_shared/creatorCollabs.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 type Json = Record<string, unknown>;
@@ -280,6 +284,25 @@ async function fromList(ctx: Ctx, handles: unknown[]) {
     candidates: users.map((u) => ({ username: u, data: ctx.cache.get(u)?.data ?? null, why: ctx.cache.get(u)?.why ?? (ctx.stop || null) })),
     stopped: ctx.stop || undefined,
   };
+}
+
+/** Ses collabs, post par post : les posts qui citent une marque ou sont payés (#ad…). */
+async function collabs(ctx: Ctx, creator: string) {
+  const c = igUser(creator).toLowerCase();
+  if (!c) return { error: "nom_invalide" };
+  await loadKnown(ctx);
+  const r = await discover(c, 50);
+  if (!r.ok) return { error: r.why };
+  const followers = r.profile.followers;
+  const posts: CollabPost[] = r.profile.media
+    .map((p) => ({
+      id: p.id, url: p.url, at: p.at, kind: postKind(p.type, p.product), likes: p.likes, comments: p.comments,
+      er: postEr(p.likes, p.comments, followers), paid: isPaid(p.caption),
+      brands: cited(p.caption, 2).map((x) => x.u).filter((u) => u !== c).slice(0, 5),
+      caption: p.caption.replace(/\s+/g, " ").trim().slice(0, 400),
+    }))
+    .filter((p) => p.brands.length || p.paid);
+  return { creator: c, followers, scanned: r.profile.media.length, posts, brands: brandSummary(posts) };
 }
 
 /**
@@ -620,6 +643,7 @@ Deno.serve(async (req: Request) => {
   if (body.mode === "brand") return done(await fromBrand(ctx, String(body.brand ?? "")));
   if (body.mode === "list") return done(await fromList(ctx, Array.isArray(body.handles) ? body.handles : []));
   if (body.mode === "similar") return done(await similar(ctx, String(body.creator ?? "")));
+  if (body.mode === "collabs") return done(await collabs(ctx, String(body.creator ?? "")));
   if (body.mode === "verify") return done(await verify(ctx));
   if (body.mode === "rivals") return done(await rivals(ctx, body.handle ? String(body.handle) : undefined));
   const out = await scan(ctx);
