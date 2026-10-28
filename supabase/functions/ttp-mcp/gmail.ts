@@ -1,7 +1,7 @@
 // ============================================================================
 // ttp-mcp/gmail.ts : les deux boîtes de l'agence pour Claude (recherche, lecture,
-// brouillon). partnerships@ = connexion Google de l'app ; talent@ = compte de service.
-// Jamais d'envoi : Claude prépare un BROUILLON, Marc l'envoie lui-même depuis Gmail.
+// brouillon, envoi). partnerships@ = connexion Google de l'app ; talent@ = compte de service.
+// Envoi (sendMail) : fondateurs seulement, et Claude demande l'accord avant (outil envoyer_mail).
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -234,6 +234,48 @@ export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, 
     body: JSON.stringify({ message: msg }),
   });
   return { id: String(res.id ?? ""), replaced: false, removed: 0 };
+}
+
+/**
+ * ENVOI d'un mail (outil envoyer_mail, fondateurs). `threadId` : réponse dans ce fil
+ * (In-Reply-To / References du dernier message, objet « Re: » repris s'il manque).
+ */
+export async function sendMail(sb: SupabaseClient, box: MailBox, m: {
+  to: string[]; cc: string[]; bcc: string[]; subject: string; html: string; threadId?: string;
+}): Promise<{ id: string; threadId: string; subject: string }> {
+  const token = box === "talent" ? await boxToken(sb, "talent", "send") : await getAccessToken(sb);
+  let subject = clean(m.subject);
+  const extra: string[] = [];
+  if (m.threadId) {
+    const t = await gjson(token, `${GMAIL}/threads/${encodeURIComponent(m.threadId)}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=References&metadataHeaders=Subject`);
+    const msgs = (t.messages as Msg[] | undefined) ?? [];
+    const last = msgs[msgs.length - 1];
+    const mid = header(last?.payload?.headers, "message-id");
+    const refs = header(last?.payload?.headers, "references");
+    if (mid) extra.push(`In-Reply-To: ${clean(mid)}`, `References: ${clean(`${refs} ${mid}`).slice(0, 1900)}`);
+    if (!subject) {
+      const s0 = header(msgs[0]?.payload?.headers, "subject");
+      subject = /^\s*re\s*:/i.test(s0) ? s0 : `Re: ${s0}`;
+    }
+  }
+  const head = [
+    `To: ${m.to.join(", ")}`,
+    ...(m.cc.length ? [`Cc: ${m.cc.join(", ")}`] : []),
+    ...(m.bcc.length ? [`Bcc: ${m.bcc.join(", ")}`] : []),
+    `Subject: ${encWord(subject || "(sans objet)")}`,
+    ...extra,
+    "X-TTP-Source: claude",
+    "MIME-Version: 1.0",
+    'Content-Type: text/html; charset="UTF-8"',
+    "Content-Transfer-Encoding: base64",
+  ];
+  const raw = `${head.join("\r\n")}\r\n\r\n${b64Utf8(m.html).replace(/.{76}/g, "$&\r\n")}`;
+  const res = await gjson(token, `${GMAIL}/messages/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ raw: b64urlUtf8(raw), ...(m.threadId ? { threadId: m.threadId } : {}) }),
+  });
+  return { id: String(res.id ?? ""), threadId: String(res.threadId ?? m.threadId ?? ""), subject };
 }
 
 /** Non lus de la boîte de réception (léger, pour le point du jour). */

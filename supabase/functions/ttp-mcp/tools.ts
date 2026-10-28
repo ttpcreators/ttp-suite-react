@@ -4,6 +4,8 @@
 // scouting (créateurs / sportifs), contacts, pipeline, collabs, planning, tâches,
 // factures et méthode TARIF (fondateurs), briefs. Actions : tâche, rendez-vous, brouillon de mail, contact,
 // échange noté, scouting, étape de collab, résumé de brief. Claude demande l'accord avant chaque action.
+// Accès complet des fondateurs (admin.ts) : lire / créer / modifier / supprimer (Corbeille) partout,
+// réglages, factures, envoi de mails et de DM Instagram.
 // Jamais exposés : coffre des mots de passe, IBAN, jetons de connexion.
 // ============================================================================
 
@@ -12,6 +14,7 @@ import { triggerSync } from "../_shared/google.ts";
 import { readAppState } from "../_shared/appState.ts";
 import type { Ctx } from "./oauth.ts";
 import { boxesFor, createDraft, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
+import { ADMIN_TOOLS } from "./admin.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
 type Json = Record<string, unknown>;
@@ -24,6 +27,7 @@ type Tool = {
   inputSchema: Json;
   write?: boolean;
   founder?: boolean;
+  destructive?: boolean;
   run: (sb: SupabaseClient, ctx: Ctx, a: Args) => Promise<ToolResult>;
 };
 
@@ -1060,6 +1064,7 @@ export const TOOLS: Tool[] = [
   creerTache, creerEvenement, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur,
   lireBrief, resumerBrief,
+  ...ADMIN_TOOLS,
 ];
 
 /** Liste MCP (les outils fondateurs n'apparaissent pas pour un membre). */
@@ -1069,7 +1074,7 @@ export function toolList(ctx: Ctx) {
     title: t.title,
     description: t.description,
     inputSchema: t.inputSchema,
-    annotations: { title: t.title, readOnlyHint: !t.write, destructiveHint: false, idempotentHint: !t.write, openWorldHint: false },
+    annotations: { title: t.title, readOnlyHint: !t.write, destructiveHint: !!t.destructive, idempotentHint: !t.write, openWorldHint: false },
   }));
 }
 
