@@ -143,11 +143,11 @@ Deno.serve(async (req: Request) => {
   // Lecture ratée : on s'arrête (sinon les emails déjà notés seraient remplacés par les seuls nouveaux).
   if (knownErr) return fail("reseau", `conversations connues illisibles : ${knownErr.message}`);
   const known = new Map(((knownRaw as ThreadRow[] | null) ?? []).map((t) => [t.id, t]));
-  // Rattrapage : des conversations n'ont pas pu être lues au passage précédent (« left »).
-  // On parcourt alors toute la liste au lieu de s'arrêter à la 1re page sans nouveauté
-  // (avant : 111 conversations sur 149 n'étaient jamais lues, et leurs emails non plus).
+  // Parcours complet de la liste (au lieu de s'arrêter à la 1re page sans nouveauté) :
+  // bouton « Actualiser », passages enchaînés, ou conversations laissées au passage
+  // précédent (« left »). Avant : 111 conversations sur 149 n'étaient jamais lues.
   const { data: prevInbox } = await sb.from("ig_sync_state").select("data").eq("key", "inbox").maybeSingle<{ data: { left?: number } }>();
-  const catchUp = !targets.length && (chain > 0 || Number(prevInbox?.data?.left) > 0);
+  const catchUp = !targets.length && (who === "agency" || chain > 0 || Number(prevInbox?.data?.left) > 0);
   let url: string | null = targets.length ? null : `${GRAPH}/${page.pageId}/conversations?platform=instagram&limit=${PAGE_SIZE}&fields=${enc("id,updated_time,participants")}&access_token=${enc(page.token)}`;
   const todo: Conv[] = [];
   // Lecture ciblée : la conversation de chaque compte signalé par le webhook.
