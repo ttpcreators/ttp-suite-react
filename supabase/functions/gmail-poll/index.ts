@@ -10,6 +10,7 @@
 // Boîtes : partnerships@ (connexion de l'app) + talent@ (compte de service, si configuré).
 //
 // Appelé par pg_cron (Bearer CRON_SECRET) OU par l'agence (JWT) pour un check manuel.
+// Les demandes de ces mails deviennent des tâches de la To-do (tasks.ts, sans IA).
 // État du dernier passage : blob __app_state__ clé `emailPollState` =
 //   { lastTs (partnerships@, ms), talentLastTs (talent@, ms) }, écrit par la fonction
 //   SQL app_state_set (une seule clé, jamais tout le blob : les réglages ne sont pas écrasés).
@@ -24,6 +25,7 @@ import { boxToken, talentAddress, type Box } from "../_shared/gmailBox.ts";
 import { gfetch, mapPool } from "../_shared/gfetch.ts";
 import { sendTo } from "../_shared/push.ts";
 import { agencyMailPayloads, creatorMailPayloads, creatorsForMail, type CreatorMailSetting, type Lang, type NewMail } from "../_shared/mailNotif.ts";
+import { tasksFromMails } from "./tasks.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
@@ -32,8 +34,9 @@ const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const LIST_PAGE = 100; // ids par page de liste
 const LIST_CAP = 500; // ids listés au plus par boîte et par passage
 const PER_RUN = 100; // messages traités au plus par boîte et par passage
-// En-têtes lus : la notification (expéditeur, objet) et les destinataires (mails des créateurs).
-const META_HEADERS = ["From", "Subject", "Message-ID", "To", "Cc", "Delivered-To", "X-Original-To"]
+// En-têtes lus : la notification (expéditeur, objet), les destinataires (mails des créateurs)
+// et List-Unsubscribe (newsletter : jamais de tâche tirée de ce mail).
+const META_HEADERS = ["From", "Subject", "Message-ID", "To", "Cc", "Delivered-To", "X-Original-To", "List-Unsubscribe"]
   .map((h) => `metadataHeaders=${h}`).join("&");
 type Sb = ReturnType<typeof getServiceClient>;
 type Header = { name: string; value: string };
@@ -81,7 +84,7 @@ async function saveStateKey(sb: Sb, key: string, value: unknown) {
   else await sb.from("module_rows").insert({ module: "__app_state__", a: json });
 }
 
-type Fresh = NewMail & { rfcId: string };
+type Fresh = NewMail & { rfcId: string; listUnsub?: boolean };
 
 /**
  * Nouveaux messages d'une boîte depuis `cursor` (ms). Liste paginée (Gmail : du plus
@@ -123,6 +126,7 @@ async function scanBox(box: Box, token: string, cursor: number): Promise<{ fresh
         snippet: String(m.snippet ?? "").slice(0, 300), ts, rfcId: h("message-id").trim(), box,
         to: h("to"), cc: h("cc"), deliveredTo: all("delivered-to"), originalTo: all("x-original-to"),
         labelIds: Array.isArray(m.labelIds) ? m.labelIds : [],
+        listUnsub: !!h("list-unsubscribe"),
       };
     } catch {
       return "fail";
@@ -303,8 +307,18 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Demandes des mails reçus → tâches de la To-do (règles fixes, sans IA ; voir tasks.ts).
+  let tasks = 0;
+  if (added.length && prefs.mailTasks !== false) {
+    try {
+      tasks = await tasksFromMails(sb, tokens, added, blob, AGENCY_DOMAIN, await creatorMailSettings(sb));
+    } catch (e) {
+      console.error("gmail-poll tâches", (e as Error)?.message);
+    }
+  }
+
   return jsonRes({
-    ok: true, new: added.length, pushed, creatorPushed,
+    ok: true, new: added.length, pushed, creatorPushed, tasks,
     ...(baseline ? { baseline: true } : {}),
     ...(more ? { more: true } : {}),
     ...(failedBoxes.length ? { partial: true, failedBoxes } : {}),

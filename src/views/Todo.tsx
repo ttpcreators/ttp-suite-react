@@ -28,7 +28,8 @@ import type { ActivityWhat } from "@/lib/activityEvents";
 import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
 import { NewDot } from "@/components/ui/new-dot";
 import { writeTodoStatus } from "@/lib/todoStatus";
-import { useIntent } from "@/lib/openIntent";
+import { requestIntent, useIntent } from "@/lib/openIntent";
+import { parseDeepLink } from "@/lib/deepLink";
 import { useLiveKey } from "@/lib/useLive";
 import { useIsPhone } from "@/lib/iosUi";
 import { fmtDay, fmtDayTime, toISODate, todayISO } from "@/lib/dates";
@@ -418,6 +419,13 @@ export function Todo() {
     }
   };
   const openAttachment = async (att: Attachment) => {
+    // « Voir le mail » d'une tâche tirée d'un mail (gmail-poll) : le fil dans la page Mails.
+    const link = att.path.startsWith("/?") ? parseDeepLink(att.path) : null;
+    if (link?.open === "mails") {
+      requestIntent("mail:open", JSON.stringify({ thread: link.thread, box: link.box }));
+      window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "mails" }));
+      return;
+    }
     if (/^https?:\/\//i.test(att.path)) { window.open(att.path, "_blank"); return; }
     // Onglet ouvert dans le clic, avant l'await (sinon bloqué sur iPhone).
     const ok = await openLater(async () => {

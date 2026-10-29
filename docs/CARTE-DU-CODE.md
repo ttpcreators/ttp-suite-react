@@ -218,7 +218,7 @@ fonction avec `Authorization: Bearer <CRON_SECRET>`.
 | `gmail-thread` | Fil complet, pièce jointe, lu / non lu / archivé | `Mails.tsx` | oui | rôle agence | |
 | `gmail-send` | Envoi depuis la vraie boîte (partnerships@ ou talent@) | `mailSend.ts`, `Contacts.tsx`, `Debrief.tsx` | oui | rôle agence | |
 | `gmail-trash` | Fil à la corbeille Gmail ou retour (jamais de suppression définitive) | `Mails.tsx` | oui | rôle agence | |
-| `gmail-poll` | Nouveaux mails reçus → `email_activity` + push | pg_cron | non | CRON_SECRET ou agence | `*/5 * * * *` |
+| `gmail-poll` | Nouveaux mails reçus → `email_activity` + push + tâches tirées des demandes (`tasks.ts`) | pg_cron | non | CRON_SECRET ou agence | `*/5 * * * *` |
 | `gmail-reconcile` | Mails envoyés → `contacts.last_contacted` et touches | pg_cron | non | CRON_SECRET ou agence | `12 * * * *` |
 | `creator-mail` | Boîte mail de l'espace créateur, filtrée côté serveur (logique pure dans `logic.ts`) | `creatorMail.ts` | oui | créateur = ses fils ; agence peut viser un créateur | |
 | `meet-invite` | Rendez-vous Google Agenda avec lien Meet et invitations | `components/meet-invite.tsx` | oui (absente de `config.toml`, défaut) | rôle agence | |
@@ -290,6 +290,7 @@ hiver : la fonction ne garde que le bon passage. Hors fonction : `ttp-app-state-
 | `youtube.ts`, `youtube-login.ts` | YouTube Data API (quota) et connexion d'un créateur | `yt-*` |
 | `mentions.ts` | Comptes cités dans un post (Meta retire les @) | `ig-sync`, `ig-sourcing` |
 | `igFeed.ts` | Feed Instagram d'un créateur (posts, chiffres, chemins d'images) | `ig-sync`, `ig-connect` |
+| `mailTasks.ts` | Demandes d'un mail reçu → tâches (règles fixes FR/EN, échéances, sans IA) | `gmail-poll` (`gmail-poll/tasks.ts`) |
 | `signals.ts` | Partenariat payé, emails, « déjà en agence » | `ig-inbox`, `ig-sourcing`, `yt-*` |
 | `brandmatch.ts` | Une publication cite-t-elle la marque ? | `tt-sync`, `yt-sync` |
 | `autoStats.ts` | Stats du mois relevées toutes seules | `ig-sync`, `tt-sync` |

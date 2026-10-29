@@ -52,6 +52,7 @@ export type NotifPrefs = {
   digestStats?: boolean; // rappel quotidien : données créateurs à mettre à jour ce mois
   emailReceivedBell?: boolean; // cloche : mail reçu sur la boîte agence
   emailReceivedPush?: boolean; // push : mail reçu sur la boîte agence
+  mailTasks?: boolean; // tâches de la To-do créées toutes seules à partir des demandes des mails (gmail-poll)
   dmReceivedPush?: boolean; // push : DM Instagram reçu sur le compte de l'agence
   pushErrors?: boolean; // push : un bug (crash de rendu) est survenu dans l'app
   pushTeamActivity?: boolean; // push : un autre compte agence a ajouté / terminé / supprimé qqch
@@ -1268,6 +1269,7 @@ export function Parametres() {
             <Card title="Emails" hint="Quand un email arrive sur la boîte de l'agence (Gmail connecté).">
               <PrefRow label="Notification sur le téléphone" hint="Un push par fil dès qu'un mail arrive (expéditeur, objet, début du message), un résumé au-delà de 3." checked={on(prefs.emailReceivedPush)} onChange={(v) => setPref("emailReceivedPush", v)} />
               <PrefRow label="Afficher dans la cloche" hint="Les nouveaux emails en haut des notifications de l'app." checked={on(prefs.emailReceivedBell)} onChange={(v) => setPref("emailReceivedBell", v)} />
+              <PrefRow label="Créer les tâches toutes seules" hint="Quand une marque demande quelque chose (stats, facture, contrat, brief, retours, adresse, tarifs, call, date de publication, paiement), la tâche arrive dans la To-do avec son échéance, reliée à la collab, avec la phrase du mail et un lien vers le mail." checked={on(prefs.mailTasks)} onChange={(v) => setPref("mailTasks", v)} />
             </Card>
             <Card title="DM Instagram" hint="Quand quelqu'un écrit au compte Instagram de l'agence.">
               <PrefRow label="Notification sur le téléphone" hint="Un push par conversation dès qu'un DM arrive (le @ et le début du message), un résumé au-delà de 3." checked={on(prefs.dmReceivedPush)} onChange={(v) => setPref("dmReceivedPush", v)} />
