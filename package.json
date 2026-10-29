@@ -22,7 +22,7 @@
     "cobe": "^2.0.1",
     "dompurify": "^3.4.16",
     "lucide-react": "^1.22.0",
-    "motion": "^12.42.2",
+    "motion": "^14.6.0",
     "pdfjs-dist": "^4.10.38",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
