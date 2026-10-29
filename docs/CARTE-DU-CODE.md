@@ -290,6 +290,7 @@ hiver : la fonction ne garde que le bon passage. Hors fonction : `ttp-app-state-
 | `youtube.ts`, `youtube-login.ts` | YouTube Data API (quota) et connexion d'un créateur | `yt-*` |
 | `mentions.ts` | Comptes cités dans un post (Meta retire les @) | `ig-sync`, `ig-sourcing` |
 | `igFeed.ts` | Feed Instagram d'un créateur (posts, chiffres, chemins d'images) | `ig-sync`, `ig-connect` |
+| `exclusivites.ts` | Exclusivités des créateurs : conflits marque × concurrents, lecture d'un contrat (règles fixes) | app (`useExclusivites.ts`, page Exclusivités, choix d'un créateur, Mails), `ttp-mcp` |
 | `mailTasks.ts` | Demandes d'un mail reçu → tâches (règles fixes FR/EN, échéances, sans IA) | `gmail-poll` (`gmail-poll/tasks.ts`) |
 | `signals.ts` | Partenariat payé, emails, « déjà en agence » | `ig-inbox`, `ig-sourcing`, `yt-*` |
 | `brandmatch.ts` | Une publication cite-t-elle la marque ? | `tt-sync`, `yt-sync` |

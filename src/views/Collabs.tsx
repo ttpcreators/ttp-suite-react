@@ -37,7 +37,9 @@ import { igRefresh, igWhyText, postKind, useIgColumn, type IgCollab } from "@/li
 import type { TtCollab } from "@/lib/tiktok";
 import type { YtCollab } from "@/lib/youtube";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
+import { useBlockedCreators } from "@/lib/useExclusivites";
 import { CollabLinkedPanel, useCollabAutoTasks } from "@/components/collab-links";
+import { CollabExcluPanel } from "@/components/exclu-alert";
 import { createStepTask } from "@/lib/collabLinksDb";
 import { autoTaskFor, cachetAmount } from "@/lib/collabLinks";
 import { putInvoicePrefill } from "@/lib/invoicePrefill";
@@ -198,6 +200,9 @@ export function Collabs() {
   // édition
   const [editId, setEditId] = useState<string | null>(null);
   const [eBrand, setEBrand] = useState("");
+  // Créateurs en exclusivité avec un concurrent de la marque saisie : signalés, jamais en tête.
+  const blockedNew = useBlockedCreators(brand);
+  const blockedEdit = useBlockedCreators(eBrand);
   const [eContact, setEContact] = useState("");
   const [eTitle, setETitle] = useState("");
   const [eDeliverables, setEDeliverables] = useState("");
@@ -647,7 +652,7 @@ export function Collabs() {
           </div>
           <div className="flex flex-col gap-3">
             <TextField label="Marque" value={eBrand} onChange={setEBrand} />
-            <CreatorPickerField label="Créateur" value={eCreator} onChange={setECreator} creators={creators} />
+            <CreatorPickerField label="Créateur" value={eCreator} onChange={setECreator} creators={creators} blocked={blockedEdit} />
             <TextField label="Libellé de la collab" value={eTitle} onChange={setETitle} placeholder="ex Campagne été" />
             <TextField label="Contact marque" value={eContact} onChange={setEContact} />
             <TextField label="Livrables" value={eDeliverables} onChange={setEDeliverables} placeholder="ex 3 posts · 1 reel" />
@@ -1032,6 +1037,8 @@ export function Collabs() {
           onCreateInvoice={() => createInvoice(row)}
           onPrepareRecap={() => prepareRecap(row)}
         />
+        {/* Exclusivité signée avec cette marque (points clés) ou exclusivité qui la bloque. */}
+        <CollabExcluPanel creator={row.creator} brand={row.brand} />
       </div>
     );
   };
@@ -1184,7 +1191,7 @@ export function Collabs() {
 
       <InlineForm open={formOpen} title="Nouvelle collab" onClose={() => setFormOpen(false)} onSubmit={submit}>
         <TextField label="Marque" value={brand} onChange={setBrand} />
-        <CreatorPickerField label="Créateur" value={creator} onChange={setCreator} creators={creators} />
+        <CreatorPickerField label="Créateur" value={creator} onChange={setCreator} creators={creators} blocked={blockedNew} />
         <TextField label="Libellé de la collab" value={title} onChange={setTitle} placeholder="ex Campagne été" />
         <TextField label="Contact marque" value={contact} onChange={setContact} />
         <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" />

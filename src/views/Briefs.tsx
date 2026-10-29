@@ -29,6 +29,7 @@ import { openLater } from "@/lib/openLater";
 import { notifyCreator, notifyCreatorsChange } from "@/lib/push";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
+import { useBlockedCreators } from "@/lib/useExclusivites";
 import { CollabField, ObjectCollabLink, linkNewToCollab } from "@/components/collab-links";
 
 type Row = {
@@ -134,6 +135,9 @@ export function Briefs() {
 
   const [editId, setEditId] = useState<string | null>(null);
   const [editBrand, setEditBrand] = useState("");
+  // Créateurs en exclusivité avec un concurrent de la marque saisie : signalés, jamais en tête.
+  const blockedNew = useBlockedCreators(brand);
+  const blockedEdit = useBlockedCreators(editBrand);
   const [editDeliverables, setEditDeliverables] = useState("");
   const [editDue, setEditDue] = useState("");
   const [editObjectif, setEditObjectif] = useState("");
@@ -385,7 +389,7 @@ export function Briefs() {
             <TextField label="Échéance" type="date" value={editDue} onChange={setEditDue} />
             <TextField label="Objectif" value={editObjectif} onChange={setEditObjectif} />
             <TextField label="Budget" value={editBudget} onChange={setEditBudget} />
-            <CreatorPickerField label="Créateur" value={editCreator} onChange={setEditCreator} creators={creators} />
+            <CreatorPickerField label="Créateur" value={editCreator} onChange={setEditCreator} creators={creators} blocked={blockedEdit} />
             <ObjectCollabLink table="briefs" id={row.id} creator={editCreator || row.creator} withLabel />
             <AutoGrowTextField
               label="Script"
@@ -636,7 +640,7 @@ export function Briefs() {
 
       <InlineForm open={formOpen} title="Nouveau brief" onClose={() => setFormOpen(false)} onSubmit={submit}>
         <TextField label="Marque" value={brand} onChange={setBrand} />
-        <CreatorPickerField label="Créateur" value={creator} onChange={setCreator} creators={creators} />
+        <CreatorPickerField label="Créateur" value={creator} onChange={setCreator} creators={creators} blocked={blockedNew} />
         <CollabField value={collabId} onChange={setCollabId} creator={creator} />
         <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" />
         <TextField label="Échéance" type="date" value={due} onChange={setDue} />

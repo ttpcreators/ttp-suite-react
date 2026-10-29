@@ -12,6 +12,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { triggerSync } from "../_shared/google.ts";
 import { readAppState } from "../_shared/appState.ts";
+import { activeByCreator, conflictsFor, excluLine, excluState, readExclusivites } from "../_shared/exclusivites.ts";
 import type { Ctx } from "./oauth.ts";
 import { boxesFor, createDraft, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
@@ -170,7 +171,7 @@ const rechercher: Tool = {
 const roster: Tool = {
   name: "lister_createurs",
   title: "Roster",
-  description: "Liste les créateurs représentés par l'agence (roster) : niche, plateforme, abonnés, engagement, statut. Filtre facultatif par statut (actif, inactif) ou niche.",
+  description: "Liste les créateurs représentés par l'agence (roster) : niche, plateforme, abonnés, engagement, statut, et ⚠ leurs exclusivités en cours. Filtre facultatif par statut (actif, inactif) ou niche.",
   inputSchema: { type: "object", properties: { statut: { type: "string", enum: ["actif", "inactif", "tous"] }, niche: { type: "string" } }, additionalProperties: false },
   run: async (sb, _c, a) => {
     let q = sb.from("creators").select("name, niche, platform, followers, er, status, ville, instagram, tiktok").order("sort_order");
@@ -180,7 +181,10 @@ const roster: Tool = {
     const { data, error } = await q;
     if (error) return fail("Lecture du roster impossible.");
     const rows = (data as Json[]) ?? [];
-    return ok([`# Roster · ${rows.length} créateur(s)`, ...rows.map((r) => `- ${titleCase(String(r.name))} · ${r.niche ?? "?"} · ${r.platform ?? "?"} · ${r.followers ?? "?"} abonnés · engagement ${r.er ?? "?"} · ${r.status ?? ""}${r.ville ? ` · ${r.ville}` : ""}${r.instagram ? ` · IG ${r.instagram}` : ""}${r.tiktok ? ` · TT ${r.tiktok}` : ""}`)].join("\n"));
+    // Exclusivités en cours (page Exclusivités) : à ne jamais oublier avant de proposer quelqu'un.
+    const exclu = activeByCreator(readExclusivites((await appState(sb).catch(() => ({} as Json))).exclusivites), isoDay());
+    const ex = (n: unknown) => (exclu.get(String(n).trim().toLowerCase()) ?? []).map((e) => ` · ⚠ ${excluLine(e)}`).join("");
+    return ok([`# Roster · ${rows.length} créateur(s)`, ...rows.map((r) => `- ${titleCase(String(r.name))} · ${r.niche ?? "?"} · ${r.platform ?? "?"} · ${r.followers ?? "?"} abonnés · engagement ${r.er ?? "?"} · ${r.status ?? ""}${r.ville ? ` · ${r.ville}` : ""}${r.instagram ? ` · IG ${r.instagram}` : ""}${r.tiktok ? ` · TT ${r.tiktok}` : ""}${ex(r.name)}`)].join("\n"));
   },
 };
 
@@ -225,8 +229,29 @@ const ficheCreateur: Tool = {
       `\n## Tâches ouvertes`,
       lines(((td.data as Json[] | null) ?? []).map((t) => `- ${t.text}${t.due ? ` · échéance ${t.due}` : ""}`), "Aucune."),
     ];
+    const exclus = readExclusivites((await appState(sb).catch(() => ({} as Json))).exclusivites)
+      .filter((e) => e.creator.trim().toLowerCase() === name.trim().toLowerCase() && excluState(e, today) !== "terminee");
+    out.push(`\n## Exclusivités (ne pas proposer de concurrent)`, lines(exclus.map((e) => `- ${excluLine(e)}${e.points.length ? `\n  Points clés : ${e.points.join(" | ")}` : ""}`), "Aucune."));
     if (ctx.founder) out.push(`\n## Factures`, lines(((inv.data as Json[] | null) ?? []).map((f) => `- ${f.ref} · ${f.party} · ${f.amount} € · ${INVOICE_STATUS[String(f.status)] ?? f.status} · échéance ${f.date}`), "Aucune."));
     return ok(out.filter(Boolean).join("\n"));
+  },
+};
+
+const verifierExclusivite: Tool = {
+  name: "verifier_exclusivite",
+  title: "Vérifier une exclusivité",
+  description: "À appeler AVANT de proposer un créateur à une marque (prospection, réponse à un mail ou à un DM) : liste les créateurs du roster en exclusivité avec un concurrent de cette marque (en cours ou à venir), qu'il ne faut pas proposer. Avec « createur », dit si CE créateur peut travailler avec la marque.",
+  inputSchema: { type: "object", properties: { marque: { type: "string", description: "Marque à qui on veut proposer quelqu'un" }, createur: { type: "string", description: "Créateur envisagé (facultatif)" } }, required: ["marque"], additionalProperties: false },
+  run: async (sb, _c, a) => {
+    const brand = str(a.marque, 80);
+    if (!brand) return fail("Donne la marque.");
+    const list = readExclusivites((await appState(sb)).exclusivites);
+    const today = isoDay();
+    const who = str(a.createur, 80);
+    const names = who ? [who] : [...new Set(list.map((e) => e.creator))];
+    const hits = names.flatMap((n) => conflictsFor(list, n, brand, today));
+    if (!hits.length) return ok(who ? `${titleCase(who)} n'a aucune exclusivité qui bloque ${brand}.` : `Aucun créateur du roster n'est en exclusivité contre ${brand}.`);
+    return ok([`# À ne pas proposer à ${brand}`, ...hits.map((e) => `- ${titleCase(e.creator)} : ${excluLine(e)}`)].join("\n"));
   },
 };
 
@@ -1060,7 +1085,7 @@ const resumerBrief: Tool = {
 };
 
 export const TOOLS: Tool[] = [
-  pointDuJour, rechercher, roster, ficheCreateur, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, planning, taches, factures, methodeTarif,
+  pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, planning, taches, factures, methodeTarif,
   creerTache, creerEvenement, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur,
   lireBrief, resumerBrief,

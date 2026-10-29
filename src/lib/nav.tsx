@@ -1,6 +1,6 @@
 import type { LucideIcon } from "@/components/icons";
 import {
-  TtpBell, TtpBrief, TtpChecklist, TtpCollabs, TtpContacts, TtpContract, TtpDeadline, TtpDm, TtpEngagement, TtpEvolution,
+  TtpBell, TtpBrief, TtpChecklist, TtpCollabs, TtpContacts, TtpContract, TtpDeadline, TtpExclu, TtpDm, TtpEngagement, TtpEvolution,
   TtpFiles, TtpFolder, TtpGift, TtpHistory, TtpIdea, TtpInvoice, TtpLock, TtpMail, TtpMediakit, TtpPerson, TtpPipeline,
   TtpPlanning, TtpPulse, TtpReport, TtpScouting, TtpSend, TtpSliders, TtpSourcing, TtpSpark, TtpStar, TtpStats, TtpTag,
   TtpTarget, TtpTemplate, TtpToday, TtpTodo, TtpTransfer,
@@ -16,6 +16,7 @@ export type ViewId =
   | "reversements"
   | "relances"
   | "echeances"
+  | "exclusivites"
   | "roster"
   | "engagement"
   | "pricing"
@@ -146,6 +147,7 @@ export const NAV: NavFamily[] = [
         ],
       },
       { id: "echeances", label: "Fins de contrat", icon: TtpDeadline },
+      { id: "exclusivites", label: "Exclusivités", icon: TtpExclu },
       { id: "gifting", label: "Gifting", icon: TtpGift },
       { id: "debrief", label: "Debrief", icon: TtpReport },
       { id: "ideas", label: "Idées", icon: TtpIdea },

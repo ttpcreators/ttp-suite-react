@@ -68,6 +68,7 @@ export const TtpDm = make("TtpDm", <><path d="M4 4 H20 V16 H11 L7 20 V16 H4 Z" /
 // ── Collaborations ───────────────────────────────────────────────────────────
 export const TtpBrief = make("TtpBrief", <><path d="M6 7.5 L12 3.5 L18 7.5 V21 H6 Z" /><path d="M9 11 H15 M9 14 H15 M9 17 H13" /></>);
 export const TtpContract = make("TtpContract", <><path d="M5 3 H15 L19 7 V21 H5 Z" /><path d="M15 3 V7 H19" /><path d="M8 17 L10 15 L12 17 L14 15 L16 17" /></>);
+export const TtpExclu = make("TtpExclu", <><path d="M12 3 L19.5 6 V11.5 C19.5 16 16.5 19.5 12 21 C7.5 19.5 4.5 16 4.5 11.5 V6 Z" /><path d="M8.5 15.5 L15.5 8.5" /></>);
 export const TtpDeadline = make("TtpDeadline", <><path d="M6 3 H18 M6 21 H18" /><path d="M7 3 V7 L12 12 L17 7 V3" /><path d="M7 21 V17 L12 12 L17 17 V21" /></>);
 export const TtpGift = make("TtpGift", <><path d="M4 10 H20 V20 H4 Z" /><path d="M3 7 H21 V10 H3 Z" /><path d="M12 7 V20" /><path d="M12 7 L8.5 3.5 M12 7 L15.5 3.5" /></>);
 export const TtpReport = make("TtpReport", <><path d="M5 3 H19 V21 H5 Z" /><path d="M9 17 V13 M12 17 V9.5 M15 17 V14" /></>);

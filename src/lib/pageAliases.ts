@@ -19,6 +19,7 @@ export const PAGE_ALIASES: Partial<Record<ViewId, string[]>> = {
   mails: ["mail", "email", "boite mail", "gmail"],
   templates: ["modele", "modeles", "template"],
   echeances: ["echeance", "echeances", "expiration", "renouvellement contrat", "fin de contrat"],
+  exclusivites: ["exclu", "exclusivite", "exclusivites", "non concurrence", "concurrent", "clause"],
   diagnostique: ["diagnostic", "bug", "panne"],
   sourcing: ["sourcing", "radar", "trouver", "recruter", "marques instagram", "concurrents", "agences concurrentes", "veille"],
   messages: ["dm", "messages", "messagerie", "inbox", "instagram"],

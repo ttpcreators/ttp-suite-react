@@ -35,6 +35,7 @@ const INSTRUCTIONS =
   "Réponds en français. Commence par point_du_jour pour une question sur la journée, rechercher pour un nom ou une marque, " +
   "rechercher_mails puis lire_mail pour les mails. Les actions (tâche, rendez-vous, brouillon, contact, scouting, collab) " +
   "écrivent dans l'app : confirme toujours avec l'utilisateur avant. " +
+  "Avant de proposer un créateur à une marque (prospection, réponse à un mail ou un DM), appelle verifier_exclusivite : ne propose jamais un créateur en exclusivité avec un concurrent. " +
   "Fondateurs : accès complet. lire_donnees lit n'importe quelle table ; creer_element, modifier_element et supprimer_element (vers la Corbeille) " +
   "écrivent partout ; reglages_app pour les réglages ; preparer_facture pour les factures. Lis toujours la ligne avant de la modifier, " +
   "annonce précisément ce qui va changer et attends l'accord. envoyer_mail et envoyer_dm ENVOIENT vraiment : montre le texte final, " +

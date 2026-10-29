@@ -26,6 +26,7 @@ export const VIEW_HINTS: Partial<Record<ViewId, string>> = {
   reversements: "Ce que l'agence doit reverser à chaque créateur.",
   relances: "Les factures en retard, à relancer.",
   echeances: "Les contrats qui arrivent à leur fin, à renouveler ou à renégocier à temps.",
+  exclusivites: "Qui est en exclusivité avec quelle marque, contre quels concurrents et jusqu'à quand. L'app ne te propose jamais un créateur bloqué, en prospection comme en réponse à une marque. « Lire un contrat » remplit la fiche depuis le PDF.",
   contacts: "Ton carnet de marques et d'agences, avec le suivi de vos échanges.",
   whatsapp: "Les marques à contacter ou à relancer aujourd'hui, et par quel canal.",
   mails: "Tes deux boîtes mail, partnerships@ et talent@, au même endroit.",

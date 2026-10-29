@@ -81,6 +81,7 @@ const Activite = lazy(lazyImport(() => import("@/views/Activite").then((m) => ({
 const Reversements = lazy(lazyImport(() => import("@/views/Reversements").then((m) => ({ default: m.Reversements }))));
 const Relances = lazy(lazyImport(() => import("@/views/Relances").then((m) => ({ default: m.Relances }))));
 const Echeances = lazy(lazyImport(() => import("@/views/Echeances").then((m) => ({ default: m.Echeances }))));
+const Exclusivites = lazy(lazyImport(() => import("@/views/Exclusivites").then((m) => ({ default: m.Exclusivites }))));
 const Parametres = lazy(lazyImport(() => import("@/views/Parametres").then((m) => ({ default: m.Parametres }))));
 const Diagnostique = lazy(lazyImport(() => import("@/views/Diagnostique").then((m) => ({ default: m.Diagnostique }))));
 const EngagementSuivi = lazy(lazyImport(() => import("@/views/EngagementSuivi").then((m) => ({ default: m.EngagementSuivi }))));
@@ -96,6 +97,7 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   reversements: Reversements,
   relances: Relances,
   echeances: Echeances,
+  exclusivites: Exclusivites,
   briefs: Briefs,
   collabs: Collabs,
   gifting: Gifting,

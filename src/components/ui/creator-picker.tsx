@@ -6,6 +6,7 @@ import { cn, titleCase } from "@/lib/utils";
 import { mentionSuggestions } from "@/lib/todoQuickAdd";
 import { useT } from "@/lib/i18n";
 import { Field } from "@/components/ui/form";
+import { toast } from "@/components/ui/toast";
 
 export type PickCreator = { name: string; photo_url?: string | null };
 
@@ -13,6 +14,8 @@ export type PickCreator = { name: string; photo_url?: string | null };
  * Choix d'UN créateur : un champ de recherche puis le roster avec les photos, noms lisibles
  * (« Candice Maissa »), « Aucun » en dernier. La valeur reste le nom tel qu'il est enregistré.
  * `extraNames` : noms déjà utilisés qui ne sont plus dans le roster (gardés pour ne rien perdre).
+ * `blocked` : créateurs en exclusivité avec un concurrent de la marque (nom en minuscules →
+ * « Exclu Nike · 12 déc. ») : jamais suggérés en premier, signalés, et prévenus si on les choisit.
  */
 export function CreatorPicker({
   value,
@@ -23,6 +26,7 @@ export function CreatorPicker({
   placeholder = "Choisir…",
   ariaLabel,
   className,
+  blocked,
 }: {
   value: string;
   onChange: (name: string) => void;
@@ -32,6 +36,7 @@ export function CreatorPicker({
   placeholder?: string;
   ariaLabel?: string;
   className?: string;
+  blocked?: ReadonlyMap<string, string>;
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
@@ -43,12 +48,16 @@ export function CreatorPicker({
     ...creators.filter((c) => c.name),
     ...extraNames.filter((n) => n && !known.has(key(n))).map((name) => ({ name, photo_url: null })),
   ];
-  const list = mentionSuggestions(q, all, all.length);
+  const found = mentionSuggestions(q, all, all.length);
+  const why = (n: string) => blocked?.get(key(n));
+  // Créateurs en exclusivité avec un concurrent : à la fin de la liste.
+  const list = blocked?.size ? [...found.filter((c) => !why(c.name)), ...found.filter((c) => why(c.name))] : found;
   // « Aucun » en dernier choix (seulement sans recherche).
   const options: (PickCreator | null)[] = q.trim() ? list : [...list, null];
   const current = value ? all.find((c) => key(c.name) === key(value)) ?? { name: value, photo_url: null } : null;
 
   const choose = (c: PickCreator | null) => {
+    if (c && why(c.name)) toast(`Attention : ${why(c.name)}`);
     onChange(c ? c.name : "");
     setOpen(false);
     setQ("");
@@ -134,7 +143,8 @@ export function CreatorPicker({
                 ) : (
                   <span aria-hidden className="h-7 w-7 shrink-0" />
                 )}
-                <span className={cn("min-w-0 flex-1 truncate", c ? "text-foreground" : "text-muted-foreground")}>{c ? titleCase(c.name) : t(emptyLabel)}</span>
+                <span className={cn("min-w-0 flex-1 truncate", c ? (why(c.name) ? "text-muted-foreground" : "text-foreground") : "text-muted-foreground")}>{c ? titleCase(c.name) : t(emptyLabel)}</span>
+                {c && why(c.name) && <span className="shrink-0 rounded-full bg-wait-soft px-2 py-0.5 text-[11px] font-medium text-wait">{why(c.name)}</span>}
                 {on && <Check className="h-4 w-4 shrink-0 text-primary" />}
               </button>
             );

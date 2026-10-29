@@ -14,6 +14,8 @@ import {
 import { ActionMenu } from "@/components/ui/action-menu";
 import { ArrowRight, Handshake, Pencil, Trash2, PanelsTopLeft, Columns3, ChevronLeft, Mail } from "@/components/icons";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
+import { todayParis, useBlockedCreators, useExclusivites } from "@/lib/useExclusivites";
+import { conflictsFor } from "../../supabase/functions/_shared/exclusivites.ts";
 import { useCreators } from "@/lib/useCreators";
 import { cachetOf, collabFromProspect, type Proposal } from "@/lib/prospectProposal";
 import { markProspectSigned, proposalColumnsReady, prospectCollabId } from "@/lib/prospectsDb";
@@ -119,6 +121,14 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
   const creators = useCreators();
   const [convert, setConvert] = useState<Row | null>(null);
   const [cvCreator, setCvCreator] = useState("");
+  const blockedCv = useBlockedCreators(convert?.brand); // exclusivité avec un concurrent : signalé
+  const { list: exclus } = useExclusivites();
+  /** Exclusivité d'un créateur qui interdit cette marque (« Exclu Nike · 12 déc. »), sinon null. */
+  const excluOf = (creator: string | null | undefined, brand: string) => {
+    if (!creator) return null;
+    const hit = conflictsFor(exclus, creator, brand, todayParis())[0];
+    return hit ? `Exclu ${hit.brand}${hit.end ? ` · ${fmtDay(hit.end)}` : ""}` : null;
+  };
   const [cvDeliv, setCvDeliv] = useState("");
   const [cvCachet, setCvCachet] = useState("");
   const startConvert = (r: Row) => {
@@ -254,7 +264,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
       onSubmit={submitConvert}
       submitLabel="Créer"
     >
-      <CreatorPickerField label="Créateur" value={cvCreator} onChange={setCvCreator} creators={creators} />
+      <CreatorPickerField label="Créateur" value={cvCreator} onChange={setCvCreator} creators={creators} blocked={blockedCv} />
       <TextField label="Livrables" value={cvDeliv} onChange={setCvDeliv} placeholder="ex. 2 reels Instagram" />
       <TextField label="Cachet" value={cvCachet} onChange={setCvCachet} placeholder="ex. 950 €" />
     </InlineForm>
@@ -433,7 +443,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
               row={(r, on) => ({
                 tile: <BrandTile brand={r.brand} email={contactOf(r)?.email} creator={r.creator} photoUrl={photoOf(r.creator)} onAccent={on} />,
                 title: `${r.brand}${r.creator ? ` × ${firstNameOf(r.creator)}` : ""}`,
-                sub: [r.deliverables ?? "", r.proposal ? priceRange(r.proposal.min, r.proposal.max, false) : r.value && r.value !== "—" ? r.value : ""].filter(Boolean).slice(0, 2).join(" · "),
+                sub: [excluOf(r.creator, r.brand) ?? "", r.deliverables ?? "", r.proposal ? priceRange(r.proposal.min, r.proposal.max, false) : r.value && r.value !== "—" ? r.value : ""].filter(Boolean).slice(0, 2).join(" · "),
               })}
             />
           </div>
@@ -445,7 +455,12 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
               {(() => {
                 const ct = contactOf(sel);
                 const rowsInfo: [string, ReactNode][] = [
-                  ["Créateur", sel.creator ? titleCase(sel.creator) : "—"],
+                  ["Créateur", sel.creator ? (
+                    <span className="inline-flex flex-wrap items-center gap-2">
+                      {titleCase(sel.creator)}
+                      {excluOf(sel.creator, sel.brand) && <span className="rounded-full bg-wait-soft px-2 py-0.5 text-[11px] font-medium text-wait">{excluOf(sel.creator, sel.brand)}</span>}
+                    </span>
+                  ) : "—"],
                   ["Livrables", sel.deliverables || sel.proposal?.deliverables || "—"],
                   ["Proposition", sel.proposal ? `${priceRange(sel.proposal.min, sel.proposal.max)} · cible ${formatEuro(sel.proposal.target)}` : sel.value && sel.value !== "—" ? sel.value : "—"],
                   ["Contact", ct ? [ct.person, ct.email].filter(Boolean).join(" · ") || "—" : sel.contact || "—"],

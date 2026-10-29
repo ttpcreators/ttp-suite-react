@@ -1,4 +1,5 @@
 import { useStickyState } from "@/lib/useStickyState";
+import { ExcluAlert } from "@/components/exclu-alert";
 import { lazyImport } from "@/lib/appUpdate";
 import { contextPrompt, threadTranscript } from "@/lib/mailThreadContext";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -2711,6 +2712,8 @@ export function Mails() {
                   })}
                   {/* Réponse : sous la conversation, dans sa propre carte. */}
                   <div className="mt-2">
+                            {/* Créateurs en exclusivité avec un concurrent de cette marque : à ne pas proposer. */}
+                            <ExcluAlert brand={brandFromEmail(plan.to)} className="mb-2" />
                             {gmailDraftWaiting && threadGmailDraft && (
                               <div role="status" className="mb-2 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-muted/50 px-3.5 py-2 text-[12.5px] text-muted-foreground">
                                 <FilePen className="h-3.5 w-3.5 shrink-0" />

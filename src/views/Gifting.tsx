@@ -22,6 +22,7 @@ import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
+import { useBlockedCreators } from "@/lib/useExclusivites";
 import { CollabField, ObjectCollabLink, linkNewToCollab, useCollabLinkReady } from "@/components/collab-links";
 import { getCollabLink, openCollab, setCollabLink } from "@/lib/collabLinksDb";
 import { StatsBento } from "@/components/ui/stats-bento";
@@ -66,6 +67,7 @@ export function Gifting({ embedded = false }: { embedded?: boolean } = {}) {
   const [editId, setEditId] = useState<string | null>(null);
   const [creator, setCreator] = useState("");
   const [brand, setBrand] = useState("");
+  const blocked = useBlockedCreators(brand); // exclusivité avec un concurrent : signalé
   const [product, setProduct] = useState("");
   const [value, setValue] = useState("");
   const [contactName, setContactName] = useState("");
@@ -298,7 +300,7 @@ export function Gifting({ embedded = false }: { embedded?: boolean } = {}) {
         onSubmit={save}
         submitLabel={editId ? "Enregistrer" : "Ajouter"}
       >
-        <CreatorPickerField label="Créateur" value={creator} onChange={setCreator} creators={creators} className="sm:min-w-[170px] flex-1" />
+        <CreatorPickerField label="Créateur" value={creator} onChange={setCreator} creators={creators} blocked={blocked} className="sm:min-w-[170px] flex-1" />
         {editId ? (
           <ObjectCollabLink table="gifting" id={editId} creator={creator} withLabel className="sm:min-w-[170px] flex-1" />
         ) : (
