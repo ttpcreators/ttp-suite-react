@@ -77,6 +77,7 @@ pour toute l'équipe dans Paramètres → Apparence → « Couleurs des classeur
 | `Facturation.tsx` | `facturation` (F) | Factures : éditeur, statuts, PDF. |
 | `Relances.tsx` | `relances` (F) | Factures en retard et mail de relance. |
 | `Reversements.tsx` | `reversements` (F) | Ce que l'agence doit reverser à chaque créateur. |
+| `Compta.tsx` | `compta` (F) | Compte pro (solde théorique, à mettre de côté, disponible), ce que l'agence prend par collab, réglages URSSAF et TVA. |
 | `Stats.tsx` | `stats` | Chiffres de l'agence sur une période. |
 | `Objectifs.tsx` | `objectifs` | Objectifs du mois et réussite mois par mois (`charts/ObjectivesTrend.tsx`). |
 | `Agent.tsx` | `agent` (F) | Agents IA : consignes, routines, file « À valider », mémoire. |
@@ -191,7 +192,7 @@ Règle : la logique pure (sans React ni Supabase) vit dans `src/lib/<nom>.ts`, a
 | Mails | `mailSend.ts` (envoi, « Annuler l'envoi », brouillons), `mailSignature.ts`, `useMailSignatures.ts`, `useMailSettings.ts`, `mailTemplates.ts`, `mailThreadContext.ts` (contexte donné à Claude), `mailCollab.ts`, `mailAvatar.ts`, `useMailUnread.ts`, `useAttachments.ts`, `mailAddresses.ts` |
 | Espace créateur | `creatorTabs.ts`, `creatorMissions.ts`, `creatorNextStep.ts`, `creatorGains.ts`, `creatorMail.ts`, `creatorMailCounts.ts`, `creatorTracking.ts`, `monthlyReport.ts` |
 | Traduction | `i18n.tsx`, `i18n/en.ts`, `i18n/en-shared.ts`, `i18n/en-creatorSpace.ts`, `i18n/en-creatorPages.ts` |
-| Facturation et argent | `invoice.ts` (calcul unique HT, TVA, commission, reversement, au centime ; `invoiceTotals` pour une facture enregistrée), `reversements.ts` (dû, versé, reste par créateur, même calcul que les gains du créateur), `commission.ts` (`rateFor` : taux de la fiche sans tenir compte des majuscules), `useFounder.ts` (montants visibles des fondateurs seulement), `pricing.ts` (ancien moteur : UGC, calcul du media kit), `pricingTTP.ts` + `_shared/tarif.ts` (méthode TARIF, aussi lue par l'outil Claude `methode_tarif`) |
+| Facturation et argent | `invoice.ts` (calcul unique HT, TVA, commission, reversement, au centime ; `invoiceTotals` pour une facture enregistrée), `reversements.ts` (dû, versé, reste par créateur, même calcul que les gains du créateur), `commission.ts` (`rateFor` : taux de la fiche sans tenir compte des majuscules), `compta.ts` + `comptaRates.ts` (micro-entreprise : CA, URSSAF, TVA, compte pro, mode d'encaissement par collab ; sources dans `docs/compta-micro.md`), `useFounder.ts` (montants visibles des fondateurs seulement), `pricing.ts` (ancien moteur : UGC, calcul du media kit), `pricingTTP.ts` + `_shared/tarif.ts` (méthode TARIF, aussi lue par l'outil Claude `methode_tarif`) |
 | Contrats | `contractRegistry.ts` + `contractRegistryDb.ts`, `contractDuration.ts`, `representationContract.ts`, `agencySignature.ts` |
 | PDF | `pdfDoc.ts` (identité commune des documents), `printPdf.ts` (`printHtml`) |
 | Briefs, collabs, bilans | `briefResume.ts`, `collabs.ts` (11 étapes), `campaignRecap.ts`, `engagement.ts`, `objectivesTrend.ts`, `platform.ts` |

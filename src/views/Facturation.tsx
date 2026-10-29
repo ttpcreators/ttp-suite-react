@@ -100,6 +100,8 @@ type Details = {
   commissionRate: number;
   bankId: string;
   notes: string;
+  /** « commission » : facture de la commission de l'agence au créateur (page Compta). */
+  kind?: "commission";
 };
 
 type Draft = Details & {
@@ -359,7 +361,7 @@ table.lines tr{break-inside:avoid}
   <div><h3>Émetteur</h3><div class="name">${esc(issuer.name)}</div><div class="addr">${issuerLegal}</div></div>
   <div><h3>Facturé à</h3><div class="name">${esc(d.clientName || brand)}</div><div class="addr">${clientLegal}</div>
     ${d.tpoRef && d.tpoRef.trim() ? `<div class="tpo"><span>Réf. TPO</span> ${esc(d.tpoRef)}</div>` : ""}</div>
-  <div><h3>Prestation</h3><div class="name">${esc(brand)}</div>
+  <div><h3>Prestation</h3><div class="name">${d.kind === "commission" ? "Commission d'agence" : esc(brand)}</div>
     ${creator ? `<div class="addr">Créateur : ${esc(titleCase(creator))}</div>` : ""}</div>
 </div>
 
@@ -580,10 +582,17 @@ export function Facturation() {
     if (!p) return;
     const blank = blankDraft(rows.map((r) => r.ref), ((appData.invoiceBankAccounts as BankAccount[]) ?? [])[0]?.id ?? "");
     const lines = p.lines.map((l) => ({ id: uid(), label: l.label, qty: 1, unit: l.unit }));
-    const commissionRate = p.creator
-      ? rateFor(p.creator, commissionMap(creators), (appData.creatorCommission as Record<string, number>) ?? {}, DEFAULT_COMMISSION)
-      : blank.commissionRate;
-    setDraft({ ...blank, creator: p.creator, brand: p.brand, commissionRate, items: lines.length ? lines : blank.items, ...(p.collabId ? { collabId: p.collabId } : {}) });
+    const commissionRate = p.kind === "commission"
+      ? 0 // la commission ne prend pas de commission
+      : p.creator
+        ? rateFor(p.creator, commissionMap(creators), (appData.creatorCommission as Record<string, number>) ?? {}, DEFAULT_COMMISSION)
+        : blank.commissionRate;
+    setDraft({
+      ...blank, creator: p.creator, brand: p.brand, commissionRate, items: lines.length ? lines : blank.items,
+      ...(p.collabId ? { collabId: p.collabId } : {}),
+      ...(p.kind === "commission" ? { kind: "commission" as const, clientName: p.brand } : {}),
+      ...(p.franchise !== undefined ? { franchise: p.franchise } : {}),
+    });
     setBaseline(draftSnapshot(blank));
     setConfirmLeave(false);
   }, [rows, appData, creators]);
@@ -666,7 +675,9 @@ export function Facturation() {
   // détail → montant enregistré considéré HT (franchise), taux du roster. Seuil 100 € inclus.
   const finOf = (r: Row): Totals & { rate: number } => {
     // Même calcul que Reversements et les gains du créateur (src/lib/invoice.ts).
-    return invoiceTotals(parseAmount(r.amount), details[r.id], commissionFor(r.creator));
+    const t = invoiceTotals(parseAmount(r.amount), details[r.id], commissionFor(r.creator));
+    // Facture de commission au créateur : tout le HT revient à l'agence, rien au créateur.
+    return details[r.id]?.kind === "commission" ? { ...t, commission: t.ht, reversal: 0 } : t;
   };
   // Synthèse sur la période (brouillons exclus : ce n'est pas encore facturé).
   const billed = scope.filter((r) => r.status !== "brouillon");
@@ -812,6 +823,7 @@ export function Facturation() {
       commissionRate: draft.commissionRate,
       bankId: draft.bankId,
       notes: draft.notes,
+      ...(draft.kind === "commission" ? { kind: "commission" as const } : {}),
     };
     // Relire FRAIS avant de fusionner : deux postes peuvent créer des factures en
     // parallèle → sinon l'instantané local périmé écrase les détails de l'autre.

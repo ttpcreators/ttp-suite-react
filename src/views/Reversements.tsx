@@ -5,7 +5,9 @@ import { supabase } from "@/lib/supabase";
 import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, parseAmount, formatEuro, type AppState } from "@/lib/appState";
 import { useCreators } from "@/lib/useCreators";
 import { commissionMap, DEFAULT_COMMISSION } from "@/lib/commission";
-import { cents, type InvoiceDetailLike } from "@/lib/invoice";
+import { cents } from "@/lib/invoice";
+import { mandatesFrom, noPayoutIds, type ComptaDetail } from "@/lib/compta";
+import { collabIdMissing } from "@/lib/collabLinks";
 import { owesMoney, overpaid, reversementRows, type Payout, type PayoutsMap, type RevInvoice, type RevRow } from "@/lib/reversements";
 import { titleCase } from "@/lib/utils";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
@@ -23,7 +25,7 @@ import { fmtDayAny } from "@/lib/dates";
  * Les paiements sont stockés dans le blob agence `creatorPayouts`.
  */
 
-type Inv = RevInvoice;
+type Inv = RevInvoice & { collab_id?: string | null };
 let _uid = 0;
 const uid = () => `pay${Date.now().toString(36)}${(_uid += 1)}`;
 // Date LOCALE (toISOString = UTC → la veille entre minuit et 2 h en France)
@@ -50,9 +52,12 @@ export function Reversements() {
 
   useEffect(() => {
     let alive = true;
-    supabase
-      .from("invoices")
-      .select("id,amount,status,creator")
+    // Collab de la facture (mode d'encaissement, page Compta) ; sans la colonne : sans elle.
+    const load = async () => {
+      const withLink = await supabase.from("invoices").select("id,amount,status,creator,collab_id");
+      return withLink.error && collabIdMissing(withLink.error) ? supabase.from("invoices").select("id,amount,status,creator") : withLink;
+    };
+    void load()
       .then(({ data, error }) => {
         if (!alive) return;
         // Échec d'un rafraîchissement : on garde la liste déjà affichée (pas de vidage)
@@ -73,13 +78,16 @@ export function Reversements() {
   // Calcul au centime, partagé avec Facturation et les gains du créateur (src/lib/reversements.ts).
   const rows: RevRow[] = useMemo(() => {
     if (!invoices) return [];
+    const details = (app?.invoiceDetails as Record<string, ComptaDetail>) ?? {};
     return reversementRows({
       invoices,
-      details: (app?.invoiceDetails as Record<string, InvoiceDetailLike>) ?? {},
+      details,
       payouts: payoutsMap,
       rosterRates: commissionMap(creators),
       savedRates: commissions,
       defaultRate: DEFAULT_COMMISSION,
+      // Marque qui paie le créateur, facture de commission : rien à reverser (page Compta).
+      skip: noPayoutIds(invoices, details, (app?.collabCashMode as Record<string, string>) ?? {}, mandatesFrom(app?.contractHistory)),
     });
   }, [invoices, commissions, payoutsMap, creators, app]);
 

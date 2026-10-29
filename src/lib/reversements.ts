@@ -47,6 +47,9 @@ export function reversementRows(input: {
   /** Taux mémorisés à l'enregistrement d'une facture (blob `creatorCommission`), par nom. */
   savedRates: Record<string, number>;
   defaultRate: number;
+  /** Factures sans reversement : la marque a payé le créateur (collab en mode « créateur »)
+   *  ou facture de commission de l'agence au créateur (src/lib/compta.ts). */
+  skip?: ReadonlySet<string>;
 }): RevRow[] {
   const roster = new Map<string, { name: string; rate: number }>();
   for (const [name, rate] of Object.entries(input.rosterRates)) roster.set(key(name), { name, rate });
@@ -66,7 +69,7 @@ export function reversementRows(input: {
     return a;
   };
   for (const iv of input.invoices) {
-    if (iv.status !== "payee" || !key(iv.creator)) continue;
+    if (iv.status !== "payee" || !key(iv.creator) || input.skip?.has(iv.id)) continue;
     const a = bump(iv.creator as string);
     const t = invoiceTotals(parseAmount(iv.amount), input.details[iv.id], rateOf(key(iv.creator)));
     a.encaisse += t.ttc;

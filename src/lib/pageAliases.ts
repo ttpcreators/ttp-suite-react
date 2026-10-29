@@ -7,6 +7,7 @@ import type { ViewId } from "./nav";
 export const PAGE_ALIASES: Partial<Record<ViewId, string[]>> = {
   aujourdhui: ["aujourd'hui", "journee", "a traiter", "today", "inbox zero", "accueil", "dashboard", "tableau de bord", "apercu"],
   reversements: ["paie", "paiement", "reverser", "reversement", "salaire createur"],
+  compta: ["comptabilite", "urssaf", "tva", "compte pro", "banque", "cotisations", "chiffre d'affaires"],
   relances: ["impaye", "retard", "relancer", "relance facture"],
   facturation: ["facture", "devis"],
   planning: ["agenda", "calendrier", "rendez-vous", "rdv", "posts instagram", "programmer un post", "publier"],

@@ -22,6 +22,18 @@ describe("reversements au centime", () => {
     expect(rows[0].commission).toBe(240.1);
     expect(rows[0].reste).toBe(960.4);
   });
+  it("factures sans reversement (marque qui paie le créateur, commission) ignorées", () => {
+    const rows = reversementRows({
+      invoices: [inv("a", "Léna Test", "1 000"), inv("b", "Léna Test", "500")],
+      details: {},
+      payouts: {},
+      rosterRates: { "Léna Test": 20 },
+      savedRates: {},
+      defaultRate: 20,
+      skip: new Set(["b"]),
+    });
+    expect(rows[0].du).toBe(800);
+  });
 
   it("une seule ligne par créateur, quelle que soit la casse ; taux de la fiche retrouvé", () => {
     const rows = reversementRows({

@@ -5,8 +5,13 @@
  */
 import type { QuoteLine } from "./pricingForm";
 
-/** `collabId` : facture créée depuis une collab (reliée à l'enregistrement). */
-export type InvoicePrefill = { creator: string; brand: string; lines: QuoteLine[]; collabId?: string };
+/**
+ * `collabId` : facture créée depuis une collab (reliée à l'enregistrement).
+ * `kind: "commission"` : facture de la commission de l'agence AU CRÉATEUR (la marque a payé
+ * le créateur, page Compta) ; `brand` porte alors le nom du créateur facturé, `creator` est vide
+ * (aucun reversement, invisible dans l'espace du créateur), `franchise` suit le régime de TVA.
+ */
+export type InvoicePrefill = { creator: string; brand: string; lines: QuoteLine[]; collabId?: string; kind?: "commission"; franchise?: boolean };
 
 const KEY = "ttp:invoice-prefill";
 
