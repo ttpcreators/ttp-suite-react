@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  cashModeFor, collabTake, comptePro, DEFAULT_SETTINGS, invoiceLine, mandatesFrom, periodDeadline, periodOf, readSettings, socialRate, thresholdAlerts,
+  billingFor, cashModeFor, collabTake, comptePro, DEFAULT_SETTINGS, invoiceLine, mandatesFrom, periodDeadline, periodOf, readSettings, socialRate, thresholdAlerts,
   type ComptaSettings,
 } from "./compta";
 
@@ -89,5 +89,18 @@ describe("compta : réglages, seuils, collabs", () => {
     expect(cashModeFor("c1", "Léa Test", { c1: "agence" }, mandates)).toBe("agence");
     expect(cashModeFor("c2", "Léa Test", {}, mandates)).toBe("createur");
     expect(cashModeFor(null, "Inconnue", {}, mandates)).toBe("agence");
+    expect(cashModeFor("c3", "Léa Test", { c3: "mandat" }, mandates)).toBe("agence");
+  });
+  it("au nom de qui facturer : la facture, sinon la collab, sinon le réglage par défaut", () => {
+    expect(billingFor("c1", { c1: "mandat" }, S)).toBe("mandat");
+    expect(billingFor("c1", { c1: "agence" }, { ...S, facturation: "mandat" })).toBe("agence");
+    expect(billingFor("c2", {}, { ...S, facturation: "mandat" })).toBe("mandat");
+    expect(billingFor(null, {}, S)).toBe("agence");
+    // La facture l'emporte : cochée « au nom du créateur », seule la commission est du CA.
+    const l = invoiceLine(inv("m", "1 000 €"), { issueDate: "2026-10-05", onBehalf: true }, 20, "agence", S, "agence");
+    expect(l.agencyCA).toBe(200);
+    const l2 = invoiceLine(inv("n", "1 000 €"), { issueDate: "2026-10-05" }, 20, "agence", S, "mandat");
+    expect(l2.agencyCA).toBe(200);
+    expect(invoiceLine(inv("o", "1 000 €"), { issueDate: "2026-10-05", onBehalf: false }, 20, "agence", S, "mandat").agencyCA).toBe(1000);
   });
 });

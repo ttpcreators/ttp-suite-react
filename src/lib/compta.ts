@@ -23,6 +23,13 @@ import { ACTIVITIES, MICRO_CEILING, VAT_FRANCHISE, type Activity } from "./compt
  */
 
 export type CashMode = "agence" | "createur";
+/**
+ * Au nom de qui la facture à la marque est établie : « agence » (en son nom : tout le HT est
+ * son chiffre d'affaires) ou « mandat » (au nom et pour le compte du créateur : seule la
+ * commission l'est). Choix par collab (blob `collabCashMode` = « mandat »), par facture
+ * (`onBehalf` de son détail), sinon le réglage par défaut de la page Compta.
+ */
+export type Billing = "agence" | "mandat";
 export type ComptaSettings = {
   activity: Activity;
   /** % de cotisations sociales (réglable, défaut : taux officiel de l'activité). */
@@ -77,7 +84,7 @@ export function readSettings(raw: unknown): ComptaSettings {
 export const socialRate = (s: ComptaSettings) => s.urssafRate + s.cfpRate + (s.vl ? s.vlRate : 0);
 
 export type ComptaInvoice = { id: string; amount: string | null; status: string | null; creator: string | null; collab_id?: string | null; date?: string | null; party?: string | null };
-export type ComptaDetail = InvoiceDetailLike & { issueDate?: string | null; dueDate?: string | null; kind?: string | null };
+export type ComptaDetail = InvoiceDetailLike & { issueDate?: string | null; dueDate?: string | null; kind?: string | null; onBehalf?: boolean | null };
 
 export type InvoiceLine = {
   id: string;
@@ -111,8 +118,9 @@ const isoDay = (v: unknown): string | null => {
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
 };
 
-/** Une facture vue par la compta. `mode` : celui de sa collab (ou le défaut de son créateur). */
-export function invoiceLine(inv: ComptaInvoice, detail: ComptaDetail | null | undefined, rate: number, mode: CashMode, s: ComptaSettings): InvoiceLine {
+/** Une facture vue par la compta. `mode` : celui de sa collab (ou le défaut de son créateur) ; `billing` : celui de sa collab. */
+export function invoiceLine(inv: ComptaInvoice, detail: ComptaDetail | null | undefined, rate: number, mode: CashMode, s: ComptaSettings, billing?: Billing): InvoiceLine {
+  const billed: Billing = detail?.onBehalf === true ? "mandat" : detail?.onBehalf === false ? "agence" : (billing ?? s.facturation);
   const kind = detail?.kind === "commission" ? "commission" : "marque";
   const t = invoiceTotals(parseAmount(inv.amount), detail, kind === "commission" ? 0 : rate);
   const paid = inv.status === "payee";
@@ -131,7 +139,7 @@ export function invoiceLine(inv: ComptaInvoice, detail: ComptaDetail | null | un
     }
   } else if (mode === "agence" && paid) {
     cashIn = t.ttc;
-    if (s.facturation === "agence") {
+    if (billed === "agence") {
       agencyCA = t.ht;
       vatDue = t.tva;
       owedCreator = t.reversal;
@@ -299,8 +307,17 @@ export function collabTake(c: CollabLite, lines: InvoiceLine[], rate: number, mo
 export function cashModeFor(collabId: string | null | undefined, creator: string | null | undefined, collabModes: Record<string, string>, creatorMandates: Record<string, boolean>): CashMode {
   const set = collabId ? collabModes[collabId] : undefined;
   if (set === "agence" || set === "createur") return set;
+  if (set === "mandat") return "agence"; // l'agence encaisse, facture au nom du créateur
   const m = creatorMandates[k(creator)];
   return m === false ? "createur" : "agence";
+}
+
+/** Au nom de qui facturer la marque pour cette collab : son choix, sinon le réglage par défaut. */
+export function billingFor(collabId: string | null | undefined, collabModes: Record<string, string>, s: ComptaSettings): Billing {
+  const set = collabId ? collabModes[collabId] : undefined;
+  if (set === "mandat") return "mandat";
+  if (set === "agence") return "agence";
+  return s.facturation;
 }
 
 /** Contrats de représentation (blob `contractHistory`) → mandat d'encaissement par créateur (le plus récent). */

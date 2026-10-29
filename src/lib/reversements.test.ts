@@ -22,6 +22,18 @@ describe("reversements au centime", () => {
     expect(rows[0].commission).toBe(240.1);
     expect(rows[0].reste).toBe(960.4);
   });
+  it("facture au nom du créateur (mandat) : sa TVA lui est reversée", () => {
+    const items = [{ id: "l", label: "Reel", qty: 1, unit: 1000 }];
+    const rows = reversementRows({
+      invoices: [inv("m", "Léna Test", "1200")],
+      details: { m: { items, franchise: false, vatRate: 20, commissionRate: 20, onBehalf: true } },
+      payouts: {},
+      rosterRates: { "Léna Test": 20 },
+      savedRates: {},
+      defaultRate: 20,
+    });
+    expect(rows[0].du).toBe(1000);
+  });
   it("factures sans reversement (marque qui paie le créateur, commission) ignorées", () => {
     const rows = reversementRows({
       invoices: [inv("a", "Léna Test", "1 000"), inv("b", "Léna Test", "500")],

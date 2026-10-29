@@ -5,7 +5,7 @@ import { useCreators } from "@/lib/useCreators";
 import { useIsFounder } from "@/lib/useFounder";
 import { useLiveKey } from "@/lib/useLive";
 import { commissionMap, DEFAULT_COMMISSION, rateFor } from "@/lib/commission";
-import { cashModeFor, collabTake, invoiceLine, mandatesFrom, readSettings, socialRate, type CashMode, type ComptaDetail, type ComptaInvoice } from "@/lib/compta";
+import { billingFor, cashModeFor, collabTake, invoiceLine, mandatesFrom, readSettings, socialRate, type Billing, type CashMode, type ComptaDetail, type ComptaInvoice } from "@/lib/compta";
 import { collabIdMissing } from "@/lib/collabLinks";
 import { HelpTip } from "@/components/ui/help-tip";
 import { toast } from "@/components/ui/toast";
@@ -23,7 +23,8 @@ export function CollabTakeCard({ collab }: { collab: { id: string; brand: string
   const creators = useCreators();
   const { data: app } = useAppState<AppState>();
   const [invoices, setInvoices] = useState<ComptaInvoice[]>([]);
-  const [localMode, setLocalMode] = useState<CashMode | null>(null);
+  // Valeur enregistrée pour la collab : « agence », « mandat » (agence encaisse, facture au nom du créateur) ou « createur ».
+  const [localSet, setLocalSet] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -45,28 +46,33 @@ export function CollabTakeCard({ collab }: { collab: { id: string; brand: string
 
   const rawSettings = app?.comptaSettings;
   const settings = useMemo(() => readSettings(rawSettings), [rawSettings]);
-  const modes = (app?.collabCashMode as Record<string, string>) ?? {};
-  const mode = localMode ?? cashModeFor(collab.id, collab.creator, modes, mandatesFrom(app?.contractHistory));
+  const stored = (app?.collabCashMode as Record<string, string>) ?? {};
+  const modes = localSet ? { ...stored, [collab.id]: localSet } : stored;
+  const mode = cashModeFor(collab.id, collab.creator, modes, mandatesFrom(app?.contractHistory));
+  const billing = billingFor(collab.id, modes, settings);
   const rate = rateFor(collab.creator, commissionMap(creators), (app?.creatorCommission as Record<string, number>) ?? {}, DEFAULT_COMMISSION);
   const take = useMemo(() => {
     const details = (app?.invoiceDetails as Record<string, ComptaDetail>) ?? {};
-    const lines = invoices.map((iv) => invoiceLine(iv, details[iv.id], rate, mode, settings));
+    const lines = invoices.map((iv) => invoiceLine(iv, details[iv.id], rate, mode, settings, billing));
     return collabTake(collab, lines, rate, mode, settings);
-  }, [app, invoices, rate, mode, settings, collab]);
+  }, [app, invoices, rate, mode, billing, settings, collab]);
 
   if (!founder) return null;
 
-  const setMode = async (next: CashMode) => {
-    if (next === mode || saving) return;
+  const save = async (value: string) => {
+    if (saving || modes[collab.id] === value) return;
     setSaving(true);
-    setLocalMode(next);
-    const ok = await mergeAppStateKey("collabCashMode", { [collab.id]: next });
+    setLocalSet(value);
+    const ok = await mergeAppStateKey("collabCashMode", { [collab.id]: value });
     setSaving(false);
     if (!ok) {
-      setLocalMode(null);
+      setLocalSet(null);
       toast("Erreur, réessaie");
     }
   };
+  // L'agence encaisse : garde le « au nom de » actuel ; le créateur encaisse : la question ne se pose pas.
+  const setMode = (next: CashMode) => void save(next === "createur" ? "createur" : billing === "mandat" ? "mandat" : "agence");
+  const setBilling = (next: Billing) => void save(next === "mandat" ? "mandat" : "agence");
 
   const status = take.received ? "Encaissé" : take.commissionToBill ? "Commission à facturer" : "À recevoir";
   const seg = (on: boolean) =>
@@ -81,15 +87,25 @@ export function CollabTakeCard({ collab }: { collab: { id: string; brand: string
           <HelpTip title="Ce que je prends">
             <p>Ta commission HT sur cette collab, les cotisations URSSAF de la micro-entreprise ({pct(socialRate(settings))}, réglage de la page Compta) et ce qu'il te reste.</p>
             <p>« Agence encaisse » : la marque paie l'agence, qui reverse la part du créateur. « Créateur encaisse » : la marque paie le créateur, et « Créer la facture » prépare la facture de ta commission au créateur.</p>
+            <p>Quand l'agence encaisse, la facture à la marque est faite au nom de l'agence (tout le HT compte dans ton chiffre d'affaires) ou au nom du créateur, en mandat (seule ta commission compte, la facture porte son nom et la mention du mandat).</p>
             {take.estimated ? <p>Pas encore de facture reliée : estimation sur le cachet.</p> : null}
           </HelpTip>
         </h3>
         <span className={cn("text-[12px] font-medium", take.received ? "text-ok" : take.commissionToBill ? "text-wait" : "text-muted-foreground")}>{status}</span>
       </div>
       <div role="group" aria-label="Qui encaisse" className="mb-3 flex rounded-full bg-field p-0.5">
-        <button type="button" aria-pressed={mode === "agence"} disabled={saving} onClick={() => void setMode("agence")} className={seg(mode === "agence")}>Agence encaisse</button>
-        <button type="button" aria-pressed={mode === "createur"} disabled={saving} onClick={() => void setMode("createur")} className={seg(mode === "createur")}>Créateur encaisse</button>
+        <button type="button" aria-pressed={mode === "agence"} disabled={saving} onClick={() => setMode("agence")} className={seg(mode === "agence")}>Agence encaisse</button>
+        <button type="button" aria-pressed={mode === "createur"} disabled={saving} onClick={() => setMode("createur")} className={seg(mode === "createur")}>Créateur encaisse</button>
       </div>
+      {mode === "agence" && (
+        <div className="mb-3 flex flex-col gap-1.5">
+          <span className="px-1 text-[12px] text-muted-foreground">Facture à la marque</span>
+          <div role="group" aria-label="Facture à la marque" className="flex rounded-full bg-field p-0.5">
+            <button type="button" aria-pressed={billing === "agence"} disabled={saving} onClick={() => setBilling("agence")} className={seg(billing === "agence")}>Au nom de l'agence</button>
+            <button type="button" aria-pressed={billing === "mandat"} disabled={saving} onClick={() => setBilling("mandat")} className={seg(billing === "mandat")}>Au nom du créateur</button>
+          </div>
+        </div>
+      )}
       <div className="grid grid-cols-3 gap-px overflow-hidden rounded-2xl border border-border bg-border">
         {[
           { l: "Commission HT", v: formatEuro(take.commission), sub: take.estimated ? "estimée" : `${pct(rate)} du HT` },

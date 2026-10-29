@@ -75,7 +75,8 @@ export function reversementRows(input: {
     a.encaisse += t.ttc;
     a.ht += t.ht;
     a.commission += t.commission;
-    a.du += t.reversal;
+    // Facture au nom du créateur (mandat) : la TVA facturée est la sienne, elle lui est reversée.
+    a.du += t.reversal + (input.details[iv.id]?.onBehalf ? t.tva : 0);
   }
   // Les créateurs qui ont déjà des versements apparaissent aussi (même sans facture payée).
   for (const [k, list] of Object.entries(input.payouts ?? {})) {

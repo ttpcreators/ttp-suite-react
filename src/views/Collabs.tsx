@@ -13,7 +13,7 @@ import { MailAvatar } from "@/components/mail-avatar";
 import { brandDomainFrom, brandInitials, siteDomain } from "@/lib/mailAvatar";
 import { getAppState, mergeAppStateKey, useAppState, type AppState } from "@/lib/appState";
 import { CollabTakeCard } from "@/components/collab-take";
-import { cashModeFor, commissionInvoiceLabel, mandatesFrom, readSettings } from "@/lib/compta";
+import { billingFor, cashModeFor, commissionInvoiceLabel, mandatesFrom, readSettings } from "@/lib/compta";
 import { commissionMap, DEFAULT_COMMISSION, rateFor } from "@/lib/commission";
 import { totalsOf } from "@/lib/invoice";
 import { StatusPill } from "@/components/ui/status-pill";
@@ -478,6 +478,8 @@ export function Collabs() {
         brand: row.brand,
         lines: [{ label: row.deliverables?.trim() || row.title?.trim() || `Collab ${row.brand}`, unit: amount }],
         collabId: row.id,
+        // Au nom de l'agence, ou du créateur (mandat) : choix de la collab, sinon le réglage de la page Compta.
+        onBehalf: billingFor(row.id, (st.collabCashMode as Record<string, string>) ?? {}, readSettings(st.comptaSettings)) === "mandat",
       });
     }
     if (!ok) return toast("Impossible de préparer la facture");

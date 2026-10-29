@@ -44,6 +44,8 @@ export type InvoiceDetailLike = {
   franchise?: boolean | null;
   vatRate?: number | null;
   commissionRate?: number | null;
+  /** Facture établie au nom et pour le compte du créateur (mandat) : sa TVA lui revient. */
+  onBehalf?: boolean | null;
 };
 
 /**

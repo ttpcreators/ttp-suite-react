@@ -44,6 +44,7 @@ import { commissionMap, rateFor } from "@/lib/commission";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { invoiceHT, invoiceTotals, totalsOf, type LineItem, type Totals } from "@/lib/invoice";
+import { readSettings } from "@/lib/compta";
 import { printHtml } from "@/lib/printPdf";
 import { docHead, pdfFileTitle, ttpLogoImg } from "@/lib/pdfDoc";
 import { notifyCreator } from "@/lib/push";
@@ -102,6 +103,8 @@ type Details = {
   notes: string;
   /** « commission » : facture de la commission de l'agence au créateur (page Compta). */
   kind?: "commission";
+  /** Facture à la marque établie au nom et pour le compte du créateur (mandat de facturation). */
+  onBehalf?: boolean;
 };
 
 type Draft = Details & {
@@ -261,8 +264,19 @@ function invoiceHTML(o: {
   brand: string;
   creator: string | null;
   totals: Totals;
+  /** Identité du créateur (facture au nom et pour le compte du créateur). */
+  creatorLegal?: { address?: string | null; siren?: string | null } | null;
 }): string {
   const { issuer, bank, details: d, ref, brand, creator, totals } = o;
+  // Mandat : le créateur est le vendeur, l'agence émet la facture pour son compte.
+  const mandat = !!d.onBehalf && !!creator && d.kind !== "commission";
+  const sellerName = mandat ? titleCase(creator as string) : issuer.name;
+  const sellerLegal = mandat
+    ? [o.creatorLegal?.address ?? "", o.creatorLegal?.siren ? `SIREN ${o.creatorLegal.siren}` : ""].filter(Boolean).map((l) => `<div>${esc(l)}</div>`).join("")
+    : "";
+  const mandatLine = mandat
+    ? `Facture émise par ${issuer.name}${issuer.siret ? ` (SIRET ${issuer.siret})` : ""} au nom et pour le compte de ${titleCase(creator as string)}, en vertu d'un mandat de facturation.`
+    : "";
 
   const issuerLegal = [
     issuer.legalForm,
@@ -358,7 +372,8 @@ table.lines tr{break-inside:avoid}
 </dl>
 
 <div class="parties">
-  <div><h3>Émetteur</h3><div class="name">${esc(issuer.name)}</div><div class="addr">${issuerLegal}</div></div>
+  <div><h3>${mandat ? "Vendeur" : "Émetteur"}</h3><div class="name">${esc(sellerName)}</div><div class="addr">${mandat ? sellerLegal : issuerLegal}</div>
+    ${mandat ? `<div class="addr" style="margin-top:2mm">Émise par ${esc(issuer.name)}, mandataire</div>` : ""}</div>
   <div><h3>Facturé à</h3><div class="name">${esc(d.clientName || brand)}</div><div class="addr">${clientLegal}</div>
     ${d.tpoRef && d.tpoRef.trim() ? `<div class="tpo"><span>Réf. TPO</span> ${esc(d.tpoRef)}</div>` : ""}</div>
   <div><h3>Prestation</h3><div class="name">${d.kind === "commission" ? "Commission d'agence" : esc(brand)}</div>
@@ -383,7 +398,7 @@ ${notesBlock}
   Conditions de règlement : paiement par virement au plus tard le ${frDate(d.dueDate)}.
   En cas de retard de paiement, application de pénalités égales à trois fois le taux d'intérêt légal, ainsi qu'une
   indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 et D441-5 du Code de commerce).
-  Pas d'escompte pour paiement anticipé.${d.franchise ? " TVA non applicable, art. 293 B du CGI." : ""}
+  Pas d'escompte pour paiement anticipé.${d.franchise ? " TVA non applicable, art. 293 B du CGI." : ""}${mandatLine ? `<br>${esc(mandatLine)}` : ""}
   <br>Document généré par TTP Suite.
 </div>
 </div></body></html>`;
@@ -504,6 +519,19 @@ export function Facturation() {
   const creators = useCreators();
   const live = useLiveKey();
   const { data: appData } = useAppState<AppState>();
+  // Identité des créateurs (adresse, SIREN) : vendeur d'une facture faite au nom du créateur (mandat).
+  const [creatorLegal, setCreatorLegal] = useState<Record<string, { address: string | null; siren: string | null }>>({});
+  useEffect(() => {
+    let alive = true;
+    void supabase.from("creators").select("name,address,siren").then(({ data }) => {
+      if (!alive || !data) return;
+      setCreatorLegal(Object.fromEntries((data as { name: string; address: string | null; siren: string | null }[]).map((c) => [c.name.trim().toLowerCase(), { address: c.address, siren: c.siren }])));
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const legalOf = (creator: string | null | undefined) => (creator ? creatorLegal[creator.trim().toLowerCase()] ?? null : null);
 
   // Réglages persistés (blob agence)
   const [issuer, setIssuer] = useState<Issuer>(DEFAULT_ISSUER);
@@ -592,6 +620,7 @@ export function Facturation() {
       ...(p.collabId ? { collabId: p.collabId } : {}),
       ...(p.kind === "commission" ? { kind: "commission" as const, clientName: p.brand } : {}),
       ...(p.franchise !== undefined ? { franchise: p.franchise } : {}),
+      ...(p.onBehalf !== undefined ? { onBehalf: p.onBehalf } : {}),
     });
     setBaseline(draftSnapshot(blank));
     setConfirmLeave(false);
@@ -695,7 +724,7 @@ export function Facturation() {
 
   // ── Éditeur ──
   function openCreate() {
-    const d = blankDraft(invoices.map((r) => r.ref), banks[0]?.id ?? "");
+    const d: Draft = { ...blankDraft(invoices.map((r) => r.ref), banks[0]?.id ?? ""), onBehalf: readSettings(appData?.comptaSettings).facturation === "mandat" };
     setDraft(d);
     setBaseline(draftSnapshot(d));
     setConfirmLeave(false);
@@ -824,6 +853,7 @@ export function Facturation() {
       bankId: draft.bankId,
       notes: draft.notes,
       ...(draft.kind === "commission" ? { kind: "commission" as const } : {}),
+      ...(draft.kind !== "commission" && draft.onBehalf !== undefined ? { onBehalf: draft.onBehalf } : {}),
     };
     // Relire FRAIS avant de fusionner : deux postes peuvent créer des factures en
     // parallèle → sinon l'instantané local périmé écrase les détails de l'autre.
@@ -867,7 +897,7 @@ export function Facturation() {
     const bank = banks.find((b) => b.id === d.bankId) ?? null;
     const party = r.party ?? "";
     const brand = party.includes("×") ? party.split("×")[0].trim() : party;
-    return invoiceHTML({ issuer, bank, details: d, ref: r.ref, brand, creator: r.creator, totals: t });
+    return invoiceHTML({ issuer, bank, details: d, ref: r.ref, brand, creator: r.creator, totals: t, creatorLegal: legalOf(r.creator) });
   }
 
   // Export = impression navigateur → « Enregistrer au format PDF » : vrai PDF
@@ -967,6 +997,7 @@ export function Facturation() {
           brand: draft.brand,
           creator: draft.creator || null,
           totals: draftTotals,
+          creatorLegal: legalOf(draft.creator),
         })
       : "";
   const dirty = !!draft && draftSnapshot(draft) !== baseline;
@@ -1183,6 +1214,19 @@ export function Facturation() {
               </div>
 
               <div className="mt-4 grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
+                {draft.kind !== "commission" && (
+                  <Field label="Facture au nom de">
+                    <Picker
+                      ariaLabel="Facture au nom de"
+                      value={draft.onBehalf ? "mandat" : "agence"}
+                      onChange={(v) => setDraft({ ...draft, onBehalf: v === "mandat" })}
+                      options={[
+                        { value: "agence", label: "L'agence" },
+                        { value: "mandat", label: draft.creator ? `${titleCase(draft.creator)} (mandat)` : "Le créateur (mandat)" },
+                      ]}
+                    />
+                  </Field>
+                )}
                 <Field label="TVA">
                   <Picker
                     ariaLabel="TVA"

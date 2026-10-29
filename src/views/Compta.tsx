@@ -8,7 +8,7 @@ import { getCache, setCache } from "@/lib/viewCache";
 import { commissionMap, DEFAULT_COMMISSION, rateFor } from "@/lib/commission";
 import { collabIdMissing } from "@/lib/collabLinks";
 import {
-  cashModeFor, collabTake, comptePro, invoiceLine, mandatesFrom, readSettings, socialRate, thresholdAlerts,
+  billingFor, cashModeFor, collabTake, comptePro, invoiceLine, mandatesFrom, readSettings, socialRate, thresholdAlerts,
   type ComptaDetail, type ComptaInvoice, type ComptaSettings, type Payout,
 } from "@/lib/compta";
 import { ACTIVITIES, RATE_SOURCES, RATES_CHECKED, type Activity } from "@/lib/comptaRates";
@@ -88,7 +88,7 @@ export function Compta() {
       .filter((iv) => iv.status !== "brouillon")
       .map((iv) => {
         const who = iv.creator ?? collabById.get(iv.collab_id ?? "")?.creator ?? null;
-        return invoiceLine(iv, details[iv.id], rateOf(who), cashModeFor(iv.collab_id, who, modes, mandates), settings);
+        return invoiceLine(iv, details[iv.id], rateOf(who), cashModeFor(iv.collab_id, who, modes, mandates), settings, billingFor(iv.collab_id, modes, settings));
       });
     const box = comptePro(lines, (app?.creatorPayouts as Record<string, Payout[]>) ?? {}, settings, todayISO());
     const takes = collabs
@@ -269,12 +269,12 @@ function SettingsSheet({ settings, onClose }: { settings: ComptaSettings; onClos
               <button type="button" aria-pressed={s.declaration === "trimestre"} onClick={() => setS((x) => ({ ...x, declaration: "trimestre" }))} className={seg(s.declaration === "trimestre")}>Chaque trimestre</button>
             </div>
           </Row>
-          <Row label="Factures aux marques">
+          <Row label="Factures aux marques, par défaut">
             <div role="group" className="flex flex-col gap-1 rounded-[20px] bg-field p-1 sm:flex-row">
               <button type="button" aria-pressed={s.facturation === "agence"} onClick={() => setS((x) => ({ ...x, facturation: "agence" }))} className={seg(s.facturation === "agence")}>Au nom de l'agence</button>
               <button type="button" aria-pressed={s.facturation === "mandat"} onClick={() => setS((x) => ({ ...x, facturation: "mandat" }))} className={seg(s.facturation === "mandat")}>Au nom du créateur</button>
             </div>
-            <span className="text-[11px] leading-snug text-faint">Au nom de l'agence (comme les factures de l'app aujourd'hui) : tout le HT compte dans ton chiffre d'affaires. Au nom du créateur (mandat) : seulement ta commission. À choisir avec ton comptable.</span>
+            <span className="text-[11px] leading-snug text-faint">Au nom de l'agence : tout le HT compte dans ton chiffre d'affaires. Au nom du créateur (mandat) : seulement ta commission. Ce choix se change aussi collab par collab (fiche collab) et facture par facture.</span>
           </Row>
           <div className="rounded-xl bg-panel px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
             Taux officiels vérifiés le {fmtDay(RATES_CHECKED)} :

@@ -11,7 +11,8 @@ import type { QuoteLine } from "./pricingForm";
  * le créateur, page Compta) ; `brand` porte alors le nom du créateur facturé, `creator` est vide
  * (aucun reversement, invisible dans l'espace du créateur), `franchise` suit le régime de TVA.
  */
-export type InvoicePrefill = { creator: string; brand: string; lines: QuoteLine[]; collabId?: string; kind?: "commission"; franchise?: boolean };
+/** `onBehalf` : facture à la marque établie au nom et pour le compte du créateur (mandat), choix de la collab. */
+export type InvoicePrefill = { creator: string; brand: string; lines: QuoteLine[]; collabId?: string; kind?: "commission"; franchise?: boolean; onBehalf?: boolean };
 
 const KEY = "ttp:invoice-prefill";
 
