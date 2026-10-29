@@ -156,6 +156,17 @@ export function splitAddressList(value: string): string[] {
 }
 
 /**
+ * Le message s'adresse-t-il à quelqu'un hors de l'agence (To / Cc / Bcc) ? Un mail de
+ * l'agence envoyé au seul créateur (ou en interne) n'est pas du démarchage.
+ */
+export function writesOutside(m: GMessageLite, agencyDomain: string): boolean {
+  const dom = "@" + agencyDomain.toLowerCase();
+  return m.headers
+    .filter((h) => ["to", "cc", "bcc"].includes(h.name.toLowerCase()))
+    .some((h) => addressesIn(h.value).some((a) => !a.endsWith(dom)));
+}
+
+/**
  * To / Cc montrés à une créatrice : toute adresse de l'agence autre que les siennes
  * devient « TTP Creators » (une seule fois). Une adresse extérieure dont le nom
  * affiché cite une adresse de l'agence est réduite à l'adresse seule.

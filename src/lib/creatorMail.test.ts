@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addressList, addressesIn, aliasQuery, aliasRefused, brandOf, cleanComment, concernedMessages, displayName, isMailStatus, isSharedBox,
-  maskAgencyAddresses, messageMatches, normEmail, parseChoice, splitAddressList, threadMatches, type GMessageLite,
+  maskAgencyAddresses, messageMatches, normEmail, parseChoice, splitAddressList, threadMatches, writesOutside, type GMessageLite,
 } from "../../supabase/functions/creator-mail/logic.ts";
 import { autoStatusOf, buildFeed, choiceOf, type MailNote, type MailStatusEvent } from "./creatorMail";
 
@@ -214,6 +214,15 @@ describe("creator-mail : avis En cours / Validé / Refusé", () => {
     expect(autoStatusOf([{ fromAgency: true }, { fromAgency: true }])).toBe("demarchee"); // relance sans réponse
     expect(autoStatusOf([{ fromAgency: true }, { fromAgency: false }])).toBe("negociation"); // la marque a répondu
     expect(autoStatusOf([{ fromAgency: false }, { fromAgency: true }])).toBe("negociation");
+  });
+
+  it("mail de l'agence au seul créateur : pas du démarchage", () => {
+    expect(autoStatusOf([{ fromAgency: true, to: "candice@ttpcreators.pro", cc: "" }])).toBe("nouvelle");
+    expect(autoStatusOf([{ fromAgency: true, to: "TTP Creators, candice@ttpcreators.pro", cc: "" }])).toBe("nouvelle");
+    expect(autoStatusOf([{ fromAgency: true, to: "Julie <julie@nike.com>", cc: "candice@ttpcreators.pro" }])).toBe("demarchee");
+    expect(writesOutside(msg({ From: "partnerships@ttpcreators.pro", To: "candice@ttpcreators.pro" }), "ttpcreators.pro")).toBe(false);
+    expect(writesOutside(msg({ From: "partnerships@ttpcreators.pro", To: "talent@ttpcreators.pro", Bcc: "candice@ttpcreators.pro" }), "ttpcreators.pro")).toBe(false);
+    expect(writesOutside(msg({ From: "partnerships@ttpcreators.pro", To: "julie@nike.com", Bcc: "candice@ttpcreators.pro" }), "ttpcreators.pro")).toBe(true);
   });
 });
 

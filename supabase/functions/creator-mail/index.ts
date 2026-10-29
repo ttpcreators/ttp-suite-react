@@ -47,7 +47,7 @@ import { gfetch, classifyGmail, mapPool, charsetOf, decodeGmailBody, type Gfetch
 import { REACTION_MIME, parseReactionJson } from "../_shared/emailReaction.ts";
 import {
   addressList, aliasQuery, aliasRefused, brandAddressOf, brandOf, cleanComment, concernedMessages, displayName, header, isVisibleMessage,
-  maskAgencyAddresses, normEmail, parseChoice, threadMatches,
+  maskAgencyAddresses, normEmail, parseChoice, threadMatches, writesOutside,
   type GHeader, type GMessageLite,
 } from "./logic.ts";
 
@@ -353,11 +353,13 @@ const fromAgency = (m: GMessage) =>
  * puis « En négociation » dès que l'agence a répondu dans le fil. Un statut choisi
  * à la main (table creator_mail_threads) l'emporte toujours.
  */
-// Fil lancé par l'agence (démarchage, alias du créateur en copie) : « Démarchée par
-// l'agence » tant que la marque n'a pas répondu, puis « En négociation ».
+// Fil lancé par l'agence vers une marque (démarchage, alias du créateur en copie) :
+// « Démarchée par l'agence » tant que la marque n'a pas répondu, puis « En négociation ».
+// Un mail de l'agence adressé au seul créateur n'est pas du démarchage : il arrive dans ses Reçus.
+const outreach = (m: GMessage) => fromAgency(m) && writesOutside(lite(m), AGENCY_DOMAIN);
 const autoStatus = (msgs: GMessage[]) =>
   msgs[0] && fromAgency(msgs[0])
-    ? (msgs.slice(1).some((m) => !fromAgency(m)) ? "negociation" : "demarchee")
+    ? !outreach(msgs[0]) ? "nouvelle" : msgs.slice(1).some((m) => !fromAgency(m)) ? "negociation" : "demarchee"
     : (msgs.slice(1).some(fromAgency) ? "negociation" : "nouvelle");
 
 type ThreadRow = { thread_id: string; status: string; brand: string | null; decided_by?: string | null; decided_at?: string | null };
@@ -439,8 +441,8 @@ async function listThreads(sb: Sb, token: string, s: Settings, fresh: boolean) {
         ...decisionOf(row),
         notes: noteCount.get(t.id) ?? 0,
         // Démarchage : l'agence a écrit en premier ; la marque a-t-elle répondu depuis ?
-        prospect: fromAgency(msgs[0]),
-        replied: fromAgency(msgs[0]) && msgs.slice(1).some((m) => !fromAgency(m)),
+        prospect: outreach(msgs[0]),
+        replied: outreach(msgs[0]) && msgs.slice(1).some((m) => !fromAgency(m)),
         startedTs: Number(msgs[0].internalDate ?? 0),
         // « Envoyés » de l'espace créateur : l'agence a écrit dans l'échange (messages qu'il voit).
         sent: shown.some(fromAgency),

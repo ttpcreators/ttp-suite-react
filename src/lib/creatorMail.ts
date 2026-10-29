@@ -76,15 +76,21 @@ export type MailChoice = "encours" | "a_verifier" | "a_valider" | "valide" | "re
 export const STORED_STATUSES = ["a_verifier", "a_valider", "valide", "refuse"] as const;
 export const choiceOf = (s: MailStatus): MailChoice =>
   (STORED_STATUSES as readonly string[]).includes(s) ? (s as MailChoice) : "encours";
+/** Une adresse hors de l'agence ? (« TTP Creators », adresse masquée, ne compte pas.) */
+const toOutside = (value: string) =>
+  (value.match(/[^\s<>"',;]+@[^\s<>"',;]+/g) ?? []).some((a) => !a.toLowerCase().endsWith("@ttpcreators.pro"));
 /**
  * Statut automatique (comme le serveur) :
  *  - fil lancé par la MARQUE : « Nouvelle demande », puis « En négociation » dès que l'agence a répondu ;
- *  - fil lancé par l'AGENCE (démarchage) : « Démarchée par l'agence », puis « En négociation » dès que la marque répond.
+ *  - fil lancé par l'AGENCE (démarchage) : « Démarchée par l'agence », puis « En négociation » dès que la marque répond ;
+ *  - mail de l'agence adressé au seul créateur (To / Cc connus, aucune adresse extérieure) : « Nouvelle demande ».
  */
-export const autoStatusOf = (messages: Pick<MailMessage, "fromAgency">[]): MailStatus =>
-  messages[0]?.fromAgency
-    ? messages.slice(1).some((m) => !m.fromAgency) ? "negociation" : "demarchee"
-    : messages.slice(1).some((m) => m.fromAgency) ? "negociation" : "nouvelle";
+export const autoStatusOf = (messages: (Pick<MailMessage, "fromAgency"> & Partial<Pick<MailMessage, "to" | "cc">>)[]): MailStatus => {
+  const first = messages[0];
+  if (!first?.fromAgency) return messages.slice(1).some((m) => m.fromAgency) ? "negociation" : "nouvelle";
+  if (first.to !== undefined && !toOutside(`${first.to} ${first.cc ?? ""}`)) return "nouvelle";
+  return messages.slice(1).some((m) => !m.fromAgency) ? "negociation" : "demarchee";
+};
 
 /** Une ligne de l'historique : qui a rangé l'échange, où, quand, avec quel mot. */
 export type MailStatusEvent = {
