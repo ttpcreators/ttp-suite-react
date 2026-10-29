@@ -11,7 +11,11 @@ import { StatsBento } from "@/components/ui/stats-bento";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { MailAvatar } from "@/components/mail-avatar";
 import { brandDomainFrom, brandInitials, siteDomain } from "@/lib/mailAvatar";
-import { mergeAppStateKey, useAppState } from "@/lib/appState";
+import { getAppState, mergeAppStateKey, useAppState, type AppState } from "@/lib/appState";
+import { CollabTakeCard } from "@/components/collab-take";
+import { cashModeFor, commissionInvoiceLabel, mandatesFrom, readSettings } from "@/lib/compta";
+import { commissionMap, DEFAULT_COMMISSION, rateFor } from "@/lib/commission";
+import { totalsOf } from "@/lib/invoice";
 import { StatusPill } from "@/components/ui/status-pill";
 import { useEffect, useState, type ReactElement } from "react";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
@@ -449,15 +453,33 @@ export function Collabs() {
 
   // Tâche créée à chaque étape franchie (réglage d'équipe, activé par défaut).
   const [autoTasks] = useCollabAutoTasks();
-  // « Créer la facture » : Facturation s'ouvre sur un brouillon prérempli (marque, cachet, créateur).
-  const createInvoice = (row: Row) => {
+  // « Créer la facture » : Facturation s'ouvre sur un brouillon prérempli. Selon qui encaisse
+  // (bloc « Ce que je prends », src/lib/compta.ts) : la facture à la marque (cachet), ou la
+  // facture de la commission de l'agence au créateur quand la marque paie le créateur.
+  const createInvoice = async (row: Row) => {
     const amount = cachetAmount(row.cachet);
-    const ok = putInvoicePrefill({
-      creator: row.creator ?? "",
-      brand: row.brand,
-      lines: [{ label: row.deliverables?.trim() || row.title?.trim() || `Collab ${row.brand}`, unit: amount }],
-      collabId: row.id,
-    });
+    const st = await getAppState().catch(() => ({}) as AppState);
+    const mode = cashModeFor(row.id, row.creator, (st.collabCashMode as Record<string, string>) ?? {}, mandatesFrom(st.contractHistory));
+    let ok: boolean;
+    if (mode === "createur") {
+      const rate = rateFor(row.creator, commissionMap(creators), (st.creatorCommission as Record<string, number>) ?? {}, DEFAULT_COMMISSION);
+      const commission = totalsOf([{ id: "c", label: "", qty: 1, unit: amount }], true, 0, rate).commission;
+      ok = putInvoicePrefill({
+        creator: "",
+        brand: titleCase(row.creator ?? "") || "Créateur",
+        lines: [{ label: commissionInvoiceLabel(row.brand, rate), unit: commission }],
+        collabId: row.id,
+        kind: "commission",
+        franchise: readSettings(st.comptaSettings).vatRegime !== "assujetti",
+      });
+    } else {
+      ok = putInvoicePrefill({
+        creator: row.creator ?? "",
+        brand: row.brand,
+        lines: [{ label: row.deliverables?.trim() || row.title?.trim() || `Collab ${row.brand}`, unit: amount }],
+        collabId: row.id,
+      });
+    }
     if (!ok) return toast("Impossible de préparer la facture");
     window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "facturation" }));
   };
@@ -1032,9 +1054,11 @@ export function Collabs() {
           </div>
         </div>
 
+        <CollabTakeCard collab={{ id: row.id, brand: row.brand, creator: row.creator, cachet: row.cachet }} />
+
         <CollabLinkedPanel
           collab={{ id: row.id, brand: row.brand, creator: row.creator, step: row.step, status: row.status, cachet: row.cachet }}
-          onCreateInvoice={() => createInvoice(row)}
+          onCreateInvoice={() => void createInvoice(row)}
           onPrepareRecap={() => prepareRecap(row)}
         />
         {/* Exclusivité signée avec cette marque (points clés) ou exclusivité qui la bloque. */}

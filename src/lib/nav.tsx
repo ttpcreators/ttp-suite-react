@@ -3,7 +3,7 @@ import {
   TtpBell, TtpBrief, TtpChecklist, TtpCollabs, TtpContacts, TtpContract, TtpDeadline, TtpExclu, TtpDm, TtpEngagement, TtpEvolution,
   TtpFiles, TtpFolder, TtpGift, TtpHistory, TtpIdea, TtpInvoice, TtpLock, TtpMail, TtpMediakit, TtpPerson, TtpPipeline,
   TtpPlanning, TtpPulse, TtpReport, TtpScouting, TtpSend, TtpSliders, TtpSourcing, TtpSpark, TtpStar, TtpStats, TtpTag,
-  TtpTarget, TtpTemplate, TtpToday, TtpTodo, TtpTransfer,
+  TtpTarget, TtpTemplate, TtpToday, TtpTodo, TtpTransfer, TtpGains,
 } from "@/components/icons/ttp-icons";
 
 export type ViewId =
@@ -14,6 +14,7 @@ export type ViewId =
   | "objectifs"
   | "facturation"
   | "reversements"
+  | "compta"
   | "relances"
   | "echeances"
   | "exclusivites"
@@ -161,6 +162,7 @@ export const NAV: NavFamily[] = [
       { id: "facturation", label: "Facturation", icon: TtpInvoice },
       { id: "relances", label: "Relances", icon: TtpBell },
       { id: "reversements", label: "Reversements", icon: TtpTransfer },
+      { id: "compta", label: "Compta", icon: TtpGains },
       { id: "stats", label: "Stats", icon: TtpStats },
       { id: "objectifs", label: "Objectifs", icon: TtpTarget },
     ],

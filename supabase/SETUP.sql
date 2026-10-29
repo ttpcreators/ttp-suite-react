@@ -228,7 +228,8 @@ $$;
 -- Clés « argent » du blob agence, rangées dans la ligne '__finance_state__' (fondateurs).
 create or replace function public.app_finance_key(p_key text) returns boolean
 language sql immutable set search_path = public as $$
-  select p_key = any (array['invoiceDetails', 'invoiceBankAccounts', 'invoiceIssuer', 'creatorPayouts', 'creatorCommission']);
+  -- + comptaSettings, collabCashMode : page Compta (sql/2026-10-29-compta.sql).
+  select p_key = any (array['invoiceDetails', 'invoiceBankAccounts', 'invoiceIssuer', 'creatorPayouts', 'creatorCommission', 'comptaSettings', 'collabCashMode']);
 $$;
 
 create or replace function public.my_creator() returns text

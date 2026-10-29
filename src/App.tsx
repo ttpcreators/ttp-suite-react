@@ -79,6 +79,7 @@ const CreatorSpace = lazy(lazyImport(() => import("@/views/CreatorSpace").then((
 const Corbeille = lazy(lazyImport(() => import("@/views/Corbeille").then((m) => ({ default: m.Corbeille }))));
 const Activite = lazy(lazyImport(() => import("@/views/Activite").then((m) => ({ default: m.Activite }))));
 const Reversements = lazy(lazyImport(() => import("@/views/Reversements").then((m) => ({ default: m.Reversements }))));
+const Compta = lazy(lazyImport(() => import("@/views/Compta").then((m) => ({ default: m.Compta }))));
 const Relances = lazy(lazyImport(() => import("@/views/Relances").then((m) => ({ default: m.Relances }))));
 const Echeances = lazy(lazyImport(() => import("@/views/Echeances").then((m) => ({ default: m.Echeances }))));
 const Exclusivites = lazy(lazyImport(() => import("@/views/Exclusivites").then((m) => ({ default: m.Exclusivites }))));
@@ -95,6 +96,7 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   stats: Stats,
   facturation: Facturation,
   reversements: Reversements,
+  compta: Compta,
   relances: Relances,
   echeances: Echeances,
   exclusivites: Exclusivites,
@@ -624,7 +626,7 @@ export default function App() {
 
   // Rôle agence : fondateur = accès total ; membre = tout SAUF Finance & Accès.
   const isFounder = agencyRole === "founder";
-  const FOUNDER_ONLY: ViewId[] = ["facturation", "reversements", "relances", "echeances", "acces", "diagnostique", "agent"];
+  const FOUNDER_ONLY: ViewId[] = ["facturation", "reversements", "compta", "relances", "echeances", "acces", "diagnostique", "agent"];
   const hiddenIds = isFounder ? [] : FOUNDER_ONLY;
   const canSee = (id: ViewId) => !hiddenIds.includes(id);
   // Dans les menus : ni les pages fondateur (pour un membre), ni les pages rangées.

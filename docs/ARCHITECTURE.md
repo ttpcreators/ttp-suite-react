@@ -36,7 +36,8 @@ dans **un seul blob JSON** : table `module_rows`, ligne `module='__app_state__'`
 colonne `a`. RLS : **agence uniquement**.
 
 **L'argent à part** (2026-10-25) : les clés `invoiceDetails`, `invoiceBankAccounts`,
-`invoiceIssuer`, `creatorPayouts` et `creatorCommission` vivent dans une 2e ligne,
+`invoiceIssuer`, `creatorPayouts`, `creatorCommission`, `comptaSettings` et `collabCashMode`
+(page Compta, SQL 2026-10-29) vivent dans une 2e ligne,
 `module='__finance_state__'`, lisible des seuls **fondateurs** (RLS `module_rows_agency`).
 Les fonctions `app_state_set/merge/list` y rangent d'office ces clés (liste dans
 `app_finance_key()`), et l'app (`src/lib/appState.ts`) comme le serveur

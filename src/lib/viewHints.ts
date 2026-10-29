@@ -24,6 +24,7 @@ export const VIEW_HINTS: Partial<Record<ViewId, string>> = {
   planning: "Le calendrier de l'agence (relié à Google Agenda) et les posts Instagram de TTP à programmer.",
   facturation: "Les factures : à envoyer, en attente, payées, en retard.",
   reversements: "Ce que l'agence doit reverser à chaque créateur.",
+  compta: "Ce qu'il devrait y avoir sur le compte pro, ce qu'il faut mettre de côté (créateurs, URSSAF, TVA) et ce que tu prends sur chaque collab.",
   relances: "Les factures en retard, à relancer.",
   echeances: "Les contrats qui arrivent à leur fin, à renouveler ou à renégocier à temps.",
   exclusivites: "Qui est en exclusivité avec quelle marque, contre quels concurrents et jusqu'à quand. L'app ne te propose jamais un créateur bloqué, en prospection comme en réponse à une marque. « Lire un contrat » remplit la fiche depuis le PDF.",
