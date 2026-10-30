@@ -47,6 +47,7 @@ import { CollabExcluPanel } from "@/components/exclu-alert";
 import { createStepTask } from "@/lib/collabLinksDb";
 import { autoTaskFor, cachetAmount } from "@/lib/collabLinks";
 import { putInvoicePrefill } from "@/lib/invoicePrefill";
+import { useIsWide } from "@/lib/iosUi";
 
 type Row = {
   id: string;
@@ -166,6 +167,7 @@ export function Collabs() {
     }
   });
   const [phoneDetail, setPhoneDetail] = useState(false);
+  const wide = useIsWide();
   const pick = (id: string) => {
     setSelId(id);
     setPhoneDetail(true);
@@ -885,7 +887,8 @@ export function Collabs() {
             <h3 className="px-2 pb-1 pt-1.5 text-[12px] font-semibold text-muted-foreground">{p.label}</h3>
             <div className="flex flex-col gap-0.5">
               {inPhase.map((r) => {
-                const on = selected?.id === r.id;
+                // Sans détail à côté (téléphone, tablette), aucune ligne n'est « active ».
+                const on = wide && selected?.id === r.id;
                 const d = daysSince(reachedAt(r));
                 return (
                   <button

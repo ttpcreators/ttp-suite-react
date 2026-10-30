@@ -42,6 +42,20 @@ export function isPhoneNow(): boolean {
   return !!phoneMq?.matches;
 }
 
+const wideMq = typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(min-width: 1024px)") : null;
+
+/** Écran large (1024 px et plus), où une liste et son détail tiennent côte à côte. */
+export function useIsWide(): boolean {
+  return useSyncExternalStore(
+    (fn) => {
+      wideMq?.addEventListener("change", fn);
+      return () => wideMq?.removeEventListener("change", fn);
+    },
+    () => !!wideMq?.matches,
+    () => false,
+  );
+}
+
 export function useIsPhone(): boolean {
   return useSyncExternalStore(
     (fn) => {
