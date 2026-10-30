@@ -313,7 +313,7 @@ function TeamNameField() {
  * de jetons live : les couleurs figées vivent toutes ici, dans cette seule table.
  */
 const PREVIEW_COLORS = {
-  studio: { bg: "#e9e9eb", side: "#e9e9eb", card: "#ffffff", line: "#d8d8dd", strong: "#111113", accent: "#0069fe" },
+  studio: { bg: "#f1f1f3", side: "#f1f1f3", card: "#ffffff", line: "#d8d8dd", strong: "#111113", accent: "#0069fe" },
   clair: { bg: "#f5f5f7", side: "#ffffff", card: "#ffffff", line: "#d8d8dd", strong: "#1d1d1f", accent: "#0069fe" },
   verre: {
     bg: "linear-gradient(135deg, #dbe7fb 0%, #ddf2ea 50%, #fde5d4 100%)",
