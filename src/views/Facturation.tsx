@@ -1303,7 +1303,7 @@ export function Facturation() {
 
   return (
     <>
-      <div ref={editorTop} className="scroll-mt-4" />
+      <div ref={editorTop} className="-mb-4 scroll-mt-4" />
       {/* Téléphone : la facture s'ouvre en feuille (comme les autres « + »), pas dans la page. */}
       {editing && phone ? (
         <IosSheet onClose={() => closeEditor()} label={draft?.id ? `Facture ${draft.ref}` : "Nouvelle facture"}>

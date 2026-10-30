@@ -156,6 +156,7 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
   // Barre qui défile : fondu sur le bord qui cache encore des onglets (rien de coupé net).
   const { ref: rowRef, style: fadeStyle } = useEdgeFade();
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const placedFor = useRef(-1);
   const [ind, setInd] = useState({ x: 0, y: 0, width: 0, height: 0, ready: false });
   const selectedIndex = items.findIndex((i) => i.value === tabs.value);
 
@@ -168,14 +169,44 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
     read();
     const row = rowRef.current;
     if (!row) return;
-    // Barre qui défile : l'onglet actif reste visible (sans faire défiler la page).
-    if (!wrap && row.scrollWidth > row.clientWidth) {
-      const left = node.offsetLeft - (row.clientWidth - node.offsetWidth) / 2;
-      row.scrollTo({ left: Math.max(0, left), behavior: reduced ? "auto" : "smooth" });
+    // Barre qui défile : l'onglet actif reste visible (sans faire défiler la page). La barre
+    // s'arrête au début d'un onglet entier (le précédent, s'il tient) : jamais un mot coupé à gauche.
+    // Pour le dernier onglet, la barre ne défile pas assez loin : on ajoute la marge qui manque à
+    // droite. Placée une fois par onglet (pas à chaque rendu, le doigt reste libre), puis refaite
+    // quand la police arrive (les onglets changent alors de largeur).
+    const place = (smooth: boolean, force: boolean) => {
+      row.style.paddingInlineEnd = "";
+      const shown = node.offsetLeft >= row.scrollLeft && node.offsetLeft + node.offsetWidth <= row.scrollLeft + row.clientWidth;
+      if (row.scrollWidth <= row.clientWidth || (shown && !force)) return false;
+      const prev = tabRefs.current[selectedIndex - 1];
+      const fits = prev && node.offsetLeft + node.offsetWidth - prev.offsetLeft <= row.clientWidth;
+      const left = Math.max(0, selectedIndex === 0 ? 0 : (fits ? prev.offsetLeft : node.offsetLeft) - 4);
+      const short = left - (row.scrollWidth - row.clientWidth);
+      if (short > 0) row.style.paddingInlineEnd = `${parseFloat(getComputedStyle(row).paddingInlineEnd) + short}px`;
+      // La marge ajoutée n'est parfois prise en compte qu'après quelques images : on attend
+      // que la barre puisse défiler jusque-là (10 images au plus) avant de la faire défiler.
+      const go = (tries: number) => {
+        if (placedFor.current !== selectedIndex) return;
+        if (row.scrollWidth - row.clientWidth < left - 1 && tries > 0) {
+          requestAnimationFrame(() => go(tries - 1));
+          return;
+        }
+        row.scrollTo({ left, behavior: smooth && !reduced ? "smooth" : "auto" });
+      };
+      go(10);
+      return true;
+    };
+    let alive = true;
+    if (!wrap && placedFor.current !== selectedIndex) {
+      placedFor.current = selectedIndex;
+      const moved = place(true, false);
+      if (moved && document.fonts && document.fonts.status !== "loaded") {
+        void document.fonts.ready.then(() => { if (alive && placedFor.current === selectedIndex) place(false, true); });
+      }
     }
     const observer = new ResizeObserver(read);
     observer.observe(row);
-    return () => observer.disconnect();
+    return () => { alive = false; observer.disconnect(); };
   }, [selectedIndex, items, wrap, reduced]);
 
   return (
