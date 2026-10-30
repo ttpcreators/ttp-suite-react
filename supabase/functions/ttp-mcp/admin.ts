@@ -9,6 +9,8 @@
 // Jamais : coffre des mots de passe, IBAN, jetons de connexion (_shared/mcpAdmin.ts).
 // ============================================================================
 
+import { DEFAULT_MAIL_MODELS } from "../_shared/mailModels.ts";
+import { readTarifGrid } from "../_shared/tarif.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { readAppState } from "../_shared/appState.ts";
 import { pageAccess, postGraph } from "../_shared/instagram.ts";
@@ -222,6 +224,15 @@ const reglagesApp: AdminTool = {
         return ok(`# Réglages · ${keys.length} clés\n${keys.map((k) => `- ${k} (${Array.isArray(st[k]) ? `liste de ${(st[k] as unknown[]).length}` : typeof st[k]})`).join("\n")}`);
       }
       if (blockedSetting(key)) return fail("Réglage protégé (jamais lu par Claude).");
+      // Valeurs fournies d'office par l'app (jamais enregistrées tant qu'on n'y touche pas).
+      if (key === "customTemplates") {
+        const own = Array.isArray(st.customTemplates) ? (st.customTemplates as { category?: string; title?: string; body?: string }[]) : [];
+        const fmt = (t: { category?: string; title?: string; body?: string }) => `## ${t.title ?? "Sans titre"} (${t.category ?? "?"})\n${t.body ?? ""}`;
+        return ok([`# Modèles de mails · ${DEFAULT_MAIL_MODELS.length} fournis par l'app + ${own.length} de l'agence`, ...DEFAULT_MAIL_MODELS.map(fmt), own.length ? "\n# Modèles de l'agence" : "", ...own.map(fmt)].filter(Boolean).join("\n\n"));
+      }
+      if (key === "pricingRates" && st.pricingRates == null) {
+        return ok(`# pricingRates\nPas encore réglé dans l'app : le barème utilisé est celui de départ.\n${JSON.stringify({ ttp: readTarifGrid(undefined) }, null, 1)}`);
+      }
       const v = JSON.stringify(st[key] ?? null, null, 1);
       return ok(`# ${key}\n${v.length > 12000 ? `${v.slice(0, 12000)}… (coupé, ${v.length} caractères)` : v}`);
     }

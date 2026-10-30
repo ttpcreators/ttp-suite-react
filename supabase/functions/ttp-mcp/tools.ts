@@ -399,6 +399,57 @@ const contrats: Tool = {
   },
 };
 
+/** Proposition qu'un agent a lui même déclarée périmée (« PÉRIMÉ … à écarter »). */
+const isStale = (r: Json) => /^\s*p[ée]rim[ée]/i.test(String(r.contexte ?? ""));
+
+const aValider: Tool = {
+  name: "a_valider",
+  title: "File « À valider » des agents",
+  description: "Propositions des agents qui attendent la validation de l'équipe (page Agents → À valider) : messages WhatsApp ou mails à envoyer, alertes. Les propositions marquées périmées par l'agent sont listées à part. Donne l'id pour ecarter_proposition.",
+  inputSchema: { type: "object", properties: { agent: { type: "string", description: "Nom de l'agent (facultatif)" } }, additionalProperties: false },
+  founder: true,
+  run: async (sb, _c, a) => {
+    const db = sb.schema("agent");
+    const [{ data, error }, { data: ags }] = await Promise.all([
+      db.from("actions").select("id, type, cible, contexte, contenu, cree_le, agent_id").eq("statut", "a_valider").order("cree_le", { ascending: false }).limit(200),
+      db.from("agents").select("id, nom, slug"),
+    ]);
+    if (error) return fail(`Lecture de la file impossible : ${error.message}`);
+    const agents = new Map(((ags as Json[] | null) ?? []).map((x) => [String(x.id), x]));
+    const nameOf = (r: Json) => String((r.agent_id ? agents.get(String(r.agent_id))?.nom : [...agents.values()].find((x) => x.slug === "megan")?.nom) ?? "Agent");
+    const want = str(a.agent, 60).toLowerCase();
+    const rows = ((data as Json[] | null) ?? []).filter((r) => !want || nameOf(r).toLowerCase().includes(want));
+    const live = rows.filter((r) => !isStale(r));
+    const stale = rows.filter(isStale);
+    const line = (r: Json) => `- [${r.type}] ${r.cible ?? ""} · ${nameOf(r)} · ${frDay(String(r.cree_le))} [proposition ${r.id}]${r.contexte ? `\n  Contexte : ${String(r.contexte).slice(0, 300)}` : ""}${r.contenu ? `\n  Message : ${String(r.contenu).slice(0, 500)}` : ""}`;
+    return ok([
+      `# À valider · ${live.length} proposition(s)${stale.length ? ` (+ ${stale.length} périmée(s) à écarter)` : ""}`,
+      lines(live.map(line), "Rien à valider."),
+      stale.length ? `\n## Périmées (l'agent les a remplacées : à écarter)\n${stale.map(line).join("\n")}` : "",
+    ].filter(Boolean).join("\n"));
+  },
+};
+
+const ecarterProposition: Tool = {
+  name: "ecarter_proposition",
+  title: "Écarter une proposition d'agent",
+  description: "Retire une proposition de la file « À valider » (statut Écarté), par exemple une proposition périmée ou remplacée par une plus récente. Donner l'id (a_valider).",
+  inputSchema: { type: "object", properties: { proposition: { type: "string", description: "Id de la proposition" } }, required: ["proposition"], additionalProperties: false },
+  write: true,
+  founder: true,
+  run: async (sb, _c, a) => {
+    const id = str(a.proposition, 40);
+    if (!/^[0-9a-f-]{36}$/i.test(id)) return fail("Id de proposition invalide.");
+    const db = sb.schema("agent");
+    const { data, error } = await db.from("actions").update({ statut: "ecarte", traite_le: new Date().toISOString() }).eq("id", id).eq("statut", "a_valider").select("type, cible");
+    if (error) return fail(`Proposition non écartée : ${error.message}`);
+    const row = (data as Json[] | null)?.[0];
+    if (!row) return fail("Proposition introuvable ou déjà traitée.");
+    await db.from("journal").insert({ action: "marc_ecarte", detail: `${row.type} · ${row.cible ?? ""} (via Claude)` }).then(() => {}, () => {});
+    return ok(`Proposition écartée : ${row.type} · ${row.cible ?? ""}.`);
+  },
+};
+
 const verifierExclusivite: Tool = {
   name: "verifier_exclusivite",
   title: "Vérifier une exclusivité",
@@ -1208,6 +1259,22 @@ async function pdfText(sb: SupabaseClient, path: string): Promise<string> {
   return String(Array.isArray(text) ? text.join("\n") : text).replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, 40000);
 }
 
+/** Brief rangé seulement en PDF dans Documents (pas de fiche dans la page Briefs) : le lire quand même. */
+async function briefFromDocuments(sb: SupabaseClient, brand: string, creator: string): Promise<ToolResult> {
+  let q = sb.from("documents").select("name, creator, path, created_at").eq("type", "brief").ilike("name", like(brand)).order("created_at", { ascending: false }).limit(5);
+  if (creator) q = q.ilike("creator", like(creator));
+  const { data, error } = await q;
+  const docs = (data as Json[] | null) ?? [];
+  if (error || !docs.length) return fail("Aucun brief trouvé (ni dans Briefs, ni en PDF dans Documents).");
+  const parts = [`# Brief ${brand} : seulement en PDF dans Documents (pas de fiche dans la page Briefs, donc pas de résumé possible avec resumer_brief)`];
+  for (const d of docs.slice(0, 3)) {
+    const text = String(d.path ?? "").toLowerCase().endsWith(".pdf") ? await pdfText(sb, String(d.path)).catch(() => "") : "";
+    parts.push(`\n## ${d.name}${d.creator ? ` · ${titleCase(String(d.creator))}` : ""} · ajouté le ${String(d.created_at).slice(0, 10)}`, text ? text.slice(0, 12000) : "(PDF illisible ici, par exemple scanné.)");
+  }
+  if (docs.length > 3) parts.push(`\nAutres PDF : ${docs.slice(3).map((d) => d.name).join(" ; ")}`);
+  return ok(parts.join("\n"));
+}
+
 const lireBrief: Tool = {
   name: "lire_brief",
   title: "Lire un brief",
@@ -1229,7 +1296,7 @@ const lireBrief: Tool = {
     const { data, error } = await q;
     if (error) return fail(`Lecture impossible : ${error.message}`);
     const rows = (data as BriefRow[] | null) ?? [];
-    if (!rows.length) return fail("Aucun brief trouvé.");
+    if (!rows.length) return id ? fail("Aucun brief trouvé.") : briefFromDocuments(sb, str(a.marque, 80), str(a.createur, 80));
     if (rows.length > 1 && !id) return ok(["Plusieurs briefs correspondent, redemande avec l'id :", ...rows.map((r) => `- ${r.id} · ${r.brand} × ${titleCase(r.creator)} · échéance ${clean(r.due) || "?"}`)].join("\n"));
     const b = rows[0];
     const [{ data: res }, { data: cr }] = await Promise.all([
@@ -1296,7 +1363,7 @@ const resumerBrief: Tool = {
 };
 
 export const TOOLS: Tool[] = [
-  pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif,
+  pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif, aValider, ecarterProposition,
   creerTache, creerEvenement, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur,
   lireBrief, resumerBrief,
