@@ -114,7 +114,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
 
   const save = async () => {
     if (saving) return;
-    if (loadedKey !== key) return toast("Fiche pas encore chargée — patiente ou recharge");
+    if (loadedKey !== key) return toast("Fiche pas encore chargée, patiente ou recharge");
     setSaving(true);
     try {
       // N'envoie QUE la fiche de ce créateur (fusion côté base, sous verrou) : jamais
@@ -128,11 +128,11 @@ export function EditorialProfileCard({ name }: { name: string }) {
         savedP.current = cur;
         const { error } = await supabase.from(ROADMAP_TABLE).upsert({ creator: name, roadmap: roadmapFrom(cur) }, { onConflict: "creator" });
         setMode("view");
-        if (!error) notifyCreator("roadmap", name, "Ta feuille de route a été mise à jour — jette un œil ✨");
+        if (!error) notifyCreator("roadmap", name, "Ta feuille de route a été mise à jour, jette un œil.");
         toast(error ? "Fiche enregistrée ✓ (pas encore visible dans son espace)" : "Fiche éditoriale enregistrée ✓");
         return;
       }
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
     } catch {
       // Relecture du blob impossible (repli sans fonction SQL, réseau) : rien n'a été écrit.
       toast("Lecture impossible : rien n'a été enregistré, réessaie");
@@ -330,7 +330,7 @@ export function EditorialProfileCard({ name }: { name: string }) {
                   </div>
                   <div>
                     <label className={LBL}>Conformité (loi 2023-451)</label>
-                    <input value={cur.conformite} onChange={(e) => set({ conformite: e.target.value })} placeholder="Ex : OK / à vérifier — mentions « Publicité » systématiques ?" className={IN} />
+                    <input value={cur.conformite} onChange={(e) => set({ conformite: e.target.value })} placeholder="Ex : OK / à vérifier, mentions « Publicité » systématiques ?" className={IN} />
                     <p className="mt-1.5 text-[11px] text-faint">Écris « OK » quand c'est à jour ; tout autre texte lève une alerte de conformité.</p>
                   </div>
                 </div>
@@ -410,7 +410,7 @@ export function MonthlyTracking({ name }: { name: string }) {
 
   const save = async () => {
     if (saving) return;
-    if (loadedKey !== key) return toast("Suivi pas encore chargé — patiente ou recharge");
+    if (loadedKey !== key) return toast("Suivi pas encore chargé, patiente ou recharge");
     setSaving(true);
     try {
       // N'envoie QUE le suivi de ce créateur (fusion côté base).
@@ -419,7 +419,7 @@ export function MonthlyTracking({ name }: { name: string }) {
         savedList.current = list;
         setMode("view");
       }
-      toast(ok ? "Suivi mensuel enregistré ✓" : "Erreur — réessaie");
+      toast(ok ? "Suivi mensuel enregistré ✓" : "Erreur, réessaie");
     } catch {
       // Relecture du blob impossible (repli sans fonction SQL, réseau) : rien n'a été écrit.
       toast("Lecture impossible : rien n'a été enregistré, réessaie");
@@ -643,7 +643,7 @@ export function JournalCard({ name }: { name: string }) {
 
   const save = async () => {
     if (saving) return;
-    if (loadedKey !== key) return toast("Journal pas encore chargé — patiente ou recharge");
+    if (loadedKey !== key) return toast("Journal pas encore chargé, patiente ou recharge");
     setSaving(true);
     try {
       // N'envoie QUE le journal de ce créateur (fusion côté base).
@@ -652,7 +652,7 @@ export function JournalCard({ name }: { name: string }) {
         savedJ.current = list;
         setMode("view");
       }
-      toast(ok ? "Journal enregistré ✓" : "Erreur — réessaie");
+      toast(ok ? "Journal enregistré ✓" : "Erreur, réessaie");
     } catch {
       // Relecture du blob impossible (repli sans fonction SQL, réseau) : rien n'a été écrit.
       toast("Lecture impossible : rien n'a été enregistré, réessaie");

@@ -45,6 +45,8 @@ import { OfflineBanner } from "@/components/mobile/offline-banner";
 import { onDeepLink, setCurrentPlace, takeDeepLink } from "@/lib/deepLink";
 import { requestIntent } from "@/lib/openIntent";
 import { collabTabRedirect } from "@/lib/collabTabs";
+import { PAGE_MERGES, pageMerge } from "@/lib/pageMerges";
+import { MergedPage } from "@/components/ui/merged-page";
 import { useAppBadge, useCloseMailNotifications } from "@/lib/appBadge";
 
 // Vues chargées à la demande (code-splitting → démarrage plus léger, mobile compris).
@@ -90,11 +92,25 @@ const Engagement = lazy(lazyImport(() => import("@/views/Engagement").then((m) =
 const Pricing = lazy(lazyImport(() => import("@/views/Pricing").then((m) => ({ default: m.Pricing }))));
 
 
+// Pages regroupées en onglets (refonte du menu) : l'onglet suit la sous-page de la sidebar.
+const FacturationPage = () => (
+  <MergedPage label="Sous-pages Facturation" orderKey="facturation" tabs={[{ value: "factures", label: "Factures", View: Facturation }, { value: "relances", label: "Relances", View: Relances }]} />
+);
+const StatsPage = () => (
+  <MergedPage label="Sous-pages Stats" orderKey="stats" tabs={[{ value: "chiffres", label: "Chiffres", View: Stats }, { value: "objectifs", label: "Objectifs", View: Objectifs }]} />
+);
+const ContactsPage = () => (
+  <MergedPage label="Sous-pages Contacts" orderKey="contacts" tabs={[{ value: "repertoire", label: "Répertoire", View: Contacts }, { value: "whatsapp", label: "À contacter", View: WhatsappView }]} />
+);
+const MessagesPage = () => (
+  <MergedPage variant="pills" label="Messagerie" orderKey="mails" tabs={[{ value: "boite", label: "Mails", View: Mails }, { value: "messages", label: "DM Instagram", View: Messages }]} />
+);
+
 const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   aujourdhui: Aujourdhui,
   agent: AgentView,
-  stats: Stats,
-  facturation: Facturation,
+  stats: StatsPage,
+  facturation: FacturationPage,
   reversements: Reversements,
   compta: Compta,
   relances: Relances,
@@ -107,9 +123,9 @@ const VIEWS: Partial<Record<ViewId, ComponentType>> = {
   todo: Todo,
   planning: Planning,
   documents: Documents,
-  contacts: Contacts,
+  contacts: ContactsPage,
   whatsapp: WhatsappView,
-  mails: Mails,
+  mails: MessagesPage,
   contrats: Contrats,
   prospection: Prospection,
   vivier: Vivier,
@@ -262,6 +278,7 @@ export default function App() {
     // Restaure la dernière page ouverte (évite de retomber sur l'accueil à chaque refresh).
     try {
       const saved = localStorage.getItem("ttp:view");
+      if (saved && pageMerge(saved)) return pageMerge(saved)!.view;
       if (saved && isNavView(saved)) return saved as ViewId;
     } catch {
       /* localStorage indisponible */
@@ -276,6 +293,12 @@ export default function App() {
     } catch {
       /* localStorage indisponible */
     }
+    try {
+      const ids = JSON.parse(raw ?? "null");
+      if (Array.isArray(ids)) raw = JSON.stringify([...new Set(ids.map((x) => (typeof x === "string" ? pageMerge(x)?.view ?? x : x)))]);
+    } catch {
+      /* valeur illisible : restoreTabs la remplace */
+    }
     return restoreTabs(raw, active, isNavView) as ViewId[];
   });
   // Ref vers l'onglet actif : navigateCurrentTab (stable) lit la valeur à jour.
@@ -286,6 +309,8 @@ export default function App() {
   // sa page : après un rechargement, on rouvre la même sous-page (Contrats → Représentation…).
   const [sub, setSub] = useState<string | null>(() => {
     try {
+      const savedView = localStorage.getItem("ttp:view");
+      if (savedView && pageMerge(savedView)) return pageMerge(savedView)!.sub;
       const saved = JSON.parse(localStorage.getItem("ttp:sub") ?? "null") as { view?: string; sub?: string } | null;
       return saved?.view === active && typeof saved.sub === "string" ? saved.sub : null;
     } catch {
@@ -310,7 +335,7 @@ export default function App() {
   const [resolved, setResolved] = useState<ResolvedTheme>(() => resolveTheme(getThemeChoice()));
   const dark = resolved === "noir";
   // Dernier thème clair choisi (Clair ou Verre) : le bouton soleil y revient depuis Noir.
-  const lastLight = useRef<"clair" | "verre">(theme === "verre" ? "verre" : "clair");
+  const lastLight = useRef<"studio" | "clair" | "verre">(theme === "verre" || theme === "clair" ? theme : "studio");
   // Mode iPhone : écran « Plus » ou « Rechercher » affiché par-dessus la page courante.
   const [phoneScreen, setPhoneScreen] = useState<null | "more" | "search">(null);
   // Emplacement du « + » de la page dans la barre de titre (iPhone).
@@ -387,7 +412,7 @@ export default function App() {
 
   useEffect(() => {
     setThemeChoice(theme);
-    if (theme === "clair" || theme === "verre") lastLight.current = theme;
+    if (theme === "studio" || theme === "clair" || theme === "verre") lastLight.current = theme;
     const sync = () => {
       const r = resolveTheme(theme);
       setResolved(r);
@@ -559,8 +584,10 @@ export default function App() {
   }, [profile, agencyRole]);
 
   const select = (id: ViewId, subId?: string) => {
-    navigateCurrentTab(id);
-    setSub(subId ?? null); // sous-page ciblée (ou reset si nav normale)
+    // Page devenue onglet d'une autre (refonte du menu) : on ouvre la page hôte, sur cet onglet.
+    const merged = pageMerge(id);
+    navigateCurrentTab(merged?.view ?? id);
+    setSub(merged?.sub ?? subId ?? null); // sous-page ciblée (ou reset si nav normale)
     setPhoneScreen(null);
     setQuery("");
     setDetailCreator(null);
@@ -570,10 +597,11 @@ export default function App() {
   const openInNewTab = (target: ViewId) => {
     const r = collabTabRedirect(target);
     if (r) requestIntent("collabs:tab", r.tab);
-    const id = (r?.view ?? target) as ViewId;
+    const merged = pageMerge(target);
+    const id = (r?.view ?? merged?.view ?? target) as ViewId;
     setTabs((prev) => addTab(prev, id) as ViewId[]);
     setActive(id);
-    setSub(null);
+    setSub(merged?.sub ?? null);
     setQuery("");
     setDetailCreator(null);
     setSpace("agency");
@@ -663,6 +691,9 @@ export default function App() {
     for (const [page, n] of Object.entries(activity.counts)) out[page] = (out[page] ?? 0) + n;
     return out;
   }, [navBadgesBase, activity.counts]);
+  /** Compteur d'un onglet de la barre du bas : la page, plus les pages qui sont devenues ses onglets. */
+  const tabBadge = (id: ViewId) =>
+    Object.entries(PAGE_MERGES).reduce((n, [page, m]) => (m?.view === id ? n + (navBadges[page] ?? 0) : n), navBadges[id] ?? 0) || undefined;
   const viewingKey = viewing.join("|");
   useEffect(() => {
     if (!seenUid) return;
@@ -689,9 +720,9 @@ export default function App() {
     ...(["todo", "mails", "collabs", "planning", "contacts"] as ViewId[]).filter(inNav),
   ])].slice(0, 4);
   const iosTabs: IosTab[] = [
-    ...tabIds.map((id) => ({ id, label: id === "aujourdhui" ? "Accueil" : findPinnable(id)?.label ?? viewTitle(id), icon: id === "aujourdhui" ? TtpHome : findPinnable(id)?.icon ?? TtpStar, badge: navBadges[id] })),
+    ...tabIds.map((id) => ({ id, label: id === "aujourdhui" ? "Accueil" : findPinnable(id)?.label ?? viewTitle(id), icon: id === "aujourdhui" ? TtpHome : findPinnable(id)?.icon ?? TtpStar, badge: tabBadge(id) })),
     // « Plus » : les notifications des pages qui n'ont pas leur onglet.
-    { id: "__more", label: "Plus", icon: TtpMore, badge: Object.entries(navBadges).reduce((n, [id, c]) => (tabIds.includes(id as ViewId) || !inNav(id as ViewId) ? n : n + c), 0) },
+    { id: "__more", label: "Plus", icon: TtpMore, dot: Object.entries(navBadges).some(([id, c]) => c > 0 && !tabIds.includes(pageMerge(id)?.view ?? (id as ViewId)) && inNav(id as ViewId)) },
   ];
   const iosActive = phoneScreen === "more" ? "__more" : phoneScreen === "search" ? "" : tabIds.includes(active) ? active : "__more";
   // Chaque écran garde sa position de défilement, comme les onglets d'une app iOS.

@@ -233,7 +233,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
     };
     const created = await dbInsert("prospects", row);
     if (!created) {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return;
     }
     setRows([created as unknown as Row, ...(rows ?? [])]);
@@ -567,10 +567,12 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
                           card.tone ? DOT_CLASS[card.tone] : "bg-cyan",
                         )}
                       />
-                      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
+                      <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-foreground">
                         {card.brand}
                       </span>
+                      {card.value && <span className="shrink-0 text-[13px] font-medium tabular-nums text-foreground">{card.value}</span>}
                       <ActionMenu
+                        buttonClassName="-my-2.5"
                         items={[
                           {
                             key: "edit",
@@ -587,7 +589,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
                             label: `Passer en « ${stageLabel(s)} »`,
                             icon: ArrowRight,
                             onClick: () => {
-                              void saveEdit(card.id, { stage: s }).then((ok) => ok && toast(`Passé en « ${stageLabel(s)} » ✓`));
+                              void saveEdit(card.id, { stage: s }).then((ok) => ok && toast(`Passé en « ${stageLabel(s)} »`));
                             },
                           })),
                           {
@@ -602,16 +604,13 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
                       />
                     </div>
                     {card.contact && (
-                      <p className="mt-1.5 truncate pl-[15px] text-[10px] text-muted-foreground">
+                      <p className="mt-0.5 truncate pl-[15px] text-[11px] text-muted-foreground">
                         {card.contact}
                       </p>
                     )}
-                    <BrandIgInline ig={igByBrand[card.brand.trim().toLowerCase()]} className="mt-1 block truncate pl-[15px] text-[10px] text-faint" />
-                    <p className="mt-2 pl-[15px] text-[13px] font-semibold text-foreground">
-                      {card.value ?? "—"}
-                    </p>
+                    <BrandIgInline ig={igByBrand[card.brand.trim().toLowerCase()]} className="mt-0.5 block truncate pl-[15px] text-[11px] text-faint empty:hidden" />
                     {(card.creator || card.deliverables) && (
-                      <p className="mt-1 truncate pl-[15px] text-[11px] text-muted-foreground" title={[card.creator ? titleCase(card.creator) : "", card.deliverables ?? ""].filter(Boolean).join(" · ")}>
+                      <p className="mt-1.5 truncate pl-[15px] text-[11px] text-muted-foreground" title={[card.creator ? titleCase(card.creator) : "", card.deliverables ?? ""].filter(Boolean).join(" · ")}>
                         {[card.creator ? titleCase(card.creator) : "", card.deliverables ?? "", card.proposal?.at ? fmtDay(card.proposal.at) : ""].filter(Boolean).join(" · ")}
                       </p>
                     )}

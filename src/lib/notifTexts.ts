@@ -36,7 +36,7 @@ export const NOTIF_TEXTS_AGENCY: NotifTextField[] = [
   { key: "a_idea", label: "Créateur propose une idée", def: "{createur} · nouvelle idée" },
   { key: "a_contact", label: "Créateur ajoute un contact", def: "{createur} · nouveau contact" },
   { key: "a_event", label: "Créateur ajoute un évènement", def: "{createur} · nouvel évènement" },
-  { key: "a_gift", label: "Créateur — cadeau / dotation", def: "{createur} · cadeau reçu" },
+  { key: "a_gift", label: "Créateur : cadeau / dotation", def: "{createur} · cadeau reçu" },
   { key: "a_facture", label: "Créateur dépose une facture", def: "{createur} · facture déposée" },
   { key: "a_contenu", label: "Créateur envoie un contenu", def: "{createur} · contenu envoyé" },
   { key: "a_task_update", label: "Créateur écrit sur une tâche", def: "{createur} · du nouveau sur une tâche" },

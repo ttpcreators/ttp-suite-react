@@ -79,7 +79,7 @@ const KIND = {
     catLabel: "Catégorie", catPh: "Ex : Mode, Sport, Beauté", allCats: "Toutes les catégories",
     namePh: "Ex : Léna Marchand", handlePh: "@lena.mrchd", emailPh: "lena@email.com",
     newTitle: "Nouveau créateur à suivre", editTitle: "Modifier le créateur",
-    empty: "Ton scouting est vide. Ajoute des créateurs à repérer / solliciter le jour où tu en as besoin ✨",
+    empty: "Ton scouting est vide. Ajoute des créateurs à repérer / solliciter le jour où tu en as besoin.",
   },
   sportifs: {
     table: "athlete_pool", cache: "vivier-sportifs", track: "athleteTracking",
@@ -543,7 +543,7 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
   const openMail = (r: Row) => {
     if (!r.email || !EMAIL_RE.test(r.email)) { toast(`Ce ${K.one} n'a pas d'email valide`); return; }
     setMailRow(r);
-    setSubject("Collaboration avec TTP Creators ✨");
+    setSubject("Collaboration avec TTP Creators");
     setMessage(`Bonjour ${r.name.split(" ")[0] || ""},\n\n`);
   };
 

@@ -120,14 +120,14 @@ async function uploadImage(file: File): Promise<{ url: string; path: string } | 
   const path = `signatures/${uid()}.${ext}`;
   const up = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined, upsert: false });
   if (up.error) {
-    toast("Upload échoué — réessaie");
+    toast("Upload échoué, réessaie");
     return null;
   }
   const signed = await supabase.storage.from("documents").createSignedUrl(path, TTL);
   const url = signed.data?.signedUrl ?? "";
   if (!url) {
     await supabase.storage.from("documents").remove([path]).catch(() => {});
-    toast("URL indisponible — réessaie");
+    toast("URL indisponible, réessaie");
     return null;
   }
   return { url, path };
@@ -157,7 +157,7 @@ export function useMailSignatures() {
       const next: SigState = { list: [sig, ...cur.list], defaultId: cur.defaultId || sig.id };
       if (!(await commit(next))) {
         await supabase.storage.from("documents").remove([up.path]).catch(() => {});
-        toast("Signature non enregistrée — réessaie");
+        toast("Signature non enregistrée, réessaie");
         return null;
       }
       toast("Signature ajoutée ✓");
@@ -186,7 +186,7 @@ export function useMailSignatures() {
     const list = exists ? cur.list.map((s) => (s.id === sigId ? sig : s)) : [sig, ...cur.list];
     const next: SigState = { list, defaultId: cur.defaultId || sigId };
     if (!(await commit(next))) {
-      toast("Signature non enregistrée — réessaie");
+      toast("Signature non enregistrée, réessaie");
       return null;
     }
     toast("Signature enregistrée ✓");
@@ -203,13 +203,13 @@ export function useMailSignatures() {
       const p = sig.kind === "html" ? sig.fields?.photoPath : sig.path;
       if (p) await supabase.storage.from("documents").remove([p]).catch(() => {});
     }
-    toast(ok ? "Signature supprimée" : "Erreur — réessaie");
+    toast(ok ? "Signature supprimée" : "Erreur, réessaie");
   };
 
   const setDefault = async (id: string): Promise<void> => {
     const cur = await readFresh();
     const ok = await commit({ ...cur, defaultId: id });
-    toast(ok ? "Signature par défaut ✓" : "Erreur — réessaie");
+    toast(ok ? "Signature par défaut ✓" : "Erreur, réessaie");
   };
 
   return { list: state.list, defaultId: state.defaultId, busy, addImage, uploadPhoto, saveHtml, remove, setDefault };

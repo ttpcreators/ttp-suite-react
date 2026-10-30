@@ -95,7 +95,7 @@ export const EN_SHARED: Record<string, string> = {
   "Type de graphique": "Chart type",
   "Aire": "Area",
   "Ligne": "Line",
-  "Pas encore de données — la courbe apparaîtra ici.": "No data yet. The chart will appear here.",
+  "Pas encore de données, la courbe apparaîtra ici.": "No data yet. The chart will appear here.",
 
   // ── Menu, navigation, iPhone ───────────────────────────────────────────────
   "Actions": "Actions",
@@ -130,11 +130,11 @@ export const EN_SHARED: Record<string, string> = {
   // ── Notifications (carte d'activation) ─────────────────────────────────────
   "Notifications": "Notifications",
   "Échec : {detail}": "Failed: {detail}",
-  "Échec — réessaie": "Failed, please try again",
-  "Aucun appareil abonné — active d'abord ici": "No device subscribed yet, turn them on here first",
+  "Échec, réessaie": "Failed, please try again",
+  "Aucun appareil abonné, active d'abord ici": "No device subscribed yet, turn them on here first",
   "Envoi refusé": "Sending refused",
   "Notification test envoyée 🎉": "Test notification sent 🎉",
-  "Activation échouée — réessaie": "Couldn't turn them on, please try again",
+  "Activation échouée, réessaie": "Couldn't turn them on, please try again",
   "Envoi…": "Sending…",
   "Envoyer un test": "Send a test",
   "Activation…": "Turning on…",

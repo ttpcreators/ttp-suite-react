@@ -57,7 +57,7 @@ pour toute l'équipe dans Paramètres → Apparence → « Couleurs des classeur
 | `Mails.tsx` | `mails` | Client mail des deux boîtes (partnerships@ et talent@) : lecture, réponse, transfert, collab liée, « Rédiger avec Claude ». |
 | `Collabs.tsx` | `collabs` | Collaborations en 11 étapes, de la signature au bilan. |
 | `Planning.tsx` | `planning` (`agenda`, `instagram`) | Agenda relié à Google Agenda et posts Instagram programmés (`IgPlanner`). |
-| `RosterTabs.tsx` | `roster` | Conteneur du roster : onglet Liste (`Roster.tsx`) et Accompagnement (`RosterTracking` de `CreatorTracking.tsx`). |
+| `RosterTabs.tsx` | `roster` | Conteneur du roster : onglets Liste (`Roster.tsx`), Accompagnement (`RosterTracking` de `CreatorTracking.tsx`), Évolution (`EngagementSuivi.tsx`) et Engagement (`Engagement.tsx`), calés sur la sous-page de la sidebar. |
 | `Vivier.tsx` | `vivier` (`createurs`, `sportifs`) | Scouting : créateurs et sportifs repérés avant recrutement. |
 | `Engagement.tsx` | `engagement` | Calculateur de taux d'engagement par plateforme. |
 | `EngagementSuivi.tsx` | `suivi` | Évolution des abonnés et de l'engagement (exporte aussi `SuiviPanel`, réutilisé côté créateur). |
@@ -113,6 +113,7 @@ pour toute l'équipe dans Paramètres → Apparence → « Couleurs des classeur
 | Quoi | Où |
 |---|---|
 | Liste des pages, familles du menu, libellés, icônes, sous-pages | `src/lib/nav.tsx` (`ViewId`, `NAV`). Les `id` ne changent jamais. |
+| Page devenue onglet d'une autre (Relances dans Facturation, Objectifs dans Stats…) | `src/lib/pageMerges.ts` (`PAGE_MERGES` : son id ouvre la page hôte sur le bon onglet) et `components/ui/merged-page.tsx` (page hôte à onglets) |
 | Page id → composant | `src/App.tsx` (`VIEWS`, imports `lazy(lazyImport(...))`) |
 | Pages réservées aux fondateurs | `src/App.tsx` (`FOUNDER_ONLY`) + contexte `src/lib/restrictedViews.ts` |
 | Phrase sous le titre de chaque page | `src/lib/viewHints.ts` |
@@ -184,8 +185,8 @@ Règle : la logique pure (sans React ni Supabase) vit dans `src/lib/<nom>.ts`, a
 | Domaine | Fichiers |
 |---|---|
 | Socle données | `supabase.ts` (client, clé anon), `db.ts` (insert / update / delete), `appState.ts` (blob agence `__app_state__`), `useLive.ts` (resynchronisation), `viewCache.ts`, `trash.ts` (corbeille), `useCreators.ts`, `money.ts`, `utils.ts`, `dates.ts`, `dateRange.ts`, `timeSeries.ts` |
-| Navigation et interface | `nav.tsx`, `navSub.ts`, `navAction.ts`, `navSeen.ts`, `useNavBadges.ts`, `hiddenPages.ts`, `restrictedViews.ts`, `pageAliases.ts`, `viewHints.ts`, `tabs.ts`, `openIntent.ts`, `deepLink.ts`, `commandPalette.ts`, `search.ts`, `searchKinds.ts`, `useGlobalSearch.ts`, `settingsSearch.ts`, `folderTabs.ts`, `useFolderTones.ts`, `useVisitedTabs.ts`, `useStickyState.ts`, `iosUi.ts`, `touch.ts`, `ease.ts`, `hooks/` (gestes) |
-| Apparence | `accent.ts` (accent et thèmes Clair, Verre, Noir, Auto), `theme.ts` (contexte React), `statusTone.ts` (un sens par couleur) |
+| Navigation et interface | `nav.tsx`, `navSub.ts`, `navAction.ts`, `navSeen.ts`, `useNavBadges.ts`, `hiddenPages.ts`, `restrictedViews.ts`, `pageAliases.ts`, `viewHints.ts`, `tabs.ts`, `openIntent.ts`, `deepLink.ts`, `commandPalette.ts`, `search.ts`, `searchKinds.ts`, `useGlobalSearch.ts`, `settingsSearch.ts`, `folderTabs.ts`, `useFolderTones.ts`, `useVisitedTabs.ts`, `useStickyState.ts`, `pageMerges.ts`, `useEdgeFade.ts` (fondu au bord d'une rangée qui défile), `iosUi.ts`, `touch.ts`, `ease.ts`, `hooks/` (gestes) |
+| Apparence | `accent.ts` (accent et thèmes Studio par défaut, Clair, Verre, Noir, Auto), `theme.ts` (contexte React), `statusTone.ts` (un sens par couleur) |
 | Mise à jour et santé | `appUpdate.ts` (`version.json`, `lazyImport`), `errorReport.ts`, `diagnostics.ts`, `features.ts` (fonctions en attente d'accord Meta, TikTok, Google) |
 | Aujourd'hui et anticipation | `aujourdhui.ts`, `anticipation.ts`, `relance.ts`, `useRelanceInvoices.ts` |
 | To-do | `todoCreators.ts` + `todoCreatorsDb.ts` (plusieurs créateurs), `todoQuickAdd.ts`, `todoProgress.ts`, `todoStatus.ts`, `routines.ts` |

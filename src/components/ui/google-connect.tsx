@@ -53,7 +53,7 @@ export function GoogleConnect() {
     const { justConnected, error } = consumeOAuthReturn();
     void refresh();
     if (justConnected) toast("Google Agenda connecté ✓");
-    else if (error) toast("Échec de la connexion Google — réessaie");
+    else if (error) toast("Échec de la connexion Google, réessaie");
   }, [refresh]);
 
   const onConnect = useCallback(async () => {
@@ -71,7 +71,7 @@ export function GoogleConnect() {
     try {
       const r = await triggerSync();
       if (r.skipped === "locked") toast("Synchro déjà en cours…");
-      else toast(`Synchro OK — ${r.pulled} reçu(s), ${r.pushed} envoyé(s), ${r.deleted} supprimé(s)`);
+      else toast(`Synchro OK : ${r.pulled} reçu(s), ${r.pushed} envoyé(s), ${r.deleted} supprimé(s)`);
       await refresh();
     } catch {
       toast("Échec de la synchronisation");

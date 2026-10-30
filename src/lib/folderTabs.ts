@@ -38,9 +38,10 @@ export function tabFromSub<T extends string>(sub: string | null | undefined, all
 /*
  * Contrats : « Tous » = la page d'arrivée (sous-page nulle), puis un onglet par
  * générateur, mêmes ids que les sous-pages de la sidebar (Marque × Créateur,
- * Représentation, Contrat UGC).
+ * Représentation, Contrat UGC), puis Fins de contrat et Exclusivités (anciennes pages,
+ * mêmes ids : src/lib/pageMerges.ts).
  */
-export const CONTRATS_TABS = ["tous", "marque", "repr", "ugc"] as const;
+export const CONTRATS_TABS = ["tous", "marque", "repr", "ugc", "echeances", "exclusivites"] as const;
 export type ContratsTab = (typeof CONTRATS_TABS)[number];
 
 export const contratsTabFromSub = (sub: string | null | undefined): ContratsTab => tabFromSub(sub, CONTRATS_TABS, "tous");

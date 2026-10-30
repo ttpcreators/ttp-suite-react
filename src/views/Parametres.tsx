@@ -75,7 +75,7 @@ const ENTRIES: Entry[] = [
     hint: "Thème et couleur de cet appareil. Pages du menu et couleurs des classeurs de toute l'équipe.",
     keywords: ["thème", "look", "couleur", "classeur"],
     sections: [
-      { title: "Apparence", keywords: ["thème", "clair", "verre", "noir", "sombre", "auto", "mode nuit"] },
+      { title: "Apparence", keywords: ["thème", "studio", "clair", "verre", "noir", "sombre", "auto", "mode nuit"] },
       { title: "Couleur d'accent", keywords: ["couleur", "accent", "dégradé", "boutons"] },
       { title: "Pages affichées", keywords: ["menu", "masquer", "ranger", "cacher", "pages"] },
       { title: "Couleurs des classeurs", keywords: ["couleur", "onglet", "onglets", "classeur", "classeurs", "intercalaire", "dossier"] },
@@ -313,6 +313,7 @@ function TeamNameField() {
  * de jetons live : les couleurs figées vivent toutes ici, dans cette seule table.
  */
 const PREVIEW_COLORS = {
+  studio: { bg: "#e9e9eb", side: "#e9e9eb", card: "#ffffff", line: "#d8d8dd", strong: "#111113", accent: "#0069fe" },
   clair: { bg: "#f5f5f7", side: "#ffffff", card: "#ffffff", line: "#d8d8dd", strong: "#1d1d1f", accent: "#0069fe" },
   verre: {
     bg: "linear-gradient(135deg, #dbe7fb 0%, #ddf2ea 50%, #fde5d4 100%)",
@@ -351,7 +352,7 @@ function ThemePreview({ theme }: { theme: ThemeChoice }) {
     <span aria-hidden className="relative block aspect-[16/7] w-full overflow-hidden rounded-[10px]">
       {theme === "auto" ? (
         <>
-          <MiniWindow kind="clair" />
+          <MiniWindow kind="studio" />
           {/* Moitié droite en Noir : Auto suit le réglage de l'appareil. */}
           <span className="absolute inset-0" style={{ clipPath: "inset(0 0 0 50%)" }}>
             <MiniWindow kind="noir" />
@@ -368,7 +369,7 @@ function ThemeCard() {
   const { theme, setTheme } = useTheme();
   return (
     <Card anchor="Apparence" title="Thème">
-      <div role="radiogroup" aria-label="Thème" className="grid grid-cols-2 gap-3 @lg:grid-cols-4">
+      <div role="radiogroup" aria-label="Thème" className="grid grid-cols-2 gap-3 @lg:grid-cols-5">
         {THEME_CHOICES.map((t) => {
           const sel = theme === t.value;
           return (
@@ -393,7 +394,7 @@ function ThemeCard() {
           );
         })}
       </div>
-      <p className="mt-3 text-[12px] leading-snug text-muted-foreground">Verre façon Liquid Glass, Noir le soir. Auto suit le réglage de l'appareil.</p>
+      <p className="mt-3 text-[12px] leading-snug text-muted-foreground">Studio par défaut, Verre façon Liquid Glass, Noir le soir. Auto suit le réglage de l'appareil.</p>
     </Card>
   );
 }

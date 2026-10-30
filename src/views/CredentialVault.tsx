@@ -76,7 +76,7 @@ export function CredentialVault() {
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground"><KeyRound className="h-4 w-4" /></span>
           <div>
             <div className="text-sm font-semibold text-foreground">Identifiants des créateurs</div>
-            <div className="text-[11px] text-faint">Boîtes e-mail que tu gères. Agence uniquement — ⚠️ stocké en clair, n'ajoute que ce que tu acceptes.</div>
+            <div className="text-[11px] text-faint">Boîtes e-mail que tu gères. Agence uniquement. Stocké en clair : n'ajoute que ce que tu acceptes.</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -103,7 +103,7 @@ export function CredentialVault() {
             {rows.map((r) => (
               <div key={r.id} className="rounded-xl border border-border bg-panel/40 p-3.5">
                 <div className="mb-2 flex items-center gap-2">
-                  <input value={r.label} onChange={(e) => edit(r.id, { label: e.target.value })} placeholder="Créateur / libellé (ex : Carla — boîte pro)" className={CIN + " font-semibold"} />
+                  <input value={r.label} onChange={(e) => edit(r.id, { label: e.target.value })} placeholder="Créateur / libellé (ex : Carla, boîte pro)" className={CIN + " font-semibold"} />
                   {confirmDel === r.id ? (
                     <div className="flex shrink-0 items-center gap-1">
                       <button type="button" onClick={() => del(r.id)} className="rounded-full bg-destructive px-2.5 py-2 text-[11px] font-semibold text-white">Supprimer</button>

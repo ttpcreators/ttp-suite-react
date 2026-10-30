@@ -216,7 +216,7 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
     };
     const created = await dbInsert("creators", row);
     if (!created) {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return;
     }
     setRows([mapCreator(created as unknown as CreatorRow), ...rows]);
@@ -259,7 +259,7 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
     if (oks.some((ok) => !ok)) {
       setRows(rows); // rollback optimiste
       setCache("roster", rows);
-      toast("Ordre non enregistré — réessaie");
+      toast("Ordre non enregistré, réessaie");
     }
   };
 

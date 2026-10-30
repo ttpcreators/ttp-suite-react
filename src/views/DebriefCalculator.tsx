@@ -379,7 +379,7 @@ export function DebriefCalculator({
     if (added.length) {
       const cur = stateRef.current;
       onChange({ ...cur, shots: [...cur.shots, ...added] });
-      toast(`${added.length} capture${added.length > 1 ? "s" : ""} jointe${added.length > 1 ? "s" : ""} ✓ — pense à enregistrer`);
+      toast(`${added.length} capture${added.length > 1 ? "s" : ""} jointe${added.length > 1 ? "s" : ""}, pense à enregistrer`);
     }
   };
 
@@ -481,7 +481,7 @@ export function DebriefCalculator({
                 </>
               ) : (
                 <span className="text-[12px] font-medium text-muted-foreground">
-                  Totaux de la campagne — additionne les captures
+                  Totaux de la campagne : additionne les captures
                 </span>
               )}
             </div>

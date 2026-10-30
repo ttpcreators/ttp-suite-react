@@ -255,7 +255,6 @@ export function Templates() {
           <Tabs
             className="min-w-0"
             label="Filtrer par catégorie"
-            wrap
             items={[{ value: "Tous", label: "Tous" }, ...allCategories.map((cat) => ({ value: cat, label: cat }))]}
             value={activeCategory}
             onValueChange={setActiveCategory}

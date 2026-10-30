@@ -9,6 +9,7 @@ import {
 import type { KeyboardEvent, ReactNode } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/utils";
+import { useEdgeFade } from "@/lib/useEdgeFade";
 import { useT } from "@/lib/i18n";
 
 /**
@@ -152,7 +153,8 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
   const lg = size === "lg";
   const tabs = useTabs({ items, value, defaultValue, onValueChange, activation });
   const reduced = useReducedMotion();
-  const rowRef = useRef<HTMLDivElement | null>(null);
+  // Barre qui défile : fondu sur le bord qui cache encore des onglets (rien de coupé net).
+  const { ref: rowRef, style: fadeStyle } = useEdgeFade();
   const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [ind, setInd] = useState({ x: 0, y: 0, width: 0, height: 0, ready: false });
   const selectedIndex = items.findIndex((i) => i.value === tabs.value);
@@ -181,6 +183,7 @@ export function Tabs({ items, value, defaultValue, onValueChange, activation = "
       <div
         {...tabs.tabListProps}
         ref={rowRef}
+        style={wrap ? undefined : fadeStyle}
         aria-label={label}
         className={cn(
           "relative flex max-w-full gap-0.5 overflow-x-auto overscroll-x-contain rounded-[12px] bg-field [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden",

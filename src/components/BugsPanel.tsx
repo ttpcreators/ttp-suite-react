@@ -114,7 +114,7 @@ export function BugsPanel() {
         <div className="py-6 text-center text-[12px] text-faint">Chargement…</div>
       ) : shown.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-[12px] text-muted-foreground">
-          {filter === "open" ? "Aucun bug à régler. 🎉" : "Aucun bug signalé ces 30 derniers jours."}
+          {filter === "open" ? "Aucun bug à régler." : "Aucun bug signalé ces 30 derniers jours."}
         </div>
       ) : (
         <ul className="flex flex-col gap-2">

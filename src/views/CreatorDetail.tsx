@@ -333,7 +333,7 @@ export function CreatorDetail({
     } catch {
       /* réseau : les infos sont enregistrées, pas l'exclusivité */
     }
-    if (!okEx) toast("Exclusivité non enregistrée — réessaie");
+    if (!okEx) toast("Exclusivité non enregistrée, réessaie");
     setC({ ...c, ...patch });
     setEditing(false);
     toast("Infos enregistrées ✓");

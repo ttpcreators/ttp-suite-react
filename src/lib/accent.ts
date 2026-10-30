@@ -139,12 +139,13 @@ export function initAccent(): void {
   }
 }
 
-// ── Thème mémorisé par appareil : Clair, Verre, Noir, ou Auto (suit l'appareil) ──
+// ── Thème mémorisé par appareil : Studio (par défaut), Clair, Verre, Noir, ou Auto (suit l'appareil) ──
 const THEME_KEY = "ttp:theme";
-export type ThemeChoice = "clair" | "verre" | "noir" | "auto";
+export type ThemeChoice = "studio" | "clair" | "verre" | "noir" | "auto";
 export type ResolvedTheme = Exclude<ThemeChoice, "auto">;
 
 export const THEME_CHOICES: { value: ThemeChoice; label: string }[] = [
+  { value: "studio", label: "Studio" },
   { value: "clair", label: "Clair" },
   { value: "verre", label: "Verre" },
   { value: "noir", label: "Noir" },
@@ -156,26 +157,27 @@ export function getThemeChoice(): ThemeChoice {
     const v = localStorage.getItem(THEME_KEY);
     // « dark » = l'ancien réglage sombre, devenu Noir.
     if (v === "dark" || v === "noir") return "noir";
-    if (v === "verre" || v === "auto") return v;
-    return "clair";
+    if (v === "clair" || v === "verre" || v === "auto") return v;
+    // Rien d'enregistré : Studio, le thème de la refonte (2026-10-30).
+    return "studio";
   } catch {
-    return "clair";
+    return "studio";
   }
 }
 
-/** Auto : Noir si l'appareil est en sombre, Clair sinon. */
+/** Auto : Noir si l'appareil est en sombre, Studio sinon. */
 export function resolveTheme(choice: ThemeChoice): ResolvedTheme {
   if (choice !== "auto") return choice;
   try {
-    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "noir" : "clair";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "noir" : "studio";
   } catch {
-    return "clair";
+    return "studio";
   }
 }
 
 export function setThemeChoice(choice: ThemeChoice): void {
   try {
-    if (choice === "clair") localStorage.removeItem(THEME_KEY);
+    if (choice === "studio") localStorage.removeItem(THEME_KEY);
     else localStorage.setItem(THEME_KEY, choice);
   } catch {
     /* stockage indispo : le thème reste valable pour la session */
@@ -205,6 +207,6 @@ export function applyTheme(theme: ResolvedTheme): void {
   el.dataset.theme = theme;
   el.classList.toggle("dark", dark);
   // Couleur de la barre d'état (iPhone : appliquée au prochain lancement de l'app installée).
-  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#000000" : theme === "verre" ? "#edf0f7" : "#f5f5f7");
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#000000" : theme === "verre" ? "#edf0f7" : theme === "studio" ? "#e9e9eb" : "#f5f5f7");
   document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]')?.setAttribute("content", dark ? "black-translucent" : "default");
 }

@@ -49,7 +49,7 @@ export function Diagnostique() {
     setRunning(true);
     try {
       const r = await runDiagnostics();
-      toast(r.overall === "ok" ? "Audit terminé — tout va bien ✓" : "Audit terminé — voir les détails");
+      toast(r.overall === "ok" ? "Audit terminé, tout va bien ✓" : "Audit terminé, voir les détails");
     } finally {
       setRunning(false);
     }
@@ -146,7 +146,7 @@ export function Diagnostique() {
         {showIncidents && (
           <div className="mt-3 flex flex-col gap-2">
             {incidents.length === 0 ? (
-              <div className="text-[12px] text-faint">Aucun incident enregistré — l'app se porte bien 🎉</div>
+              <div className="text-[12px] text-faint">Aucun incident enregistré : l'app se porte bien.</div>
             ) : (
               incidents.slice(0, 30).map((s, i) => (
                 <div key={i} className="rounded-xl bg-panel/40 px-3 py-2">

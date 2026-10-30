@@ -43,8 +43,8 @@ function PushRow() {
     setTesting(true);
     try {
       const r = await sendTest();
-      if (!r.ok) toast(`Échec de l'appel${r.detail ? ` : ${r.detail}` : " — réessaie"}`);
-      else if (r.total === 0) toast("Aucun appareil abonné — active d'abord sur ce téléphone");
+      if (!r.ok) toast(`Échec de l'appel${r.detail ? ` : ${r.detail}` : ", réessaie"}`);
+      else if (r.total === 0) toast("Aucun appareil abonné, active d'abord sur ce téléphone");
       else if (r.sent === 0) toast(`Envoi refusé${r.detail ? ` : ${r.detail}` : ""}`);
       else toast(`Notification test envoyée (${r.sent}) 🎉`);
     } finally {
@@ -91,7 +91,7 @@ function PushRow() {
           type="button"
           onClick={async () => {
             const ok = await enable();
-            if (!ok && Notification.permission === "granted") toast("Activation échouée — réessaie");
+            if (!ok && Notification.permission === "granted") toast("Activation échouée, réessaie");
           }}
           disabled={busy}
           className="flex w-full items-center justify-center gap-2 rounded-full bg-primary px-3 py-2 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
@@ -194,7 +194,7 @@ export function Notifications({
           <TtpBell className={variant === "bar" ? "h-[22px] w-[22px]" : "h-4 w-4"} strokeWidth={variant === "bar" ? 1.9 : 2} />
           {unreadCount > 0 && (
             <span className={(variant === "bar" ? "absolute right-1 top-1" : variant === "sidebar" ? "absolute -right-0.5 -top-0.5" : "absolute -right-1 -top-1") + " grid h-[18px] min-w-[18px] place-items-center rounded-full bg-badge px-1 text-[10px] font-bold text-white"}>
-              {unreadCount > 99 ? "99+" : unreadCount}
+              {unreadCount > 9 ? "9+" : unreadCount}
             </span>
           )}
         </button>

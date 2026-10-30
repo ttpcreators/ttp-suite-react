@@ -231,11 +231,11 @@ export function AgencyTab() {
         })
         .select("id, updated_at");
       if (error || !(data && data.length)) {
-        toast("Enregistrement échoué — réessaie");
+        toast("Enregistrement échoué, réessaie");
         return;
       }
       setLoadedAt(((data[0] as { updated_at?: string | null }).updated_at as string | null | undefined) ?? null);
-      toast("Media kit agence enregistré ✓ — le deck se met à jour en ligne");
+      toast("Media kit agence enregistré, le deck se met à jour en ligne");
     } finally {
       setSaving(false);
     }
@@ -248,12 +248,12 @@ export function AgencyTab() {
           Le contenu de cadrage du deck agence.{" "}
           <span className="text-faint">Les créateurs se gèrent dans l'onglet « Créateurs » ; la liste des marques partenaires est gérée sur le site.</span>
         </p>
-        <div className="flex items-center gap-2">
+        <div className="flex w-full items-center gap-2 sm:w-auto">
           <a
             href={PUBLIC_URL}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-surface px-3.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
           >
             <ExternalLink className="h-3.5 w-3.5" /> <span>Voir en ligne</span>
           </a>
@@ -262,7 +262,7 @@ export function AgencyTab() {
             target="_blank"
             rel="noreferrer"
             title="Version anglaise, pour les marques étrangères"
-            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3.5 py-2.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-surface px-3.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
           >
             <Languages className="h-3.5 w-3.5" /> <span>En anglais</span>
           </a>
@@ -270,7 +270,7 @@ export function AgencyTab() {
             type="button"
             onClick={save}
             disabled={saving || loading || loadError || !loaded}
-            className="flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="ml-auto flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full bg-primary px-4 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50 sm:ml-0"
           >
             <Save className="h-3.5 w-3.5" /> {saving ? "Enregistrement…" : "Enregistrer"}
           </button>
@@ -644,7 +644,7 @@ export function AgencyTab() {
             </div>
             <div className="mt-4">
               <ImageField
-                label="Photo d'agence (page contact du deck — sinon monogramme)"
+                label="Photo d'agence (page contact du deck, sinon monogramme)"
                 slug="agence"
                 field="photo"
                 url={kit.photo}

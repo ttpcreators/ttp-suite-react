@@ -12,7 +12,8 @@ import { useT } from "@/lib/i18n";
  * Couleurs : encre pour l'onglet actif (code couleur de l'app), vert = activé.
  */
 
-export type IosTab = { id: string; label: string; icon: LucideIcon; badge?: number | null };
+/** `dot` : simple point (total agrégé de plusieurs pages, un nombre ne voudrait rien dire). */
+export type IosTab = { id: string; label: string; icon: LucideIcon; badge?: number | null; dot?: boolean };
 
 /** Barre d'onglets du bas. Toucher l'onglet déjà ouvert remonte en haut de la page. */
 export function IosTabBar({ items, active, onSelect, onReselect }: {
@@ -46,8 +47,10 @@ export function IosTabBar({ items, active, onSelect, onReselect }: {
                 <t.icon className="h-[22px] w-[22px]" strokeWidth={on ? 2.1 : 1.8} />
                 {t.badge ? (
                   <span className="absolute -right-2.5 -top-1.5 grid h-[17px] min-w-[17px] place-items-center rounded-full bg-badge px-1 text-[10px] font-semibold tabular-nums text-white">
-                    {t.badge > 99 ? "99+" : t.badge}
+                    {t.badge > 9 ? "9+" : t.badge}
                   </span>
+                ) : t.dot ? (
+                  <span aria-hidden className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-badge ring-2 ring-surface" />
                 ) : null}
               </span>
               <span className="max-w-full truncate px-0.5 text-[10.5px] font-semibold leading-none">{t.label}</span>
