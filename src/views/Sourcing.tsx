@@ -427,10 +427,17 @@ function CreatorFinder({ paused }: { paused: boolean }) {
   const [lastBy, setLastBy] = useState<Record<"instagram" | "youtube", LastSearch | null>>(() => ({ instagram: readLast("instagram"), youtube: readLast("youtube") }));
   const last = lastBy[platform];
   const isYt = platform === "youtube";
+  // Parcours en 3 temps : chercher, lire les résultats, trier. Une fois des résultats affichés,
+  // la recherche se replie en une ligne (« Nouvelle recherche » la rouvre) et les filtres
+  // attendent derrière « Filtrer ».
+  const [searchOpen, setSearchOpen] = useState(() => !lastBy[platform]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const keep = (s: LastSearch) => {
     const p = s.platform === "youtube" ? "youtube" : "instagram";
     setLastBy((m) => ({ ...m, [p]: s }));
     setSection("trier"); // nouvelle recherche : on repart des comptes à trier
+    setSearchOpen(false);
+    setSelKey(null);
     try {
       localStorage.setItem(lastKey(p), JSON.stringify(s));
     } catch {
@@ -724,6 +731,11 @@ function CreatorFinder({ paused }: { paused: boolean }) {
     return list.sort((a, b) => key(b) - key(a));
   }, [scored, minF, maxF, minEr, bioWord, emailF, agencyF, showOthers, sort, pageQ]);
   const hidden = (last?.results.length ?? 0) - shown.length;
+  const activeFilters = [minF.trim() || maxF.trim(), minEr.trim(), bioWord.trim(), emailF !== "tous", agencyF !== "toutes", showOthers].filter(Boolean).length;
+  /** Montre tout : plus aucun filtre, ni recherche dans les résultats, et les comptes cachés d'office. */
+  const showAll = () => {
+    setMinF(""); setMaxF(""); setMinEr(""); setBioWord(""); setEmailF("tous"); setAgencyF("toutes"); setPageQ(""); setShowOthers(true);
+  };
   const bySection = { trier: 0, scouting: 0, contacter: 0, pas: 0, roster: 0 } as Record<Section, number>;
   for (const x of shown) bySection[sectionOf(x.c)]++;
   const visible = shown.filter((x) => sectionOf(x.c) === section);
@@ -737,7 +749,7 @@ function CreatorFinder({ paused }: { paused: boolean }) {
   const selIdx = useRef(0);
   const rowEls = useRef(new Map<string, HTMLElement>());
   // Grand écran : un compte est toujours sélectionné ; s'il quitte la section (trié), on passe au suivant.
-  const selected = visible.find((x) => x.c.username === selKey) ?? (wide && visible.length ? visible[Math.min(selIdx.current, visible.length - 1)] : null);
+  const selected = visible.find((x) => x.c.username === selKey) ?? (wide && selKey && visible.length ? visible[Math.min(selIdx.current, visible.length - 1)] : null);
   const selPos = selected ? visible.indexOf(selected) : -1;
   useEffect(() => {
     if (selPos >= 0) selIdx.current = selPos;
@@ -807,6 +819,18 @@ function CreatorFinder({ paused }: { paused: boolean }) {
     { value: "brand", label: "Depuis une marque", hint: "Les chaînes qui ont fait des vidéos sur cette marque (tests, sponsors, avis)." },
     { value: "list", label: "Liste de chaînes", hint: "Colle des @ ou des liens YouTube pour voir leurs chiffres." },
   ];
+  /** Les façons de chercher, en cartes : un titre qui dit ce qu'on obtient, une phrase qui dit comment. */
+  const CARDS: { value: string; title: string; short: string; button: string }[] = isYt
+    ? [
+        { value: "search", title: "Par thème", short: "Les chaînes qui parlent d'un sujet, dans un pays", button: "Trouver des chaînes" },
+        { value: "brand", title: "Les chaînes d'une marque", short: "Celles qui ont parlé de la marque en vidéo", button: "Trouver ses chaînes" },
+        { value: "list", title: "Mes chaînes à analyser", short: "Les chiffres d'une liste que tu as déjà", button: "Analyser ces chaînes" },
+      ]
+    : [
+        { value: "marque", title: "Les créateurs d'une marque", short: "Ceux qu'elle a cités ou payés dans ses derniers posts", button: "Trouver ses créateurs" },
+        { value: "similaire", title: "Des profils comme…", short: "Qui ressemblent à un créateur que tu aimes", button: "Trouver des profils proches" },
+        { value: "liste", title: "Mes @ à analyser", short: "Tous les chiffres d'une liste que tu as déjà", button: "Analyser ces @" },
+      ];
   const isList = isYt ? ytSource === "list" : source === "liste";
   const run = () => void (isYt ? runYt() : source === "marque" ? runBrand() : source === "similaire" ? runSimilar() : runList());
   const startOpts = isYt ? YT_SOURCES : SOURCES;
@@ -877,6 +901,11 @@ function CreatorFinder({ paused }: { paused: boolean }) {
         <div className="mb-3 flex items-center justify-between gap-2">
           <span className="text-[13px] font-semibold text-muted-foreground">Profil sélectionné</span>
           <div className="flex items-center gap-1">
+            {wide && (
+              <button type="button" onClick={() => setSelKey(null)} title="Fermer" aria-label="Fermer la fiche" className="grid h-8 w-8 place-items-center rounded-full bg-field text-foreground transition-colors hover:bg-rowhover">
+                <X className="h-4 w-4" />
+              </button>
+            )}
             <ActionMenu items={menuFor(c)} buttonClassName="h-8 w-8 bg-field text-foreground" />
             {href && (
               <a href={href} target="_blank" rel="noreferrer" title="Ouvrir le profil" aria-label="Ouvrir le profil" className="grid h-8 w-8 place-items-center rounded-full bg-field text-foreground transition-colors hover:bg-rowhover">
@@ -1014,35 +1043,65 @@ function CreatorFinder({ paused }: { paused: boolean }) {
     );
   };
 
-  const hasInspector = wide && !!last;
+  // Le détail d'un profil ne s'ouvre qu'au clic (plus de colonne vide « Choisis un profil »).
+  const hasInspector = wide && !!last && !!selected;
+  const card = CARDS.find((x) => x.value === startVal) ?? CARDS[0];
+  const startHint = startOpts.find((o) => o.value === startVal)?.hint;
   return (
     <div className={cn("grid items-start gap-5", hasInspector && "lg:grid-cols-[minmax(0,1fr)_340px]")}>
       <div className="@container min-w-0">
-        {/* Barre de recherche : réseau, point de départ, le @ (ou le thème), « Trouver » */}
-        <form onSubmit={(e) => { e.preventDefault(); run(); }} className="grid grid-cols-2 gap-1.5 rounded-[16px] bg-field p-1.5 @xl:flex @xl:items-center">
-          <MenuPill
-            ariaLabel="Réseau"
-            label={isYt ? "YouTube" : "Instagram"}
-            icon={<PlatformIcon platform={platform} className="h-4 w-4 shrink-0" />}
-            value={platform}
-            onChange={(v) => setPlatform(v === "youtube" ? "youtube" : "instagram")}
-            options={[
-              { value: "instagram", label: "Instagram", icon: <PlatformIcon platform="instagram" className="h-4 w-4" /> },
-              { value: "youtube", label: "YouTube", icon: <PlatformIcon platform="youtube" className="h-4 w-4" /> },
-            ]}
-          />
-          <MenuPill
-            ariaLabel="Point de départ"
-            label={startOpts.find((o) => o.value === startVal)?.label ?? ""}
-            value={startVal}
-            onChange={(v) => (isYt ? setYtSource(v as typeof ytSource) : setSource(v as typeof source))}
-            options={startOpts}
-          />
-          <div className="col-span-2 flex min-w-0 flex-1 items-center gap-1.5">
+        {searchOpen || !last ? (
+          /* 1. Chercher : le réseau, la façon de chercher (en cartes), un seul champ, un bouton qui dit ce qu'il fait */
+          <form onSubmit={(e) => { e.preventDefault(); run(); }} className="flex flex-col gap-3 rounded-[20px] bg-surface p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[15px] font-semibold text-foreground">Comment chercher ?</span>
+              <div className="flex items-center gap-2">
+                {last && (
+                  <button type="button" onClick={() => setSearchOpen(false)} className="h-8 rounded-full px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                    Revenir aux résultats
+                  </button>
+                )}
+                <Tabs
+                  size="sm"
+                  label="Réseau"
+                  value={platform}
+                  onValueChange={(v) => setPlatform(v === "youtube" ? "youtube" : "instagram")}
+                  items={[
+                    { value: "instagram", label: "Instagram", icon: <PlatformIcon platform="instagram" className="h-3.5 w-3.5" /> },
+                    { value: "youtube", label: "YouTube", icon: <PlatformIcon platform="youtube" className="h-3.5 w-3.5" /> },
+                  ]}
+                />
+              </div>
+            </div>
+            <div role="radiogroup" aria-label="Façon de chercher" className="grid grid-cols-1 gap-2 @xl:grid-cols-3">
+              {CARDS.map((o) => {
+                const on = o.value === startVal;
+                return (
+                  <button
+                    key={o.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    onClick={() => (isYt ? setYtSource(o.value as typeof ytSource) : setSource(o.value as typeof source))}
+                    className={cn(
+                      "flex flex-col gap-0.5 rounded-[16px] px-4 py-3 text-left transition-colors",
+                      on ? "bg-primary/[0.06] ring-2 ring-primary" : "bg-panel ring-1 ring-border hover:bg-rowhover",
+                    )}
+                  >
+                    <span className="text-[14px] font-semibold text-foreground">{o.title}</span>
+                    <span className="text-[12px] leading-snug text-muted-foreground">{o.short}</span>
+                  </button>
+                );
+              })}
+            </div>
             {isList ? (
-              <span className="min-w-0 flex-1 truncate px-2 text-[13px] text-muted-foreground">{isYt ? "Colle tes chaînes ci-dessous" : "Colle tes @ ci-dessous"}</span>
+              isYt ? (
+                <textarea aria-label="Liste de chaînes" value={ytList} onChange={(e) => setYtList(e.target.value)} rows={4} placeholder={"@lea.fit\nyoutube.com/@camilleyoga\nyoutube.com/channel/UC…"} className="w-full resize-y rounded-[14px] bg-field px-3 py-2.5 text-[14px] leading-relaxed text-foreground outline-none placeholder:text-faint" />
+              ) : (
+                <textarea aria-label="Liste de @" value={listIn} onChange={(e) => setListIn(e.target.value)} rows={4} placeholder={"@lea.fit\n@ines.run\ninstagram.com/camille.yoga"} className="w-full resize-y rounded-[14px] bg-field px-3 py-2.5 text-[14px] leading-relaxed text-foreground outline-none placeholder:text-faint" />
+              )
             ) : (
-              <label className="flex h-10 min-w-0 flex-1 items-center gap-1 px-2">
+              <label className="flex h-11 min-w-0 items-center gap-1.5 rounded-full bg-field px-4">
                 {isYt && ytSource === "search" ? <Search className="h-4 w-4 shrink-0 text-faint" /> : !isYt ? <span aria-hidden className="text-[15px] font-medium text-faint">@</span> : null}
                 <input
                   aria-label={isYt ? (ytSource === "search" ? "Thème" : "Marque") : source === "marque" ? "@ de la marque" : "@ du créateur"}
@@ -1051,42 +1110,20 @@ function CreatorFinder({ paused }: { paused: boolean }) {
                   placeholder={inputHint}
                   className="min-w-0 flex-1 bg-transparent text-[14px] text-foreground outline-none placeholder:text-faint"
                 />
+                {isYt && <MenuPill ariaLabel="Pays" label={regionLabel} value={ytRegion} onChange={setYtRegion} options={REGIONS.map(([v, l]) => ({ value: v, label: l }))} />}
               </label>
             )}
-            {isYt && !isList && (
-              <MenuPill ariaLabel="Pays" label={regionLabel} value={ytRegion} onChange={setYtRegion} options={REGIONS.map(([v, l]) => ({ value: v, label: l }))} />
-            )}
-            <button type="submit" disabled={!!busy} className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
-              {busy ? <Spin size={14} /> : <Search className="h-4 w-4" />} {isList ? "Analyser" : "Trouver"}
-            </button>
-          </div>
-        </form>
-
-        {isList && (
-          <div className="mt-2 rounded-[16px] bg-field p-1.5">
-            {isYt ? (
-              <textarea aria-label="Liste de chaînes" value={ytList} onChange={(e) => setYtList(e.target.value)} rows={4} placeholder={"@lea.fit\nyoutube.com/@camilleyoga\nyoutube.com/channel/UC…"} className="w-full resize-y rounded-[12px] bg-surface px-3 py-2 text-[13px] outline-none" />
-            ) : (
-              <textarea aria-label="Liste de @" value={listIn} onChange={(e) => setListIn(e.target.value)} rows={4} placeholder={"@lea.fit\n@ines.run\ninstagram.com/camille.yoga"} className="w-full resize-y rounded-[12px] bg-surface px-3 py-2 text-[13px] outline-none" />
-            )}
-            <div className="px-2 pb-1 pt-1.5 text-[11px] text-muted-foreground">
-              {isYt ? "Un @ ou un lien par ligne. Environ 3 unités YouTube par chaîne." : "Un @ par ligne (ou des liens Instagram). 1 demande Meta par @."}
+            <div className="flex flex-col gap-2 @xl:flex-row @xl:items-center @xl:justify-between">
+              <p className="min-w-0 flex-1 text-[12px] leading-snug text-muted-foreground">
+                {isList ? (isYt ? "Un @ ou un lien par ligne. Environ 3 unités YouTube par chaîne." : "Un @ par ligne (ou des liens Instagram). 1 demande Meta par @.") : startHint}
+              </p>
+              <button type="submit" disabled={!!busy} className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-5 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+                {busy ? <Spin size={14} /> : <Search className="h-4 w-4" />} {card.button}
+              </button>
             </div>
-          </div>
-        )}
-
-        {/* Sous la barre : avancement, quota YouTube, raccourcis vers le roster */}
-        {(busy || (isYt && ytQuota) || (!isYt && source === "similaire" && roster.length > 0)) && (
-          <div className="mt-2 flex flex-col gap-2 px-1 text-[12px] text-muted-foreground">
-            {busy && <div>{busy}</div>}
-            {isYt && ytQuota && (
-              <span title="Google offre 10 000 unités par jour : une recherche par thème ou par marque en coûte environ 150, une chaîne de la liste environ 3">
-                Quota YouTube du jour : <span className={cn("font-semibold", ytQuota.used / ytQuota.limit > 0.85 ? TONE_TEXT.wait : "text-foreground")}>{ytQuota.used.toLocaleString("fr-FR")}</span> / {ytQuota.limit.toLocaleString("fr-FR")}
-              </span>
-            )}
             {!isYt && source === "similaire" && roster.length > 0 && (
-              <div className="flex flex-wrap items-center gap-1.5">
-                Tes créateurs :
+              <div className="flex flex-wrap items-center gap-1.5 text-[12px] text-muted-foreground">
+                Ou pars d'un de tes créateurs :
                 {roster.slice(0, 12).map((r) => (
                   <button key={r.user} type="button" disabled={!!busy} onClick={() => void runSimilar(r.user)} className="rounded-full bg-field px-2.5 py-1 font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50">
                     {titleCase(r.name)}
@@ -1094,14 +1131,68 @@ function CreatorFinder({ paused }: { paused: boolean }) {
                 ))}
               </div>
             )}
+          </form>
+        ) : null}
+
+        {/* Avancement et quota YouTube, sous la recherche */}
+        {(busy || (isYt && ytQuota)) && (
+          <div className="mt-2 flex flex-col gap-2 px-1 text-[12px] text-muted-foreground">
+            {busy && <div>{busy}</div>}
+            {isYt && ytQuota && (
+              <span title="Google offre 10 000 unités par jour : une recherche par thème ou par marque en coûte environ 150, une chaîne de la liste environ 3">
+                Quota YouTube du jour : <span className={cn("font-semibold", ytQuota.used / ytQuota.limit > 0.85 ? TONE_TEXT.wait : "text-foreground")}>{ytQuota.used.toLocaleString("fr-FR")}</span> / {ytQuota.limit.toLocaleString("fr-FR")}
+              </span>
+            )}
           </div>
         )}
 
         {last && (
           <>
-            {/* Filtres en pastilles */}
+            {/* 2. Les résultats, en clair : d'où ils viennent, combien, et de quoi les filtrer */}
+            <div className="mt-1 flex flex-wrap items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-[20px] font-bold leading-tight tracking-tight text-foreground">{last.label.replace(/^Créatrices citées/, "Créateurs cités")}</h2>
+                <p className="mt-1 flex flex-wrap items-center gap-x-1 text-[13px] text-muted-foreground">
+                  <span title={last.mode === "similaire" && last.brands?.length ? `Via ${last.brands.slice(0, 4).map((m) => `@${m}`).join(", ")}` : undefined}>
+                    {plural(shown.length, "profil")} · recherche du {fmtDay(last.at)}
+                  </span>
+                  <HelpTip title="Le score « Potentiel »">
+                    <p>Une note sur 100 pour trier vite : engagement par rapport à sa taille (40), rythme de publication (15), déjà payé par des marques (15), email trouvé (10), pas d'agence (10), actif ces 2 dernières semaines (10).</p>
+                    <p>Chaque signal d'alerte retire 15 points : engagement très bas pour sa taille, compte qui suit plus de monde qu'il n'a d'abonnés, rien publié depuis 2 mois.</p>
+                    <p>70 et plus : pépite. C'est une aide, pas un verdict.</p>
+                  </HelpTip>
+                </p>
+              </div>
+              {!searchOpen && (
+                <button type="button" onClick={() => setSearchOpen(true)} className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-field px-4 text-[13px] font-semibold text-foreground transition-colors hover:bg-rowhover">
+                  <Search className="h-3.5 w-3.5" /> Nouvelle recherche
+                </button>
+              )}
+            </div>
+
             <div className="mt-3 flex flex-wrap items-center gap-1.5">
-              <PillSearch value={pageQ} onChange={setPageQ} placeholder="Rechercher dans les résultats…" />
+              <PillSearch value={pageQ} onChange={setPageQ} placeholder="Chercher dans les résultats…" />
+              <button
+                type="button"
+                aria-expanded={filtersOpen}
+                onClick={() => setFiltersOpen((o) => !o)}
+                className={cn("flex h-9 items-center gap-1.5 rounded-full px-3.5 text-[13px] font-medium transition-colors", activeFilters ? "bg-primary/[0.08] text-primary" : "bg-field text-foreground hover:bg-rowhover")}
+              >
+                <SlidersHorizontal className="h-3.5 w-3.5" /> Filtrer{activeFilters ? ` · ${activeFilters}` : ""}
+              </button>
+              <FilterChip label={`Trier : ${sortOpts.find((o) => o.value === sort)?.label ?? "Potentiel"}`} active onClear={sort !== "score" ? () => setSort("score") : undefined}>
+                <OptionList value={sort} onPick={(v) => setSort(v as typeof sort)} options={sortOpts} />
+              </FilterChip>
+              {hidden > 0 && (
+                <span className="px-1 text-[12px] text-muted-foreground">
+                  {hidden} caché{hidden > 1 ? "s" : ""}{" "}
+                  <span title="Par tes filtres, ou d'office : comptes perso (Meta ne donne pas leurs chiffres), marques citées, @ introuvables">par tes filtres ou d'office</span>{" "}·{" "}
+                  <button type="button" onClick={showAll} className="font-semibold text-primary hover:underline">tout afficher</button>
+                </span>
+              )}
+            </div>
+            {filtersOpen && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 rounded-[16px] bg-panel p-2">
               <FilterChip label={followersLabel} active={!!(minF.trim() || maxF.trim())} onClear={() => { setMinF(""); setMaxF(""); }}>
                 <div className="flex flex-col gap-2">
                   <div className="text-[12px] font-semibold text-foreground">Abonnés</div>
@@ -1133,49 +1224,19 @@ function CreatorFinder({ paused }: { paused: boolean }) {
               <FilterChip label={agencyF === "sans" ? "Sans agence" : agencyF === "avec" ? "Déjà en agence" : "Agence"} active={agencyF !== "toutes"} onClear={() => setAgencyF("toutes")}>
                 <OptionList value={agencyF} onPick={(v) => setAgencyF(v as typeof agencyF)} options={[{ value: "toutes", label: "Toutes" }, { value: "sans", label: "Sans agence" }, { value: "avec", label: "Déjà en agence", hint: "Un indice dans la bio ou le lien (management, booking…), pas une certitude." }]} />
               </FilterChip>
-              <FilterChip label={`Trier : ${sortOpts.find((o) => o.value === sort)?.label ?? "Potentiel"}`} active onClear={sort !== "score" ? () => setSort("score") : undefined}>
-                <OptionList value={sort} onPick={(v) => setSort(v as typeof sort)} options={sortOpts} />
-              </FilterChip>
               <FilterChip
-                label="Comptes perso, marques, introuvables"
-                title="Cachés par défaut : les comptes perso (Meta ne donne pas leurs chiffres), les marques citées et les @ introuvables. Clique pour les voir."
-                active={showOthers}
-                onToggle={() => setShowOthers(!showOthers)}
-                onClear={() => setShowOthers(false)}
-              />
-            </div>
-
-            {/* En-tête des résultats : d'où ils viennent, combien, et les sections du tri */}
-            <div className="mb-3 mt-6 flex flex-wrap items-end justify-between gap-3">
-              <div className="min-w-0">
-                <h2 className="text-[20px] font-bold leading-tight tracking-tight text-foreground">{last.label.replace(/^Créatrices citées/, "Créateurs cités")}</h2>
-                <p className="mt-1 flex flex-wrap items-center gap-x-1 text-[13px] text-muted-foreground">
-                  {/* Trois infos au plus : profils, masqués, date de la recherche. */}
-                  <span title={last.mode === "similaire" && last.brands?.length ? `Via ${last.brands.slice(0, 4).map((m) => `@${m}`).join(", ")}` : undefined}>
-                    {plural(shown.length, "profil")}
-                    {hidden > 0 && <> · {hidden} masqué{hidden > 1 ? "s" : ""}</>}
-                    {" "}· {fmtDay(last.at)}
-                  </span>
-                  <HelpTip title="Le score « Potentiel »">
-                    <p>Une note sur 100 pour trier vite : engagement par rapport à sa taille (40), rythme de publication (15), déjà payé par des marques (15), email trouvé (10), pas d'agence (10), actif ces 2 dernières semaines (10).</p>
-                    <p>Chaque signal d'alerte retire 15 points : engagement très bas pour sa taille, compte qui suit plus de monde qu'il n'a d'abonnés, rien publié depuis 2 mois.</p>
-                    <p>70 et plus : pépite. C'est une aide, pas un verdict.</p>
-                  </HelpTip>
-                </p>
+                  label="Voir aussi les comptes perso, marques, @ introuvables"
+                  title="Cachés d'office : les comptes perso (Meta ne donne pas leurs chiffres), les marques citées et les @ introuvables."
+                  active={showOthers}
+                  onToggle={() => setShowOthers(!showOthers)}
+                  onClear={() => setShowOthers(false)}
+                />
               </div>
-              {shown.length > 0 && wide && (
-                <button
-                  type="button"
-                  onClick={() => setKeysOpen((o) => !o)}
-                  aria-pressed={keysOpen}
-                  title="Raccourcis clavier (touche ?)"
-                  aria-label="Raccourcis clavier"
-                  className={cn("order-last ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors", keysOpen ? "bg-primary/[0.08] text-primary" : "text-faint hover:bg-rowhover hover:text-foreground")}
-                >
-                  <Keyboard className="h-4 w-4" />
-                </button>
-              )}
-              {shown.length > 0 && (
+            )}
+
+            {/* 3. Trier : les sections au-dessus de la liste */}
+            {shown.length > 0 && (
+              <div className="mb-3 mt-5 flex flex-wrap items-center justify-between gap-2">
                 <Tabs
                   size="sm"
                   label="Sections du tri"
@@ -1189,11 +1250,26 @@ function CreatorFinder({ paused }: { paused: boolean }) {
                     ...(bySection.roster ? [{ value: "roster", label: "Au roster", count: bySection.roster }] : []),
                   ]}
                 />
-              )}
-            </div>
+                {wide && (
+                  <button
+                    type="button"
+                    onClick={() => setKeysOpen((o) => !o)}
+                    aria-pressed={keysOpen}
+                    title="Raccourcis clavier (touche ?)"
+                    aria-label="Raccourcis clavier"
+                    className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-full transition-colors", keysOpen ? "bg-primary/[0.08] text-primary" : "text-faint hover:bg-rowhover hover:text-foreground")}
+                  >
+                    <Keyboard className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            )}
 
             {shown.length === 0 ? (
-              <div className="rounded-[16px] bg-surface px-6 py-10 text-center text-sm text-muted-foreground">Aucun profil pour ces filtres.</div>
+              <div className="mt-4 rounded-[16px] bg-surface px-6 py-10 text-center text-sm text-muted-foreground">
+                Aucun profil ne passe tes filtres.{" "}
+                {hidden > 0 && <button type="button" onClick={showAll} className="font-semibold text-primary hover:underline">Tout afficher ({hidden})</button>}
+              </div>
             ) : visible.length === 0 ? (
               <div className="rounded-[16px] bg-surface px-6 py-10 text-center text-sm text-muted-foreground">
                 {section === "trier"
@@ -1300,14 +1376,34 @@ function CreatorFinder({ paused }: { paused: boolean }) {
                         {sec === "roster" ? (
                           <span className="inline-flex h-8 items-center rounded-full bg-field px-3 text-[12px] font-medium text-muted-foreground">Au roster</span>
                         ) : sec === "trier" ? (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); act(x, "scouting"); }}
-                            disabled={busyRow}
-                            className={cn("flex h-8 items-center gap-1 rounded-full px-3 text-[12px] font-semibold transition-colors disabled:opacity-50", on ? "bg-primary text-primary-foreground hover:opacity-90" : "bg-field text-foreground hover:bg-rowhover")}
-                          >
-                            {busyRow ? <Spin size={14} /> : <Plus className="h-3.5 w-3.5" />} Scouting
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); act(x, "scouting"); }}
+                              disabled={busyRow}
+                              className={cn("flex h-8 items-center gap-1 rounded-full px-3 text-[12px] font-semibold transition-colors disabled:opacity-50", on ? "bg-primary text-primary-foreground hover:opacity-90" : "bg-field text-foreground hover:bg-rowhover")}
+                            >
+                              {busyRow ? <Spin size={14} /> : <Plus className="h-3.5 w-3.5" />} Scouting
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); act(x, "contacter"); }}
+                              disabled={busyRow}
+                              className="hidden h-8 items-center gap-1 rounded-full bg-field px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover disabled:opacity-50 @2xl:flex"
+                            >
+                              <PhoneOutgoing className="h-3.5 w-3.5" /> À contacter
+                            </button>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); act(x, "pas"); }}
+                              disabled={busyRow}
+                              title="Écarter"
+                              aria-label="Écarter"
+                              className="hidden h-8 w-8 place-items-center rounded-full bg-field text-foreground transition-colors hover:bg-rowhover disabled:opacity-50 @2xl:grid"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </>
                         ) : null}
                         <ActionMenu items={menuFor(c)} buttonClassName="h-8 w-8" />
                       </div>
@@ -1331,31 +1427,12 @@ function CreatorFinder({ paused }: { paused: boolean }) {
             )}
           </>
         )}
-        {!last && !busy && (
-          <div className="mt-5 grid grid-cols-1 gap-2.5 @xl:grid-cols-3">
-            {[
-              ["1", "Choisis un point de départ", "Une marque de ta niche, un créateur que tu aimes, ou une liste de @."],
-              ["2", "Filtre", "Abonnés, engagement, ville dans la bio, avec email, sans agence. Tri par score « Potentiel »."],
-              ["3", "Trie et contacte", "Range chaque compte : Scouting, À contacter ou Écartés. Écris-lui depuis ta boîte Gmail ou Instagram."],
-            ].map(([n, t, dsc]) => (
-              <div key={n} className="rounded-[20px] bg-surface p-5">
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-foreground text-[12px] font-bold text-background">{n}</span>
-                <div className="mt-3 text-[15px] font-bold text-foreground">{t}</div>
-                <div className="mt-1 text-[13px] leading-snug text-muted-foreground">{dsc}</div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
 
       {/* Colonne de droite : le profil sélectionné (grand écran) */}
       {hasInspector && (
         <aside aria-label="Profil sélectionné" className="sticky top-0 flex max-h-[calc(100dvh-8rem)] flex-col rounded-[22px] bg-surface p-5">
-          {selected ? (
-            renderInspector(selected)
-          ) : (
-            <div className="grid flex-1 place-items-center py-16 text-center text-[13px] text-muted-foreground">Choisis un profil dans la liste pour voir son détail.</div>
-          )}
+          {selected && renderInspector(selected)}
         </aside>
       )}
 

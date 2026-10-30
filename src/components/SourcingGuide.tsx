@@ -32,9 +32,9 @@ const WORDS: Record<string, Word> = {
 const TOOLS: Record<GuideTool, { steps: Step[]; tipLead: string; tip: string; words: (keyof typeof WORDS)[] }> = {
   createurs: {
     steps: [
-      { icon: Search, tone: "progress", title: "Choisis le réseau et un point de départ.", text: "Instagram : une marque de ta niche (ses créateurs), un créateur que tu aimes (des profils proches), ou une liste de @. YouTube : un thème (« fitness lyon »), une marque, ou une liste de chaînes." },
-      { icon: SlidersHorizontal, tone: "info", title: "Trie et filtre.", text: "Par score « Potentiel », abonnés, engagement, ville dans la bio, avec email, sans agence." },
-      { icon: UserPlus, tone: "ok", title: "Agis.", text: "« Contacter » (mail depuis ta boîte Gmail, ou message Instagram) ou « + Scouting » pour le suivre plus tard." },
+      { icon: Search, tone: "progress", title: "Choisis le réseau et une des trois cartes.", text: "Instagram : les créateurs d'une marque de ta niche, des profils comme un créateur que tu aimes, ou tes @ à analyser. YouTube : un thème (« fitness lyon »), une marque, ou une liste de chaînes." },
+      { icon: SlidersHorizontal, tone: "info", title: "Lis les résultats, filtre si besoin.", text: "Triés par score « Potentiel ». « Filtrer » range abonnés, engagement, ville dans la bio, email et agence ; « tout afficher » remet tout." },
+      { icon: UserPlus, tone: "ok", title: "Agis.", text: "Sur chaque ligne : « + Scouting » pour le suivre, « À contacter » pour lui écrire bientôt, ou la croix pour l'écarter. Clique un profil pour voir son détail et lui écrire." },
     ],
     tipLead: "Le bon réflexe :",
     tip: "ouvre toujours le profil avant d'écrire. Le score aide à trier, il ne remplace pas ton œil.",
