@@ -106,6 +106,24 @@ const dueText = (v: unknown) => {
   const d = dueIso(v);
   return d ? frDay(d) : `${String(v ?? "").trim() || "?"} (date incomplète)`;
 };
+/**
+ * Date d'arrivée sur l'étape courante (historique `collab_steps`), sinon updated_at.
+ * Le scan Instagram du matin réécrit chaque collab (updated_at) : ce n'est pas un mouvement.
+ */
+async function stepSince(sb: SupabaseClient, rows: Json[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  const ids = rows.map((r) => String(r.id)).filter(Boolean);
+  if (!ids.length) return out;
+  const { data } = await sb.from("collab_steps").select("collab_id, step, reached_at").in("collab_id", ids).order("reached_at");
+  const byCollab = new Map<string, Json[]>();
+  for (const s of (data as Json[] | null) ?? []) byCollab.set(String(s.collab_id), [...(byCollab.get(String(s.collab_id)) ?? []), s]);
+  for (const r of rows) {
+    const hit = [...(byCollab.get(String(r.id)) ?? [])].reverse().find((s) => Number(s.step) === Number(r.step));
+    out.set(String(r.id), String(hit?.reached_at ?? r.updated_at ?? ""));
+  }
+  return out;
+}
+
 /** Mesures d'engagement de l'agence (blob) pour le total des abonnés. */
 const engHistory = (st: Json) => (Array.isArray(st.engagementHistory) ? (st.engagementHistory as EngEntry[]) : []);
 
@@ -129,12 +147,20 @@ const pointDuJour: Tool = {
       sb.from("events").select("date, time, title, type, who").in("date", [today, tomorrow]).eq("deleted", false).order("date").order("time"),
       sb.from("todos").select("text, due, creator, priority").eq("done", false).not("due", "is", null).limit(500),
       sb.from("ig_threads").select("username, name, last_text, updated_at").eq("hidden", false).eq("last_from_me", false).gte("updated_at", new Date(Date.now() - 3 * 86400000).toISOString()).order("updated_at", { ascending: false }).limit(10),
-      sb.from("collabs").select("brand, creator, step, updated_at").eq("status", "active").lt("updated_at", new Date(Date.now() - 7 * 86400000).toISOString()).order("updated_at").limit(10),
+      sb.from("collabs").select("id, brand, creator, step, updated_at").eq("status", "active").lt("step", COLLAB_STEPS.length).limit(300),
       ctx.founder ? sb.from("invoices").select("ref, party, amount, date, status").in("status", ["retard", "attente"]).limit(50) : Promise.resolve({ data: [] }),
     ]);
     const bad = [ev, todos, dms, collabs, inv].find((r) => (r as { error?: { message: string } | null }).error);
     if (bad) return fail(`Lecture impossible (${(bad as { error: { message: string } }).error.message}) : réessaie dans un instant.`);
     const mails = await unreadCounts(sb).catch(() => []);
+    // Bloquée = 7 jours ou plus sur la même étape (historique des étapes, comme la page Collabs).
+    const activeCollabs = (collabs.data as Json[] | null) ?? [];
+    const since = await stepSince(sb, activeCollabs);
+    const stuck = activeCollabs
+      .map((c) => ({ c, d: Math.floor((Date.now() - Date.parse(since.get(String(c.id)) ?? "")) / 86400000) }))
+      .filter((x) => Number.isFinite(x.d) && x.d >= 7)
+      .sort((x, y) => y.d - x.d)
+      .slice(0, 15);
     const evs = (ev.data as Json[] | null) ?? [];
     const late = ((inv.data as Json[] | null) ?? []).filter((r) => invoiceLate(r, today));
     const out = [
@@ -149,7 +175,7 @@ const pointDuJour: Tool = {
       `\n## Mails`,
       lines(mails.map((m) => `- ${m}`), "Lecture impossible."),
       `\n## Collabs sans mouvement depuis 7 jours`,
-      lines(((collabs.data as Json[] | null) ?? []).map((c) => `- ${c.brand} × ${titleCase(String(c.creator ?? ""))} · étape ${c.step} « ${COLLAB_STEPS[Number(c.step) - 1] ?? ""} »`), "Aucune."),
+      lines(stuck.map(({ c, d }) => `- ${c.brand} × ${titleCase(String(c.creator ?? ""))} · étape ${c.step} « ${COLLAB_STEPS[Number(c.step) - 1] ?? ""} » depuis ${d} j`), "Aucune."),
     ];
     if (ctx.founder) {
       out.push(`\n## Factures en retard`, lines(late.map((f) => `- ${f.ref} · ${f.party} · ${money(f.amount)} · échéance ${dueText(f.date)}`), "Aucune."));
@@ -625,14 +651,26 @@ const contacts: Tool = {
 const pipeline: Tool = {
   name: "pipeline",
   title: "Pipeline marques",
-  description: "Marques en prospection et leur étape (Repérée, Contact, Discussion, Proposition, Signée…).",
+  description: "Marques en prospection et leur étape (Repérée, Contact, Discussion, Proposition, Signée…), avec le contact affiché par l'app (fiche contact reliée, sinon le contact de la marque qui a un email) et la note de contact saisie dans la négociation si elle diffère.",
   inputSchema: { type: "object", properties: { etape: { type: "string" } }, additionalProperties: false },
   run: async (sb, _c, a) => {
-    let q = sb.from("prospects").select("brand, contact, stage, value, created_at").order("sort_order");
+    let q = sb.from("prospects").select("*").order("sort_order");
     if (str(a.etape)) q = q.ilike("stage", like(str(a.etape)));
-    const { data } = await q;
+    const [{ data, error }, { data: cts }] = await Promise.all([q, sb.from("contacts").select("id, brand, person, email").limit(5000)]);
+    if (error) return fail(`Lecture du pipeline impossible : ${error.message}`);
     const rows = (data as Json[] | null) ?? [];
-    return ok([`# Pipeline · ${rows.length} marque(s)`, ...rows.map((r) => `- ${r.brand} · ${r.stage}${r.contact ? ` · ${r.contact}` : ""}${r.value && r.value !== "—" ? ` · ${r.value}` : ""} · ajoutée le ${String(r.created_at).slice(0, 10)}`)].join("\n"));
+    const contacts = (cts as Json[] | null) ?? [];
+    // Même règle que la page Négociations (Prospection.tsx, contactOf).
+    const contactOf = (r: Json) =>
+      (r.contact_id ? contacts.find((c) => c.id === r.contact_id) : undefined) ??
+      contacts.find((c) => String(c.brand ?? "").trim().toLowerCase() === String(r.brand ?? "").trim().toLowerCase() && c.email);
+    return ok([`# Pipeline · ${rows.length} marque(s)`, ...rows.map((r) => {
+      const c = contactOf(r);
+      const shown = c ? `${c.person ? `${c.person} · ` : ""}${c.email ?? "sans email"}${r.contact_id ? "" : " (deviné par la marque, pas relié)"}` : "";
+      const note = clean(r.contact);
+      const extra = note && (!c || !`${c.person ?? ""} ${c.email ?? ""}`.toLowerCase().includes(note.toLowerCase())) ? ` · noté dans la négo : ${note}` : "";
+      return `- ${r.brand} · ${r.stage}${r.creator ? ` · ${titleCase(String(r.creator))}` : ""}${shown ? ` · contact : ${shown}` : ""}${extra}${r.value && r.value !== "—" ? ` · ${r.value}` : ""} · ajoutée le ${String(r.created_at).slice(0, 10)}`;
+    })].join("\n"));
   },
 };
 
@@ -651,8 +689,9 @@ const collabs: Tool = {
     // Comme la page Collabs : arrivée à l'étape 11 (Bilan), la collab est bouclée = terminée.
     const stateOf = (r: Json) => (r.status === "active" && Number(r.step) >= COLLAB_STEPS.length ? "terminee" : String(r.status));
     const rows = ((data as Json[] | null) ?? []).filter((r) => st === "toutes" || stateOf(r) === st).slice(0, 60);
+    const since = await stepSince(sb, rows);
     const LABEL: Record<string, string> = { active: "en cours", terminee: "bouclée", archivee: "archivée", gagnee: "gagnée", perdue: "perdue" };
-    return ok([`# Collabs (${st}) · ${rows.length}`, ...rows.map((r) => `- ${r.brand} × ${titleCase(String(r.creator ?? ""))}${r.title ? ` · ${r.title}` : ""} · étape ${r.step}/11 « ${COLLAB_STEPS[Number(r.step) - 1] ?? ""} » · ${LABEL[stateOf(r)] ?? stateOf(r)}${r.cachet ? ` · ${r.cachet}` : ""}${r.deliverables ? ` · ${r.deliverables}` : ""} · bougée le ${String(r.updated_at).slice(0, 10)} [collab ${r.id}]`)].join("\n"));
+    return ok([`# Collabs (${st}) · ${rows.length}`, ...rows.map((r) => `- ${r.brand} × ${titleCase(String(r.creator ?? ""))}${r.title ? ` · ${r.title}` : ""} · étape ${r.step}/11 « ${COLLAB_STEPS[Number(r.step) - 1] ?? ""} » · ${LABEL[stateOf(r)] ?? stateOf(r)}${r.cachet ? ` · ${r.cachet}` : ""}${r.deliverables ? ` · ${r.deliverables}` : ""} · sur cette étape depuis le ${String(since.get(String(r.id)) ?? "").slice(0, 10) || "?"} [collab ${r.id}]`)].join("\n"));
   },
 };
 
