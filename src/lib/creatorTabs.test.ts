@@ -44,8 +44,8 @@ describe("favoris du créateur", () => {
     expect(parseCsFavorites('["todo","mediakit"]')).toEqual(["mediakit"]); // ancienne liste : « todo » est d'office
   });
   it("Accueil, À faire, Idées et Mail sont toujours en tête, puis les favoris choisis", () => {
-    expect(csFavoritesShown([])).toEqual(["aujourdhui", "accueil", "todo", "ideas", "mails"]);
-    expect(csFavoritesShown(["mediakit", "todo"])).toEqual(["aujourdhui", "accueil", "todo", "ideas", "mails", "mediakit"]);
+    expect(csFavoritesShown([])).toEqual(["accueil", "todo", "ideas", "mails"]);
+    expect(csFavoritesShown(["mediakit", "todo"])).toEqual(["accueil", "todo", "ideas", "mails", "mediakit"]);
     expect(toggleCsFavorite(["mediakit"], "ideas")).toEqual(["mediakit"]); // d'office : ne se retire pas
   });
   it("ajoute puis retire", () => {

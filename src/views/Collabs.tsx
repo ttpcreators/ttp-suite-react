@@ -437,7 +437,7 @@ export function Collabs() {
       deliverables: eDeliverables.trim() || null, cachet: eCachet.trim() || null,
       creator: eCreator || null, note: eNote.trim() || null,
     };
-    if (!(await dbUpdate("collabs", id, patch))) return toast("Erreur — réessaie");
+    if (!(await dbUpdate("collabs", id, patch))) return toast("Erreur, réessaie");
     setRows((rows ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
     // Site de la marque (pour son logo) : partagé avec toute l'équipe, rangé par nom de marque.
     const key = patch.brand.toLowerCase();
@@ -500,7 +500,7 @@ export function Collabs() {
     setRows((rs) => (rs ?? []).map((r) => (r.id === row.id ? { ...r, step: clamped } : r)));
     if (!(await dbUpdate("collabs", row.id, { step: clamped }))) {
       setRows((rs) => (rs ?? []).map((r) => (r.id === row.id ? { ...r, step: prev } : r)));
-      return toast("Erreur — réessaie");
+      return toast("Erreur, réessaie");
     }
     // Reflète le changement dans l'historique local (pour les dates, sans re-fetch).
     setSteps((m) => ({ ...m, [row.id]: [...(m[row.id] ?? []), { collab_id: row.id, step: clamped, reached_at: new Date().toISOString() }] }));
@@ -520,7 +520,7 @@ export function Collabs() {
     setRows((rs) => (rs ?? []).map((r) => (r.id === row.id ? { ...r, status } : r)));
     if (!(await dbUpdate("collabs", row.id, { status }))) {
       setRows((rs) => (rs ?? []).map((r) => (r.id === row.id ? { ...r, status: prev } : r)));
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
     }
   };
 

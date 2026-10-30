@@ -251,7 +251,7 @@ export function RepresentationContract({ initial = null }: { initial?: ContractH
     setSaving(true);
     try {
       const html = representationHTML(config);
-      const title = `Contrat de représentation — ${config.talentNom.trim()}`;
+      const title = `Contrat de représentation · ${config.talentNom.trim()}`;
       const slug = (config.talentNom.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40) || "talent").replace(/^-|-$/g, "");
       const path = `contracts/${slug}-${Date.now()}.html`;
       const up = await supabase.storage.from("documents").upload(path, new Blob([html], { type: "text/html;charset=utf-8" }), {
@@ -259,7 +259,7 @@ export function RepresentationContract({ initial = null }: { initial?: ContractH
         upsert: false,
       });
       if (up.error) {
-        toast("Enregistrement échoué — réessaie");
+        toast("Enregistrement échoué, réessaie");
         return;
       }
       const creator = isExternal ? null : ctName || null;
@@ -271,7 +271,7 @@ export function RepresentationContract({ initial = null }: { initial?: ContractH
         .single();
       if (docErr || !doc) {
         await supabase.storage.from("documents").remove([path]).catch(() => {});
-        toast("Enregistrement échoué — réessaie");
+        toast("Enregistrement échoué, réessaie");
         return;
       }
       const entry: ContractHist = {
@@ -322,7 +322,7 @@ export function RepresentationContract({ initial = null }: { initial?: ContractH
 
       toast(
         creator
-          ? `Contrat enregistré ✓ — portail du créateur${deadlineOk ? " · échéance suivie" : ""}`
+          ? `Contrat enregistré et visible dans le portail du créateur${deadlineOk ? " · échéance suivie" : ""}`
           : `Contrat enregistré ✓${deadlineOk ? " · échéance suivie" : ""}`,
       );
     } finally {
@@ -342,7 +342,7 @@ export function RepresentationContract({ initial = null }: { initial?: ContractH
   const shareContract = async (e: ContractHist) => {
     const { data, error } = await supabase.storage.from("documents").createSignedUrl(e.path, 60 * 60 * 24 * 7);
     if (error || !data?.signedUrl) {
-      toast("Lien indisponible — réessaie");
+      toast("Lien indisponible, réessaie");
       return;
     }
     const url = data.signedUrl;

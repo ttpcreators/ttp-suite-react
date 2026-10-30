@@ -909,7 +909,7 @@ export function Facturation() {
   function sendInvoice(r: Row) {
     const d = detailsFor(r);
     const t = totalsOf(d.items, d.franchise, d.vatRate, d.commissionRate);
-    const subject = `Facture ${r.ref} — ${issuer.name}`;
+    const subject = `Facture ${r.ref} · ${issuer.name}`;
     const body = [
       `Bonjour,`,
       ``,

@@ -114,7 +114,7 @@ function debriefToText(d: Debrief): string {
     lines.push(d.renewal.trim());
   }
   lines.push("");
-  lines.push("— TTP Suite · Trust the Process");
+  lines.push("TTP Suite · Trust the Process");
   return lines.join("\n");
 }
 
@@ -154,7 +154,7 @@ function debriefHTML(d: Debrief, shotUrls: Record<string, string> = {}): string 
   const shots = (d.calc?.shots ?? []).map((s) => shotUrls[s.path]).filter(Boolean);
   const shotsBlock = shots.length
     ? `<div style="margin-top:20px;border-top:1px solid #ececec;padding-top:14px">` +
-      `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8a8a8a;margin-bottom:8px">Annexe — captures des statistiques</div>` +
+      `<div style="font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:#8a8a8a;margin-bottom:8px">Annexe : captures des statistiques</div>` +
       `<table style="border-collapse:collapse"><tr>` +
       shots
         .map((u) => `<td style="padding:4px;vertical-align:top"><img src="${escHtml(u)}" alt="" style="width:120px;border:1px solid #ececec;border-radius:8px;display:block"></td>`)
@@ -517,7 +517,7 @@ export function Debrief() {
 
   async function shareDebrief(d: Debrief) {
     const text = debriefToText(d);
-    const title = `Debrief — ${d.brand} × ${titleCase(d.creator)}`;
+    const title = `Debrief · ${d.brand} × ${titleCase(d.creator)}`;
     if (navigator.share) {
       try {
         await navigator.share({ title, text });
@@ -551,7 +551,7 @@ export function Debrief() {
   function openShare(d: Debrief) {
     setShareD(d);
     setShareTo("");
-    setShareSubject(`Bilan de campagne — ${d.brand}`);
+    setShareSubject(`Bilan de campagne · ${d.brand}`);
     setShareVia("gmail");
   }
   // `printHtml` = iframe caché même origine → pas de pop-up à autoriser (et cohérent
@@ -568,7 +568,7 @@ export function Debrief() {
       toast("Email destinataire invalide");
       return;
     }
-    const subject = shareSubject.trim() || `Bilan de campagne — ${shareD.brand}`;
+    const subject = shareSubject.trim() || `Bilan de campagne · ${shareD.brand}`;
     setShareSending(true);
     try {
       const html = debriefHTML(shareD, shareShotUrls);
@@ -582,7 +582,7 @@ export function Debrief() {
       const res = (await jsonOf(error, data)) as { ok?: boolean; error?: string; detail?: string } | null;
       if (!res?.ok) {
         if (res?.error === "google_non_connecte" || res?.error === "gmail_scope_manquant") toast("Reconnecte Google (droits Gmail).");
-        else toast(res?.detail ? `Échec : ${res.detail}` : "Envoi échoué — réessaie");
+        else toast(res?.detail ? `Échec : ${res.detail}` : "Envoi échoué, réessaie");
         return;
       }
       toast("Debrief envoyé à la marque ✓");

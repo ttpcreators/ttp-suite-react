@@ -766,3 +766,179 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .tip-in { animation: none; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   STUDIO : thème par défaut depuis la refonte du 2026-10-30 (Clair, Verre et Noir restent
+   au choix dans Paramètres). Inspirations : Tasklify, Orvion CRM, Keel. Gris neutre, menu
+   posé sur le fond, contenu dans un grand panneau clair, cartes blanches très arrondies,
+   chiffres fins, statuts en pastilles teintées, une touche de citron pour « payé » et les
+   hausses. L'accent reste le bleu TTP (et le choix de Paramètres, posé en ligne, passe devant).
+   Règles hors couche Tailwind : elles passent devant les utilitaires, d'où des cibles nettes.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+[data-theme="studio"] {
+  color-scheme: light;
+  --background: #e9e9eb;
+  --foreground: #111113;
+  --card: #ffffff;
+  --card-foreground: #111113;
+  --popover: #ffffff;
+  --popover-foreground: #111113;
+  --secondary: #f3f3f4;
+  --secondary-foreground: #111113;
+  --muted: #f3f3f4;
+  --muted-foreground: #74747a;
+  --faint: #86868c;
+  --panel: #f4f4f5;
+  --surface: #ffffff;
+  --field: #ededef;
+  --border: rgba(17, 17, 19, 0.07);
+  --input: rgba(17, 17, 19, 0.09);
+  --rowhover: rgba(17, 17, 19, 0.035);
+  --segment: #ffffff;
+  --shadow-float: 0 18px 50px rgba(17, 17, 19, 0.1);
+  --badge: #ff4d3d;
+
+  --r-panel: 28px;
+  --r-card: 24px;
+  --r-card-lg: 30px;
+  --r-row: 14px;
+  --r-field: 12px;
+
+  /* Statuts en pastille teintée (façon Tasklify) : un fond clair + le texte foncé de la même teinte. */
+  --st-ok-bg: #e6f6d8;
+  --st-ok: #2e6f10;
+  --st-progress-bg: #e5ecfd;
+  --st-progress: #2649b8;
+  --st-info-bg: #dff1f2;
+  --st-info: #0d5f68;
+  --st-wait-bg: #fbeed6;
+  --st-wait: #84520a;
+  --st-late-bg: #fde2df;
+  --st-late: #b8231a;
+  --st-closed-bg: #ececee;
+  --st-closed: #56565c;
+
+  /* Graphiques : noir, citron, puis des gris. */
+  --chart-1: #111113;
+  --chart-2: #b7dd3f;
+  --chart-3: #8e8e93;
+  --chart-4: #c7c7cc;
+  --chart-5: #48484d;
+  --chart-6: #d8d8dc;
+  --chart-7: #6e6e73;
+}
+
+[data-theme="studio"] body {
+  background: var(--background);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01", "tnum";
+}
+
+/* ── Typo : titres plus fins et serrés, chiffres légers (Keel, Orvion) ── */
+[data-theme="studio"] h1,
+[data-theme="studio"] .text-title {
+  font-weight: 500 !important;
+  letter-spacing: -0.035em !important;
+}
+[data-theme="studio"] h2,
+[data-theme="studio"] .text-section {
+  font-weight: 500 !important;
+  letter-spacing: -0.02em !important;
+}
+[data-theme="studio"] :is(.text-2xl, .text-3xl, .text-4xl, .text-5xl, [class*="text-[22"], [class*="text-[24"], [class*="text-[26"], [class*="text-[28"], [class*="text-[3"], [class*="text-[4"], [class*="text-[5"], [class*="text-[6"]) {
+  font-weight: 450 !important;
+  letter-spacing: -0.035em !important;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Cadre (Tasklify) : le menu se pose sur le gris, le contenu vit dans un grand panneau clair ── */
+@media (min-width: 768px) {
+  [data-theme="studio"] aside:is(.glass, .bg-surface) {
+    background: transparent !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    box-shadow: none !important;
+    border-color: transparent !important;
+  }
+  [data-theme="studio"] .shell-panel {
+    background: #f7f7f8 !important;
+    border-radius: var(--r-panel) !important;
+    box-shadow: 0 0 0 1px rgba(17, 17, 19, 0.04) !important;
+  }
+}
+
+/* ── Sélection : plus de contour noir, une carte blanche qui se soulève ── */
+[data-theme="studio"] .ring-primary {
+  --tw-ring-color: rgba(17, 17, 19, 0.1) !important;
+}
+[data-theme="studio"] .ring-primary:is([class*="bg-primary/"]) {
+  background: var(--surface) !important;
+  box-shadow: 0 0 0 1px rgba(17, 17, 19, 0.08), 0 8px 24px rgba(17, 17, 19, 0.07) !important;
+}
+
+/* ── Cartes dans le panneau clair : un liseré fin pour les détacher (Tasklify) ── */
+@media (min-width: 768px) {
+  [data-theme="studio"] .shell-panel :is(.bg-surface, .bg-card):is(.rounded-2xl, .rounded-3xl, .rounded-xl, [class*="rounded-[1"], [class*="rounded-[2"]) {
+    box-shadow: 0 0 0 1px rgba(17, 17, 19, 0.06) !important;
+  }
+}
+
+/* ── Classeur à onglets (Collabs, Contrats…) : intercalaires gris clair au lieu du noir ── */
+[data-theme="studio"] .bg-\[\#292929\] {
+  background: #e4e4e7 !important;
+  color: var(--foreground) !important;
+}
+[data-theme="studio"] .bg-\[\#292929\] :is([class~="text-white/70"], [class~="text-white/60"], [class~="text-white/50"]) {
+  color: rgba(17, 17, 19, 0.5) !important;
+}
+[data-theme="studio"] .bg-\[\#292929\] [aria-selected="true"] {
+  color: var(--foreground) !important;
+}
+[data-theme="studio"] .bg-\[\#292929\] :is([class*="text-white"]):hover {
+  color: var(--foreground) !important;
+}
+
+/* ── Éclat citron : statut « fait / payé », hausses ── */
+[data-theme="studio"] .bg-ok-soft {
+  background: #ecf8c4 !important;
+}
+[data-theme="studio"] .text-ok {
+  color: #3e5c00 !important;
+}
+
+/* ── Cartes : blanches, très arrondies, bord à peine visible, pas d'ombre ── */
+[data-theme="studio"] :is(.bg-surface, .bg-card):is(.rounded-2xl, .rounded-3xl, .rounded-xl, .rounded-\[20px\], .rounded-\[22px\], .rounded-\[24px\], .rounded-\[18px\], .rounded-\[16px\]) {
+  border-radius: var(--r-card) !important;
+}
+[data-theme="studio"] :is(.bg-surface, .bg-card):is(.shadow-sm, .shadow) {
+  box-shadow: 0 0 0 1px var(--border) !important;
+}
+
+/* ── Boutons et onglets : capsules. Le bouton plein garde l'accent, l'actif d'un segment est blanc. ── */
+[data-theme="studio"] :is(button, a).bg-primary {
+  border-radius: 999px !important;
+}
+[data-theme="studio"] .bg-segment {
+  border-radius: 999px !important;
+  box-shadow: 0 1px 2px rgba(17, 17, 19, 0.08) !important;
+}
+[data-theme="studio"] :has(> .bg-segment):is(.bg-field, .bg-secondary, .bg-muted) {
+  border-radius: 999px !important;
+}
+
+/* ── Menu latéral : élément actif en pilule de l'accent ── */
+[data-theme="studio"] aside :is(button, a).bg-primary,
+[data-theme="studio"] nav :is(button, a).bg-primary {
+  border-radius: 12px !important;
+}
+
+/* ── Champs ── */
+[data-theme="studio"] :is(input, select, textarea):not([type="checkbox"]):not([type="radio"]) {
+  border-radius: var(--r-field);
+}
+
+/* ── Pastilles de compteur ── */
+[data-theme="studio"] .bg-badge {
+  box-shadow: 0 0 0 2px var(--surface);
+}

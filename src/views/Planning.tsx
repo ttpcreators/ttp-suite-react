@@ -218,7 +218,7 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
     };
     const created = await dbInsert("events", row);
     if (!created) {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return false;
     }
     if (e.collabId) void linkNewToCollab("events", String((created as { id: string }).id), e.collabId);

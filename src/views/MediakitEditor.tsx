@@ -309,7 +309,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
     if (!selId || saving) return;
     // Garde-fou : ne jamais écrire tant que le blob courant n'a pas été LU avec
     // succès, sinon on remplacerait le vrai media kit par un objet vide.
-    if (loadedId !== selId) return toast("Media kit pas encore chargé — patiente ou recharge");
+    if (loadedId !== selId) return toast("Media kit pas encore chargé, patiente ou recharge");
     setSaving(true);
     try {
       const desired = (mk.slug || "").trim() || slugify((selected?.name || "").split(/\s+/)[0]) || "createur";
@@ -341,7 +341,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
         ...(mk.platforms ? { platforms: mk.platforms.filter((p) => (p.key ?? "").trim()) } : {}),
       };
       const ok = await dbUpdate("creators", selId, { mediakit: clean });
-      if (!ok) return toast("Enregistrement échoué — réessaie");
+      if (!ok) return toast("Enregistrement échoué, réessaie");
       // Si rien n'a bougé pendant l'enregistrement → on affiche la version nettoyée ;
       // sinon on garde les nouvelles saisies (elles restent « non enregistrées »).
       if (selIdRef.current !== selId) return;
@@ -507,7 +507,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
           <ImageIcon className="mx-auto h-8 w-8 text-faint" />
           <div className="mt-3 text-sm font-medium text-foreground">Choisis un créateur</div>
           <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">
-            Remplis son media kit — il se met à jour en ligne sur ttpcreators.pro/mediakit/&lt;lien&gt;.
+            Remplis son media kit : il se met à jour en ligne sur ttpcreators.pro/mediakit/&lt;lien&gt;.
           </p>
         </div>
       ) : loading ? (
@@ -989,7 +989,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
                 {/* Portfolio visuel */}
                 <div>
                   <div className="mb-2 flex items-center justify-between">
-                    <label className={LBL + " mb-0"}>Portfolio — anciens contenus UGC</label>
+                    <label className={LBL + " mb-0"}>Portfolio : anciens contenus UGC</label>
                     <span className="text-[11px] font-medium text-faint">{(ugc.portfolio ?? []).length}/{MAX_UGC_PORTFOLIO}</span>
                   </div>
                   <div className="flex flex-wrap gap-3">
@@ -1087,7 +1087,7 @@ function CastingEditor({ value, onChange }: { value: Record<string, string>; onC
             <input
               value={v === "oui" ? "" : v}
               onChange={(e) => setKey(c.key, e.target.value.trim() ? e.target.value : on ? "oui" : null)}
-              placeholder={`Précision (optionnel) — ${c.hint}`}
+              placeholder={`Précision (optionnel) : ${c.hint}`}
               className={IN}
             />
           </div>
@@ -1097,7 +1097,7 @@ function CastingEditor({ value, onChange }: { value: Record<string, string>; onC
   );
 }
 
-const DEFAULT_RATES_NOTE = "Tarifs indicatifs HT — des packages sont proposés selon le dispositif.";
+const DEFAULT_RATES_NOTE = "Tarifs indicatifs HT. Des packages sont proposés selon le dispositif.";
 const RATE_PRESETS = ["Story Instagram", "Post Instagram", "Réel Instagram", "Vidéo TikTok", "Contenu UGC", "Pack sur mesure"];
 
 function RatesEditor({ rates, onChange }: { rates: RateRow[]; onChange: (r: RateRow[]) => void }) {

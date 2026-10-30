@@ -11,7 +11,7 @@ import type { ThemeChoice } from "@/lib/accent";
 export const ThemeContext = createContext<{ dark: boolean; toggle: () => void; theme: ThemeChoice; setTheme: (t: ThemeChoice) => void }>({
   dark: false,
   toggle: () => {},
-  theme: "clair",
+  theme: "studio",
   setTheme: () => {},
 });
 

@@ -192,7 +192,7 @@ export function Briefs() {
     };
     const created = await dbInsert("briefs", row);
     if (!created) {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return;
     }
     setRows([created as unknown as Row, ...(rows ?? [])]);
@@ -251,7 +251,7 @@ export function Briefs() {
       who: editCreator || "",
     };
     if (!(await dbUpdate("briefs", id, patch))) {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return;
     }
     const old = (rows ?? []).find((r) => r.id === id);
@@ -269,7 +269,7 @@ export function Briefs() {
     if (!(await dbUpdate("briefs", id, { status: next }))) {
       // Échec (RLS/réseau) : on remet l'ancien statut au lieu de laisser l'UI mentir.
       setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, status: prevStatus ?? r.status } : r)));
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
     }
   };
   const del = async (row: Row) => {
@@ -314,8 +314,8 @@ export function Briefs() {
       const slug = (row.brand || "brief").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "brief";
       const path = `briefs/${slug}-${Date.now()}.pdf`;
       const up = await supabase.storage.from("documents").upload(path, file, { contentType: "application/pdf", upsert: false });
-      if (up.error) return toast("Upload échoué — réessaie");
-      const docName = `Brief — ${row.brand}${row.creator ? ` — ${titleCase(row.creator)}` : ""}`;
+      if (up.error) return toast("Upload échoué, réessaie");
+      const docName = `Brief · ${row.brand}${row.creator ? ` · ${titleCase(row.creator)}` : ""}`;
       const doc = await dbInsert("documents", { creator: row.creator || null, name: docName, type: "brief", size: `${Math.max(1, Math.round(file.size / 1024))} Ko`, path, sort_order: 0 });
       if (!doc) {
         await supabase.storage.from("documents").remove([path]).catch(() => {});
@@ -332,7 +332,7 @@ export function Briefs() {
       if (old?.path) await supabase.storage.from("documents").remove([old.path]).catch(() => {});
       if (old?.docId) await supabase.from("documents").delete().eq("id", old.docId).then(() => {}, () => {});
       if (row.creator) notifyCreator("brief", row.creator, `PDF joint au brief ${row.brand}`);
-      toast("PDF joint ✓ — visible dans Documents et le portail créateur");
+      toast("PDF joint, visible dans Documents et le portail créateur");
     } finally {
       setPdfBusy(null);
     }
@@ -346,7 +346,7 @@ export function Briefs() {
       const { data, error } = await supabase.storage.from("documents").createSignedUrl(path, 3600);
       return error || !data?.signedUrl ? null : data.signedUrl;
     });
-    if (!ok) toast("Lien indisponible — réessaie");
+    if (!ok) toast("Lien indisponible, réessaie");
   };
 
   const removePdf = async (row: Row) => {
@@ -651,7 +651,7 @@ export function Briefs() {
           label="Script"
           value={script}
           onChange={setScript}
-          placeholder="Colle ici le script (écrit par toi ou le créateur) — il devient le corps du PDF envoyé à la marque…"
+          placeholder="Colle ici le script (écrit par toi ou le créateur). Il devient le corps du PDF envoyé à la marque…"
           className="min-w-full"
         />
       </InlineForm>

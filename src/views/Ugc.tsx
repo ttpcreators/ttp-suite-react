@@ -76,7 +76,7 @@ export function Ugc() {
     const next = mutate(fresh);
     setList(next);
     const ok = await saveAppStateKey("ugcRoster", next);
-    if (!ok) toast("Erreur — réessaie");
+    if (!ok) toast("Erreur, réessaie");
     return ok;
   };
 

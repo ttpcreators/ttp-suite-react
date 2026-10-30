@@ -29,8 +29,8 @@ export function PushCard({ mails = false }: { mails?: boolean }) {
     setTesting(true);
     try {
       const r = await sendTest();
-      if (!r.ok) toast(r.detail ? t("Échec : {detail}", { detail: r.detail }) : t("Échec — réessaie"));
-      else if (r.total === 0) toast(t("Aucun appareil abonné — active d'abord ici"));
+      if (!r.ok) toast(r.detail ? t("Échec : {detail}", { detail: r.detail }) : t("Échec, réessaie"));
+      else if (r.total === 0) toast(t("Aucun appareil abonné, active d'abord ici"));
       else if (r.sent === 0) toast(t("Envoi refusé"));
       else toast(t("Notification test envoyée 🎉"));
     } finally {
@@ -40,7 +40,7 @@ export function PushCard({ mails = false }: { mails?: boolean }) {
   const doEnable = async () => {
     const ok = await enable();
     if (ok) setActOpen(false);
-    else if (Notification.permission === "granted") toast(t("Activation échouée — réessaie"));
+    else if (Notification.permission === "granted") toast(t("Activation échouée, réessaie"));
   };
 
   // Label + action du bouton principal de la modale d'activation, selon l'état.

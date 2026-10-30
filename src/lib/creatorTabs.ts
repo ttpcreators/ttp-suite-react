@@ -40,6 +40,8 @@ export const CS_ALL_TABS: readonly CsTab[] = [
  * l'onglet « profil » s'affiche « Plus » (rubriques + profil).
  */
 export const CS_TAB_ALIASES: Record<string, CsTab> = {
+  // Refonte du menu (2026-10-30) : Aujourd'hui faisait doublon avec l'Accueil.
+  aujourdhui: "accueil",
   briefs: "missions",
   facturation: "gains",
   __more: "profil",
@@ -68,10 +70,13 @@ export function isMainTab(tab: CsTab): tab is CsMainTab {
  * Favoris d'office de CHAQUE créateur (demande de Marc, 2026-10-22) : toujours en tête,
  * on ne peut pas les retirer. Les favoris choisis par le créateur viennent après.
  */
-export const CS_FIXED_FAVORITES: readonly CsTab[] = ["aujourdhui", "accueil", "todo", "ideas", "mails"];
+export const CS_FIXED_FAVORITES: readonly CsTab[] = ["accueil", "todo", "ideas", "mails"];
+
+/** Rubriques regroupées dans une autre (refonte du menu) : plus de favori à part. */
+const CS_MERGED: readonly CsTab[] = ["aujourdhui", "gifting", "rapport", "debrief"];
 
 /** Rubriques qu'on peut ajouter ou retirer des favoris (ni Plus, ni les favoris d'office). */
-export const CS_FAVORABLE: readonly CsTab[] = CS_ALL_TABS.filter((t) => t !== "profil" && !CS_FIXED_FAVORITES.includes(t));
+export const CS_FAVORABLE: readonly CsTab[] = CS_ALL_TABS.filter((t) => t !== "profil" && !CS_FIXED_FAVORITES.includes(t) && !CS_MERGED.includes(t));
 
 /** Favoris choisis d'office pour un créateur qui n'a encore rien choisi (en plus des fixes). */
 export const CS_DEFAULT_FAVORITES: readonly CsTab[] = [];

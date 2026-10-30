@@ -1,6 +1,6 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { lazyImport } from "@/lib/appUpdate";
-import { TtpMail, TtpMore, TtpStar, TtpContacts, TtpEvolution, TtpFiles, TtpGains, TtpGift, TtpGuide, TtpHome, TtpIdea, TtpMediakit, TtpMission, TtpPlanning, TtpReport, TtpRoad, TtpStats, TtpToday, TtpTodo } from "@/components/icons/ttp-icons";
+import { TtpMail, TtpMore, TtpStar, TtpContacts, TtpEvolution, TtpFiles, TtpGains, TtpGuide, TtpHome, TtpIdea, TtpMediakit, TtpMission, TtpPlanning, TtpRoad, TtpTodo } from "@/components/icons/ttp-icons";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense, type ReactNode } from "react";
 import { Spin } from "@/components/ui/loader";
 import { motion, AnimatePresence } from "motion/react";
@@ -121,9 +121,6 @@ type Todo = { id: string; text: string; descr: string | null; due: string | null
 let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
 type Idea = { id: string; text: string; status: string | null; sort_order?: number; subtasks?: Subtask[] | null };
-// Barre d'accent (bord gauche de la carte idée) selon le statut.
-const IDEA_ACCENT: Record<string, string> = { "À explorer": "bg-indigo", "À faire": "bg-primary", "En cours": "bg-cyan", "Publiée": "bg-signal" };
-const ideaAccent = (s: string | null) => IDEA_ACCENT[s ?? "À faire"] ?? "bg-primary";
 type Brief = { id: string; brand: string | null; deliverables: string | null; due: string | null; status: string | null; consignes: string | null; resume?: BriefResume | null };
 type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string | null; type: string | null; who?: string | null; description?: string | null };
 type Doc = { id: string; name: string; type: string | null; size: string | null; path: string | null; created_at: string | null };
@@ -169,10 +166,9 @@ const CREATOR_GROUPS: {
     label: "Mon travail",
     icon: ListChecks,
     items: [
-      { id: "aujourdhui", label: "Aujourd'hui", icon: TtpToday },
+      // Refonte du menu (2026-10-30) : Aujourd'hui vit dans l'Accueil, Gifting dans Collabs.
       { id: "todo", label: "To-do", icon: TtpTodo },
       { id: "ideas", label: "Idées", icon: TtpIdea },
-      { id: "gifting", label: "Gifting", icon: TtpGift },
       { id: "planning", label: "Planning", icon: TtpPlanning },
     ],
   },
@@ -182,9 +178,8 @@ const CREATOR_GROUPS: {
     icon: TrendingUp,
     items: [
       { id: "guide", label: "Guide", icon: TtpGuide },
+      // Mon rapport et Bilans : onglets de Mes stats (STATS_TABS).
       { id: "evolution", label: "Mes stats", icon: TtpEvolution },
-      { id: "rapport", label: "Mon rapport", icon: TtpStats },
-      { id: "debrief", label: "Bilans", icon: TtpReport },
       { id: "roadmap", label: "Ma feuille de route", icon: TtpRoad },
     ],
   },
@@ -201,15 +196,23 @@ const CREATOR_GROUPS: {
 ];
 const TABS: { id: Tab; label: string; icon: typeof LayoutDashboard }[] = CREATOR_GROUPS.flatMap((g) => g.items);
 
+/** Mes stats (refonte du menu) : ses chiffres de réseaux, le rapport du mois et les bilans de campagne. */
+const STATS_TABS: { value: Tab; label: string }[] = [
+  { value: "evolution", label: "Réseaux" },
+  { value: "rapport", label: "Rapport du mois" },
+  { value: "debrief", label: "Bilans" },
+];
+const isStatsTab = (id: Tab) => STATS_TABS.some((x) => x.value === id);
+
 /**
  * Plus (Menu, téléphone) : le reste de l'espace rangé par usage, en lignes. Pas les onglets de
  * la barre du bas (Accueil, Collabs, To-do, Mail), ni Mes informations (carte du haut).
  */
 const MENU_GROUPS: { id: string; title: string; items: Tab[] }[] = [
-  { id: "argent", title: "Mon argent", items: ["gains"] },
-  { id: "travail", title: "Mon travail", items: ["aujourdhui", "ideas", "gifting", "planning"] },
-  { id: "chiffres", title: "Mes chiffres", items: ["evolution", "rapport", "debrief", "roadmap"] },
-  { id: "documents", title: "Mes documents", items: ["mediakit", "documents", "contacts"] },
+  // Gains : en tête, sous la carte du profil (plus de section d'une seule ligne).
+  { id: "travail", title: "Mon travail", items: ["ideas", "planning"] },
+  { id: "chiffres", title: "Mes chiffres", items: ["evolution", "roadmap"] },
+  { id: "documents", title: "Mon dossier", items: ["mediakit", "documents", "contacts"] },
   { id: "aide", title: "Aide", items: ["guide"] },
 ];
 
@@ -1383,7 +1386,6 @@ export function CreatorSpace({
         onClickCapture={() => activity.keys.has(`idea:${x.id}`) && void markActivityRead("idea", x.id)}
         className="relative overflow-hidden rounded-2xl border border-border bg-surface p-4 pl-5 shadow-sm"
       >
-        <span className={cn("absolute left-0 top-0 h-full w-1", ideaAccent(x.status))} />
         <div className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[15px] leading-relaxed text-foreground">
           {activity.keys.has(`idea:${x.id}`) && <NewDot label={t("Du nouveau de ton agence")} className="mr-1.5 align-middle" />}
           {x.text}
@@ -1851,7 +1853,7 @@ export function CreatorSpace({
 
   // Titre et phrase d'aide de l'onglet, traduits à l'affichage.
   const tabLabel = (id: Tab) => {
-    const x = TABS.find((y) => y.id === id);
+    const x = TABS.find((y) => y.id === (isStatsTab(id) ? "evolution" : id));
     return x ? t(x.label) : "";
   };
   const tabHint = TAB_HINTS[tab];
@@ -2292,7 +2294,7 @@ export function CreatorSpace({
           <div className="hidden h-full md:block">
             <SidebarNav
               groups={navGroups}
-              activeId={tab}
+              activeId={isStatsTab(tab) ? "evolution" : tab}
               onSelect={(id) => setTab(id as Tab)}
               isPinned={(id) => favs.includes(id as CsTab)}
               onTogglePin={(id) => isFavorable(id) && toggleFav(id as CsTab)}
@@ -2920,6 +2922,15 @@ export function CreatorSpace({
             );
           })()}
 
+          {isStatsTab(tab) && (
+            <Tabs
+              label={t("Mes stats")}
+              items={STATS_TABS.map((x) => ({ value: x.value, label: t(x.label) }))}
+              value={tab}
+              onValueChange={(v) => setTab(v as Tab)}
+            />
+          )}
+
           {/* Mes stats (id « evolution ») : feed Instagram et chiffres du jour (ig-sync), puis le
               suivi d'engagement de tous ses réseaux (mesures de l'agence, lecture seule). */}
           {tab === "evolution" && (
@@ -3167,7 +3178,7 @@ export function CreatorSpace({
               <div className="flex flex-col gap-3">
                 {contacts.length === 0 ? (
                   <div className="rounded-2xl border border-border bg-surface p-6 text-sm text-muted-foreground shadow-sm">
-                    {t("Aucun contact. Ajoute une marque ou une personne que tu connais. Ton agence les verra 👋")}
+                    {t("Aucun contact. Ajoute une marque ou une personne que tu connais. Ton agence les verra.")}
                   </div>
                 ) : (
                   contacts.map((c) =>
@@ -3796,6 +3807,11 @@ export function CreatorSpace({
                   <ChevronRight className="h-5 w-5 shrink-0 text-faint" />
                 </button>
               </div>
+
+              {/* Gains en tête : ce que la créatrice regarde le plus, sans section d'une seule ligne. */}
+              <IosGroup>
+                <IosRow icon={TtpGains} label={t("Gains")} onClick={() => setTab("gains")} chevron />
+              </IosGroup>
 
               {/* Le reste de l'espace, rangé par usage, en lignes façon Réglages iOS. Les onglets de la
                   barre du bas (Accueil, Collabs, To-do, Mail) n'y sont pas répétés. */}

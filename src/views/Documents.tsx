@@ -171,7 +171,7 @@ export function Documents() {
     const up = await supabase.storage.from("documents").upload(path, file, { upsert: false, contentType: file.type || undefined });
     if (up.error) {
       setBusy(false);
-      toast("Échec de l'upload — réessaie");
+      toast("Échec de l'upload, réessaie");
       return;
     }
     const row = {
@@ -414,7 +414,7 @@ export function Documents() {
       {rows !== null && rows.length > 1 && (
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
           <div className="flex min-w-0 flex-1 items-center gap-2">
-            <PillSearch size="md" value={pageQ} onChange={setPageQ} placeholder="Rechercher un document…" />
+            <PillSearch size="md" value={pageQ} onChange={setPageQ} placeholder="Rechercher…" />
             <FilterBar value={sort} options={SORT_OPTIONS} onChange={setSort} placeholder="Trier" />
           </div>
           {/* Mobile : les deux filtres côte à côte, même largeur ; ≥ sm : à droite. */}
@@ -445,7 +445,7 @@ export function Documents() {
             <AnimatedBadge status="danger" size="sm">Erreur de chargement</AnimatedBadge>
           </div>
         ) : rows.length === 0 ? (
-          <div className="rounded-2xl border border-border bg-surface px-4 py-6 text-sm text-muted-foreground shadow-sm">Aucun document — ajoute le premier 📎</div>
+          <div className="rounded-2xl border border-border bg-surface px-4 py-6 text-sm text-muted-foreground shadow-sm">Aucun document. Ajoute le premier.</div>
         ) : query.trim() && filtered.length === 0 ? (
           <div className="rounded-2xl border border-border bg-surface px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">Aucun résultat pour « {query} »</div>
         ) : !query.trim() && filtered.length === 0 ? (

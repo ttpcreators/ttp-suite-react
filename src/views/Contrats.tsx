@@ -16,6 +16,9 @@ import { RepresentationContract, type ContractHist } from "@/views/Representatio
 import { ContractsHome } from "@/components/contracts/contracts-home";
 import { TYPE_META as REG_TYPE_META, type ContractRow, type ContractStatus } from "@/lib/contractRegistry";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
+import { useIsFounder } from "@/lib/useFounder";
+import { Echeances } from "@/views/Echeances";
+import { Exclusivites } from "@/views/Exclusivites";
 import { CONTRACT_CSS, contractHead, contractTitle, docHead, docToday, pdfFileTitle } from "@/lib/pdfDoc";
 import { nbspFr } from "@/lib/representationContract";
 import { Overlay } from "@/components/mobile/ios-sheet";
@@ -143,18 +146,18 @@ function objetOf(collab: string, brand: string): string {
   const b = brand || "—";
   switch (collab) {
     case "ugc": return `Production de contenus UGC pour ${b}`;
-    case "gifting": return `Placement de produit — ${b}`;
-    case "ambassador": return `Programme ambassadeur — ${b}`;
-    case "event": return `Prestation événementielle — ${b}`;
+    case "gifting": return `Placement de produit · ${b}`;
+    case "ambassador": return `Programme ambassadeur · ${b}`;
+    case "event": return `Prestation événementielle · ${b}`;
     default: return `Campagne ${b}`;
   }
 }
 
 function rightsValue(s: Scenario): string {
   switch (s.rights) {
-    case "repost": return `Repost organique — ${s.rightsDuration}`;
-    case "paid": return `Paid media / whitelisting — ${s.rightsDuration}`;
-    case "buyout": return `Cession totale (buyout) — ${s.rightsDuration}`;
+    case "repost": return `Repost organique · ${s.rightsDuration}`;
+    case "paid": return `Paid media / whitelisting · ${s.rightsDuration}`;
+    case "buyout": return `Cession totale (buyout) · ${s.rightsDuration}`;
     default: return "Organique, compte du créateur uniquement";
   }
 }
@@ -358,6 +361,9 @@ export function Contrats() {
   const navSub = useNavSub();
   const setNavSub = useSetNavSub();
   const genType: CtType | null = navSub === "marque" || navSub === "repr" || navSub === "ugc" ? navSub : null;
+  // Fins de contrat (fondateurs seulement, comme l'ancienne page) et Exclusivités : onglets à part.
+  const isFounder = useIsFounder() === true;
+  const extra = navSub === "exclusivites" || (navSub === "echeances" && isFounder) ? navSub : null;
   // `seq` remonte le générateur (formulaire neuf) ; `req` = contrat chargé par « Modifier ».
   const [edit, setEdit] = useState<{ seq: number; req: EditRequest | null }>({ seq: 0, req: null });
   // Dernier générateur ouvert : proposé en « Reprendre » sur la page d'arrivée.
@@ -387,6 +393,8 @@ export function Contrats() {
     { value: "marque", label: TYPE_META.marque.chip },
     { value: "repr", label: TYPE_META.repr.chip },
     { value: "ugc", label: TYPE_META.ugc.chip },
+    ...(isFounder ? [{ value: "echeances" as const, label: "Fins de contrat" }] : []),
+    { value: "exclusivites", label: "Exclusivités" },
   ];
 
   return (
@@ -398,9 +406,11 @@ export function Contrats() {
       // Même effet qu'un clic sur la sous-page dans la sidebar.
       onValueChange={(v) => setNavSub(contratsSubFromTab(v as ContratsTab))}
     >
-      <div hidden={!!genType}>
+      {extra === "echeances" && <Echeances />}
+      {extra === "exclusivites" && <Exclusivites />}
+      <div hidden={!!genType || !!extra}>
         <ContractsHome
-          active={!genType}
+          active={!genType && !extra}
           onCount={setTotal}
           onNew={(t) => {
             // Après un « Modifier », « Nouveau contrat » repart d'un formulaire neuf.
@@ -636,7 +646,7 @@ function ContractGenerator({ initial }: { initial: EditRequest | null }) {
       toast("Contrat copié ✓");
       window.setTimeout(() => setCopied(false), 1600);
     } catch {
-      toast("Impossible de copier — presse-papier bloqué");
+      toast("Impossible de copier : presse-papier bloqué");
     }
   };
 

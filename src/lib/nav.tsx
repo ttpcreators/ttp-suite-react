@@ -1,7 +1,7 @@
 import type { LucideIcon } from "@/components/icons";
 import {
   TtpBell, TtpBrief, TtpChecklist, TtpCollabs, TtpContacts, TtpContract, TtpDeadline, TtpExclu, TtpDm, TtpEngagement, TtpEvolution,
-  TtpFiles, TtpFolder, TtpGift, TtpHistory, TtpIdea, TtpInvoice, TtpLock, TtpMail, TtpMediakit, TtpPerson, TtpPipeline,
+  TtpFiles, TtpFolder, TtpHistory, TtpIdea, TtpInvoice, TtpLock, TtpMail, TtpMediakit, TtpPerson, TtpPipeline,
   TtpPlanning, TtpPulse, TtpReport, TtpScouting, TtpSend, TtpSliders, TtpSourcing, TtpSpark, TtpStar, TtpStats, TtpTag,
   TtpTarget, TtpTemplate, TtpToday, TtpTodo, TtpTransfer, TtpGains,
 } from "@/components/icons/ttp-icons";
@@ -59,12 +59,14 @@ export type NavFamily = {
   items: NavItem[];
 };
 
-// Organisation (refaite le 2026-10-20, TTP Suite 2.0) : en tête les FAVORIS, les pages
+// Organisation (refaite le 2026-10-30, refonte « Studio ») : en tête les FAVORIS, les pages
 // ouvertes tous les jours (toujours dépliés) ; puis une section par métier.
 //   • Favoris : la journée ;                 • Talents : le roster et ses chiffres ;
 //   • Prospection : trouver les marques ;    • Collaborations : livrer une campagne ;
-//   • Finance : l'argent et le pilotage ;    • Intelligence : les agents ;
-//   • Ressources, Réglages.
+//   • Finance : l'argent et le pilotage ;    • Agence : les agents et les ressources ;
+//   • Réglages.
+// Les pages qui faisaient doublon sont devenues des onglets de leur page hôte (src/lib/pageMerges.ts) :
+// leur `id` reste valable et ouvre la page hôte sur le bon onglet.
 // Les `id` ne changent JAMAIS (raccourcis, droits, onglets enregistrés) : seuls l'ordre,
 // le rangement et les libellés bougent.
 export const NAV: NavFamily[] = [
@@ -76,7 +78,15 @@ export const NAV: NavFamily[] = [
     items: [
       { id: "aujourdhui", label: "Aujourd'hui", icon: TtpToday },
       { id: "todo", label: "To-do", icon: TtpTodo },
-      { id: "mails", label: "Mails", icon: TtpMail },
+      {
+        id: "mails",
+        label: "Messages",
+        icon: TtpMail,
+        children: [
+          { id: "boite", label: "Mails" },
+          { id: "messages", label: "DM Instagram", icon: TtpDm, pinnable: true },
+        ],
+      },
       { id: "collabs", label: "Collabs", icon: TtpCollabs },
       {
         id: "planning",
@@ -94,7 +104,17 @@ export const NAV: NavFamily[] = [
     label: "Talents",
     icon: TtpPerson,
     items: [
-      { id: "roster", label: "Roster", icon: TtpPerson },
+      {
+        id: "roster",
+        label: "Roster",
+        icon: TtpPerson,
+        children: [
+          { id: "liste", label: "Liste" },
+          { id: "accompagnement", label: "Accompagnement" },
+          { id: "suivi", label: "Évolution", icon: TtpEvolution, pinnable: true },
+          { id: "engagement", label: "Engagement", icon: TtpEngagement, pinnable: true },
+        ],
+      },
       {
         id: "vivier",
         label: "Scouting",
@@ -104,8 +124,6 @@ export const NAV: NavFamily[] = [
           { id: "sportifs", label: "Sportifs" },
         ],
       },
-      { id: "engagement", label: "Engagement", icon: TtpEngagement },
-      { id: "suivi", label: "Évolution", icon: TtpEvolution },
       {
         id: "mediakit",
         label: "Media kit",
@@ -124,11 +142,17 @@ export const NAV: NavFamily[] = [
     label: "Prospection",
     icon: TtpContacts,
     items: [
-      { id: "contacts", label: "Contacts", icon: TtpContacts },
-      { id: "sourcing", label: "Sourcing", icon: TtpSourcing },
-      { id: "whatsapp", label: "À contacter", icon: TtpSend },
+      {
+        id: "contacts",
+        label: "Contacts",
+        icon: TtpContacts,
+        children: [
+          { id: "repertoire", label: "Répertoire" },
+          { id: "whatsapp", label: "À contacter", icon: TtpSend, pinnable: true },
+        ],
+      },
       { id: "prospection", label: "Pipeline", icon: TtpPipeline },
-      { id: "messages", label: "DM Instagram", icon: TtpDm },
+      { id: "sourcing", label: "Sourcing", icon: TtpSourcing },
     ],
   },
   {
@@ -145,11 +169,10 @@ export const NAV: NavFamily[] = [
           { id: "marque", label: "Marque × Créateur" },
           { id: "repr", label: "Représentation" },
           { id: "ugc", label: "Contrat UGC" },
+          { id: "echeances", label: "Fins de contrat", icon: TtpDeadline, pinnable: true },
+          { id: "exclusivites", label: "Exclusivités", icon: TtpExclu, pinnable: true },
         ],
       },
-      { id: "echeances", label: "Fins de contrat", icon: TtpDeadline },
-      { id: "exclusivites", label: "Exclusivités", icon: TtpExclu },
-      { id: "gifting", label: "Gifting", icon: TtpGift },
       { id: "debrief", label: "Debrief", icon: TtpReport },
       { id: "ideas", label: "Idées", icon: TtpIdea },
     ],
@@ -159,28 +182,34 @@ export const NAV: NavFamily[] = [
     label: "Finance",
     icon: TtpInvoice,
     items: [
-      { id: "facturation", label: "Facturation", icon: TtpInvoice },
-      { id: "relances", label: "Relances", icon: TtpBell },
+      {
+        id: "facturation",
+        label: "Facturation",
+        icon: TtpInvoice,
+        children: [
+          { id: "factures", label: "Factures" },
+          { id: "relances", label: "Relances", icon: TtpBell, pinnable: true },
+        ],
+      },
       { id: "reversements", label: "Reversements", icon: TtpTransfer },
       { id: "compta", label: "Compta", icon: TtpGains },
-      { id: "stats", label: "Stats", icon: TtpStats },
-      { id: "objectifs", label: "Objectifs", icon: TtpTarget },
+      {
+        id: "stats",
+        label: "Stats",
+        icon: TtpStats,
+        children: [
+          { id: "chiffres", label: "Chiffres" },
+          { id: "objectifs", label: "Objectifs", icon: TtpTarget, pinnable: true },
+        ],
+      },
     ],
   },
   {
-    id: "intelligence",
-    label: "Intelligence",
-    icon: TtpSpark,
-    items: [
-      { id: "agent", label: "Agents", icon: TtpSpark },
-      { id: "activite", label: "Activité", icon: TtpHistory },
-    ],
-  },
-  {
-    id: "ressources",
-    label: "Ressources",
+    id: "agence",
+    label: "Agence",
     icon: TtpFolder,
     items: [
+      { id: "agent", label: "Agents", icon: TtpSpark },
       { id: "documents", label: "Documents", icon: TtpFiles },
       { id: "templates", label: "Modèles", icon: TtpTemplate },
       { id: "checklist", label: "Checklist", icon: TtpChecklist },
@@ -201,6 +230,7 @@ export const NAV: NavFamily[] = [
         ],
       },
       { id: "parametres", label: "Paramètres", icon: TtpSliders },
+      { id: "activite", label: "Activité", icon: TtpHistory },
       { id: "diagnostique", label: "Diagnostic", icon: TtpPulse },
     ],
   },

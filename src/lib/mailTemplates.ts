@@ -124,9 +124,9 @@ export function renderTemplate(text: string, c: TemplateContact): string {
 export const DEFAULT_TEMPLATES: MailTemplate[] = [
   {
     id: "tpl-prospection-marque",
-    name: "Premier contact — marque",
+    name: "Premier contact : marque",
     kind: "prospection",
-    subject: "{{marque}} × TTP Creators — une idée de collaboration",
+    subject: "{{marque}} × TTP Creators : une idée de collaboration",
     body: `Bonjour {{destinataire}},
 
 Je suis Marc, co-fondateur de TTP Creators, agence de talent management Sport & Lifestyle entre Lyon et Genève.
@@ -136,24 +136,26 @@ On accompagne des créateurs dont l'audience correspond bien à l'univers de {{m
 Est-ce que vous auriez 15 minutes cette semaine ou la suivante pour en parler ? Je peux aussi vous envoyer directement le media kit du créateur qui matcherait le mieux.
 
 Bien à vous,
-Marc — TTP Creators
+Marc
+TTP Creators
 ttpcreators.pro`,
   },
   {
     id: "tpl-prospection-mediakit",
-    name: "Premier contact — avec media kit",
+    name: "Premier contact : avec media kit",
     kind: "prospection",
-    subject: "Un créateur pour {{marque}} — media kit inclus",
+    subject: "Un créateur pour {{marque}}, media kit inclus",
     body: `Bonjour {{destinataire}},
 
 Marc, de TTP Creators (talent management Sport & Lifestyle, Lyon · Genève).
 
-En regardant ce que fait {{marque}} en ce moment, un de nos créateurs s'impose comme une évidence — audience alignée, formats qui performent, historique de campagnes propre. Son media kit complet (chiffres à jour) est ici : ttpcreators.pro/mediakit/
+En regardant ce que fait {{marque}} en ce moment, un de nos créateurs s'impose comme une évidence : audience alignée, formats qui performent, historique de campagnes propre. Son media kit complet (chiffres à jour) est ici : ttpcreators.pro/mediakit/
 
 Si le profil vous parle, je vous propose un échange rapide pour cadrer une première collaboration simple.
 
 Bien à vous,
-Marc — TTP Creators`,
+Marc
+TTP Creators`,
   },
   {
     id: "tpl-relance-douce",
@@ -162,17 +164,18 @@ Marc — TTP Creators`,
     subject: "Re : {{marque}} × TTP Creators",
     body: `Bonjour {{destinataire}},
 
-Je me permets de revenir vers vous — mon précédent message a pu passer entre deux priorités.
+Je me permets de revenir vers vous, mon précédent message a pu passer entre deux priorités.
 
 L'idée reste simple : connecter {{marque}} avec le bon créateur de notre roster, sur un format court et mesurable pour commencer. Si le timing n'est pas bon, dites-le-moi franchement et je reviendrai au bon moment.
 
 Bien à vous,
-Marc — TTP Creators
+Marc
+TTP Creators
 ttpcreators.pro`,
   },
   {
     id: "tpl-relance-fenetre",
-    name: "Relance — dernière fenêtre",
+    name: "Relance : dernière fenêtre",
     kind: "relance",
     subject: "On cale {{marque}} sur ce trimestre ?",
     body: `Bonjour {{destinataire}},
@@ -182,7 +185,8 @@ Dernier message de ma part, promis : on finalise en ce moment les collaborations
 Un simple « oui, parlons-en » ou « pas cette fois » me suffit.
 
 Merci pour votre temps,
-Marc — TTP Creators
+Marc
+TTP Creators
 ttpcreators.pro`,
   },
 ];

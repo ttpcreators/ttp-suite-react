@@ -513,7 +513,7 @@ function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhot
   return (
     <li className={mailCardCls(on, cursor)} data-key={keyOf(t)}>
       {/* Bord coloré : la boîte du fil (violet = partnerships@, vert = talent@). */}
-      {showBox && <span aria-hidden title={BOX_LABEL[t.box]} className={cn("absolute right-0 top-3.5 z-[1] h-5 w-[3px] rounded-l-full", BOX_STYLE[t.box].dot)} />}
+      {showBox && <span aria-hidden title={BOX_LABEL[t.box]} className={cn("absolute right-1.5 top-[19px] z-[1] h-1.5 w-1.5 rounded-full", BOX_STYLE[t.box].dot)} />}
       <SwipeRow actions={swipe}>
         <button type="button" aria-current={on || undefined} onClick={onOpen} className={cn(mailCardBtnCls, "bg-surface dark:bg-transparent")}>
           <span className="flex w-full min-w-0 items-start gap-3">
@@ -576,7 +576,7 @@ function DraftRow({ k, subject, to, email, snippet, ts, box, showBox, byClaude, 
 }) {
   return (
     <li className={mailCardCls(on)} data-key={k}>
-      {showBox && box && <span aria-hidden title={BOX_LABEL[box]} className={cn("absolute right-0 top-3.5 z-[1] h-5 w-[3px] rounded-l-full", BOX_STYLE[box].dot)} />}
+      {showBox && box && <span aria-hidden title={BOX_LABEL[box]} className={cn("absolute right-1.5 top-[19px] z-[1] h-1.5 w-1.5 rounded-full", BOX_STYLE[box].dot)} />}
       <SwipeRow actions={[{ key: "delete", label: "Supprimer", icon: Trash2, tone: "red", onClick: onDelete }]}>
         <button type="button" aria-current={on || undefined} onClick={onOpen} className={cn(mailCardBtnCls, "bg-surface dark:bg-transparent")}>
           <span className="flex w-full min-w-0 items-start gap-3">
@@ -2160,7 +2160,7 @@ export function Mails() {
 
   // ── Même barre, en ligne (téléphone, tablette) ──────────────────────────
   const mobileNav = (
-    <nav aria-label="Dossiers" className={cn("flex gap-1.5 overflow-x-auto border-b border-border p-2 [scrollbar-width:none] lg:hidden", readerOpen && "max-lg:hidden")}>
+    <nav aria-label="Dossiers" className={cn("flex gap-1.5 overflow-x-auto border-b border-border p-2 pr-7 [scrollbar-width:none] [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] lg:hidden", readerOpen && "max-lg:hidden")}>
       <button type="button" onClick={openNewMail} className={cn(pillCls, "bg-primary px-3 text-primary-foreground hover:opacity-90")}>
         <PenLine className="h-3.5 w-3.5" /> Nouveau
       </button>

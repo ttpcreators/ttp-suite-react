@@ -105,10 +105,10 @@ export function ImageField({
     const path = `mediakit/${s}/${field}-${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from("avatars").upload(path, blob, { upsert: false, cacheControl: "3600", contentType });
     setBusy(false);
-    if (error) return toast("Échec de l'upload — réessaie");
+    if (error) return toast("Échec de l'upload, réessaie");
     const { data } = supabase.storage.from("avatars").getPublicUrl(path);
     onChange(data.publicUrl);
-    toast("Image ajoutée ✓ — pense à Enregistrer");
+    toast("Image ajoutée, pense à Enregistrer");
   };
   return (
     <div>

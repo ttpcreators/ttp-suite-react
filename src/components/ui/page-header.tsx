@@ -39,7 +39,7 @@ export function PageFrame({ title, hint, hideHead, children }: { title: ReactNod
             <h1 className="page-title min-w-0 text-[28px] font-bold leading-tight tracking-[-0.025em] md:text-title">{title}</h1>
             {/* À quoi sert la page (src/lib/viewHints.ts) : derrière un « ? », jamais affiché en permanence. */}
             {hint && (
-              <HelpTip title="À quoi sert cette page" className="page-hint h-5 w-5 text-[11px]">
+              <HelpTip title="À quoi sert cette page" className="page-hint h-6 w-6 border-transparent bg-transparent text-[12px] text-faint hover:border-transparent hover:bg-rowhover hover:text-foreground">
                 {hint}
               </HelpTip>
             )}

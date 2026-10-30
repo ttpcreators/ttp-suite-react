@@ -94,7 +94,7 @@ export default function GlassStatChart({
       <div className="mt-4">
         {clean.length === 0 ? (
           <div className="grid place-items-center text-center text-xs text-muted-foreground" style={{ height }}>
-            {t("Pas encore de données — la courbe apparaîtra ici.")}
+            {t("Pas encore de données, la courbe apparaîtra ici.")}
           </div>
         ) : (
           <div style={{ height }}>

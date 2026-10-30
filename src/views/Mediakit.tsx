@@ -52,7 +52,7 @@ const DEFAULT_TEMPLATES: MailTemplate[] = [
   {
     id: "tpl-presentation",
     name: "Présentation créateur",
-    subject: "Media kit — {{creator}} · TTP Creators",
+    subject: "Media kit · {{creator}} · TTP Creators",
     body: "Bonjour,\n\nJe vous partage le media kit de {{creator}}, créateur représenté par TTP Creators.\n{{message}}\nVous y trouverez son audience, ses formats et ses tarifs.\n\nBien à vous,\nTTP Creators",
   },
   {
@@ -212,14 +212,14 @@ function MediakitFiles() {
 
   const upload = async (file: File) => {
     if (!selected) return toast("Choisis d'abord un créateur");
-    if (file.size > MAX_MB * 1024 * 1024) return toast(`Fichier trop lourd (max ${MAX_MB} Mo) — passe par « Ajouter un lien »`);
+    if (file.size > MAX_MB * 1024 * 1024) return toast(`Fichier trop lourd (max ${MAX_MB} Mo), passe par « Ajouter un lien »`);
     setUploading(true);
     try {
       const ext = (/\.([a-z0-9]+)$/i.exec(file.name)?.[1] ?? "pdf").toLowerCase();
       const slug = selected.toLowerCase().replace(/[^a-z0-9]+/g, "-");
       const path = `mediakits/${slug}-${Date.now()}.${ext}`;
       const up = await supabase.storage.from("documents").upload(path, file, { upsert: false, contentType: file.type || undefined });
-      if (up.error) return toast("Échec de l'envoi du fichier — réessaie");
+      if (up.error) return toast("Échec de l'envoi du fichier, réessaie");
       const added = await addRow(path, `${Math.max(1, Math.round(file.size / 1024))} Ko`);
       if (!added) {
         // Ligne non créée : on retire le fichier pour ne pas laisser d'orphelin.
@@ -249,7 +249,7 @@ function MediakitFiles() {
   const addRow = async (path: string, size: string): Promise<boolean> => {
     const row = {
       creator: selected,
-      name: `Media kit — ${titleCase(selected)} — ${monthName()}`,
+      name: `Media kit · ${titleCase(selected)} · ${monthName()}`,
       type: "mediakit",
       size,
       path,
@@ -262,7 +262,7 @@ function MediakitFiles() {
     }
     setArchives((prev) => [created as unknown as ArchiveRow, ...(prev ?? [])]);
     if (selected) notifyCreator("mediakit", selected, row.name); // push au créateur
-    toast("Media kit ajouté ✓ — visible par le créateur");
+    toast("Media kit ajouté, visible par le créateur");
     return true;
   };
 
@@ -275,7 +275,7 @@ function MediakitFiles() {
 
   const open = async (row: ArchiveRow) => {
     // Onglet ouvert dans le clic, avant l'await (sinon bloqué sur iPhone).
-    if (!(await openLater(() => resolveUrl(row, 3600)))) toast("Lien indisponible — réessaie");
+    if (!(await openLater(() => resolveUrl(row, 3600)))) toast("Lien indisponible, réessaie");
   };
 
   const remove = async (row: ArchiveRow) => {
@@ -314,7 +314,7 @@ function MediakitFiles() {
     setSending(true);
     try {
       const link = await resolveUrl(sendRow, 60 * 60 * 24 * 7); // lien valable 7 jours
-      if (!link) return toast("Lien indisponible — réessaie");
+      if (!link) return toast("Lien indisponible, réessaie");
       const who = titleCase(sendRow.creator ?? "");
       const { html } = renderTemplate(activeTpl, { creator: who, lien: link, message: sendMsg.trim() });
       const finalHtml = sendSig ? html + renderSignatureHtml(sendSig) : html;
@@ -326,7 +326,7 @@ function MediakitFiles() {
         const d = (res?.detail ?? "").toLowerCase();
         if (d.includes("domain") || d.includes("verif") || d.includes("testing"))
           toast("L'envoi d'e-mails n'est pas encore activé : pour l'instant, seule ton adresse peut recevoir.");
-        else toast(res?.detail ? `Échec : ${res.detail}` : "Envoi échoué — réessaie");
+        else toast(res?.detail ? `Échec : ${res.detail}` : "Envoi échoué, réessaie");
         return;
       }
       toast(`Envoyé ✓ (${res.sent}/${res.total} destinataire${(res.total ?? 0) > 1 ? "s" : ""})`);
@@ -640,7 +640,7 @@ function MediakitFiles() {
                 <div>
                   <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">Corps</div>
                   <textarea value={tplDraft.body} onChange={(e) => setTplDraft({ ...tplDraft, body: e.target.value })} rows={7} className="w-full resize-y rounded-md border border-border bg-surface px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15" />
-                  <p className="mt-1 text-[10px] text-faint">Variables : <code>{"{{creator}}"}</code> (nom), <code>{"{{message}}"}</code> (ton mot), <code>{"{{lien}}"}</code> (bouton du media kit — ajouté auto en bas si absent).</p>
+                  <p className="mt-1 text-[10px] text-faint">Variables : <code>{"{{creator}}"}</code> (nom), <code>{"{{message}}"}</code> (ton mot), <code>{"{{lien}}"}</code> (bouton du media kit, ajouté auto en bas si absent).</p>
                 </div>
                 <div className="flex justify-end gap-2">
                   <button type="button" onClick={() => setTplDraft(null)} className="rounded-full border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground hover:bg-rowhover">
@@ -685,7 +685,7 @@ function MediakitFiles() {
                 ))}
                 <button
                   type="button"
-                  onClick={() => setTplDraft({ id: uid(), name: "", subject: "Media kit — {{creator}}", body: "Bonjour,\n\n{{message}}\n\n— TTP Creators" })}
+                  onClick={() => setTplDraft({ id: uid(), name: "", subject: "Media kit · {{creator}}", body: "Bonjour,\n\n{{message}}\n\nTTP Creators" })}
                   className="mt-1 inline-flex items-center gap-1.5 rounded-full px-2 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
                 >
                   <Plus className="h-3.5 w-3.5" /> Nouveau modèle

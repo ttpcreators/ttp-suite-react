@@ -138,10 +138,10 @@ type HistEntry = {
 
 function verdict(er: number, p: Platform): { label: string; hint: string; tone: "signal" | "amber" } {
   if (er >= p.excellent)
-    return { label: "Excellent", hint: "Communauté très engagée — un argument fort en négociation.", tone: "signal" };
+    return { label: "Excellent", hint: "Communauté très engagée, un argument fort en négociation.", tone: "signal" };
   if (er >= p.bon)
     return { label: "Bon", hint: "Engagement solide, dans les standards de la plateforme.", tone: "signal" };
-  return { label: "Moyen", hint: "Sous la moyenne de la plateforme — à valoriser autrement (niche, régularité).", tone: "amber" };
+  return { label: "Moyen", hint: "Sous la moyenne de la plateforme : à valoriser autrement (niche, régularité).", tone: "amber" };
 }
 
 export function Engagement() {
@@ -304,7 +304,7 @@ export function Engagement() {
     const okBlob = await listAppStateKey("engagementHistory", [entry], removed, true);
     if (!okBlob) {
       setSaving(false);
-      toast("Erreur d'enregistrement — réessaie");
+      toast("Erreur d'enregistrement, réessaie");
       return;
     }
     setHistory(nextHist);
@@ -556,7 +556,7 @@ export function Engagement() {
         <div className="mt-auto flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
           <div className="text-[12px] leading-snug text-muted-foreground">
             {editingId ? (
-              <><span className="font-semibold text-primary">Modification en cours</span> — ajuste les valeurs puis « Mettre à jour ». </>
+              <><span className="font-semibold text-primary">Modification en cours</span> : ajuste les valeurs puis « Mettre à jour ». </>
             ) : !hasInputs ? (
               <>Renseigne les interactions <span className="font-medium text-foreground">et</span> les vues (30 j) pour pouvoir enregistrer.</>
             ) : creatorId ? (

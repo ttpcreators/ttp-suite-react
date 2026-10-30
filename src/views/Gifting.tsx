@@ -174,12 +174,12 @@ export function Gifting({ embedded = false }: { embedded?: boolean } = {}) {
     };
     if (editId) {
       const ok = await dbUpdate("gifting", editId, patch);
-      if (!ok) return toast("Erreur — réessaie");
+      if (!ok) return toast("Erreur, réessaie");
       setRows((prev) => (prev ?? []).map((r) => (r.id === editId ? { ...r, ...patch } : r)));
       toast("Gifting modifié ✓");
     } else {
       const created = await dbInsert("gifting", { ...patch, source: "agency", sort_order: nextOrder(list) });
-      if (!created) return toast("Erreur — réessaie");
+      if (!created) return toast("Erreur, réessaie");
       setRows((prev) => [created as unknown as GiftRow, ...(prev ?? [])]);
       void linkNewToCollab("gifting", (created as { id: string }).id, collabId);
       if (patch.creator) notifyCreator("gift", patch.creator, b || p);
@@ -196,7 +196,7 @@ export function Gifting({ embedded = false }: { embedded?: boolean } = {}) {
     if (!(await dbUpdate("gifting", g.id, { status: next }))) {
       // Échec (RLS/réseau) : on remet l'ancien statut, sinon l'UI ment jusqu'au refetch.
       setRows((prev) => (prev ?? []).map((r) => (r.id === g.id ? { ...r, status: prevStatus } : r)));
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
     }
   }
 
@@ -204,7 +204,7 @@ export function Gifting({ embedded = false }: { embedded?: boolean } = {}) {
     if (await dbTrash("gifting", g.id, g.brand || g.product || "Gifting", g.creator || undefined)) {
       setRows((prev) => (prev ?? []).filter((r) => r.id !== g.id));
       toast("Déplacé dans la corbeille");
-    } else toast("Erreur — réessaie");
+    } else toast("Erreur, réessaie");
   }
 
   // « En attente » = contenu attendu, pas encore publié/clos ET pas refusé (un cadeau
@@ -523,7 +523,7 @@ function GiftDetail({ g, onClose, onEdit }: { g: GiftRow; onClose: () => void; o
         "—"
       ),
     ],
-    ["Contenu attendu", g.content_expected ? g.deliverables || "Oui" : "Non — sans contrepartie"],
+    ["Contenu attendu", g.content_expected ? g.deliverables || "Oui" : "Non, sans contrepartie"],
   ];
   return (
     <Overlay className="fixed inset-0 z-[110] flex items-start justify-center overflow-y-auto bg-black/40 p-4 sm:p-6" onClose={onClose}>

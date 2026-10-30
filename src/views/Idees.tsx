@@ -1,6 +1,6 @@
 import { useStickyState } from "@/lib/useStickyState";
 import { supabase } from "@/lib/supabase";
-import { titleCase, cn } from "@/lib/utils";
+import { titleCase } from "@/lib/utils";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { SubtaskChecklist, type Subtask } from "@/components/ui/subtask-checklist";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
@@ -45,15 +45,6 @@ const STATUS_OPTS: StatusOption[] = [
   { value: "En cours", label: "En cours", dot: "bg-progress" },
   { value: "Publiée", label: "Publiée", dot: "bg-ok" },
 ];
-
-// Barre d'accent (bord gauche de la carte) selon le statut de l'idée.
-const IDEA_ACCENT: Record<string, string> = {
-  "À explorer": "bg-indigo",
-  "À faire": "bg-primary",
-  "En cours": "bg-cyan",
-  "Publiée": "bg-signal",
-};
-const ideaAccent = (s: string | null) => IDEA_ACCENT[s ?? "À faire"] ?? "bg-primary";
 
 const STATUS_FILTERS = ["À explorer", "À faire", "En cours", "Publiée"];
 const ALL_STATUS = "__all__";
@@ -109,7 +100,7 @@ export function Idees() {
       /* traité ci-dessous */
     }
     setNotes(before);
-    toast("Commentaire non enregistré — réessaie");
+    toast("Commentaire non enregistré, réessaie");
     return false;
   };
 
@@ -149,7 +140,7 @@ export function Idees() {
     };
     const created = await dbInsert("ideas", row);
     if (!created) {
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
       return;
     }
     const createdRow = created as unknown as Row;
@@ -189,7 +180,7 @@ export function Idees() {
       setRows(prev);
       if (prev) setCache("ideas", prev);
       setEditId(id);
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
     }
   };
 
@@ -202,7 +193,7 @@ export function Idees() {
       // Échec : on restaure l'état ET le cache pour ne pas afficher un faux statut.
       setRows(prev);
       if (prev) setCache("ideas", prev);
-      toast("Erreur — réessaie");
+      toast("Erreur, réessaie");
     }
   };
 
@@ -346,7 +337,7 @@ export function Idees() {
         onClose={() => setFormOpen(false)}
         onSubmit={submit}
       >
-        <AutoGrowTextField label="Idée" value={text} onChange={setText} placeholder="Décris ton idée — le champ s'agrandit tout seul…" className="min-w-full" mentions={creators} />
+        <AutoGrowTextField label="Idée" value={text} onChange={setText} placeholder="Décris ton idée, le champ s'agrandit tout seul…" className="min-w-full" mentions={creators} />
         <CreatorPickerField label="Créateur" value={formCreator} onChange={setFormCreator} creators={creators} emptyLabel="Idée générale" />
         <TextField label="Commentaire (optionnel)" value={note} onChange={setNote} placeholder="Infos, rappel, lien…" />
       </InlineForm>
@@ -372,7 +363,6 @@ export function Idees() {
               onClickCapture={() => activity.keys.has(`idea:${row.id}`) && void markActivityRead("idea", row.id)}
               className="relative overflow-hidden rounded-2xl border border-border bg-card p-4 pl-5 shadow-sm transition-colors hover:bg-rowhover"
             >
-              <span className={cn("absolute left-0 top-0 h-full w-1", ideaAccent(row.status))} />
               {editId === row.id ? (
                 <div className="flex flex-col gap-2">
                   <span className="text-[11px] font-medium text-muted-foreground">Modifier l'idée</span>

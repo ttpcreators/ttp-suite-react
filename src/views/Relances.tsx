@@ -95,7 +95,7 @@ export function Relances() {
 
       {overdue.length === 0 ? (
         <div className="rounded-2xl border border-border bg-surface p-8 text-center text-sm text-muted-foreground shadow-sm">
-          Aucune facture en retard 🎉 Tout est encaissé ou dans les délais.
+          Aucune facture en retard. Tout est encaissé ou dans les délais.
         </div>
       ) : (
         <div className="space-y-3">
