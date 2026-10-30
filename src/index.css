@@ -778,26 +778,28 @@ body {
 
 [data-theme="studio"] {
   color-scheme: light;
-  --background: #e9e9eb;
+  --background: #f1f1f3;
   --foreground: #111113;
   --card: #ffffff;
   --card-foreground: #111113;
   --popover: #ffffff;
   --popover-foreground: #111113;
-  --secondary: #f3f3f4;
+  /* Blocs internes en BLANC (demande de Marc, 2026-10-30 : « trop gris ») : un liseré fin les
+     sépare (règle plus bas). Seuls les champs et les contrôles segmentés gardent un gris léger. */
+  --secondary: #ffffff;
   --secondary-foreground: #111113;
-  --muted: #f3f3f4;
+  --muted: #ffffff;
   --muted-foreground: #74747a;
   --faint: #86868c;
-  --panel: #f4f4f5;
+  --panel: #ffffff;
   --surface: #ffffff;
-  --field: #ededef;
+  --field: #f3f3f5;
   --border: rgba(17, 17, 19, 0.07);
   --input: rgba(17, 17, 19, 0.09);
   --rowhover: rgba(17, 17, 19, 0.035);
   --segment: #ffffff;
   --shadow-float: 0 18px 50px rgba(17, 17, 19, 0.1);
-  --badge: #ff4d3d;
+  --badge: #ff2d55;
 
   --r-panel: 28px;
   --r-card: 24px;
@@ -805,17 +807,22 @@ body {
   --r-row: 14px;
   --r-field: 12px;
 
-  /* Statuts en pastille teintée (façon Tasklify) : un fond clair + le texte foncé de la même teinte. */
-  --st-ok-bg: #e6f6d8;
-  --st-ok: #2e6f10;
+  /* Statuts. Vert, orange et rouge en FLUO (demande de Marc, 2026-10-30) : la pastille prend la
+     couleur fluo pleine avec un texte foncé (blanc sur le rouge) ; le texte seul (montants, jours
+     de retard) garde une version vive mais lisible sur le blanc. Bleu, cyan et gris restent doux. */
+  --st-ok-bg: #2bee79;
+  --st-ok: #00a650;
   --st-progress-bg: #e5ecfd;
   --st-progress: #2649b8;
   --st-info-bg: #dff1f2;
   --st-info: #0d5f68;
-  --st-wait-bg: #fbeed6;
-  --st-wait: #84520a;
-  --st-late-bg: #fde2df;
-  --st-late: #b8231a;
+  --st-wait-bg: #ff9f0a;
+  --st-wait: #f27200;
+  --st-late-bg: #ff2d55;
+  --st-late: #f2133c;
+  /* Aplats pleins (boutons « payé », pastilles) : vert fluo, texte foncé dessus. */
+  --signal: #2bee79;
+  --onsignal: #03381a;
   --st-closed-bg: #ececee;
   --st-closed: #56565c;
 
@@ -862,7 +869,7 @@ body {
     border-color: transparent !important;
   }
   [data-theme="studio"] .shell-panel {
-    background: #f7f7f8 !important;
+    background: #ffffff !important;
     border-radius: var(--r-panel) !important;
     box-shadow: 0 0 0 1px rgba(17, 17, 19, 0.04) !important;
   }
@@ -886,7 +893,7 @@ body {
 
 /* ── Classeur à onglets (Collabs, Contrats…) : intercalaires gris clair au lieu du noir ── */
 [data-theme="studio"] .bg-\[\#292929\] {
-  background: #e4e4e7 !important;
+  background: #ececef !important;
   color: var(--foreground) !important;
 }
 [data-theme="studio"] .bg-\[\#292929\] :is([class~="text-white/70"], [class~="text-white/60"], [class~="text-white/50"]) {
@@ -899,12 +906,38 @@ body {
   color: var(--foreground) !important;
 }
 
-/* ── Éclat citron : statut « fait / payé », hausses ── */
-[data-theme="studio"] .bg-ok-soft {
-  background: #ecf8c4 !important;
+/* ── Blocs internes blancs : un liseré fin à la place du fond gris ── */
+[data-theme="studio"] :is(.bg-panel, .bg-secondary, .bg-muted) {
+  box-shadow: inset 0 0 0 1px var(--border);
 }
-[data-theme="studio"] .text-ok {
-  color: #3e5c00 !important;
+/* Dans le panneau blanc, ce qui reprenait le fond de page (barres collantes, fil des DM) passe
+   en blanc aussi : le gris ne sert plus qu'au cadre autour de l'app. */
+[data-theme="studio"] .shell-panel :is(.bg-background, .bg-background\/95, .bg-background\/40) {
+  background-color: #ffffff !important;
+}
+
+/* ── Recherche du menu : un champ blanc posé sur le gris, comme les cartes ── */
+[data-theme="studio"] aside .bg-field.h-9.rounded-\[10px\] {
+  background: #ffffff !important;
+  box-shadow: 0 0 0 1px var(--border) !important;
+}
+
+/* ── Pastilles fluo : texte foncé sur le vert et l'orange, blanc sur le rouge ── */
+[data-theme="studio"] .bg-ok-soft,
+[data-theme="studio"] .bg-ok-soft :is(.text-ok, .text-signaltext) {
+  color: #03381a !important;
+}
+[data-theme="studio"] .bg-wait-soft,
+[data-theme="studio"] .bg-wait-soft :is(.text-wait, .text-amber) {
+  color: #3a1e00 !important;
+}
+[data-theme="studio"] :is(.bg-late-soft, .bg-dangersoft),
+[data-theme="studio"] :is(.bg-late-soft, .bg-dangersoft) :is(.text-late, .text-dangertext) {
+  color: #ffffff !important;
+}
+[data-theme="studio"] .bg-ok.text-on-status,
+[data-theme="studio"] .bg-wait.text-on-status {
+  color: #111113 !important;
 }
 
 /* ── Cartes : blanches, très arrondies, bord à peine visible, pas d'ombre ── */

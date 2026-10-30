@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Settings2, X } from "@/components/icons";
+import { ChevronDown, Settings2, X } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
-import { useAppState, saveAppStateKey, formatEuro, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, mergeAppStateKey, formatEuro, type AppState } from "@/lib/appState";
 import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -9,7 +9,7 @@ import { commissionMap, DEFAULT_COMMISSION, rateFor } from "@/lib/commission";
 import { collabIdMissing } from "@/lib/collabLinks";
 import {
   billingFor, cashModeFor, collabTake, comptePro, invoiceLine, mandatesFrom, readSettings, socialRate, thresholdAlerts,
-  type ComptaDetail, type ComptaInvoice, type ComptaSettings, type Payout,
+  type Billing, type CashMode, type ComptaDetail, type ComptaInvoice, type ComptaSettings, type Payout,
 } from "@/lib/compta";
 import { ACTIVITIES, RATE_SOURCES, RATES_CHECKED, type Activity } from "@/lib/comptaRates";
 import { PageHeaderRow } from "@/components/ui/page-header";
@@ -51,6 +51,11 @@ export function Compta() {
   const [collabs, setCollabs] = useState<CollabRow[]>(() => getCache<CollabRow[]>("comptaCollabs") ?? []);
   const [error, setError] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Qui encaisse, changé ici ligne par ligne (même réglage que la fiche collab : blob `collabCashMode`).
+  // `local` : choix déjà enregistrés mais pas encore relus, pour que les totaux suivent tout de suite.
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [local, setLocal] = useState<Record<string, string>>({});
+  const [savingId, setSavingId] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -77,7 +82,7 @@ export function Compta() {
   const computed = useMemo(() => {
     if (!invoices) return null;
     const details = (app?.invoiceDetails as Record<string, ComptaDetail>) ?? {};
-    const modes = (app?.collabCashMode as Record<string, string>) ?? {};
+    const modes = { ...((app?.collabCashMode as Record<string, string>) ?? {}), ...local };
     const mandates = mandatesFrom(app?.contractHistory);
     const roster = commissionMap(creators);
     const saved = (app?.creatorCommission as Record<string, number>) ?? {};
@@ -92,12 +97,12 @@ export function Compta() {
       });
     const box = comptePro(lines, (app?.creatorPayouts as Record<string, Payout[]>) ?? {}, settings, todayISO());
     const takes = collabs
-      .map((c) => ({ c, t: collabTake(c, lines, rateOf(c.creator), cashModeFor(c.id, c.creator, modes, mandates), settings) }))
+      .map((c) => ({ c, billing: billingFor(c.id, modes, settings), t: collabTake(c, lines, rateOf(c.creator), cashModeFor(c.id, c.creator, modes, mandates), settings) }))
       .filter((x) => x.t.commission > 0)
       .sort((a, b) => Number(a.t.received) - Number(b.t.received) || b.t.commission - a.t.commission);
     const vatOnInvoices = settings.vatRegime === "franchise" && lines.some((l) => l.kind === "marque" && l.tva > 0 && l.mode === "agence");
-    return { box, takes, alerts: thresholdAlerts(box.caYear, settings), vatOnInvoices };
-  }, [invoices, collabs, app, creators, settings]);
+    return { box, takes, alerts: thresholdAlerts(box.caYear, settings), vatOnInvoices, modes };
+  }, [invoices, collabs, app, creators, settings, local]);
 
   if (!computed) {
     return error ? (
@@ -106,7 +111,24 @@ export function Compta() {
       <AnimatedBadge status="loading" size="sm">Chargement…</AnimatedBadge>
     );
   }
-  const { box, takes, alerts, vatOnInvoices } = computed;
+  const { box, takes, alerts, vatOnInvoices, modes } = computed;
+
+  const saveMode = async (collabId: string, value: string) => {
+    if (savingId || modes[collabId] === value) return;
+    setSavingId(collabId);
+    setLocal((m) => ({ ...m, [collabId]: value }));
+    const ok = await mergeAppStateKey("collabCashMode", { [collabId]: value });
+    setSavingId(null);
+    if (!ok) {
+      setLocal(({ [collabId]: _drop, ...rest }) => rest);
+      toast("Erreur, réessaie");
+    }
+  };
+  // L'agence encaisse : garde le « au nom de » actuel ; le créateur encaisse : la question ne se pose pas.
+  const setMode = (id: string, billing: Billing, next: CashMode) => void saveMode(id, next === "createur" ? "createur" : billing === "mandat" ? "mandat" : "agence");
+  const setBilling = (id: string, next: Billing) => void saveMode(id, next === "mandat" ? "mandat" : "agence");
+  const seg = (on: boolean) =>
+    cn("h-9 flex-1 rounded-full px-3 text-[13px] font-medium transition-colors", on ? "bg-surface text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground");
   const aside = box.aside.createurs + box.aside.urssaf + box.aside.tva;
 
   return (
@@ -171,27 +193,53 @@ export function Compta() {
           Ce que je prends
           <HelpTip title="Ce que je prends">
             <p>Par collab : ta commission HT, les cotisations URSSAF ({pct(socialRate(settings))}) et le net. Sans facture reliée, la commission est estimée sur le cachet.</p>
-            <p>Le mode (agence ou créateur encaisse) se règle dans la fiche de la collab.</p>
+            <p>Touche une ligne pour changer qui encaisse (l'agence ou le créateur) et au nom de qui la marque est facturée. Le même choix se règle aussi dans la fiche de la collab.</p>
           </HelpTip>
         </h3>
         {takes.length === 0 ? (
           <div className="rounded-2xl bg-surface px-4 py-6 text-center text-[13px] text-muted-foreground">Aucune</div>
         ) : (
           <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-            {takes.map(({ c, t }) => (
-              <div key={c.id} className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-0">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[14px] font-medium text-foreground">{c.brand}{c.creator ? ` × ${titleCase(c.creator).split(" ")[0]}` : ""}</div>
-                  <div className="truncate text-[12px] text-muted-foreground">
-                    {t.mode === "agence" ? "Agence encaisse" : "Créateur encaisse"} · {t.received ? "Encaissé" : t.commissionToBill ? "Commission à facturer" : "À recevoir"}{t.estimated ? " · estimé" : ""}
-                  </div>
+            {takes.map(({ c, t, billing }) => {
+              const open = openId === c.id;
+              const saving = savingId === c.id;
+              return (
+                <div key={c.id} className="border-b border-border last:border-0">
+                  <button
+                    type="button"
+                    aria-expanded={open}
+                    onClick={() => setOpenId(open ? null : c.id)}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-rowhover"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[14px] font-medium text-foreground">{c.brand}{c.creator ? ` × ${titleCase(c.creator).split(" ")[0]}` : ""}</div>
+                      <div className="truncate text-[12px] text-muted-foreground">
+                        {t.mode === "agence" ? (billing === "mandat" ? "Agence encaisse, au nom du créateur" : "Agence encaisse") : "Créateur encaisse"} · {t.received ? "Encaissé" : t.commissionToBill ? "Commission à facturer" : "À recevoir"}{t.estimated ? " · estimé" : ""}
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right tabular-nums">
+                      <div className="text-[14px] font-semibold text-foreground">{formatEuro(t.net)}</div>
+                      <div className="text-[11px] text-faint">{formatEuro(t.commission)} − {formatEuro(t.social)}</div>
+                    </div>
+                    <ChevronDown className={cn("h-4 w-4 shrink-0 text-faint transition-transform", open && "rotate-180")} />
+                  </button>
+                  {open && (
+                    <div className="flex flex-col gap-2 px-4 pb-4">
+                      <div role="group" aria-label="Qui encaisse" className="flex rounded-full bg-field p-0.5">
+                        <button type="button" aria-pressed={t.mode === "agence"} disabled={saving} onClick={() => setMode(c.id, billing, "agence")} className={seg(t.mode === "agence")}>Agence encaisse</button>
+                        <button type="button" aria-pressed={t.mode === "createur"} disabled={saving} onClick={() => setMode(c.id, billing, "createur")} className={seg(t.mode === "createur")}>Créateur encaisse</button>
+                      </div>
+                      {t.mode === "agence" && (
+                        <div role="group" aria-label="Facture à la marque" className="flex rounded-full bg-field p-0.5">
+                          <button type="button" aria-pressed={billing === "agence"} disabled={saving} onClick={() => setBilling(c.id, "agence")} className={seg(billing === "agence")}>Au nom de l'agence</button>
+                          <button type="button" aria-pressed={billing === "mandat"} disabled={saving} onClick={() => setBilling(c.id, "mandat")} className={seg(billing === "mandat")}>Au nom du créateur</button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
-                <div className="shrink-0 text-right tabular-nums">
-                  <div className="text-[14px] font-semibold text-foreground">{formatEuro(t.net)}</div>
-                  <div className="text-[11px] text-faint">{formatEuro(t.commission)} − {formatEuro(t.social)}</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>
