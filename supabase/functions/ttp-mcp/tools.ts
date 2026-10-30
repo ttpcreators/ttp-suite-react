@@ -16,6 +16,7 @@ import { activeByCreator, conflictsFor, excluLine, excluState, readExclusivites 
 import type { Ctx } from "./oauth.ts";
 import { boxesFor, createDraft, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
+import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/audience.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
 type Json = Record<string, unknown>;
@@ -84,6 +85,26 @@ const COLLAB_STEPS = [
 ];
 const SCOUT_STATUS: Record<string, string> = { observation: "En observation", contacter: "À contacter", discussion: "En discussion", signe: "Signé", ecarte: "Pas intéressé" };
 const INVOICE_STATUS: Record<string, string> = { brouillon: "Brouillon", attente: "En attente", retard: "En retard", payee: "Payée", annulee: "Annulée" };
+/** Montant tel qu'enregistré (« 600,00 € ») : « € » ajouté seulement s'il manque. */
+const money = (v: unknown) => {
+  const t = String(v ?? "").trim();
+  return !t ? "?" : /€/.test(t) ? t : `${t} €`;
+};
+/** Facture en retard (même règle que l'app, page Relances) : « En retard », ou « En attente » échue. */
+const invoiceLate = (r: Json, today: string) => {
+  if (r.status === "retard") return true;
+  const d = dueIso(r.date);
+  return r.status === "attente" && !!d && d < today;
+};
+/** Statut affiché : une facture « En attente » échue est « En retard ». */
+const invoiceStatus = (r: Json, today: string) => (invoiceLate(r, today) ? "retard" : String(r.status));
+/** Échéance lisible : « 1 oct. » si date complète, sinon le texte saisi (signalé). */
+const dueText = (v: unknown) => {
+  const d = dueIso(v);
+  return d ? frDay(d) : `${String(v ?? "").trim() || "?"} (date incomplète)`;
+};
+/** Mesures d'engagement de l'agence (blob) pour le total des abonnés. */
+const engHistory = (st: Json) => (Array.isArray(st.engagementHistory) ? (st.engagementHistory as EngEntry[]) : []);
 
 // FAIL-CLOSED : une lecture ratée ou illisible lève une erreur. Renvoyer {} ferait
 // réécrire une clé entière à partir de rien (ex. tout le suivi du scouting effacé).
@@ -112,7 +133,7 @@ const pointDuJour: Tool = {
     if (bad) return fail(`Lecture impossible (${(bad as { error: { message: string } }).error.message}) : réessaie dans un instant.`);
     const mails = await unreadCounts(sb).catch(() => []);
     const evs = (ev.data as Json[] | null) ?? [];
-    const late = ((inv.data as Json[] | null) ?? []).filter((r) => r.status === "retard" || (/^\d{4}-\d{2}-\d{2}/.test(String(r.date)) && String(r.date) < today));
+    const late = ((inv.data as Json[] | null) ?? []).filter((r) => invoiceLate(r, today));
     const out = [
       `# Point du ${frDay(today)}`,
       `\n## Rendez-vous`,
@@ -128,7 +149,7 @@ const pointDuJour: Tool = {
       lines(((collabs.data as Json[] | null) ?? []).map((c) => `- ${c.brand} × ${titleCase(String(c.creator ?? ""))} · étape ${c.step} « ${COLLAB_STEPS[Number(c.step) - 1] ?? ""} »`), "Aucune."),
     ];
     if (ctx.founder) {
-      out.push(`\n## Factures en retard`, lines(late.map((f) => `- ${f.ref} · ${f.party} · ${f.amount} € · échéance ${f.date}`), "Aucune."));
+      out.push(`\n## Factures en retard`, lines(late.map((f) => `- ${f.ref} · ${f.party} · ${money(f.amount)} · échéance ${dueText(f.date)}`), "Aucune."));
     }
     return ok(out.join("\n"));
   },
@@ -150,7 +171,7 @@ const rechercher: Tool = {
       sb.from("creator_pool").select("id, name, handle, tag").or(orLike(["name", "handle", "email", "tag"], q)).limit(8),
       sb.from("athlete_pool").select("id, name, handle, tag, club").or(orLike(["name", "handle", "email", "tag", "club"], q)).limit(8),
       sb.from("ig_threads").select("id, username, name, last_text").or(orLike(["username", "name"], q)).limit(8),
-      ctx.founder ? sb.from("invoices").select("ref, party, amount, status").or(orLike(["ref", "party", "creator"], q)).limit(8) : Promise.resolve({ data: [] }),
+      ctx.founder ? sb.from("invoices").select("ref, party, amount, date, status").or(orLike(["ref", "party", "creator"], q)).limit(8) : Promise.resolve({ data: [] }),
     ]);
     const sec = (title: string, rows: Json[] | null, f: (r: Json) => string) => (rows?.length ? [`\n## ${title}`, ...rows.map((r) => `- ${f(r)}`)] : []);
     const out = [
@@ -162,7 +183,7 @@ const rechercher: Tool = {
       ...sec("Scouting créateurs", sp.data as Json[], (r) => `${r.name} · ${r.handle ?? ""} · ${r.tag ?? ""} [scouting ${r.id}]`),
       ...sec("Scouting sportifs", ap.data as Json[], (r) => `${r.name} · ${r.tag ?? ""}${r.club ? ` · ${r.club}` : ""} · ${r.handle ?? ""} [sportif ${r.id}]`),
       ...sec("DM Instagram", ig.data as Json[], (r) => `@${r.username ?? "?"}${r.name ? ` (${r.name})` : ""} : « ${String(r.last_text ?? "").slice(0, 100)} » [dm ${r.id}]`),
-      ...sec("Factures", inv.data as Json[], (r) => `${r.ref} · ${r.party} · ${r.amount} € · ${INVOICE_STATUS[String(r.status)] ?? r.status}`),
+      ...sec("Factures", inv.data as Json[], (r) => `${r.ref} · ${r.party} · ${money(r.amount)} · ${INVOICE_STATUS[invoiceStatus(r, isoDay())] ?? r.status}`),
     ];
     return ok(out.length > 1 ? out.join("\n") : `Rien trouvé pour « ${q} » (essaie rechercher_mails pour les mails).`);
   },
@@ -174,7 +195,7 @@ const roster: Tool = {
   description: "Liste les créateurs représentés par l'agence (roster) : niche, plateforme, abonnés, engagement, statut, et ⚠ leurs exclusivités en cours. Filtre facultatif par statut (actif, inactif) ou niche.",
   inputSchema: { type: "object", properties: { statut: { type: "string", enum: ["actif", "inactif", "tous"] }, niche: { type: "string" } }, additionalProperties: false },
   run: async (sb, _c, a) => {
-    let q = sb.from("creators").select("name, niche, platform, followers, er, status, ville, instagram, tiktok").order("sort_order");
+    let q = sb.from("creators").select("name, niche, platform, followers, er, status, ville, handle, instagram, tiktok, ig, tt, yt").order("sort_order");
     const st = str(a.statut);
     if (st && st !== "tous") q = q.eq("status", st);
     if (str(a.niche)) q = q.ilike("niche", like(str(a.niche)));
@@ -182,9 +203,16 @@ const roster: Tool = {
     if (error) return fail("Lecture du roster impossible.");
     const rows = (data as Json[]) ?? [];
     // Exclusivités en cours (page Exclusivités) : à ne jamais oublier avant de proposer quelqu'un.
-    const exclu = activeByCreator(readExclusivites((await appState(sb).catch(() => ({} as Json))).exclusivites), isoDay());
+    const state = await appState(sb).catch(() => ({} as Json));
+    const exclu = activeByCreator(readExclusivites(state.exclusivites), isoDay());
     const ex = (n: unknown) => (exclu.get(String(n).trim().toLowerCase()) ?? []).map((e) => ` · ⚠ ${excluLine(e)}`).join("");
-    return ok([`# Roster · ${rows.length} créateur(s)`, ...rows.map((r) => `- ${titleCase(String(r.name))} · ${r.niche ?? "?"} · ${r.platform ?? "?"} · ${r.followers ?? "?"} abonnés · engagement ${r.er ?? "?"} · ${r.status ?? ""}${r.ville ? ` · ${r.ville}` : ""}${r.instagram ? ` · IG ${r.instagram}` : ""}${r.tiktok ? ` · TT ${r.tiktok}` : ""}${ex(r.name)}`)].join("\n"));
+    const hist = engHistory(state);
+    return ok([`# Roster · ${rows.length} créateur(s)`, "Abonnés = total tous réseaux (comme la page Roster), détail par réseau entre parenthèses.", ...rows.map((r) => {
+      const au = audienceOf({ name: String(r.name), followers: r.followers, ig: r.ig as Json | null, tt: r.tt as Json | null, yt: r.yt as Json | null }, hist);
+      const detail = perPlatformText(au);
+      const accounts = [r.instagram && `IG ${r.instagram}`, r.tiktok && `TT ${r.tiktok}`, !r.instagram && !r.tiktok && r.handle && String(r.handle)].filter(Boolean).join(" · ");
+      return `- ${titleCase(String(r.name))} · ${r.niche ?? "?"} · ${r.platform || "?"} · ${compact(au.total)} abonnés${detail ? ` (${detail})` : ""} · engagement ${r.er ?? "?"} · ${r.status ?? ""}${r.ville ? ` · ${r.ville}` : ""}${accounts ? ` · ${accounts}` : ""}${ex(r.name)}`;
+    })].join("\n"));
   },
 };
 
@@ -215,13 +243,28 @@ const ficheCreateur: Tool = {
     const ig = c.ig as Json | null;
     const tt = c.tt as Json | null;
     const yt = c.yt as Json | null;
+    const st = await appState(sb).catch(() => ({} as Json));
+    const hist = engHistory(st);
+    const au = audienceOf({ name, followers: c.followers, ig, tt, yt }, hist);
+    // Dernière mesure d'engagement de chaque réseau (page de la fiche, « Mesures »).
+    const lastEng = new Map<string, Json>();
+    for (const h of hist.filter((h) => (h.creator ?? "").trim().toLowerCase() === name.trim().toLowerCase()) as Json[]) {
+      const pf = String(h.platform ?? "").toLowerCase();
+      const cur = lastEng.get(pf);
+      if (pf && (!cur || dueIso(h.date) > dueIso(cur.date))) lastEng.set(pf, h);
+    }
+    const measure = (pf: string, label: string) => {
+      const h = lastEng.get(pf);
+      return h ? `${label} (mesure du ${h.date ?? "?"}) : ${h.followers ?? "?"} abonnés${h.er ? ` · engagement ${h.er} %` : ""}` : "";
+    };
     const out = [
       `# ${titleCase(name)}`,
-      `Niche : ${c.niche ?? "?"} · plateforme : ${c.platform ?? "?"} · abonnés : ${c.followers ?? "?"} · engagement : ${c.er ?? "?"} · statut : ${c.status ?? "?"}${c.ville ? ` · ${c.ville}` : ""}`,
-      `Comptes : ${[c.instagram && `IG ${c.instagram}`, c.tiktok && `TikTok ${c.tiktok}`, c.email_pro && `email pro ${c.email_pro}`].filter(Boolean).join(" · ") || "?"}`,
-      ig ? `Instagram (relevé automatique) : ${ig.followers ?? "?"} abonnés${ig.er != null ? ` · engagement ${ig.er} %` : ""}${ig.reach30 ? ` · couverture 28 j ${ig.reach30}` : ""}` : "",
-      tt ? `TikTok : ${tt.followers ?? "?"} abonnés` : "",
-      yt ? `YouTube : ${yt.subscribers ?? "?"} abonnés` : "",
+      `Niche : ${c.niche ?? "?"} · plateforme : ${c.platform || "?"} · abonnés tous réseaux : ${compact(au.total)}${perPlatformText(au) ? ` (${perPlatformText(au)})` : ""} · engagement : ${c.er ?? "?"} · statut : ${c.status ?? "?"}${c.ville ? ` · ${c.ville}` : ""}`,
+      `Comptes : ${[c.handle && `@ ${String(c.handle).replace(/^@/, "")}`, c.instagram && `IG ${c.instagram}`, c.tiktok && `TikTok ${c.tiktok}`, c.youtube && `YouTube ${c.youtube}`, c.email_pro && `email pro ${c.email_pro}`].filter(Boolean).join(" · ") || "?"}`,
+      ig ? `Instagram (relevé automatique Meta) : ${ig.followers ?? "?"} abonnés${ig.er != null ? ` · engagement ${ig.er} %` : ""}${ig.reach30 ? ` · couverture 28 j ${ig.reach30}` : ""}` : measure("instagram", "Instagram"),
+      tt ? `TikTok (relevé automatique) : ${tt.followers ?? "?"} abonnés${tt.er != null ? ` · engagement ${tt.er} %` : ""}${tt.avgViews ? ` · vues moyennes ${tt.avgViews}` : ""}` : measure("tiktok", "TikTok"),
+      yt ? `YouTube (relevé automatique) : ${yt.subscribers ?? "?"} abonnés${yt.avgViews ? ` · vues moyennes ${yt.avgViews}` : ""}` : measure("youtube", "YouTube"),
+      ...[...lastEng.keys()].filter((k) => !["instagram", "tiktok", "youtube"].includes(k)).map((k) => measure(k, titleCase(k))),
       `\n## Collabs`,
       lines(((col.data as Json[] | null) ?? []).map((r) => `- ${r.brand} · étape ${r.step}/11 « ${COLLAB_STEPS[Number(r.step) - 1] ?? ""} » · ${r.status}${r.cachet ? ` · cachet ${r.cachet}` : ""} [collab ${r.id}]`), "Aucune."),
       `\n## Prochains rendez-vous`,
@@ -229,10 +272,10 @@ const ficheCreateur: Tool = {
       `\n## Tâches ouvertes`,
       lines(((td.data as Json[] | null) ?? []).map((t) => `- ${t.text}${t.due ? ` · échéance ${t.due}` : ""}`), "Aucune."),
     ];
-    const exclus = readExclusivites((await appState(sb).catch(() => ({} as Json))).exclusivites)
+    const exclus = readExclusivites(st.exclusivites)
       .filter((e) => e.creator.trim().toLowerCase() === name.trim().toLowerCase() && excluState(e, today) !== "terminee");
     out.push(`\n## Exclusivités (ne pas proposer de concurrent)`, lines(exclus.map((e) => `- ${excluLine(e)}${e.points.length ? `\n  Points clés : ${e.points.join(" | ")}` : ""}`), "Aucune."));
-    if (ctx.founder) out.push(`\n## Factures`, lines(((inv.data as Json[] | null) ?? []).map((f) => `- ${f.ref} · ${f.party} · ${f.amount} € · ${INVOICE_STATUS[String(f.status)] ?? f.status} · échéance ${f.date}`), "Aucune."));
+    if (ctx.founder) out.push(`\n## Factures`, lines(((inv.data as Json[] | null) ?? []).map((f) => `- ${f.ref} · ${f.party} · ${money(f.amount)} · ${INVOICE_STATUS[invoiceStatus(f, today)] ?? f.status} · échéance ${dueText(f.date)}`), "Aucune."));
     return ok(out.filter(Boolean).join("\n"));
   },
 };
@@ -358,19 +401,54 @@ const scouting: Tool = {
 const contacts: Tool = {
   name: "contacts",
   title: "Contacts marques",
-  description: "Carnet des contacts marques (CRM) avec email, Instagram, dernier contact et historique des échanges. « a_relancer » = contacts sans échange depuis 45 jours ou plus.",
-  inputSchema: { type: "object", properties: { recherche: { type: "string" }, a_relancer: { type: "boolean" }, max: { type: "number" } }, additionalProperties: false },
+  description: "Carnet des contacts marques (CRM) avec email, Instagram, dernier contact et historique des échanges. Par défaut les plus récemment contactés d'abord. « a_relancer » = même règle que la page Contacts (aucun échange depuis le délai de relance réglé, 45 jours par défaut). « max » jusqu'à 500, « depuis » pour la page suivante.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      recherche: { type: "string" },
+      a_relancer: { type: "boolean" },
+      jamais_contactes: { type: "boolean", description: "Seulement les contacts jamais contactés" },
+      max: { type: "number", description: "1 à 500 (défaut 50)" },
+      depuis: { type: "number", description: "Position de départ (pagination, défaut 0)" },
+    },
+    additionalProperties: false,
+  },
   run: async (sb, _c, a) => {
-    let q = sb.from("contacts").select("id, brand, person, role, email, phone, instagram, tag, last_contacted, touches").order("last_contacted", { ascending: true, nullsFirst: true }).limit(int(a.max, 25, 1, 60));
-    if (str(a.recherche)) q = q.or(orLike(["brand", "person", "email", "instagram", "tag"], str(a.recherche, 60)));
-    if (a.a_relancer === true) q = q.lt("last_contacted", new Date(Date.now() - 45 * 86400000).toISOString());
-    const { data, error } = await q;
-    if (error) return fail("Lecture des contacts impossible.");
-    return ok([`# Contacts`, ...((data as Json[]) ?? []).map((r) => {
-      const t = (Array.isArray(r.touches) ? r.touches : []) as { date: string; canal: string; kind: string; note?: string }[];
-      const last = t[0];
-      return `- ${r.brand}${r.person ? ` · ${r.person}${r.role ? ` (${r.role})` : ""}` : ""} · ${r.email ?? "sans email"}${r.instagram ? ` · ${r.instagram}` : ""}${r.tag ? ` · ${r.tag}` : ""} · dernier contact ${r.last_contacted ? String(r.last_contacted).slice(0, 10) : "jamais"}${last ? ` (${last.kind} par ${last.canal}${last.note ? ` : ${last.note}` : ""})` : ""} · ${t.length} échange(s) [contact ${r.id}]`;
-    })].join("\n"));
+    // Tout le carnet (quelques centaines de lignes), filtré ici avec la règle de l'app.
+    const all: Json[] = [];
+    for (let from = 0; from < 10000; from += 1000) {
+      // « * » : marche avec ou sans la colonne linkedin.
+      let q = sb.from("contacts").select("*").order("id").range(from, from + 999);
+      if (str(a.recherche)) q = q.or(orLike(["brand", "person", "email", "instagram", "tag"], str(a.recherche, 60)));
+      const { data, error } = await q;
+      if (error) return fail(`Lecture des contacts impossible : ${error.message}`);
+      all.push(...((data as Json[]) ?? []));
+      if (((data as Json[]) ?? []).length < 1000) break;
+    }
+    const st = await appState(sb).catch(() => ({} as Json));
+    const relanceDays = Math.max(1, Number((st.prospectSettings as Json | undefined)?.relanceDays) || 45);
+    type T = { date: string; canal: string; kind?: string; note?: string };
+    const ms = (d: unknown) => { const t = new Date(String(d ?? "")).getTime(); return Number.isFinite(t) ? t : 0; };
+    const rows = all.map((r) => {
+      const t = ((Array.isArray(r.touches) ? r.touches : []) as T[]).filter((x) => x && typeof x.date === "string" && typeof x.canal === "string").sort((x, y) => ms(y.date) - ms(x.date));
+      const lastAt = Math.max(ms(t[0]?.date), ms(r.last_contacted));
+      return { r, t, lastAt, relance: lastAt > 0 && Date.now() - lastAt >= relanceDays * 86400000 };
+    });
+    const toRelance = rows.filter((x) => x.relance).length;
+    const never = rows.filter((x) => !x.lastAt).length;
+    let list = a.a_relancer === true ? rows.filter((x) => x.relance) : a.jamais_contactes === true ? rows.filter((x) => !x.lastAt) : rows;
+    // À relancer : les plus anciens d'abord ; sinon les plus récents d'abord.
+    list = [...list].sort((x, y) => (a.a_relancer === true ? x.lastAt - y.lastAt : y.lastAt - x.lastAt) || String(x.r.brand ?? "").localeCompare(String(y.r.brand ?? "")));
+    const start = int(a.depuis, 0, 0, 100000);
+    const page = list.slice(start, start + int(a.max, 50, 1, 500));
+    return ok([
+      `# Contacts · ${all.length} au total${str(a.recherche) ? ` pour « ${str(a.recherche, 60)} »` : ""} · ${toRelance} à relancer (${relanceDays} j) · ${never} jamais contactés`,
+      `Affichés : ${page.length ? `${start + 1} à ${start + page.length}` : "aucun"} sur ${list.length}${start + page.length < list.length ? ` (suite avec depuis = ${start + page.length})` : ""}`,
+      ...page.map(({ r, t, lastAt }) => {
+        const last = t[0];
+        return `- ${r.brand}${r.person ? ` · ${r.person}${r.role ? ` (${r.role})` : ""}` : ""} · ${r.email ?? "sans email"}${r.instagram ? ` · ${r.instagram}` : ""}${r.linkedin ? ` · LinkedIn ${r.linkedin}` : ""}${r.tag ? ` · ${r.tag}` : ""} · dernier contact ${lastAt ? new Date(lastAt).toISOString().slice(0, 10) : "jamais"}${last ? ` (${last.kind ?? "échange"} par ${last.canal}${last.note ? ` : ${String(last.note).slice(0, 120)}` : ""})` : ""} · ${t.length} échange(s) [contact ${r.id}]`;
+      }),
+    ].join("\n"));
   },
 };
 
@@ -450,22 +528,26 @@ const taches: Tool = {
 const factures: Tool = {
   name: "factures",
   title: "Factures",
-  description: "Factures de l'agence (réservé aux fondateurs) : référence, marque, montant TTC, échéance, statut, et totaux par statut. Filtre par statut ou mois (AAAA-MM).",
+  description: "Factures de l'agence (réservé aux fondateurs) : référence, marque, montant TTC, échéance, statut, et totaux par statut. « En retard » = même règle que l'app (statut « En retard », ou « En attente » dont l'échéance est passée). Filtre par statut ou mois (AAAA-MM, échéance).",
   inputSchema: { type: "object", properties: { statut: { type: "string", enum: ["brouillon", "attente", "retard", "payee", "annulee"] }, mois: { type: "string", description: "AAAA-MM (échéance)" } }, additionalProperties: false },
   founder: true,
   run: async (sb, _c, a) => {
-    let q = sb.from("invoices").select("ref, party, amount, date, status, creator").order("created_at", { ascending: false }).limit(100);
-    if (str(a.statut)) q = q.eq("status", str(a.statut));
-    if (/^\d{4}-\d{2}$/.test(str(a.mois))) q = q.like("date", `${str(a.mois)}%`);
-    const { data } = await q;
-    const rows = (data as Json[] | null) ?? [];
+    const { data, error } = await sb.from("invoices").select("ref, party, amount, date, status, creator").order("created_at", { ascending: false }).limit(1000);
+    if (error) return fail(`Lecture des factures impossible : ${error.message}`);
+    const today = isoDay();
+    const want = str(a.statut);
+    const month = /^\d{4}-\d{2}$/.test(str(a.mois)) ? str(a.mois) : "";
+    const rows = ((data as Json[] | null) ?? [])
+      .map((r) => ({ r, st: invoiceStatus(r, today) }))
+      .filter(({ r, st }) => (!want || st === want) && (!month || dueIso(r.date).startsWith(month)));
     const num = (v: unknown) => Number(String(v ?? "").replace(/\s/g, "").replace(",", ".").replace(/[^0-9.-]/g, "")) || 0;
-    const totals: Record<string, number> = {};
-    for (const r of rows) totals[String(r.status)] = (totals[String(r.status)] ?? 0) + num(r.amount);
+    const totals: Record<string, { n: number; sum: number }> = {};
+    for (const { r, st } of rows) totals[st] = { n: (totals[st]?.n ?? 0) + 1, sum: (totals[st]?.sum ?? 0) + num(r.amount) };
+    const shown = rows.slice(0, 150);
     return ok([
-      `# Factures · ${rows.length}`,
-      `Totaux : ${Object.entries(totals).map(([k, v]) => `${INVOICE_STATUS[k] ?? k} ${v.toLocaleString("fr-FR", { maximumFractionDigits: 2 })} €`).join(" · ") || "—"}`,
-      ...rows.map((r) => `- ${r.ref} · ${r.party} · ${r.amount} € · échéance ${r.date} · ${INVOICE_STATUS[String(r.status)] ?? r.status}`),
+      `# Factures · ${rows.length}${rows.length > shown.length ? ` (150 plus récentes affichées)` : ""}`,
+      `Totaux TTC : ${Object.entries(totals).map(([k, v]) => `${INVOICE_STATUS[k] ?? k} ${v.sum.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € (${v.n})`).join(" · ") || "Aucun"}`,
+      ...shown.map(({ r, st }) => `- ${r.ref} · ${r.party}${r.creator ? ` · ${titleCase(String(r.creator))}` : ""} · ${money(r.amount)} · échéance ${dueText(r.date)} · ${INVOICE_STATUS[st] ?? st}`),
     ].join("\n"));
   },
 };

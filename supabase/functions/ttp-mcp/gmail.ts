@@ -284,8 +284,12 @@ export async function unreadCounts(sb: SupabaseClient): Promise<string[]> {
   for (const b of boxesFor("all")) {
     try {
       const token = await tokenFor(sb, b, "read");
-      const l = await gjson(token, `${GMAIL}/labels/INBOX`);
-      out.push(`${b}@ : ${Number(l.threadsUnread ?? 0)} fil(s) non lu(s)`);
+      // Même compte que l'app (widget « Aujourd'hui », gmail-history) : fils non lus de la
+      // boîte de réception, hors Promotions et Réseaux sociaux.
+      const q = encodeURIComponent("in:inbox is:unread -category:promotions -category:social");
+      const l = await gjson(token, `${GMAIL}/threads?q=${q}&maxResults=100&fields=threads/id`);
+      const n = Array.isArray(l.threads) ? (l.threads as unknown[]).length : 0;
+      out.push(`${b}@ : ${n >= 100 ? "100+" : n} fil(s) non lu(s)`);
     } catch {
       out.push(`${b}@ : lecture impossible`);
     }
