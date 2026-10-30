@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoTaskFor, cachetAmount, collabChoices, collabIdMissing, collabLabel, concernsCreator, hasAutoTask, linkGroups, mentionsBrand, type CollabLite } from "./collabLinks";
+import { autoTaskFor, cachetAmount, collabChoices, collabIdMissing, collabLabel, concernsCreator, guessCollabId, hasAutoTask, linkGroups, mentionsBrand, type CollabLite } from "./collabLinks";
 
 const nutri: CollabLite = { id: "c1", brand: "Nutripure", creator: "LÉNA TEST", step: 2, status: "active" };
 
@@ -63,5 +63,23 @@ describe("fiche collab : reliés et suggérés", () => {
     expect(g.events.suggested.map((i) => i.id)).toEqual(["e1"]);
     expect(g.invoices.linked[0].late).toBe(true);
     expect(g.gifting.suggested).toEqual([]);
+  });
+});
+
+describe("collab d'une ancienne facture (sans lien enregistré)", () => {
+  const collabs = [nutri, { id: "c2", brand: "Opera Air", creator: "ZOÉ TEST" }, { id: "c3", brand: "Opera Air", creator: "Mia Test" }];
+  it("une seule collab de même marque et même créateur : reliée", () => {
+    expect(guessCollabId("invoices", { party: "NUTRIPURE ( sept, oct ) × Léna", creator: "LÉNA TEST" }, collabs)).toBe("c1");
+    expect(guessCollabId("invoices", { party: "Opera Air × Zoé", creator: "Zoé Test" }, collabs)).toBe("c2");
+    expect(guessCollabId("briefs", { brand: "Nutripure", creator: "Léna" }, collabs)).toBe("c1");
+  });
+  it("lien enregistré gardé, aucune ou plusieurs candidates : rien deviné", () => {
+    expect(guessCollabId("invoices", { party: "Autre × Léna", creator: "LÉNA TEST", collab_id: "c9" }, collabs)).toBe("c9");
+    expect(guessCollabId("invoices", { party: "JNPR × Léna", creator: "LÉNA TEST" }, collabs)).toBeNull();
+    expect(guessCollabId("invoices", { party: "Opera Air", creator: null }, collabs)).toBeNull();
+  });
+  it("le prénom seul désigne le créateur", () => {
+    expect(concernsCreator("Léna", "LÉNA TEST")).toBe(true);
+    expect(concernsCreator("Zoé", "LÉNA TEST")).toBe(false);
   });
 });

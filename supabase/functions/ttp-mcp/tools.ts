@@ -16,6 +16,7 @@ import { activeByCreator, conflictsFor, excluLine, excluState, readExclusivites 
 import type { Ctx } from "./oauth.ts";
 import { boxesFor, createDraft, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
+import { contractList, owesMoney, pctOf, reversementRows, type Detail, type Payout } from "../_shared/reversements.ts";
 import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/audience.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
@@ -77,7 +78,9 @@ const orLike = (cols: string[], q: string) => cols.map((c) => `${c}.ilike.${JSON
 const ok = (text: string): ToolResult => ({ text });
 const fail = (text: string): ToolResult => ({ text, isError: true });
 const lines = (xs: string[], empty: string) => (xs.length ? xs.join("\n") : empty);
-const titleCase = (s: string | null | undefined) => (s ?? "").replace(/\b\p{L}/gu, (c) => c.toUpperCase());
+// « LÉNA PASQUALE » → « Léna Pasquale » (\b ignore les lettres accentuées : « LÉNa » avant).
+const titleCase = (s: string | null | undefined) =>
+  (s ?? "").toLocaleLowerCase("fr-FR").replace(/(^|[^\p{L}])(\p{L})/gu, (_m, p: string, c: string) => p + c.toLocaleUpperCase("fr-FR"));
 
 const COLLAB_STEPS = [
   "Signature", "Brief transmis au créateur", "Concept validé", "Tournage", "Validation marque", "Publication",
@@ -161,7 +164,8 @@ const rechercher: Tool = {
   description: "Recherche un nom, une marque, un @ ou un email partout : créateurs du roster, contacts marques, pipeline, collabs, scouting (créateurs et sportifs), DM Instagram, factures (fondateurs). Pour les mails, utiliser rechercher_mails.",
   inputSchema: { type: "object", properties: { requete: { type: "string", description: "Texte cherché (nom, marque, @, email)" } }, required: ["requete"], additionalProperties: false },
   run: async (sb, ctx, a) => {
-    const q = str(a.requete, 80);
+    // « @lenaa.psl » : les @ des DM sont enregistrés sans « @ ».
+    const q = str(a.requete, 80).replace(/^@+/, "");
     if (q.length < 2) return fail("Donne au moins 2 caractères.");
     const [cr, ct, pr, co, sp, ap, ig, inv] = await Promise.all([
       sb.from("creators").select("name, niche, platform, followers, status").or(orLike(["name", "handle", "instagram", "tiktok", "email_pro"], q)).limit(8),
@@ -207,6 +211,17 @@ const roster: Tool = {
     const exclu = activeByCreator(readExclusivites(state.exclusivites), isoDay());
     const ex = (n: unknown) => (exclu.get(String(n).trim().toLowerCase()) ?? []).map((e) => ` · ⚠ ${excluLine(e)}`).join("");
     const hist = engHistory(state);
+    // Anciens créateurs (factures sans fiche roster) : listés pour « inactif » et « tous ».
+    let former: string[] = [];
+    if (st === "inactif" || st === "tous") {
+      const { data: inv } = await sb.from("invoices").select("creator").not("creator", "is", null).limit(5000);
+      const known = new Set(((data as Json[]) ?? []).map((r) => String(r.name).trim().toLowerCase()));
+      const { data: all } = await sb.from("creators").select("name");
+      for (const r of (all as Json[] | null) ?? []) known.add(String(r.name).trim().toLowerCase());
+      const first = new Set([...known].map((k) => k.split(/\s+/)[0]));
+      former = [...new Set(((inv as Json[] | null) ?? []).map((r) => String(r.creator).trim()).filter((n) => n && !known.has(n.toLowerCase()) && !first.has(n.toLowerCase())))].sort();
+    }
+    if (former.length) rows.push(...former.map((n) => ({ name: n, status: "hors roster (ancien créateur, a des factures)" } as Json)));
     return ok([`# Roster · ${rows.length} créateur(s)`, "Abonnés = total tous réseaux (comme la page Roster), détail par réseau entre parenthèses.", ...rows.map((r) => {
       const au = audienceOf({ name: String(r.name), followers: r.followers, ig: r.ig as Json | null, tt: r.tt as Json | null, yt: r.yt as Json | null }, hist);
       const detail = perPlatformText(au);
@@ -224,7 +239,7 @@ const ficheCreateur: Tool = {
   run: async (sb, ctx, a) => {
     const n = str(a.nom, 80);
     const found = await rosterName(sb, n);
-    if ("error" in found) return fail(found.error);
+    if ("error" in found) return /^Aucun créateur/.test(found.error) ? formerCreator(sb, ctx, n, found.error) : fail(found.error);
     const { data: list, error: cErr } = await sb.from("creators").select("*").eq("name", found.name).limit(1);
     if (cErr) return fail(`Lecture impossible : ${cErr.message}`);
     const c = (list as Json[] | null)?.[0];
@@ -261,7 +276,9 @@ const ficheCreateur: Tool = {
       `# ${titleCase(name)}`,
       `Niche : ${c.niche ?? "?"} · plateforme : ${c.platform || "?"} · abonnés tous réseaux : ${compact(au.total)}${perPlatformText(au) ? ` (${perPlatformText(au)})` : ""} · engagement : ${c.er ?? "?"} · statut : ${c.status ?? "?"}${c.ville ? ` · ${c.ville}` : ""}`,
       `Comptes : ${[c.handle && `@ ${String(c.handle).replace(/^@/, "")}`, c.instagram && `IG ${c.instagram}`, c.tiktok && `TikTok ${c.tiktok}`, c.youtube && `YouTube ${c.youtube}`, c.email_pro && `email pro ${c.email_pro}`].filter(Boolean).join(" · ") || "?"}`,
-      ig ? `Instagram (relevé automatique Meta) : ${ig.followers ?? "?"} abonnés${ig.er != null ? ` · engagement ${ig.er} %` : ""}${ig.reach30 ? ` · couverture 28 j ${ig.reach30}` : ""}` : measure("instagram", "Instagram"),
+      ig && ig.followers != null
+        ? `Instagram (relevé automatique Meta) : ${ig.followers} abonnés${ig.er != null ? ` · engagement ${ig.er} %` : ""}${ig.reach30 ? ` · couverture 28 j ${ig.reach30}` : ""}`
+        : [measure("instagram", "Instagram"), ig?.why ? `Relevé automatique Instagram indisponible (${ig.why === "compte_perso" ? "compte personnel : Meta ne donne les chiffres que d'un compte professionnel" : ig.why})` : ""].filter(Boolean).join("\n"),
       tt ? `TikTok (relevé automatique) : ${tt.followers ?? "?"} abonnés${tt.er != null ? ` · engagement ${tt.er} %` : ""}${tt.avgViews ? ` · vues moyennes ${tt.avgViews}` : ""}` : measure("tiktok", "TikTok"),
       yt ? `YouTube (relevé automatique) : ${yt.subscribers ?? "?"} abonnés${yt.avgViews ? ` · vues moyennes ${yt.avgViews}` : ""}` : measure("youtube", "YouTube"),
       ...[...lastEng.keys()].filter((k) => !["instagram", "tiktok", "youtube"].includes(k)).map((k) => measure(k, titleCase(k))),
@@ -277,6 +294,108 @@ const ficheCreateur: Tool = {
     out.push(`\n## Exclusivités (ne pas proposer de concurrent)`, lines(exclus.map((e) => `- ${excluLine(e)}${e.points.length ? `\n  Points clés : ${e.points.join(" | ")}` : ""}`), "Aucune."));
     if (ctx.founder) out.push(`\n## Factures`, lines(((inv.data as Json[] | null) ?? []).map((f) => `- ${f.ref} · ${f.party} · ${money(f.amount)} · ${INVOICE_STATUS[invoiceStatus(f, today)] ?? f.status} · échéance ${dueText(f.date)}`), "Aucune."));
     return ok(out.filter(Boolean).join("\n"));
+  },
+};
+
+/** Créateur qui n'est plus (ou pas) dans le roster mais a encore des factures, briefs, gifting ou reversements. */
+async function formerCreator(sb: SupabaseClient, ctx: Ctx, n: string, notFound: string): Promise<ToolResult> {
+  const pat = like(n);
+  const [inv, br, gi] = await Promise.all([
+    ctx.founder ? sb.from("invoices").select("ref, party, amount, date, status, creator").ilike("creator", pat).order("created_at", { ascending: false }).limit(30) : Promise.resolve({ data: [] }),
+    sb.from("briefs").select("brand, creator, status, due").ilike("creator", pat).limit(20),
+    sb.from("gifting").select("brand, product, creator, received_on").ilike("creator", pat).limit(20),
+  ]);
+  const invs = ((inv as { data: unknown }).data as Json[] | null) ?? [];
+  const briefs = ((br as { data: unknown }).data as Json[] | null) ?? [];
+  const gifts = ((gi as { data: unknown }).data as Json[] | null) ?? [];
+  const names = [...new Set([...invs, ...briefs, ...gifts].map((r) => String(r.creator ?? "").trim()).filter(Boolean))];
+  if (!names.length) return fail(notFound);
+  const today = isoDay();
+  const out = [`# ${titleCase(names[0])} (hors roster : ancien créateur ou pas encore ajouté)`, names.length > 1 ? `Noms trouvés : ${names.map((x) => titleCase(x)).join(", ")}` : ""];
+  if (ctx.founder) {
+    const st = await appState(sb).catch(() => ({} as Json));
+    const rows = reversementRows({
+      invoices: invs as unknown as { id: string; amount: unknown; status: unknown; creator: unknown }[],
+      details: {},
+      payouts: (st.creatorPayouts ?? {}) as Record<string, Payout[]>,
+      rosterRates: {},
+      savedRates: (st.creatorCommission ?? {}) as Record<string, number>,
+      collabModes: (st.collabCashMode ?? {}) as Record<string, string>,
+      contractHistory: st.contractHistory,
+    }).filter((r) => names.some((x) => x.trim().toLowerCase() === r.creator.trim().toLowerCase()));
+    out.push(`\n## Factures`, lines(invs.map((f) => `- ${f.ref} · ${f.party} · ${money(f.amount)} · ${INVOICE_STATUS[invoiceStatus(f, today)] ?? f.status} · échéance ${dueText(f.date)}`), "Aucune."));
+    out.push(`\n## Reversements`, lines(rows.map((r) => `- dû ${eur(r.du)} · versé ${eur(r.reverse)} · reste ${eur(r.reste)}`), "Rien à reverser."));
+  }
+  out.push(`\n## Briefs`, lines(briefs.map((b) => `- ${b.brand} · ${b.status ?? ""}${b.due ? ` · échéance ${b.due}` : ""}`), "Aucun."));
+  out.push(`\n## Gifting`, lines(gifts.map((g) => `- ${g.brand}${g.product ? ` · ${g.product}` : ""}${g.received_on ? ` · reçu le ${g.received_on}` : ""}`), "Aucun."));
+  return ok(out.filter(Boolean).join("\n"));
+}
+
+const eur = (n: number) => `${n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+
+const reversements: Tool = {
+  name: "reversements",
+  title: "Reversements créateurs",
+  description: "Ce que l'agence doit à chaque créateur (réservé aux fondateurs) : part créateur des factures payées par la marque, déjà versé, reste à verser, dernier virement. Mêmes chiffres que la page Reversements. Filtre facultatif par créateur.",
+  inputSchema: { type: "object", properties: { createur: { type: "string" }, tous: { type: "boolean", description: "Aussi les créateurs à jour (défaut : seulement ceux à qui on doit de l'argent)" } }, additionalProperties: false },
+  founder: true,
+  run: async (sb, _c, a) => {
+    const [{ data: inv, error }, { data: cr }] = await Promise.all([
+      sb.from("invoices").select("id, amount, status, creator, collab_id").eq("status", "payee").limit(5000),
+      sb.from("creators").select("name, commission"),
+    ]);
+    if (error) return fail(`Factures illisibles : ${error.message}`);
+    const st = await appState(sb);
+    const roster: Record<string, number> = {};
+    for (const c of (cr as Json[] | null) ?? []) {
+      const v = pctOf(c.commission);
+      if (v != null) roster[String(c.name)] = v;
+    }
+    let rows = reversementRows({
+      invoices: (inv as unknown as { id: string; amount: unknown; status: unknown; creator: unknown; collab_id: unknown }[]) ?? [],
+      details: (st.invoiceDetails ?? {}) as Record<string, Detail>,
+      payouts: (st.creatorPayouts ?? {}) as Record<string, Payout[]>,
+      rosterRates: roster,
+      savedRates: (st.creatorCommission ?? {}) as Record<string, number>,
+      collabModes: (st.collabCashMode ?? {}) as Record<string, string>,
+      contractHistory: st.contractHistory,
+    });
+    const who = str(a.createur, 80).toLowerCase();
+    if (who) rows = rows.filter((r) => r.creator.toLowerCase().includes(who));
+    const owing = rows.filter(owesMoney);
+    const shown = a.tous === true || who ? rows : owing;
+    const total = owing.reduce((s, r) => s + r.reste, 0);
+    return ok([
+      `# Reversements · reste à verser ${eur(total)} à ${owing.length} créateur(s)`,
+      ...shown.map((r) => `- ${titleCase(r.creator)} · reste ${eur(r.reste)} · dû ${eur(r.du)} (factures payées ${eur(r.encaisse)} TTC, commission ${r.rate} %) · versé ${eur(r.reverse)}${r.lastPayout ? ` · dernier virement ${frDay(r.lastPayout)}` : ""}`),
+      shown.length ? "" : "Tout est à jour.",
+    ].filter(Boolean).join("\n"));
+  },
+};
+
+const contrats: Tool = {
+  name: "contrats",
+  title: "Contrats et fins de contrat",
+  description: "Contrats des créateurs (représentation, marque, UGC) avec leur date de fin, comme la page Fins de contrat : à renouveler dans les 30 jours, déjà échus, puis les autres. Filtre facultatif par créateur.",
+  inputSchema: { type: "object", properties: { createur: { type: "string" }, tous: { type: "boolean", description: "Aussi les contrats déjà renouvelés" } }, additionalProperties: false },
+  run: async (sb, _c, a) => {
+    const st = await appState(sb);
+    const today = isoDay();
+    const who = str(a.createur, 80).toLowerCase();
+    const TYPE: Record<string, string> = { "représentation": "Représentation", representation: "Représentation", marque: "Marque", ugc: "UGC" };
+    const days = (end: string) => Math.round((Date.parse(end + "T12:00:00Z") - Date.parse(today + "T12:00:00Z")) / 86400000);
+    const list = contractList(st.contractDeadlines).filter((d) => (a.tous === true || !d.renewed) && (!who || String(d.creator ?? "").toLowerCase().includes(who)));
+    const line = (d: (typeof list)[number]) => {
+      const left = days(d.end);
+      return `- ${titleCase(String(d.creator))} · ${TYPE[String(d.type ?? "").toLowerCase()] ?? (d.type || "Contrat")} · fin le ${frDay(d.end)} (${left < 0 ? `échu depuis ${-left} j` : left === 0 ? "aujourd'hui" : `dans ${left} j`})${d.months ? ` · ${d.months} mois depuis le ${frDay(String(d.start))}` : ""}${d.renewed ? " · renouvelé" : ""}${d.note ? ` · ${String(d.note).slice(0, 120)}` : ""}`;
+    };
+    const soon = list.filter((d) => !d.renewed && days(d.end) <= 30);
+    const later = list.filter((d) => !soon.includes(d));
+    return ok([
+      `# Contrats · ${list.length}`,
+      `\n## À renouveler (30 jours) ou échus`, lines(soon.map(line), "Aucun."),
+      `\n## Plus tard`, lines(later.map(line), "Aucun."),
+    ].join("\n"));
   },
 };
 
@@ -472,13 +591,17 @@ const collabs: Tool = {
   description: "Collaborations marque × créateur et leur avancement sur 11 étapes (Signature → Bilan). Filtre par créateur, marque ou statut (active, terminee, archivee).",
   inputSchema: { type: "object", properties: { createur: { type: "string" }, marque: { type: "string" }, statut: { type: "string", enum: ["active", "terminee", "archivee", "toutes"] } }, additionalProperties: false },
   run: async (sb, _c, a) => {
-    let q = sb.from("collabs").select("id, brand, creator, title, step, status, cachet, deliverables, updated_at").order("updated_at", { ascending: false }).limit(40);
+    let q = sb.from("collabs").select("id, brand, creator, title, step, status, cachet, deliverables, updated_at").order("updated_at", { ascending: false }).limit(500);
     const st = str(a.statut) || "active";
-    if (st !== "toutes") q = q.eq("status", st);
     if (str(a.createur)) q = q.ilike("creator", like(str(a.createur)));
     if (str(a.marque)) q = q.ilike("brand", like(str(a.marque)));
-    const { data } = await q;
-    return ok([`# Collabs (${st})`, ...((data as Json[] | null) ?? []).map((r) => `- ${r.brand} × ${titleCase(String(r.creator ?? ""))}${r.title ? ` · ${r.title}` : ""} · étape ${r.step}/11 « ${COLLAB_STEPS[Number(r.step) - 1] ?? ""} »${r.cachet ? ` · ${r.cachet}` : ""}${r.deliverables ? ` · ${r.deliverables}` : ""} · bougée le ${String(r.updated_at).slice(0, 10)} [collab ${r.id}]`)].join("\n"));
+    const { data, error } = await q;
+    if (error) return fail(`Lecture des collabs impossible : ${error.message}`);
+    // Comme la page Collabs : arrivée à l'étape 11 (Bilan), la collab est bouclée = terminée.
+    const stateOf = (r: Json) => (r.status === "active" && Number(r.step) >= COLLAB_STEPS.length ? "terminee" : String(r.status));
+    const rows = ((data as Json[] | null) ?? []).filter((r) => st === "toutes" || stateOf(r) === st).slice(0, 60);
+    const LABEL: Record<string, string> = { active: "en cours", terminee: "bouclée", archivee: "archivée", gagnee: "gagnée", perdue: "perdue" };
+    return ok([`# Collabs (${st}) · ${rows.length}`, ...rows.map((r) => `- ${r.brand} × ${titleCase(String(r.creator ?? ""))}${r.title ? ` · ${r.title}` : ""} · étape ${r.step}/11 « ${COLLAB_STEPS[Number(r.step) - 1] ?? ""} » · ${LABEL[stateOf(r)] ?? stateOf(r)}${r.cachet ? ` · ${r.cachet}` : ""}${r.deliverables ? ` · ${r.deliverables}` : ""} · bougée le ${String(r.updated_at).slice(0, 10)} [collab ${r.id}]`)].join("\n"));
   },
 };
 
@@ -589,6 +712,12 @@ const methodeTarif: Tool = {
       if (!c) return fail(`Aucun créateur du roster ne correspond à « ${n} ».`);
       name = String(c.name);
       out.push(`\n# Données de ${titleCase(name)}`, creatorTarifText(c, creatorFloor(rates.ttpFloors, c.id, grid)));
+      // Le taux qui compte est celui de la fiche (règle de l'app) ; on signale s'il diffère des dernières factures.
+      const savedRate = Object.entries((st.creatorCommission ?? {}) as Record<string, number>).find(([k]) => k.trim().toLowerCase() === name!.trim().toLowerCase())?.[1];
+      const ficheRate = pctOf((c as unknown as Json).commission);
+      if (savedRate != null && ficheRate != null && Number(savedRate) !== ficheRate) {
+        out.push(`⚠ Commission : ${ficheRate} % sur la fiche (taux appliqué par l'app), mais ${savedRate} % sur les dernières factures. À faire trancher par Marc avant tout calcul.`);
+      }
     }
     if (name || marque) {
       let q = sb.from("invoices").select("id, ref, party, amount, date, status, creator").order("created_at", { ascending: false }).limit(300);
@@ -1167,7 +1296,7 @@ const resumerBrief: Tool = {
 };
 
 export const TOOLS: Tool[] = [
-  pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, planning, taches, factures, methodeTarif,
+  pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif,
   creerTache, creerEvenement, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur,
   lireBrief, resumerBrief,

@@ -6,7 +6,7 @@ import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { commissionMap, DEFAULT_COMMISSION, rateFor } from "@/lib/commission";
-import { collabIdMissing } from "@/lib/collabLinks";
+import { collabIdMissing, guessCollabId } from "@/lib/collabLinks";
 import {
   billingFor, cashModeFor, collabTake, comptePro, invoiceLine, mandatesFrom, readSettings, socialRate, thresholdAlerts,
   type Billing, type CashMode, type ComptaDetail, type ComptaInvoice, type ComptaSettings, type Payout,
@@ -89,7 +89,10 @@ export function Compta() {
     const rateOf = (name: string | null) => rateFor(name, roster, saved, DEFAULT_COMMISSION);
     // Facture de commission : son créateur est celui de sa collab (pour le mode et le taux).
     const collabById = new Map(collabs.map((c) => [c.id, c]));
+    // Anciennes factures sans collab enregistrée : reliées à LA collab de même marque et même
+    // créateur (sinon la commission était estimée, et la facture payée restait « à recevoir »).
     const lines = invoices
+      .map((iv) => (iv.collab_id ? iv : { ...iv, collab_id: guessCollabId("invoices", iv, collabs) }))
       .filter((iv) => iv.status !== "brouillon")
       .map((iv) => {
         const who = iv.creator ?? collabById.get(iv.collab_id ?? "")?.creator ?? null;

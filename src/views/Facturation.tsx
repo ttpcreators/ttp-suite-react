@@ -689,12 +689,14 @@ export function Facturation() {
   const bentoY = focusYm ? Number(focusYm.slice(0, 4)) : periodRange ? Number(periodRange.to.slice(0, 4)) : nowY;
   const bentoM = focusYm ? Number(focusYm.slice(5, 7)) : nowM;
   const periodName = periodRange ? rangeLabel(periodRange) : "";
-  const paidScope = scope.filter((r) => r.status === "payee" && (period ? true : ymOf(r.date)?.y === nowY));
+  // Échéance illisible (« 01/10 » sans année) : date d'émission de la facture, comme la page Compta.
+  const ymPaid = (r: Row) => ymOf(r.date) ?? ymOf(details[r.id]?.issueDate ?? "");
+  const paidScope = scope.filter((r) => r.status === "payee" && (period ? true : ymPaid(r)?.y === nowY));
   // Chiffre d'affaires en HORS TAXES (choix de Marc, 2026-10-25) : la TVA est due à l'État.
   const htOf = (r: Row) => invoiceHT(parseAmount(r.amount), details[r.id]);
   const encaisse = paidScope.reduce((s, r) => s + htOf(r), 0);
   const monthly = Array.from({ length: 12 }, (_, i) =>
-    paidScope.filter((r) => ymOf(r.date)?.y === bentoY && ymOf(r.date)?.m === i + 1).reduce((s, r) => s + htOf(r), 0),
+    paidScope.filter((r) => ymPaid(r)?.y === bentoY && ymPaid(r)?.m === i + 1).reduce((s, r) => s + htOf(r), 0),
   );
   // Barre « ce mois » : le mois choisi, sinon le mois courant ; plage libre = total par mois de l'année.
   const barsLabel = focusYm ? `Encaissé HT · ${periodLabel(focusYm).toLowerCase()}` : periodRange ? `Encaissé HT par mois · ${bentoY}` : "Encaissé HT ce mois";

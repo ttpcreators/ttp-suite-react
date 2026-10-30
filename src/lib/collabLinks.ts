@@ -43,8 +43,10 @@ export function mentionsBrand(text: string | null | undefined, brand: string): b
 export function concernsCreator(names: string | string[] | null | undefined, creator: string | null): boolean {
   if (!creator) return true;
   const me = fold(creator);
+  const first = fold(firstNameOf(creator));
   const list = Array.isArray(names) ? names : (names ?? "").split(",");
-  return list.some((n) => fold(n) === me);
+  // « Léna » (prénom seul, anciennes saisies) désigne aussi « LÉNA PASQUALE ».
+  return list.some((n) => fold(n) === me || (!!first && fold(n) === first));
 }
 
 /** Collabs proposées dans le champ « Collab » d'un objet : celles du créateur choisi d'abord. */
@@ -172,6 +174,18 @@ function suggests(table: LinkTable, r: Raw, c: Pick<CollabLite, "brand" | "creat
     case "events":
       return mentionsBrand(str(r.title), c.brand) && concernsCreator(str(r.who), c.creator);
   }
+}
+
+/**
+ * Collab d'un objet : son lien enregistré, sinon LA collab qui lui correspond (même marque,
+ * même créateur) quand il n'y en a qu'une. Sert aux calculs (Compta) des anciennes factures
+ * créées avant le champ « Collab » ; plusieurs candidates → aucune (pas de devinette).
+ */
+export function guessCollabId(table: "invoices" | "briefs" | "gifting", r: Raw, collabs: readonly Pick<CollabLite, "id" | "brand" | "creator">[]): string | null {
+  const own = str(r.collab_id);
+  if (own) return own;
+  const hits = collabs.filter((c) => c.brand && suggests(table, r, c));
+  return hits.length === 1 ? hits[0].id : null;
 }
 
 export const LINK_TABLES: LinkTable[] = ["briefs", "todos", "events", "invoices", "gifting"];
