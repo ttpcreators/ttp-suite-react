@@ -1618,7 +1618,7 @@ export function CreatorSpace({
   // « Total facturé » = factures réellement émises. Un brouillon de l'agence n'est pas
   // encore facturé → ne doit pas être annoncé comme tel à la créatrice (même règle que
   // le KPI « CA facturé » côté agence).
-  const totalFacture = htInvoices.filter((i) => i.status !== "brouillon").reduce((a, i) => a + i.ht, 0);
+  const totalFacture = htInvoices.filter((i) => i.status !== "brouillon" && i.status !== "annulee").reduce((a, i) => a + i.ht, 0);
 
   const markTodo = async (td: Todo, next: boolean): Promise<boolean> => {
     // On écrit done ET status ensemble (comme l'agence) → l'affichage statut/kanban
@@ -3564,7 +3564,7 @@ export function CreatorSpace({
                 ...invoices.flatMap((iv, i): CalEv[] => {
                   const status = String(iv.status ?? "");
                   const date = toISODate(iv.date);
-                  if (!date || status === "payee" || status === "brouillon") return [];
+                  if (!date || status === "payee" || status === "brouillon" || status === "annulee") return [];
                   const ref = String(iv.ref ?? "").trim();
                   const party = String(iv.party ?? "").trim();
                   const title = [ref ? t("Facture {ref}", { ref }) : t("Facture"), party].filter(Boolean).join(" · ");

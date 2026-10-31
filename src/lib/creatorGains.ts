@@ -36,6 +36,7 @@ export type GainsSummary = {
 /** Pastille d'une facture : un sens par couleur (voir statusTone.ts). */
 export function invoiceTone(inv: Pick<GainInvoice, "status" | "date">, now: Date = new Date()): { tone: StatusTone; label: string } {
   if (inv.status === "payee") return { tone: "ok", label: "Payée" };
+  if (inv.status === "annulee") return { tone: "closed", label: "Annulée" };
   if (inv.status === "attente" || inv.status === "retard") {
     return isOverdueInvoice({ status: inv.status, date: inv.date }, now) ? { tone: "late", label: "En retard" } : { tone: "wait", label: "En attente" };
   }
@@ -45,6 +46,8 @@ export function invoiceTone(inv: Pick<GainInvoice, "status" | "date">, now: Date
 export function gainsSummary(invoices: GainInvoice[], now: Date = new Date()): GainsSummary {
   const s: GainsSummary = { cashed: 0, pending: 0, late: 0, toReceive: 0, upcoming: 0, billed: 0, lateParties: [] };
   for (const inv of invoices) {
+    // Facture annulée : ni facturée, ni à recevoir.
+    if (inv.status === "annulee") continue;
     const amt = parseAmount(inv.amount);
     if (inv.status !== "brouillon") s.billed += amt;
     const { tone } = invoiceTone(inv, now);

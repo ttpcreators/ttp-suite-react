@@ -93,7 +93,7 @@ export function Compta() {
     // créateur (sinon la commission était estimée, et la facture payée restait « à recevoir »).
     const lines = invoices
       .map((iv) => (iv.collab_id ? iv : { ...iv, collab_id: guessCollabId("invoices", iv, collabs) }))
-      .filter((iv) => iv.status !== "brouillon")
+      .filter((iv) => iv.status !== "brouillon" && iv.status !== "annulee")
       .map((iv) => {
         const who = iv.creator ?? collabById.get(iv.collab_id ?? "")?.creator ?? null;
         return invoiceLine(iv, details[iv.id], rateOf(who), cashModeFor(iv.collab_id, who, modes, mandates), settings, billingFor(iv.collab_id, modes, settings));

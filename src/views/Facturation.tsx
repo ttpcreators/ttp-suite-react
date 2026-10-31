@@ -12,6 +12,8 @@ import {
   Send,
   Plus,
   Trash2,
+  Ban,
+  Undo2,
   Settings2,
   Landmark,
   Wallet,
@@ -57,7 +59,7 @@ import { isOverdueInvoice } from "@/lib/relance";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type InvoiceStatus = "payee" | "attente" | "retard" | "brouillon";
+type InvoiceStatus = "payee" | "attente" | "retard" | "brouillon" | "annulee";
 
 type Row = {
   id: string;
@@ -127,6 +129,7 @@ const STATUS_META: Record<InvoiceStatus, { badge: AnimatedBadgeStatus; label: st
   attente: { badge: "warning", label: "En attente" },
   retard: { badge: "danger", label: "En retard" },
   brouillon: { badge: "neutral", label: "Brouillon" },
+  annulee: { badge: "neutral", label: "Annulée" },
 };
 
 /** Accès SÛR au badge/libellé d'un statut. `invoices.status` n'a pas de contrainte
@@ -154,6 +157,7 @@ const STATUS_OPTIONS: { value: InvoiceStatus; label: string }[] = [
   { value: "attente", label: "En attente" },
   { value: "payee", label: "Payée" },
   { value: "retard", label: "En retard" },
+  { value: "annulee", label: "Annulée" },
 ];
 
 const DEFAULT_ISSUER: Issuer = {
@@ -540,7 +544,7 @@ export function Facturation() {
   const [commissions, setCommissions] = useState<Record<string, number>>({});
   const inited = useRef(false);
 
-  const [statusFilter, setStatusFilter] = useStickyState<InvoiceStatus | "Tous">("facturation:statut", ["Tous", "brouillon", "attente", "payee", "retard"], "Tous");
+  const [statusFilter, setStatusFilter] = useStickyState<InvoiceStatus | "Tous">("facturation:statut", ["Tous", "brouillon", "attente", "payee", "retard", "annulee"], "Tous");
   const [period, setPeriod] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [issuerDraft, setIssuerDraft] = useState<Issuer | null>(null);
@@ -711,7 +715,7 @@ export function Facturation() {
     return details[r.id]?.kind === "commission" ? { ...t, commission: t.ht, reversal: 0 } : t;
   };
   // Synthèse sur la période (brouillons exclus : ce n'est pas encore facturé).
-  const billed = scope.filter((r) => r.status !== "brouillon");
+  const billed = scope.filter((r) => r.status !== "brouillon" && r.status !== "annulee");
   const sumFin = (list: Row[]) =>
     list.reduce((a, r) => {
       const f = finOf(r);
@@ -1449,7 +1453,13 @@ export function Facturation() {
               { key: "preview", label: "Aperçu", icon: Eye, onClick: openPreview },
               { key: "send", label: "Envoyer au client", icon: Send, onClick: () => sendInvoice(r) },
               { key: "download", label: "Enregistrer en PDF", icon: Download, onClick: () => downloadInvoice(r) },
-              { key: "delete", label: "Mettre à la corbeille", icon: Trash2, danger: true, onClick: del, confirm: { title: "Mettre à la corbeille", message: `Déplacer la facture ${r.ref} (${r.party}) vers la corbeille ? Tu pourras la restaurer.`, confirmLabel: "Mettre à la corbeille" } },
+              // Une facture émise ne se supprime pas (numérotation continue, obligation légale) :
+              // elle s'annule et garde son numéro. Seul un brouillon part à la corbeille.
+              r.status === "brouillon"
+                ? { key: "delete", label: "Mettre à la corbeille", icon: Trash2, danger: true, onClick: del, confirm: { title: "Mettre à la corbeille", message: `Déplacer le brouillon ${r.ref} (${r.party}) vers la corbeille ? Tu pourras le restaurer.`, confirmLabel: "Mettre à la corbeille" } }
+                : r.status === "annulee"
+                  ? { key: "restore", label: "Réactiver", icon: Undo2, onClick: () => void pickStatus("attente") }
+                  : { key: "cancel", label: "Annuler", icon: Ban, danger: true, onClick: () => void pickStatus("annulee"), confirm: { title: "Annuler la facture", message: `Annuler la facture ${r.ref} (${r.party}) ? Elle garde son numéro et reste dans la liste, marquée « Annulée ». Elle ne compte plus dans le chiffre d'affaires.`, confirmLabel: "Annuler la facture" } },
             ];
             const margeChip = (
               <span className="inline-block whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">

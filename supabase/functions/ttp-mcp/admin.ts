@@ -179,6 +179,10 @@ const supprimerElement: AdminTool = {
     if (!row) return fail(`${rule.label} introuvable (${id}).`);
     const r = row as Json;
     const name = String(r[rule.search[0]] ?? rule.label);
+    // Une facture émise ne se supprime pas (numérotation continue) : elle s'annule (règle de l'app).
+    if (t.table === "invoices" && r.status !== "brouillon") {
+      return fail(`La facture ${r.ref ?? ""} est émise : elle ne se supprime pas, elle s'annule (numérotation continue). Utilise modifier_element avec status = "annulee". Seul un brouillon part à la Corbeille.`);
+    }
     if (rule.remove === "tombstone") {
       const { error } = await sb.from(t.table).update({ deleted: true, deleted_at: new Date().toISOString(), sync_source: "agence" }).eq("id", id);
       return error ? fail(`Suppression refusée : ${error.message}`) : ok(`✓ Rendez-vous « ${name} » supprimé (et retiré de Google Agenda).`);
@@ -261,7 +265,7 @@ const preparerFacture: AdminTool = {
     properties: {
       id: { type: "string" }, ref: { type: "string", description: "Numéro existant, ex. 2026-191" },
       marque: { type: "string" }, createur: { type: "string" },
-      statut: { type: "string", enum: ["brouillon", "attente", "retard", "payee"] },
+      statut: { type: "string", enum: ["brouillon", "attente", "retard", "payee", "annulee"] },
       client: { type: "object", properties: { nom: { type: "string" }, email: { type: "string" }, adresse: { type: "string" }, siret: { type: "string" }, tva: { type: "string" }, tpo: { type: "string" } }, additionalProperties: false },
       lignes: { type: "array", items: { type: "object", properties: { libelle: { type: "string" }, quantite: { type: "number" }, prix_ht: { type: "number" } }, required: ["libelle", "prix_ht"], additionalProperties: false } },
       tva: { type: "number" }, franchise: { type: "boolean" }, commission: { type: "number" },

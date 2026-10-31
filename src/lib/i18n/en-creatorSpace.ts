@@ -513,6 +513,7 @@ export const EN_CREATORSPACE: Record<string, string> = {
   "À venir = factures en préparation chez ton agence.": "Upcoming = invoices your agency is preparing.",
   "Historique": "History",
   "En préparation": "In preparation",
+  "Annulée": "Cancelled",
   "Ta facture n'apparaît pas ci-dessus ? Dépose-la, ton agence la reçoit aussitôt.": "Your invoice isn't listed above? Upload it, your agency gets it right away.",
 
   // ── Profil

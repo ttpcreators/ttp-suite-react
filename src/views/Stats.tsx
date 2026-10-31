@@ -330,7 +330,7 @@ export function Stats() {
     if (!k) continue;
     const a = htOf(iv);
     const cur = monthAgg.get(k) ?? { tot: 0, paid: 0 };
-    if (iv.status !== "brouillon") cur.tot += a; // « facturé » = hors brouillons
+    if (iv.status !== "brouillon" && iv.status !== "annulee") cur.tot += a; // « facturé » = hors brouillons
     if (iv.status === "payee") cur.paid += a;
     monthAgg.set(k, cur);
   }
@@ -351,7 +351,7 @@ export function Stats() {
   // ── Comparaison de période (fenêtre glissante vs période précédente ou N-1) ──
   const monthCount = new Map<string, number>();
   for (const iv of data.invoices) {
-    if (iv.status === "brouillon") continue; // brouillons non émis → exclus, comme le CA
+    if (iv.status === "brouillon" || iv.status === "annulee") continue; // brouillons non émis → exclus, comme le CA
     const k = invMonth(iv);
     if (k) monthCount.set(k, (monthCount.get(k) ?? 0) + 1);
   }
@@ -395,7 +395,7 @@ export function Stats() {
   // CA par créateur — « facturé » = hors brouillons, comme le KPI et la courbe.
   const caByCreator = new Map<string, number>();
   for (const iv of data.invoices) {
-    if (iv.status === "brouillon") continue;
+    if (iv.status === "brouillon" || iv.status === "annulee") continue;
     const key = iv.creator || "—";
     caByCreator.set(key, (caByCreator.get(key) ?? 0) + htOf(iv));
   }
@@ -412,7 +412,7 @@ export function Stats() {
     .slice(0, 8);
 
   // Factures réellement émises (hors brouillons), pour l'indication de la carte CA.
-  const issuedCount = data.invoices.filter((iv) => iv.status !== "brouillon").length;
+  const issuedCount = data.invoices.filter((iv) => iv.status !== "brouillon" && iv.status !== "annulee").length;
 
   return (
     <div className="space-y-4">

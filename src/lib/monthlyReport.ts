@@ -99,7 +99,7 @@ export function buildMonthlyReport(data: ReportData, month: string, now = new Da
   const invoices: ReportInvoice[] = [];
   for (const inv of data.invoices) {
     const status = inv.status ?? "";
-    if (status === "brouillon" || !status) continue;
+    if (status === "brouillon" || status === "annulee" || !status) continue;
     const det = data.details[inv.id];
     const m = invoiceMonth(inv, det);
     if (!m) continue;

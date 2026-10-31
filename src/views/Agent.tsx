@@ -306,7 +306,11 @@ export function AgentView() {
   const cockpitJour = cockpits.find((c) => c.jour === todayISO()) ?? null;
   const dernierCockpit = cockpitJour ?? cockpits[0] ?? null;
 
-  const queue = actions.filter((a) => a.statut === "a_valider");
+  // Proposition que l'agent a lui même déclarée périmée (« PÉRIMÉ au 29/10, à écarter … ») :
+  // hors de la file et du compteur, écartable d'un clic.
+  const isStale = (a: Action) => /^\s*p[ée]rim[ée]/i.test(a.contexte ?? "");
+  const queue = actions.filter((a) => a.statut === "a_valider" && !isStale(a));
+  const staleQueue = actions.filter((a) => a.statut === "a_valider" && isStale(a));
   const traiteesSemaine = actions.filter(
     (a) => a.statut !== "a_valider" && a.traite_le && Date.now() - new Date(a.traite_le).getTime() < 7 * 86400e3,
   ).length;
@@ -453,7 +457,7 @@ export function AgentView() {
     if (a.slug === "megan") return own ?? journal.find((j) => !j.agent_id && !j.action.startsWith("marc_"))?.cree_le ?? null;
     return own ?? null;
   };
-  const queueOf = (a: AgentRow) => actions.filter((x) => x.statut === "a_valider" && (x.agent_id === a.id || (a.slug === "megan" && !x.agent_id))).length;
+  const queueOf = (a: AgentRow) => queue.filter((x) => x.agent_id === a.id || (a.slug === "megan" && !x.agent_id)).length;
 
   // ── rendus ──
   if (!loaded) {
@@ -596,6 +600,17 @@ export function AgentView() {
               items={[{ value: "tous", label: "Tous", count: queue.length || undefined }, ...agents.map((a) => ({ value: a.id, label: a.nom, icon: <AgentAvatar figurine={figOf(a.id)} className="h-4 w-4 rounded-full" />, count: queueOf(a) || undefined }))]}
             />
           )}
+      {staleQueue.length > 0 && (
+        <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2.5 text-[12px] text-muted-foreground">
+          <span className="min-w-0 flex-1">
+            {staleQueue.length} proposition{staleQueue.length > 1 ? "s" : ""} périmée{staleQueue.length > 1 ? "s" : ""}, remplacée{staleQueue.length > 1 ? "s" : ""} par l'agent
+          </span>
+          <button type="button" onClick={() => void Promise.all(staleQueue.map((a) => traiter(a, "ecarte")))}
+            className="flex h-[30px] items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+            Tout écarter
+          </button>
+        </div>
+      )}
       {/* 2) La file d'attente */}
       <Section icon={Send} title="File d'attente" count={shownQueue.length}>
         {shownQueue.length === 0 ? (

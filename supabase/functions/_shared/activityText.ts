@@ -30,7 +30,7 @@ const COLLAB_STATUS: Record<string, string> = {
   active: "a remis en cours la collab",
 };
 const STATUS_LABEL: Record<string, string> = {
-  payee: "payée", attente: "en attente", retard: "en retard", brouillon: "brouillon",
+  payee: "payée", attente: "en attente", retard: "en retard", brouillon: "brouillon", annulee: "annulée",
   valider: "à valider", cours: "en cours", "terminé": "terminé", recu: "reçu", publie: "publié",
 };
 

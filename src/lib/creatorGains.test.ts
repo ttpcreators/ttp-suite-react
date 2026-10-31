@@ -11,6 +11,7 @@ describe("gains du créateur", () => {
     expect(invoiceTone(inv({ status: "attente", date: "2026-10-01" }), NOW)).toEqual({ tone: "late", label: "En retard" });
     expect(invoiceTone(inv({ status: "retard" }), NOW).tone).toBe("late");
     expect(invoiceTone(inv({ status: "brouillon" }), NOW)).toEqual({ tone: "closed", label: "En préparation" });
+    expect(invoiceTone(inv({ status: "annulee" }), NOW)).toEqual({ tone: "closed", label: "Annulée" });
   });
 
   it("totaux : encaissé, à recevoir, en préparation, facturé hors brouillons", () => {
@@ -21,6 +22,7 @@ describe("gains du créateur", () => {
         inv({ status: "attente", amount: "480", date: "17/09/2026" }),
         inv({ status: "retard", amount: "50", party: "JNPR" }),
         inv({ status: "brouillon", amount: "300", party: "Seoni" }),
+        inv({ status: "annulee", amount: "999", party: "Annulée" }),
       ],
       NOW,
     );

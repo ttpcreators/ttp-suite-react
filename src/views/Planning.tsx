@@ -154,7 +154,7 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
       // Échéances de FACTURES (non payées / non brouillon) → puces « Facture ».
       for (const r of (iv.data as Record<string, unknown>[] | null) ?? []) {
         const status = String(r.status ?? "");
-        if (status === "payee" || status === "brouillon") continue;
+        if (status === "payee" || status === "brouillon" || status === "annulee") continue;
         const date = toISODate(r.date);
         if (!date) continue;
         out.push({

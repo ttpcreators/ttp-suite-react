@@ -18,7 +18,7 @@ import { notifyCreator } from "@/lib/push";
 import { getCache, setCache } from "@/lib/viewCache";
 import { goToTab } from "@/lib/openLater";
 import { useEffect, useRef, useState } from "react";
-import { PencilLine, LayoutGrid, ReceiptText, FileText, Download, Eye, Share2, X, Trash2, BarChart3, ChevronLeft, type LucideIcon } from "@/components/icons";
+import { PencilLine, LayoutGrid, ReceiptText, FileSignature, FileText, Download, Eye, Share2, X, Trash2, BarChart3, ChevronLeft, type LucideIcon } from "@/components/icons";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Overlay } from "@/components/mobile/ios-sheet";
@@ -42,6 +42,7 @@ const DOC_TYPE_META: Record<string, TypeMeta> = {
   mediakit: { label: "Media kit", icon: LayoutGrid, className: "bg-progress-soft text-progress", tagClassName: "bg-progress-soft text-progress" },
   facture: { label: "Facture", icon: ReceiptText, className: "bg-ok-soft text-ok", tagClassName: "bg-ok-soft text-ok" },
   stats: { label: "Stats", icon: BarChart3, className: "bg-closed-soft text-closed", tagClassName: "bg-closed-soft text-closed" },
+  contract: { label: "Contrat", icon: FileSignature, className: "bg-closed-soft text-closed", tagClassName: "bg-closed-soft text-closed" },
   autre: { label: "Document", icon: FileText, className: "bg-closed-soft text-closed", tagClassName: "bg-closed-soft text-closed" },
 };
 const metaFor = (type: string): TypeMeta => DOC_TYPE_META[type] ?? DOC_TYPE_META.autre;
@@ -52,6 +53,7 @@ const TYPE_FMT: Record<string, FormatFileProps> = {
   facture: "pdf",
   mediakit: "pptx",
   brief: "doc",
+  contract: "doc",
   autre: "txt",
 };
 
@@ -59,6 +61,7 @@ const TYPE_OPTIONS = [
   { value: "brief", label: "Brief" },
   { value: "mediakit", label: "Media kit" },
   { value: "facture", label: "Facture" },
+  { value: "contract", label: "Contrat" },
   { value: "autre", label: "Document" },
 ];
 
@@ -348,7 +351,7 @@ export function Documents() {
   const docCreators = [...new Set(((rows ?? []).map((r) => r.creator).filter(Boolean) as string[]))].sort((a, b) => a.localeCompare(b, "fr"));
 
   // Dossiers « portails » par type — pour ne pas se noyer dans la masse.
-  const TYPE_ORDER = ["stats", "facture", "mediakit", "brief", "autre"];
+  const TYPE_ORDER = ["stats", "facture", "contract", "mediakit", "brief", "autre"];
   const normType = (t: string | null | undefined) => (t && t in DOC_TYPE_META && t !== "autre" ? t : "autre");
   const typeCount: Record<string, number> = {};
   for (const r of filtered) typeCount[normType(r.type)] = (typeCount[normType(r.type)] ?? 0) + 1;
