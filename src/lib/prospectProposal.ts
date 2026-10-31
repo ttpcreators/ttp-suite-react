@@ -94,3 +94,18 @@ export function collabFromProspect(
     sort_order: sortOrder,
   };
 }
+
+/**
+ * La marque est-elle en affaire avec l'agence (collab en cours avant le bilan, ou prospect
+ * ouvert au pipeline) ? On lui parle déjà : la page Contacts ne la classe ni « à relancer »
+ * ni « jamais contactée », même si le carnet n'a pas encore noté l'échange.
+ */
+export function inDealWith(
+  brand: string | null | undefined,
+  collabs: readonly { brand: string | null; step?: number | null; status?: string | null }[],
+  prospects: readonly ProspectLite[],
+): boolean {
+  if (!(brand ?? "").trim()) return false;
+  return collabs.some((c) => c.status === "active" && Number(c.step ?? 0) < 11 && sameBrand(c.brand, brand))
+    || prospects.some((p) => sameBrand(p.brand, brand) && !p.collab_id && p.stage !== SIGNED_STAGE);
+}

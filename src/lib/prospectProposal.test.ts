@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cachetOf, collabFromProspect, contactForBrand, openProspectFor, proposalPatch, proposalValue, type Proposal } from "./prospectProposal";
+import { cachetOf, collabFromProspect, contactForBrand, inDealWith, openProspectFor, proposalPatch, proposalValue, type Proposal } from "./prospectProposal";
 
 const P: Proposal = { mode: "influence", creator: "LÉNA PASQUALE", deliverables: "2 reels Instagram", min: 800, max: 1100, target: 950, at: "2026-10-23" };
 const amount = (s: string) => s.replace(/\s/g, " ");
@@ -31,5 +31,18 @@ describe("Tarifs → prospect → collab", () => {
   it("la collab démarre à l'étape 1 avec tout rempli", () => {
     const c = collabFromProspect({ id: "p", brand: "Nike ", contact: "Tom", value: null, stage: null }, { creator: "LÉNA PASQUALE", deliverables: "2 reels", cachet: "950 €" }, 3);
     expect(c).toEqual({ brand: "Nike", creator: "LÉNA PASQUALE", contact: "Tom", deliverables: "2 reels", cachet: "950 €", step: 1, status: "active", sort_order: 3 });
+  });
+});
+
+describe("inDealWith", () => {
+  const prospects = [{ id: "p1", brand: "CUURE", contact: null, value: null, stage: "Négociation" }];
+  it("marque en négociation ou en collab : en affaire", () => {
+    expect(inDealWith("Cuure", [], prospects)).toBe(true);
+    expect(inDealWith("JNPR", [{ brand: "JNPR", step: 8, status: "active" }], [])).toBe(true);
+  });
+  it("collab bouclée, prospect signé ou autre marque : pas en affaire", () => {
+    expect(inDealWith("JNPR", [{ brand: "JNPR", step: 11, status: "active" }], [])).toBe(false);
+    expect(inDealWith("Cuure", [], [{ ...prospects[0], stage: "Signé" }])).toBe(false);
+    expect(inDealWith("Nike", [], prospects)).toBe(false);
   });
 });

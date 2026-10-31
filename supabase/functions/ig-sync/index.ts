@@ -51,7 +51,10 @@ const age = (iso: unknown) => (typeof iso === "string" && iso ? Date.now() - Dat
 
 /** @ Instagram d'une créatrice : colonne instagram, sinon handle si son réseau principal est Instagram. */
 function creatorHandle(c: CreatorRow): string {
-  return igUser(c.instagram) || ((c.platform ?? "").toLowerCase().includes("insta") ? igUser(c.handle) : "");
+  // Le @ de la fiche sert aussi quand la plateforme n'est pas renseignée (sinon « sans handle »
+  // alors que le @ est là). Plateforme TikTok ou YouTube : le @ n'est pas un compte Instagram.
+  const p = (c.platform ?? "").toLowerCase();
+  return igUser(c.instagram) || (!p || p.includes("insta") ? igUser(c.handle) : "");
 }
 function mainIsInstagram(c: CreatorRow): boolean {
   const p = (c.platform ?? "").toLowerCase();
