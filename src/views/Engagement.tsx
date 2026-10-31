@@ -296,6 +296,15 @@ export function Engagement() {
       vals: { ...vals },
       followers,
     };
+    // Même nombre d'abonnés que la dernière mesure d'un AUTRE réseau du créateur : souvent le
+    // chiffre Instagram recopié dans TikTok (ou l'inverse). On demande de vérifier.
+    const twin = num(followers) >= 1000 && entry.creator !== "Calcul libre"
+      ? freshHist.find((h) => h.id !== editingId && h.creator === entry.creator && h.platform !== p.key && num(h.followers) === num(followers))
+      : undefined;
+    if (twin && !window.confirm(`${fmtInt(num(followers))} abonnés : c'est exactement le chiffre de la mesure ${twin.platformLabel ?? twin.platform} du ${twin.date}. Enregistrer quand même pour ${p.label} ?`)) {
+      setSaving(false);
+      return;
+    }
     const rest = freshHist.filter((h) => h.id !== editingId);
     // Plafond 400 mesures (comme les relevés automatiques, supabase/functions/_shared/autoStats.ts).
     const nextHist = [entry, ...rest].slice(0, 400);

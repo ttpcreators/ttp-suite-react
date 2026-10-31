@@ -12,7 +12,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { triggerSync } from "../_shared/google.ts";
 import { readAppState } from "../_shared/appState.ts";
-import { activeByCreator, conflictsFor, excluLine, excluState, readExclusivites } from "../_shared/exclusivites.ts";
+import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
 import type { Ctx } from "./oauth.ts";
 import { boxesFor, createDraft, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
@@ -82,10 +82,23 @@ const lines = (xs: string[], empty: string) => (xs.length ? xs.join("\n") : empt
 const titleCase = (s: string | null | undefined) =>
   (s ?? "").toLocaleLowerCase("fr-FR").replace(/(^|[^\p{L}])(\p{L})/gu, (_m, p: string, c: string) => p + c.toLocaleUpperCase("fr-FR"));
 
+/** Engagement enregistré « 5,93 % » ou 5.93 → « 5,93 % » (jamais « % % »). */
+const pct = (v: unknown) => `${String(v ?? "").trim().replace(/\s*%$/, "")} %`;
+/** Heure d'un événement : « — », « - » ou vide = journée entière. */
+const timeOf = (v: unknown) => {
+  const t = String(v ?? "").trim();
+  return t && !/^[—–-]+$/.test(t) ? t : "";
+};
+/** Conversation Instagram : @pseudo, sinon le nom, sinon une conversation sans identité. */
+const dmWho = (d: Json) => (d.username ? `@${d.username}${d.name ? ` (${d.name})` : ""}` : d.name ? String(d.name) : "conversation sans pseudo (Instagram n'a pas donné l'identité)");
+
 const COLLAB_STEPS = [
   "Signature", "Brief transmis au créateur", "Concept validé", "Tournage", "Validation marque", "Publication",
   "Statistiques à sept jours", "Facture envoyée", "Paiement marque reçu", "Créateur payé", "Bilan et renouvellement",
 ];
+/** Comme la page Collabs : arrivée à l'étape 11 (Bilan), la collab est bouclée = terminée. */
+const collabState = (r: Json) => (r.status === "active" && Number(r.step) >= COLLAB_STEPS.length ? "terminee" : String(r.status));
+const COLLAB_LABEL: Record<string, string> = { active: "en cours", terminee: "bouclée", archivee: "archivée", gagnee: "gagnée", perdue: "perdue" };
 const SCOUT_STATUS: Record<string, string> = { observation: "En observation", contacter: "À contacter", discussion: "En discussion", signe: "Signé", ecarte: "Pas intéressé" };
 const INVOICE_STATUS: Record<string, string> = { brouillon: "Brouillon", attente: "En attente", retard: "En retard", payee: "Payée", annulee: "Annulée" };
 /** Montant tel qu'enregistré (« 600,00 € ») : « € » ajouté seulement s'il manque. */
@@ -166,13 +179,13 @@ const pointDuJour: Tool = {
     const out = [
       `# Point du ${frDay(today)}`,
       `\n## Rendez-vous`,
-      lines(evs.map((e) => `- ${e.date === today ? "Aujourd'hui" : "Demain"} ${e.time || "(journée)"} · ${e.title}${e.who ? ` · ${titleCase(String(e.who))}` : ""} [${e.type}]`), "Aucun."),
+      lines(evs.map((e) => `- ${e.date === today ? "Aujourd'hui" : "Demain"} ${timeOf(e.time) || "(journée)"} · ${e.title}${e.who ? ` · ${titleCase(String(e.who))}` : ""} [${e.type}]`), "Aucun."),
       `\n## Tâches en retard ou du jour`,
       lines(((todos.data as Json[] | null) ?? []).map((t) => ({ t, d: dueIso(t.due) })).filter((x) => x.d && x.d <= today).sort((x, y) => x.d.localeCompare(y.d)).slice(0, 30)
         .map(({ t, d }) => `- ${t.text}${t.creator ? ` (${titleCase(String(t.creator))})` : ""} · ${d < today ? "en retard depuis le" : "pour aujourd'hui,"} ${frDay(d)}${t.priority === "haute" ? " · priorité haute" : ""}`), "Aucune."),
       `\n## DM Instagram sans réponse (3 derniers jours)`,
-      lines(((dms.data as Json[] | null) ?? []).map((d) => `- @${d.username ?? "?"}${d.name ? ` (${d.name})` : ""} : « ${String(d.last_text ?? "").slice(0, 120)} »`), "Aucun."),
-      `\n## Mails`,
+      lines(((dms.data as Json[] | null) ?? []).map((d) => `- ${dmWho(d)} : « ${String(d.last_text ?? "").slice(0, 120)} »`), "Aucun."),
+      `\n## Mails non lus (comme l'app : boîte de réception, hors Promotions et Réseaux sociaux)`,
       lines(mails.map((m) => `- ${m}`), "Lecture impossible."),
       `\n## Collabs sans mouvement depuis 7 jours`,
       lines(stuck.map(({ c, d }) => `- ${c.brand} × ${titleCase(String(c.creator ?? ""))} · étape ${c.step} « ${COLLAB_STEPS[Number(c.step) - 1] ?? ""} » depuis ${d} j`), "Aucune."),
@@ -212,7 +225,7 @@ const rechercher: Tool = {
       ...sec("Collabs", co.data as Json[], (r) => `${r.brand} × ${titleCase(String(r.creator ?? ""))} · étape ${r.step}/11 · ${r.status} [collab ${r.id}]`),
       ...sec("Scouting créateurs", sp.data as Json[], (r) => `${r.name} · ${r.handle ?? ""} · ${r.tag ?? ""} [scouting ${r.id}]`),
       ...sec("Scouting sportifs", ap.data as Json[], (r) => `${r.name} · ${r.tag ?? ""}${r.club ? ` · ${r.club}` : ""} · ${r.handle ?? ""} [sportif ${r.id}]`),
-      ...sec("DM Instagram", ig.data as Json[], (r) => `@${r.username ?? "?"}${r.name ? ` (${r.name})` : ""} : « ${String(r.last_text ?? "").slice(0, 100)} » [dm ${r.id}]`),
+      ...sec("DM Instagram", ig.data as Json[], (r) => `${dmWho(r)} : « ${String(r.last_text ?? "").slice(0, 100)} » [dm ${r.id}]`),
       ...sec("Factures", inv.data as Json[], (r) => `${r.ref} · ${r.party} · ${money(r.amount)} · ${INVOICE_STATUS[invoiceStatus(r, isoDay())] ?? r.status}`),
     ];
     return ok(out.length > 1 ? out.join("\n") : `Rien trouvé pour « ${q} » (essaie rechercher_mails pour les mails).`);
@@ -296,22 +309,22 @@ const ficheCreateur: Tool = {
     }
     const measure = (pf: string, label: string) => {
       const h = lastEng.get(pf);
-      return h ? `${label} (mesure du ${h.date ?? "?"}) : ${h.followers ?? "?"} abonnés${h.er ? ` · engagement ${h.er} %` : ""}` : "";
+      return h ? `${label} (mesure du ${h.date ?? "?"}) : ${h.followers ?? "?"} abonnés${h.er ? ` · engagement ${pct(h.er)}` : ""}` : "";
     };
     const out = [
       `# ${titleCase(name)}`,
       `Niche : ${c.niche ?? "?"} · plateforme : ${c.platform || "?"} · abonnés tous réseaux : ${compact(au.total)}${perPlatformText(au) ? ` (${perPlatformText(au)})` : ""} · engagement : ${c.er ?? "?"} · statut : ${c.status ?? "?"}${c.ville ? ` · ${c.ville}` : ""}`,
-      `Comptes : ${[c.handle && `@ ${String(c.handle).replace(/^@/, "")}`, c.instagram && `IG ${c.instagram}`, c.tiktok && `TikTok ${c.tiktok}`, c.youtube && `YouTube ${c.youtube}`, c.email_pro && `email pro ${c.email_pro}`].filter(Boolean).join(" · ") || "?"}`,
+      `Comptes : ${[c.handle && `@${String(c.handle).replace(/^@+/, "").trim()}`, c.instagram && `IG ${c.instagram}`, c.tiktok && `TikTok ${c.tiktok}`, c.youtube && `YouTube ${c.youtube}`, c.email_pro && `email pro ${c.email_pro}`].filter(Boolean).join(" · ") || "?"}`,
       ig && ig.followers != null
-        ? `Instagram (relevé automatique Meta) : ${ig.followers} abonnés${ig.er != null ? ` · engagement ${ig.er} %` : ""}${ig.reach30 ? ` · couverture 28 j ${ig.reach30}` : ""}`
+        ? `Instagram (relevé automatique Meta) : ${ig.followers} abonnés${ig.er != null ? ` · engagement ${pct(ig.er)}` : ""}${ig.reach30 ? ` · couverture 28 j ${ig.reach30}` : ""}`
         : [measure("instagram", "Instagram"), ig?.why ? `Relevé automatique Instagram indisponible (${ig.why === "compte_perso" ? "compte personnel : Meta ne donne les chiffres que d'un compte professionnel" : ig.why})` : ""].filter(Boolean).join("\n"),
-      tt ? `TikTok (relevé automatique) : ${tt.followers ?? "?"} abonnés${tt.er != null ? ` · engagement ${tt.er} %` : ""}${tt.avgViews ? ` · vues moyennes ${tt.avgViews}` : ""}` : measure("tiktok", "TikTok"),
+      tt ? `TikTok (relevé automatique) : ${tt.followers ?? "?"} abonnés${tt.er != null ? ` · engagement ${pct(tt.er)}` : ""}${tt.avgViews ? ` · vues moyennes ${tt.avgViews}` : ""}` : measure("tiktok", "TikTok"),
       yt ? `YouTube (relevé automatique) : ${yt.subscribers ?? "?"} abonnés${yt.avgViews ? ` · vues moyennes ${yt.avgViews}` : ""}` : measure("youtube", "YouTube"),
       ...[...lastEng.keys()].filter((k) => !["instagram", "tiktok", "youtube"].includes(k)).map((k) => measure(k, titleCase(k))),
       `\n## Collabs`,
-      lines(((col.data as Json[] | null) ?? []).map((r) => `- ${r.brand} · étape ${r.step}/11 « ${COLLAB_STEPS[Number(r.step) - 1] ?? ""} » · ${r.status}${r.cachet ? ` · cachet ${r.cachet}` : ""} [collab ${r.id}]`), "Aucune."),
+      lines(((col.data as Json[] | null) ?? []).map((r) => `- ${r.brand} · étape ${r.step}/11 « ${COLLAB_STEPS[Number(r.step) - 1] ?? ""} » · ${COLLAB_LABEL[collabState(r)] ?? collabState(r)}${r.cachet ? ` · cachet ${r.cachet}` : ""} [collab ${r.id}]`), "Aucune."),
       `\n## Prochains rendez-vous`,
-      lines(((ev.data as Json[] | null) ?? []).map((e) => `- ${frDay(String(e.date))} ${e.time || ""} · ${e.title} [${e.type}]`), "Aucun."),
+      lines(((ev.data as Json[] | null) ?? []).map((e) => `- ${frDay(String(e.date))} ${timeOf(e.time) || "(journée)"} · ${e.title} [${e.type}]`), "Aucun."),
       `\n## Tâches ouvertes`,
       lines(((td.data as Json[] | null) ?? []).map((t) => `- ${t.text}${t.due ? ` · échéance ${t.due}` : ""}`), "Aucune."),
     ];
@@ -487,17 +500,40 @@ const verifierExclusivite: Tool = {
     const list = readExclusivites((await appState(sb)).exclusivites);
     const today = isoDay();
     const who = str(a.createur, 80);
+    // Secteurs de la marque (étiquette de sa fiche contact) : une exclusivité « même catégorie »
+    // la bloque aussi, même si elle n'est pas citée parmi les concurrents.
+    const { data: tags } = await sb.from("contacts").select("tag").ilike("brand", exact(brand)).not("tag", "is", null).limit(20);
+    const brandTags = [...new Set(((tags as Json[] | null) ?? []).map((r) => String(r.tag ?? "").trim()).filter(Boolean))];
     const names = who ? [who] : [...new Set(list.map((e) => e.creator))];
-    const hits = names.flatMap((n) => conflictsFor(list, n, brand, today));
-    if (!hits.length) return ok(who ? `${titleCase(who)} n'a aucune exclusivité qui bloque ${brand}.` : `Aucun créateur du roster n'est en exclusivité contre ${brand}.`);
-    return ok([`# À ne pas proposer à ${brand}`, ...hits.map((e) => `- ${titleCase(e.creator)} : ${excluLine(e)}`)].join("\n"));
+    const hits = names.flatMap((n) => conflictsFor(list, n, brand, today, brandTags));
+    // Engagements en cours (collabs, briefs) : un contrat signé n'est pas toujours saisi en
+    // exclusivité. On les montre pour juger soi-même si la marque en est concurrente.
+    const [{ data: col }, { data: br }, { data: docs }] = await Promise.all([
+      (who ? sb.from("collabs").select("brand, creator, step, status").ilike("creator", like(who)) : sb.from("collabs").select("brand, creator, step, status")).eq("status", "active").lt("step", COLLAB_STEPS.length).limit(100),
+      (who ? sb.from("briefs").select("brand, creator, due, status").ilike("creator", like(who)) : sb.from("briefs").select("brand, creator, due, status")).neq("status", "terminé").limit(100),
+      // Briefs et contrats déposés en PDF dans Documents ces 6 derniers mois (ex. un brief
+      // de marque avec sa liste de concurrents interdits, sans fiche dans la page Briefs).
+      (who ? sb.from("documents").select("name, creator, type, created_at").ilike("creator", like(who)) : sb.from("documents").select("name, creator, type, created_at"))
+        .in("type", ["brief", "contract", "contrat"]).gte("created_at", addDays(today, -183)).limit(100),
+    ]);
+    const engaged = [
+      ...((col as Json[] | null) ?? []).map((r) => `- ${titleCase(String(r.creator ?? "?"))} · collab ${r.brand} en cours (étape ${r.step}/11)`),
+      ...((br as Json[] | null) ?? []).filter((r) => r.creator).map((r) => `- ${titleCase(String(r.creator))} · brief ${r.brand}${r.due ? ` (échéance ${r.due})` : ""}`),
+      ...((docs as Json[] | null) ?? []).filter((r) => r.creator).map((r) => `- ${titleCase(String(r.creator))} · ${r.type} en PDF « ${r.name} » (déposé le ${String(r.created_at).slice(0, 10)}, à lire avec lire_brief : il peut lister des concurrents interdits)`),
+    ];
+    const out: string[] = [];
+    if (!list.length) out.push("⚠ Aucune exclusivité n'est enregistrée dans TTP Suite (page Exclusivités) : ce contrôle ne garantit rien. Vérifie les contrats et briefs en cours ci-dessous avant de proposer quelqu'un, et demande à l'équipe en cas de doute.");
+    if (hits.length) out.push(`# À ne pas proposer à ${brand}`, ...hits.map((e) => `- ${titleCase(e.creator)} : ${excluLine(e)}`));
+    else if (list.length) out.push(who ? `${titleCase(who)} n'a aucune exclusivité enregistrée qui bloque ${brand}.` : `Aucun créateur n'a d'exclusivité enregistrée contre ${brand}.`);
+    if (engaged.length) out.push(`\n## Engagements en cours (vérifie que ${brand} n'est pas concurrent de ces marques)`, ...engaged);
+    return ok(out.join("\n"));
   },
 };
 
 const rechercherMails: Tool = {
   name: "rechercher_mails",
   title: "Rechercher dans les mails",
-  description: "Cherche dans les boîtes Gmail de l'agence (partnerships@ et talent@). La requête suit la syntaxe Gmail : « from:nike », « is:unread », « newer_than:7d », « subject:contrat », « in:sent », etc. Vide = derniers mails de la boîte de réception. Renvoie l'id du fil pour lire_mail.",
+  description: "Cherche dans les boîtes Gmail de l'agence (partnerships@ et talent@). La requête suit la syntaxe Gmail : « from:nike », « is:unread », « newer_than:7d », « subject:contrat », « in:sent », etc. Vide = derniers mails de la boîte de réception. Non lus comptés comme l'app et le point du jour : « in:inbox is:unread -category:promotions -category:social » avec max 25. Renvoie l'id du fil pour lire_mail.",
   inputSchema: {
     type: "object",
     properties: {
@@ -512,6 +548,7 @@ const rechercherMails: Tool = {
     const { threads, errors } = await searchThreads(sb, str(a.boite) === "toutes" ? undefined : str(a.boite) || undefined, q, int(a.max, 10, 1, 25));
     const out = [`# Mails · « ${q} »`, ...threads.map((t) => `- ${t.unread ? "● " : ""}${t.date} · ${t.from} · « ${t.subject} »${t.messages > 1 ? ` (${t.messages} messages)` : ""}\n  ${t.snippet.slice(0, 160)}\n  [fil ${t.threadId} · boîte ${t.box}]`)];
     if (!threads.length) out.push("Aucun mail trouvé.");
+    else if (threads.length >= int(a.max, 10, 1, 25)) out.push(`\n(${threads.length} premiers fils seulement : il y en a peut-être d'autres, relance avec max plus grand.)`);
     if (errors.length) out.push(`\nBoîtes illisibles : ${errors.join(" ; ")}`);
     return ok(out.join("\n"));
   },
@@ -560,7 +597,7 @@ const dmInstagram: Tool = {
     let q = sb.from("ig_threads").select("id, username, name, last_text, last_from_me, updated_at, emails").eq("hidden", false).order("updated_at", { ascending: false }).limit(int(a.max, 15, 1, 30));
     if (str(a.recherche)) q = q.or(orLike(["username", "name"], str(a.recherche, 60)));
     const { data } = await q;
-    return ok([`# DM Instagram`, ...((data as Json[] | null) ?? []).map((r) => `- @${r.username ?? "?"}${r.name ? ` (${r.name})` : ""} · ${String(r.updated_at ?? "").slice(0, 10)} · ${r.last_from_me ? "TTP" : "eux"} : « ${String(r.last_text ?? "").slice(0, 120)} »${(r.emails as string[] | null)?.length ? ` · email ${(r.emails as string[])[0]}` : ""} [dm ${r.id}]`)].join("\n"));
+    return ok([`# DM Instagram`, ...((data as Json[] | null) ?? []).map((r) => `- ${dmWho(r)} · ${String(r.updated_at ?? "").slice(0, 10)} · ${r.last_from_me ? "TTP" : "eux"} : « ${String(r.last_text ?? "").slice(0, 120)} »${(r.emails as string[] | null)?.length ? ` · email ${(r.emails as string[])[0]}` : ""} [dm ${r.id}]`)].join("\n"));
   },
 };
 
@@ -590,7 +627,7 @@ const scouting: Tool = {
       const snaps = ((t.snaps as { date: string; value: number }[] | undefined) ?? []).sort((x, y) => x.date.localeCompare(y.date));
       return { r, status: String(t.status ?? "observation"), niche: String(r.tag ?? "") || String(t.igNiche ?? ""), fol: snaps.length ? snaps[snaps.length - 1].value : null, er: t.igEr as number | null | undefined };
     }).filter((x) => (!a.statut || x.status === a.statut) && (!cat || x.niche.toLowerCase().includes(cat)) && (!q || `${x.r.name} ${x.r.handle ?? ""} ${x.r.note ?? ""}`.toLowerCase().includes(q)));
-    return ok([`# Scouting ${athletes ? "sportifs" : "créateurs"} · ${rows.length} profil(s)`, ...rows.map((x) => `- ${x.r.name} · ${x.r.handle ?? "sans @"} · ${x.niche || "sans catégorie"}${athletes && x.r.club ? ` · ${x.r.club}` : ""}${athletes && x.r.level ? ` · ${x.r.level}` : ""} · ${SCOUT_STATUS[x.status] ?? x.status}${x.fol != null ? ` · ${x.fol.toLocaleString("fr-FR")} abonnés` : ""}${x.er != null ? ` · engagement ${x.er} %` : ""}${x.r.last_contacted ? ` · contacté le ${String(x.r.last_contacted).slice(0, 10)}` : ""}${x.r.email ? ` · ${x.r.email}` : ""} [${athletes ? "sportif" : "scouting"} ${x.r.id}]`)].join("\n"));
+    return ok([`# Scouting ${athletes ? "sportifs" : "créateurs"} · ${rows.length} profil(s)`, ...rows.map((x) => `- ${x.r.name} · ${x.r.handle ?? "sans @"} · ${x.niche || "sans catégorie"}${athletes && x.r.club ? ` · ${x.r.club}` : ""}${athletes && x.r.level ? ` · ${x.r.level}` : ""} · ${SCOUT_STATUS[x.status] ?? x.status}${x.fol != null ? ` · ${x.fol.toLocaleString("fr-FR")} abonnés` : ""}${x.er != null ? ` · engagement ${pct(x.er)}` : ""}${x.r.last_contacted ? ` · contacté le ${String(x.r.last_contacted).slice(0, 10)}` : ""}${x.r.email ? ` · ${x.r.email}` : ""} [${athletes ? "sportif" : "scouting"} ${x.r.id}]`)].join("\n"));
   },
 };
 
@@ -623,16 +660,33 @@ const contacts: Tool = {
     }
     const st = await appState(sb).catch(() => ({} as Json));
     const relanceDays = Math.max(1, Number((st.prospectSettings as Json | undefined)?.relanceDays) || 45);
+    // Marques en affaire avec l'agence (collab en cours, négociation au pipeline) : on leur
+    // parle déjà, elles ne sont ni « à relancer » ni « jamais contactées », même si le
+    // carnet n'a pas encore noté l'échange.
+    const [{ data: liveCol }, { data: liveProsp }] = await Promise.all([
+      sb.from("collabs").select("brand, step").eq("status", "active").lt("step", COLLAB_STEPS.length).limit(500),
+      sb.from("prospects").select("brand, stage").limit(500),
+    ]);
+    const deal = new Map<string, string>();
+    for (const r of (liveProsp as Json[] | null) ?? []) if (!/perdu|refus|sign|gagn/i.test(String(r.stage ?? ""))) deal.set(foldName(String(r.brand ?? "")), `${String(r.stage ?? "pipeline").toLowerCase()} en cours`);
+    for (const r of (liveCol as Json[] | null) ?? []) deal.set(foldName(String(r.brand ?? "")), "collab en cours");
+    const dealOf = (brand: unknown) => {
+      const b = foldName(String(brand ?? ""));
+      if (!b) return "";
+      for (const [k, v] of deal) if (k && (k === b || (Math.min(k.length, b.length) >= 4 && (k.startsWith(b) || b.startsWith(k))))) return v;
+      return "";
+    };
     type T = { date: string; canal: string; kind?: string; note?: string };
     const ms = (d: unknown) => { const t = new Date(String(d ?? "")).getTime(); return Number.isFinite(t) ? t : 0; };
     const rows = all.map((r) => {
       const t = ((Array.isArray(r.touches) ? r.touches : []) as T[]).filter((x) => x && typeof x.date === "string" && typeof x.canal === "string").sort((x, y) => ms(y.date) - ms(x.date));
       const lastAt = Math.max(ms(t[0]?.date), ms(r.last_contacted));
-      return { r, t, lastAt, relance: lastAt > 0 && Date.now() - lastAt >= relanceDays * 86400000 };
+      const busy = dealOf(r.brand);
+      return { r, t, lastAt, busy, relance: !busy && lastAt > 0 && Date.now() - lastAt >= relanceDays * 86400000 };
     });
     const toRelance = rows.filter((x) => x.relance).length;
-    const never = rows.filter((x) => !x.lastAt).length;
-    let list = a.a_relancer === true ? rows.filter((x) => x.relance) : a.jamais_contactes === true ? rows.filter((x) => !x.lastAt) : rows;
+    const never = rows.filter((x) => !x.lastAt && !x.busy).length;
+    let list = a.a_relancer === true ? rows.filter((x) => x.relance) : a.jamais_contactes === true ? rows.filter((x) => !x.lastAt && !x.busy) : rows;
     // À relancer : les plus anciens d'abord ; sinon les plus récents d'abord.
     list = [...list].sort((x, y) => (a.a_relancer === true ? x.lastAt - y.lastAt : y.lastAt - x.lastAt) || String(x.r.brand ?? "").localeCompare(String(y.r.brand ?? "")));
     const start = int(a.depuis, 0, 0, 100000);
@@ -640,9 +694,9 @@ const contacts: Tool = {
     return ok([
       `# Contacts · ${all.length} au total${str(a.recherche) ? ` pour « ${str(a.recherche, 60)} »` : ""} · ${toRelance} à relancer (${relanceDays} j) · ${never} jamais contactés`,
       `Affichés : ${page.length ? `${start + 1} à ${start + page.length}` : "aucun"} sur ${list.length}${start + page.length < list.length ? ` (suite avec depuis = ${start + page.length})` : ""}`,
-      ...page.map(({ r, t, lastAt }) => {
+      ...page.map(({ r, t, lastAt, busy }) => {
         const last = t[0];
-        return `- ${r.brand}${r.person ? ` · ${r.person}${r.role ? ` (${r.role})` : ""}` : ""} · ${r.email ?? "sans email"}${r.instagram ? ` · ${r.instagram}` : ""}${r.linkedin ? ` · LinkedIn ${r.linkedin}` : ""}${r.tag ? ` · ${r.tag}` : ""} · dernier contact ${lastAt ? new Date(lastAt).toISOString().slice(0, 10) : "jamais"}${last ? ` (${last.kind ?? "échange"} par ${last.canal}${last.note ? ` : ${String(last.note).slice(0, 120)}` : ""})` : ""} · ${t.length} échange(s) [contact ${r.id}]`;
+        return `- ${r.brand}${r.person ? ` · ${r.person}${r.role ? ` (${r.role})` : ""}` : ""} · ${r.email ?? "sans email"}${r.instagram ? ` · ${r.instagram}` : ""}${r.linkedin ? ` · LinkedIn ${r.linkedin}` : ""}${r.tag ? ` · ${r.tag}` : ""} · dernier contact ${lastAt ? new Date(lastAt).toISOString().slice(0, 10) : busy ? "non noté au carnet" : "jamais"}${busy ? ` · ${busy}` : ""}${last ? ` (${last.kind ?? "échange"} par ${last.canal}${last.note ? ` : ${String(last.note).slice(0, 120)}` : ""})` : ""} · ${t.length} échange(s) [contact ${r.id}]`;
       }),
     ].join("\n"));
   },
@@ -686,11 +740,10 @@ const collabs: Tool = {
     if (str(a.marque)) q = q.ilike("brand", like(str(a.marque)));
     const { data, error } = await q;
     if (error) return fail(`Lecture des collabs impossible : ${error.message}`);
-    // Comme la page Collabs : arrivée à l'étape 11 (Bilan), la collab est bouclée = terminée.
-    const stateOf = (r: Json) => (r.status === "active" && Number(r.step) >= COLLAB_STEPS.length ? "terminee" : String(r.status));
+    const stateOf = collabState;
     const rows = ((data as Json[] | null) ?? []).filter((r) => st === "toutes" || stateOf(r) === st).slice(0, 60);
     const since = await stepSince(sb, rows);
-    const LABEL: Record<string, string> = { active: "en cours", terminee: "bouclée", archivee: "archivée", gagnee: "gagnée", perdue: "perdue" };
+    const LABEL = COLLAB_LABEL;
     return ok([`# Collabs (${st}) · ${rows.length}`, ...rows.map((r) => `- ${r.brand} × ${titleCase(String(r.creator ?? ""))}${r.title ? ` · ${r.title}` : ""} · étape ${r.step}/11 « ${COLLAB_STEPS[Number(r.step) - 1] ?? ""} » · ${LABEL[stateOf(r)] ?? stateOf(r)}${r.cachet ? ` · ${r.cachet}` : ""}${r.deliverables ? ` · ${r.deliverables}` : ""} · sur cette étape depuis le ${String(since.get(String(r.id)) ?? "").slice(0, 10) || "?"} [collab ${r.id}]`)].join("\n"));
   },
 };
@@ -704,7 +757,7 @@ const planning: Tool = {
     const from = /^\d{4}-\d{2}-\d{2}$/.test(str(a.du)) ? str(a.du) : isoDay();
     const to = /^\d{4}-\d{2}-\d{2}$/.test(str(a.au)) ? str(a.au) : addDays(from, 7);
     const { data } = await sb.from("events").select("date, time, title, type, who, description").gte("date", from).lte("date", to).eq("deleted", false).order("date").order("time").limit(80);
-    return ok([`# Planning du ${frDay(from)} au ${frDay(to)}`, lines(((data as Json[] | null) ?? []).map((e) => `- ${frDay(String(e.date))} ${e.time || "(journée)"} · ${e.title}${e.who ? ` · ${titleCase(String(e.who))}` : ""} [${e.type}]${e.description ? `\n  ${String(e.description).slice(0, 200)}` : ""}`), "Rien de prévu.")].join("\n"));
+    return ok([`# Planning du ${frDay(from)} au ${frDay(to)}`, lines(((data as Json[] | null) ?? []).map((e) => `- ${frDay(String(e.date))} ${timeOf(e.time) || "(journée)"} · ${e.title}${e.who ? ` · ${titleCase(String(e.who))}` : ""} [${e.type}]${e.description ? `\n  ${String(e.description).slice(0, 200)}` : ""}`), "Rien de prévu.")].join("\n"));
   },
 };
 

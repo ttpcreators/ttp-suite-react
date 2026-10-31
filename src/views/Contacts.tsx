@@ -48,7 +48,7 @@ import { contactCard } from "@/lib/contactCard";
 import { brandRecord, mergeMailHistory, sameBrand, type BrandMail } from "@/lib/brandRecord";
 import { loadBrandData, loadEmailActivity, type BrandData } from "@/lib/brandRecordDb";
 import { loadProspects } from "@/lib/prospectsDb";
-import type { ProspectLite } from "@/lib/prospectProposal";
+import { inDealWith, type ProspectLite } from "@/lib/prospectProposal";
 import { openCollab } from "@/lib/collabLinksDb";
 import { stepDef } from "@/lib/collabs";
 import { formatEuro } from "@/lib/money";
@@ -499,6 +499,11 @@ export function Contacts() {
     logTouch(row, "whatsapp");
   };
 
+  // Collabs et prospects (fiche marque, et marques en affaire pour les filtres de relance).
+  const [brandData, setBrandData] = useState<BrandData | null>(null);
+  const [prospects, setProspects] = useState<ProspectLite[]>([]);
+  const inDeal = (brand: string | null | undefined) => inDealWith(brand, brandData?.collabs ?? [], prospects);
+
   // Le filtre par tag se combine avec la recherche existante.
   // NB : calcul simple (pas de hook) placé AVANT les retours anticipés, car la fiche
   // affichée (et donc l'historique Gmail chargé) en dépend.
@@ -514,8 +519,8 @@ export function Contacts() {
       const list = parseTouches(row.touches);
       const contacted = !!row.last_contacted || list.length > 0;
       if (contactFilter === "contacted" && !contacted) return false;
-      if (contactFilter === "never" && contacted) return false;
-      if (contactFilter === "relancer" && !needsRelance(list, row.last_contacted, relanceDays)) return false;
+      if (contactFilter === "never" && (contacted || inDeal(row.brand))) return false;
+      if (contactFilter === "relancer" && (inDeal(row.brand) || !needsRelance(list, row.last_contacted, relanceDays))) return false;
     }
     // Filtre par ville.
     if (cityFilter && (row.city ?? "").trim().toLowerCase() !== cityFilter.toLowerCase()) return false;
@@ -533,8 +538,6 @@ export function Contacts() {
   const [history, setHistory] = useState<MailMsg[] | null>(null);
   // Fiche marque : collabs, CA, gifts et propositions de la marque (lus une fois par visite),
   // plus le journal `email_activity` du contact (fusionné à l'historique Gmail, sans doublon).
-  const [brandData, setBrandData] = useState<BrandData | null>(null);
-  const [prospects, setProspects] = useState<ProspectLite[]>([]);
   const [activity, setActivity] = useState<Awaited<ReturnType<typeof loadEmailActivity>>>([]);
   const [brandOpen, setBrandOpen] = useState(false);
   const [historyBusy, setHistoryBusy] = useState(false);
@@ -1050,15 +1053,16 @@ export function Contacts() {
   // Synthèse (4 cases) : mêmes comptes que l'ancien bento.
   const total = currentRows.length;
   const contactedCount = currentRows.filter((r) => r.last_contacted || parseTouches(r.touches).length > 0).length;
-  const relancerCount = currentRows.filter((r) => needsRelance(parseTouches(r.touches), r.last_contacted, relanceDays)).length;
+  const relancerCount = currentRows.filter((r) => !inDeal(r.brand) && needsRelance(parseTouches(r.touches), r.last_contacted, relanceDays)).length;
   const withEmail = currentRows.filter((r) => (r.email ?? "").trim()).length;
-  const neverRows = currentRows.filter((r) => !r.last_contacted && parseTouches(r.touches).length === 0);
+  const neverRows = currentRows.filter((r) => !r.last_contacted && parseTouches(r.touches).length === 0 && !inDeal(r.brand));
   const neverCats = new Set(neverRows.map((r) => (r.tag ?? "").trim()).filter(Boolean)).size;
 
   // ── Ligne de la liste ──
   // Largeur suivie par conteneur (@…) : la colonne principale rétrécit quand la fiche est ouverte à droite.
   const renderRow = (row: Row) => {
-    const info = relanceInfo(parseTouches(row.touches), row.last_contacted, relanceDays);
+    const raw = relanceInfo(parseTouches(row.touches), row.last_contacted, relanceDays);
+    const info = inDeal(row.brand) ? { ...raw, due: false } : raw;
     const on = showInspector && inspected?.id === row.id;
     const { title, sub } = contactTitle(row);
     const act = writeAction(row, info.due);
@@ -1163,7 +1167,8 @@ export function Contacts() {
   // ── Fiche du contact (colonne de droite ou feuille) ──
   const renderInspector = (row: Row, inSheet: boolean) => {
     const list = sortTouches(parseTouches(row.touches));
-    const info = relanceInfo(list, row.last_contacted, relanceDays);
+    const raw = relanceInfo(list, row.last_contacted, relanceDays);
+    const info = inDeal(row.brand) ? { ...raw, due: false } : raw;
     const kindNext = nextKind(list, row.last_contacted);
     const last = lastTouch(list);
     const { title, sub } = contactTitle(row);
