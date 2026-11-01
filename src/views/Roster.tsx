@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { typeHandle } from "@/lib/touches";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { parseAmount, formatEuro } from "@/lib/money";
-import { getAppState, useAppState, type AppState } from "@/lib/appState";
+import { getAppState } from "@/lib/appState";
 import { invoiceHT, type InvoiceDetailLike } from "@/lib/invoice";
 import { fmtCompact } from "@/lib/timeSeries";
 import { useSearch, matchQuery, matchWords } from "@/lib/search";
@@ -20,7 +20,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useIsFounder } from "@/lib/useFounder";
 import { PageHeaderRow } from "@/components/ui/page-header";
-import { useIgColumn, type IgCreator } from "@/lib/instagram";
+import { useRosterAudience } from "@/lib/rosterAudience";
 
 type CreatorRow = {
   id: string;
@@ -154,36 +154,7 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
   // Abonnés CUMULÉS par créateur = somme du DERNIER relevé de chaque plateforme
   // (mesures d'engagement, blob `engagementHistory`). Clé = nom en minuscules.
   // Instagram : le chiffre du jour donné par Meta (ig-sync) remplace la mesure.
-  const [igByName] = useIgColumn<IgCreator>("creators", "name");
-  const { data: engHist } = useAppState<{ creator?: string; platform?: string; followers?: string; date?: string }[]>(
-    (s: AppState) => (s["engagementHistory"] as { creator?: string; platform?: string; followers?: string; date?: string }[]) ?? [],
-  );
-  const cumFollowers = useMemo(() => {
-    const num = (v: unknown) => { const n = Number(String(v ?? "").replace(/\s/g, "").replace(",", ".")); return Number.isFinite(n) ? n : 0; };
-    const ts = (d?: string) => { const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(d ?? ""); return m ? new Date(+m[3], +m[2] - 1, +m[1]).getTime() : 0; };
-    const byCreator = new Map<string, { platform?: string; followers?: string; date?: string }[]>();
-    for (const h of engHist ?? []) {
-      const k = (h.creator ?? "").trim().toLowerCase();
-      if (!k) continue;
-      const arr = byCreator.get(k) ?? [];
-      arr.push(h);
-      byCreator.set(k, arr);
-    }
-    const out: Record<string, number> = {};
-    for (const k of new Set([...byCreator.keys(), ...Object.keys(igByName)])) {
-      const ordered = [...(byCreator.get(k) ?? [])].sort((a, b) => ts(b.date) - ts(a.date));
-      const latest = new Map<string, number>();
-      for (const h of ordered) {
-        const pf = (h.platform ?? "").toLowerCase();
-        if (pf && !latest.has(pf)) latest.set(pf, num(h.followers));
-      }
-      const live = igByName[k]?.followers;
-      if (live && live > 0) latest.set("instagram", live);
-      const sum = [...latest.values()].reduce((a, n) => a + n, 0);
-      if (sum > 0) out[k] = sum;
-    }
-    return out;
-  }, [engHist, igByName]);
+  const cumFollowers = useRosterAudience();
 
   if (error && !rows) {
     return (
@@ -285,7 +256,9 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
   const totalFollowers = actives.reduce((a, c) => a + followersOf(c), 0);
   const ers = actives.map((c) => numOf(c.er)).filter((n) => n > 0);
   const avgEr = ers.length ? ers.reduce((a, n) => a + n, 0) / ers.length : 0;
-  const totalCa = Object.values(caByCreator).reduce((a, n) => a + n, 0);
+  // Total = somme des lignes affichées (créateurs du roster) : un ancien créateur hors roster
+  // (factures encore là) n'y entre pas.
+  const totalCa = rows.reduce((a, c) => a + (caByCreator[c.name.trim().toLowerCase()] ?? 0), 0);
   const caOf = (name: string) => caByCreator[name.trim().toLowerCase()] ?? 0;
   const kpis = [
     { label: "Créateurs actifs", value: String(actives.length), foot: `sur ${rows.length} au roster` },

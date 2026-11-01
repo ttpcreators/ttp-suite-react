@@ -6,6 +6,7 @@
  * Côté créateur, Missions a aussi trois onglets ; « Gifting » du menu créateur ouvre
  * Missions › Gifting. Logique PURE, testée par collabTabs.test.ts.
  */
+import { parseAmount } from "./money";
 
 export const COLLAB_TABS = ["payees", "gifting", "negociations"] as const;
 export type CollabTab = (typeof COLLAB_TABS)[number];
@@ -60,6 +61,8 @@ export function negotiationCounts(list: readonly { stage: string | null; proposa
     if (r.stage === "Signé") continue;
     const t = Number(r.proposal?.target);
     if (Number.isFinite(t) && t > 0) proposed += t;
+    // Sans proposition calculée : le montant saisi à la main (« 1 000 € », haut d'une fourchette).
+    else proposed += Math.max(0, ...(String(r.value ?? "").match(/\d[\d\s.,]*/g) ?? []).map((a) => parseAmount(a)));
   }
   return {
     open: list.filter((r) => r.stage !== "Signé").length,

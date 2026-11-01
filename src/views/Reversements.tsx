@@ -228,11 +228,17 @@ export function Reversements() {
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Metric label="Payé par la marque (TTC)" value={formatEuro(r.encaisse)} />
+                <Metric label="Payé par la marque (HT)" value={formatEuro(r.ht)} />
                 <Metric label={`Commission TTP (${r.rate} %)`} value={formatEuro(r.commission)} />
                 <Metric label="Part créateur" value={formatEuro(r.du)} />
                 <Metric label="Déjà reversé" value={formatEuro(r.reverse)} />
               </div>
+              {/* Le calcul tombe juste : HT − commission = part créateur ; la TVA va à l'État. */}
+              {r.encaisse - r.ht > 0.004 && (
+                <p className="mt-2 text-[12px] text-muted-foreground">
+                  Reçu {formatEuro(r.encaisse)} TTC = {formatEuro(r.ht)} HT + {formatEuro(r.encaisse - r.ht)} de TVA (pour l'État, pas pour le créateur).
+                </p>
+              )}
 
               {r.payouts.length > 0 && (
                 <div className="mt-3 space-y-1.5">

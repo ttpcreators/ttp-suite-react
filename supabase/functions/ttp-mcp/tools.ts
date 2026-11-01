@@ -16,7 +16,7 @@ import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExc
 import type { Ctx } from "./oauth.ts";
 import { boxesFor, createDraft, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
-import { contractList, owesMoney, pctOf, reversementRows, type Detail, type Payout } from "../_shared/reversements.ts";
+import { amountOf, contractList, invoiceTotals, owesMoney, pctOf, reversementRows, type Detail, type Payout } from "../_shared/reversements.ts";
 import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/audience.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
@@ -692,7 +692,7 @@ const contacts: Tool = {
     const start = int(a.depuis, 0, 0, 100000);
     const page = list.slice(start, start + int(a.max, 50, 1, 500));
     return ok([
-      `# Contacts · ${all.length} au total${str(a.recherche) ? ` pour « ${str(a.recherche, 60)} »` : ""} · ${toRelance} à relancer (${relanceDays} j) · ${never} jamais contactés`,
+      `# Contacts · ${all.length} au total${str(a.recherche) ? ` pour « ${str(a.recherche, 60)} »` : ""} · ${all.length - never} déjà contactés (dont les marques en affaire) · ${toRelance} à relancer (${relanceDays} j) · ${never} jamais contactés`,
       `Affichés : ${page.length ? `${start + 1} à ${start + page.length}` : "aucun"} sur ${list.length}${start + page.length < list.length ? ` (suite avec depuis = ${start + page.length})` : ""}`,
       ...page.map(({ r, t, lastAt, busy }) => {
         const last = t[0];
@@ -794,27 +794,56 @@ const taches: Tool = {
 const factures: Tool = {
   name: "factures",
   title: "Factures",
-  description: "Factures de l'agence (réservé aux fondateurs) : référence, marque, montant TTC, échéance, statut, et totaux par statut. « En retard » = même règle que l'app (statut « En retard », ou « En attente » dont l'échéance est passée). Filtre par statut ou mois (AAAA-MM, échéance).",
+  description: "Factures de l'agence (réservé aux fondateurs) : référence, marque, créateur, montants HT, TVA et TTC, commission de l'agence (taux) et part du créateur, échéance, statut, et totaux par statut. Mêmes calculs que la page Facturation (commission sur le HT, rien sous 100 € HT). « En retard » = même règle que l'app (statut « En retard », ou « En attente » dont l'échéance est passée). Filtre par statut ou mois (AAAA-MM, échéance).",
   inputSchema: { type: "object", properties: { statut: { type: "string", enum: ["brouillon", "attente", "retard", "payee", "annulee"] }, mois: { type: "string", description: "AAAA-MM (échéance)" } }, additionalProperties: false },
   founder: true,
   run: async (sb, _c, a) => {
-    const { data, error } = await sb.from("invoices").select("ref, party, amount, date, status, creator").order("created_at", { ascending: false }).limit(1000);
+    const [{ data, error }, { data: cr }] = await Promise.all([
+      sb.from("invoices").select("id, ref, party, amount, date, status, creator").order("created_at", { ascending: false }).limit(1000),
+      sb.from("creators").select("name, commission"),
+    ]);
     if (error) return fail(`Lecture des factures impossible : ${error.message}`);
+    const st = await appState(sb);
+    const details = (st.invoiceDetails ?? {}) as Record<string, Detail>;
+    const saved = (st.creatorCommission ?? {}) as Record<string, number>;
+    const rosterRate = new Map<string, number>();
+    for (const c of (cr as Json[] | null) ?? []) {
+      const v = pctOf(c.commission);
+      if (v != null) rosterRate.set(String(c.name).trim().toLowerCase(), v);
+    }
+    const savedRate = new Map(Object.entries(saved).map(([k, v]) => [k.trim().toLowerCase(), Number(v)]));
+    // Taux du créateur : fiche roster, sinon réglage des commissions, sinon 20 % (comme Reversements).
+    const rateOf = (creator: unknown) => {
+      const k = String(creator ?? "").trim().toLowerCase();
+      return rosterRate.get(k) ?? (Number.isFinite(savedRate.get(k)) ? savedRate.get(k)! : 20);
+    };
     const today = isoDay();
     const want = str(a.statut);
     const month = /^\d{4}-\d{2}$/.test(str(a.mois)) ? str(a.mois) : "";
     const rows = ((data as Json[] | null) ?? [])
-      .map((r) => ({ r, st: invoiceStatus(r, today) }))
+      .map((r) => {
+        const d = details[String(r.id)];
+        const t = invoiceTotals(amountOf(r.amount), d, rateOf(r.creator));
+        // Facture de commission au créateur : tout le HT revient à l'agence.
+        const fin = d?.kind === "commission" ? { ...t, commission: t.ht, reversal: 0 } : t;
+        return { r, st: invoiceStatus(r, today), fin };
+      })
       .filter(({ r, st }) => (!want || st === want) && (!month || dueIso(r.date).startsWith(month)));
-    const num = (v: unknown) => Number(String(v ?? "").replace(/\s/g, "").replace(",", ".").replace(/[^0-9.-]/g, "")) || 0;
-    const totals: Record<string, { n: number; sum: number }> = {};
-    for (const { r, st } of rows) totals[st] = { n: (totals[st]?.n ?? 0) + 1, sum: (totals[st]?.sum ?? 0) + num(r.amount) };
+    type Tot = { n: number; ht: number; tva: number; ttc: number; commission: number; reversal: number };
+    const totals: Record<string, Tot> = {};
+    for (const { st, fin } of rows) {
+      const cur = totals[st] ?? { n: 0, ht: 0, tva: 0, ttc: 0, commission: 0, reversal: 0 };
+      totals[st] = { n: cur.n + 1, ht: cur.ht + fin.ht, tva: cur.tva + fin.tva, ttc: cur.ttc + fin.ttc, commission: cur.commission + fin.commission, reversal: cur.reversal + fin.reversal };
+    }
     const shown = rows.slice(0, 150);
     return ok([
       `# Factures · ${rows.length}${rows.length > shown.length ? ` (150 plus récentes affichées)` : ""}`,
-      `Totaux TTC : ${Object.entries(totals).map(([k, v]) => `${INVOICE_STATUS[k] ?? k} ${v.sum.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} € (${v.n})`).join(" · ") || "Aucun"}`,
-      ...shown.map(({ r, st }) => `- ${r.ref} · ${r.party}${r.creator ? ` · ${titleCase(String(r.creator))}` : ""} · ${money(r.amount)} · échéance ${dueText(r.date)} · ${INVOICE_STATUS[st] ?? st}`),
-    ].join("\n"));
+      "Totaux par statut (HT · TVA · TTC · commission agence · part créateurs) :",
+      ...(Object.entries(totals).map(([k, v]) => `- ${INVOICE_STATUS[k] ?? k} (${v.n}) : HT ${eur(v.ht)} · TVA ${eur(v.tva)} · TTC ${eur(v.ttc)} · commission ${eur(v.commission)} · créateurs ${eur(v.reversal)}`)),
+      Object.keys(totals).length ? "" : "Aucune facture.",
+      "## Factures",
+      ...shown.map(({ r, st, fin }) => `- ${r.ref} · ${r.party}${r.creator ? ` · ${titleCase(String(r.creator))}` : ""} · HT ${eur(fin.ht)} · TVA ${eur(fin.tva)} · TTC ${eur(fin.ttc)} · commission ${eur(fin.commission)} (${fin.rate} %) · créateur ${eur(fin.reversal)} · échéance ${dueText(r.date)} · ${INVOICE_STATUS[st] ?? st}`),
+    ].filter((x) => x !== "").join("\n"));
   },
 };
 

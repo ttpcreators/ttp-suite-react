@@ -517,9 +517,9 @@ export function Contacts() {
     // Filtre « déjà échangé » (dernier mail suivi OU touche manuelle).
     if (contactFilter !== "all") {
       const list = parseTouches(row.touches);
-      const contacted = !!row.last_contacted || list.length > 0;
+      const contacted = !!row.last_contacted || list.length > 0 || inDeal(row.brand);
       if (contactFilter === "contacted" && !contacted) return false;
-      if (contactFilter === "never" && (contacted || inDeal(row.brand))) return false;
+      if (contactFilter === "never" && contacted) return false;
       if (contactFilter === "relancer" && (inDeal(row.brand) || !needsRelance(list, row.last_contacted, relanceDays))) return false;
     }
     // Filtre par ville.
@@ -1052,7 +1052,8 @@ export function Contacts() {
 
   // Synthèse (4 cases) : mêmes comptes que l'ancien bento.
   const total = currentRows.length;
-  const contactedCount = currentRows.filter((r) => r.last_contacted || parseTouches(r.touches).length > 0).length;
+  // Une marque en collab ou en négociation compte comme « déjà contactée » (on lui parle).
+  const contactedCount = currentRows.filter((r) => r.last_contacted || parseTouches(r.touches).length > 0 || inDeal(r.brand)).length;
   const relancerCount = currentRows.filter((r) => !inDeal(r.brand) && needsRelance(parseTouches(r.touches), r.last_contacted, relanceDays)).length;
   const withEmail = currentRows.filter((r) => (r.email ?? "").trim()).length;
   const neverRows = currentRows.filter((r) => !r.last_contacted && parseTouches(r.touches).length === 0 && !inDeal(r.brand));

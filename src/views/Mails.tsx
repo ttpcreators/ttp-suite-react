@@ -923,8 +923,11 @@ export function Mails() {
   );
   const effList = (l: InboxThread[] | undefined) => (l ?? []).map(applyOv).filter((x): x is InboxThread => !!x);
 
-  // Non lus par boîte (pastilles), d'après la boîte de réception chargée.
+  // Non lus par boîte (pastilles) : le compte du serveur (coup d'œil, même calcul que
+  // l'accueil et le connecteur : boîte de réception hors Promotions et Réseaux sociaux),
+  // sinon la boîte de réception chargée (qui ne contient que les fils les plus récents).
   const inboxEff = useMemo(() => effList(lists.inbox?.threads), [lists.inbox, applyOv]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [serverUnread, setServerUnread] = useState<Partial<Record<MailBox, number>>>({});
   const unreadBy = useMemo(() => {
     const c = { all: 0, partnerships: 0, talent: 0 };
     for (const t of inboxEff) {
@@ -932,8 +935,10 @@ export function Mails() {
       c.all++;
       c[t.box]++;
     }
-    return c;
-  }, [inboxEff]);
+    const p = Math.max(c.partnerships, serverUnread.partnerships ?? 0);
+    const tl = Math.max(c.talent, serverUnread.talent ?? 0);
+    return { all: p + tl, partnerships: p, talent: tl };
+  }, [inboxEff, serverUnread]);
   const unreadShown = unreadBy[box];
   // Non lus par créateur (dossiers de couleur), d'après la boîte de réception chargée.
   const creatorUnread = useMemo(() => {
@@ -1478,6 +1483,7 @@ export function Mails() {
         }
         return; // coupure réseau : on réessaiera au prochain tour
       }
+      setServerUnread(Object.fromEntries(Object.entries(res.boxes).map(([b, v]) => [b, Number(v?.unread) || 0])));
       const sig = Object.entries(res.boxes).map(([b, v]) => `${b}:${v?.historyId ?? ""}`).sort().join("|");
       if (peekSig && sig !== peekSig) {
         void refreshList(folderRef.current);

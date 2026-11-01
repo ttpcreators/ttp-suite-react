@@ -70,6 +70,8 @@ type Row = {
   status: InvoiceStatus;
   creator: string | null;
   sort_order: number | null;
+  /** Jour du passage en « Payée » (SQL 2026-11-01-factures-garde-fous.sql), sinon absent. */
+  paid_at?: string | null;
 };
 
 type BankAccount = { id: string; label: string; holder: string; bank: string; iban: string; bic: string };
@@ -579,7 +581,7 @@ export function Facturation() {
   useEffect(() => {
     supabase
       .from("invoices")
-      .select("id,ref,party,amount,date,status,creator,sort_order")
+      .select("*")
       .order("sort_order")
       .then(({ data, error }) => {
         if (error) setError(true);
@@ -693,8 +695,9 @@ export function Facturation() {
   const bentoY = focusYm ? Number(focusYm.slice(0, 4)) : periodRange ? Number(periodRange.to.slice(0, 4)) : nowY;
   const bentoM = focusYm ? Number(focusYm.slice(5, 7)) : nowM;
   const periodName = periodRange ? rangeLabel(periodRange) : "";
-  // Échéance illisible (« 01/10 » sans année) : date d'émission de la facture, comme la page Compta.
-  const ymPaid = (r: Row) => ymOf(r.date) ?? ymOf(details[r.id]?.issueDate ?? "");
+  // Mois de l'encaissement : jour du passage en « Payée » (paid_at) ; anciennes factures sans
+  // cette date : l'échéance, et si elle est illisible (« 01/10 » sans année) la date d'émission.
+  const ymPaid = (r: Row) => (r.paid_at ? ymOf(r.paid_at.slice(0, 10)) : null) ?? ymOf(r.date) ?? ymOf(details[r.id]?.issueDate ?? "");
   const paidScope = scope.filter((r) => r.status === "payee" && (period ? true : ymPaid(r)?.y === nowY));
   // Chiffre d'affaires en HORS TAXES (choix de Marc, 2026-10-25) : la TVA est due à l'État.
   const htOf = (r: Row) => invoiceHT(parseAmount(r.amount), details[r.id]);

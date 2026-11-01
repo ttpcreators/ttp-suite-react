@@ -279,7 +279,7 @@ export function Idees() {
           <StatsBento phoneStrip
             className="mb-5"
             primary={{ eyebrow: "Idées publiées", value: String(publiee), caption: `sur ${rows.length} idée${rows.length > 1 ? "s" : ""} au total.` }}
-            bars={{ label: "Par statut", value: `${enCours} en cours`, series: [explorer, aFaire, enCours, publiee] }}
+            bars={{ label: "Par statut", value: `${aFaire} à faire`, series: [explorer, aFaire, enCours, publiee] }}
             small={{ value: String(enCours), label: "En cours" }}
             accent={{ value: String(explorer), label: "À explorer", icon: Sparkles }}
           />

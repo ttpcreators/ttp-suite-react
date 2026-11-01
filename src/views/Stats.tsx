@@ -1,3 +1,4 @@
+import { useRosterAudience } from "@/lib/rosterAudience";
 import { useStickyState } from "@/lib/useStickyState";
 import { lazyImport } from "@/lib/appUpdate";
 import { useEffect, useRef, useState, lazy, Suspense } from "react";
@@ -216,6 +217,7 @@ function CompareCard({ label, current, previous, delta, curLbl, prevLbl }: { lab
 export function Stats() {
   const [data, setData] = useState<StatsData | null>(() => getCache<StatsData>("statsData"));
   const [error, setError] = useState(false);
+  const cumFollowers = useRosterAudience();
   // Chiffre d'affaires et factures : fondateurs seulement (comme Facturation). Un membre
   // garde l'audience, l'engagement et l'activité.
   const money = useIsFounder() === true;
@@ -273,7 +275,7 @@ export function Stats() {
     const ym = new Date().toISOString().slice(0, 7); // "aaaa-mm"
     const cur: Snap = {
       activeCreators: data.creators.filter((c) => (c.status ?? "actif").toLowerCase() !== "inactif").length,
-      totalFollowers: data.creators.reduce((s, c) => s + parseCompact(c.followers), 0),
+      totalFollowers: data.creators.filter((c) => (c.status ?? "actif").toLowerCase() !== "inactif").reduce((s, c) => s + (cumFollowers[c.name.trim().toLowerCase()] || parseCompact(c.followers)), 0),
       avgEr: (() => { const v = data.creators.map((c) => parsePct(c.er)).filter((x) => x > 0); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : 0; })(),
       briefs: data.briefs,
     };
@@ -283,7 +285,7 @@ export function Stats() {
       if (JSON.stringify(fresh[ym]) === JSON.stringify(cur)) return; // déjà à jour ce mois
       await saveAppStateKey("statsSnapshots", { ...fresh, [ym]: cur });
     })();
-  }, [data]);
+  }, [data, cumFollowers]);
 
   if (error) {
     return <div className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">Impossible de charger les statistiques.</div>;
@@ -298,7 +300,9 @@ export function Stats() {
 
   // ── Agrégations ──
   const activeCreators = data.creators.filter((c) => (c.status ?? "actif").toLowerCase() !== "inactif").length;
-  const totalFollowers = data.creators.reduce((s, c) => s + parseCompact(c.followers), 0);
+  // Abonnés tous réseaux, créateurs actifs : même calcul et même total que le Roster.
+  const followersOf = (c: { name: string; followers: string | null }) => cumFollowers[c.name.trim().toLowerCase()] || parseCompact(c.followers);
+  const totalFollowers = data.creators.filter((c) => (c.status ?? "actif").toLowerCase() !== "inactif").reduce((s, c) => s + followersOf(c), 0);
   const erVals = data.creators.map((c) => parsePct(c.er)).filter((v) => v > 0);
   const avgEr = erVals.length ? erVals.reduce((s, v) => s + v, 0) / erVals.length : 0;
 
@@ -389,7 +393,7 @@ export function Stats() {
     { name: "Payé", value: byStatus.payee, color: COLORS.green },
     { name: "En attente", value: byStatus.attente, color: COLORS.amber },
     { name: "En retard", value: byStatus.retard, color: COLORS.rose },
-    { name: "Brouillon", value: byStatus.brouillon, color: COLORS.slate },
+    // Brouillons exclus : pas encore facturés, comme le total du CA (la légende fait le total).
   ].filter((d) => d.value > 0);
 
   // CA par créateur — « facturé » = hors brouillons, comme le KPI et la courbe.
@@ -404,9 +408,9 @@ export function Stats() {
     .sort((a, b) => b.ca - a.ca)
     .slice(0, 8);
 
-  // Followers par créateur
+  // Abonnés par créateur (tous réseaux, comme le Roster)
   const followersData = data.creators
-    .map((c) => ({ name: titleCase(c.name), followers: parseCompact(c.followers) }))
+    .map((c) => ({ name: titleCase(c.name), followers: followersOf(c) }))
     .filter((d) => d.followers > 0)
     .sort((a, b) => b.followers - a.followers)
     .slice(0, 8);
