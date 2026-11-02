@@ -18,6 +18,7 @@ import { boxesFor, createDraft, readThread, searchThreads, unreadCounts, type Ma
 import { ADMIN_TOOLS } from "./admin.ts";
 import { guessEventKind } from "../_shared/eventKind.ts";
 import { comptaSummary, type ComptaInv } from "../_shared/compta.ts";
+import { activityText } from "../_shared/activityText.ts";
 import { amountOf, contractList, invoiceTotals, owesMoney, pctOf, reversementRows, type Detail, type Payout } from "../_shared/reversements.ts";
 import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/audience.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
@@ -1540,10 +1541,13 @@ const journalActivite: Tool = {
     if (error) return fail(`Journal illisible : ${error.message}`);
     const q = str(a.recherche, 80).toLowerCase();
     const rows = ((data as Json[] | null) ?? []).filter((r) => !q || String(r.label ?? "").toLowerCase().includes(q));
-    const VERB: Record<string, string> = { add: "a ajouté", update: "a modifié", delete: "a supprimé" };
+    // Même phrase que la page Activité (« Marc a terminé la tâche … »).
     return ok([
       `# Activité · ${days} derniers jours · ${rows.length} action(s)`,
-      ...rows.map((r) => `- ${frDay(String(r.created_at).slice(0, 10))} ${String(r.created_at).slice(11, 16)} · ${r.actor_name ?? "?"} ${VERB[String(r.verb)] ?? r.verb} · ${r.entity} · ${r.label ?? ""}`),
+      ...rows.map((r) => {
+        const t = activityText({ verb: String(r.verb), entity: String(r.entity), label: String(r.label ?? ""), detail: null });
+        return `- ${frDay(String(r.created_at).slice(0, 10))} ${String(r.created_at).slice(11, 16)} · ${r.actor_name ?? "?"} ${t.action} · ${t.what}`;
+      }),
     ].join("\n"));
   },
 };
@@ -1564,12 +1568,188 @@ const corbeille: Tool = {
   },
 };
 
+// ── Stats, Bilans, Checklist, Posts Instagram, Sourcing, Notifications (audit du 2 nov., n° 20) ──
+const MOIS_FR = ["janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc."];
+const monthTxt = (ym: string) => `${MOIS_FR[Number(ym.slice(5, 7)) - 1] ?? ym} ${ym.slice(0, 4)}`;
+
+const stats: Tool = {
+  name: "stats",
+  title: "Stats de l'agence",
+  description: "Page Stats (réservé aux fondateurs) : chiffre d'affaires HT facturé et encaissé par mois d'ÉMISSION de la facture (hors brouillons et annulées), répartition par statut, créateurs actifs, abonnés cumulés tous réseaux, engagement moyen, briefs. Mêmes chiffres que la page Stats.",
+  inputSchema: { type: "object", properties: { mois: { type: "number", description: "Nombre de mois affichés (défaut 6)" } }, additionalProperties: false },
+  founder: true,
+  run: async (sb, _c, a) => {
+    const [{ data: inv, error }, { data: cr }, { count: briefs }] = await Promise.all([
+      sb.from("invoices").select("id, amount, status, date").limit(5000),
+      sb.from("creators").select("name, followers, er, status, ig, tt, yt"),
+      sb.from("briefs").select("id", { count: "exact", head: true }),
+    ]);
+    if (error) return fail(`Factures illisibles : ${error.message}`);
+    const st = await appState(sb);
+    const det = (st.invoiceDetails ?? {}) as Record<string, Detail & { issueDate?: string }>;
+    const byMonth = new Map<string, { tot: number; paid: number }>();
+    const byStatus: Record<string, number> = { payee: 0, attente: 0, retard: 0, brouillon: 0 };
+    for (const r of (inv as Json[] | null) ?? []) {
+      const ht = invoiceTotals(amountOf(r.amount), det[String(r.id)], 0).ht;
+      const s = String(r.status);
+      if (s in byStatus) byStatus[s] += ht;
+      const ym = String(det[String(r.id)]?.issueDate || r.date || "").slice(0, 7);
+      if (!/^\d{4}-\d{2}$/.test(ym)) continue;
+      const m = byMonth.get(ym) ?? { tot: 0, paid: 0 };
+      if (s !== "brouillon" && s !== "annulee") m.tot += ht;
+      if (s === "payee") m.paid += ht;
+      byMonth.set(ym, m);
+    }
+    const n = int(a.mois, 6, 1, 24);
+    const months = [...byMonth.keys()].sort().slice(-n);
+    const active = ((cr as Json[] | null) ?? []).filter((c) => String(c.status ?? "actif").toLowerCase() !== "inactif");
+    const hist = engHistory(st);
+    const followers = active.reduce((t, c) => t + audienceOf({ name: String(c.name), followers: c.followers, ig: c.ig as Json | null, tt: c.tt as Json | null, yt: c.yt as Json | null }, hist).total, 0);
+    const ers = active.map((c) => pctOf(c.er) ?? 0).filter((v) => v > 0);
+    const avgEr = ers.length ? ers.reduce((x, y) => x + y, 0) / ers.length : 0;
+    return ok([
+      `# Stats · CA facturé HT ${eur(byStatus.payee + byStatus.attente + byStatus.retard)} (payé ${eur(byStatus.payee)}, en attente ${eur(byStatus.attente)}, en retard ${eur(byStatus.retard)}) · brouillons ${eur(byStatus.brouillon)} hors total`,
+      `- ${active.length} créateurs actifs · ${compact(followers)} abonnés cumulés · engagement moyen ${avgEr.toFixed(2).replace(".", ",")} % · ${briefs ?? 0} briefs`,
+      "## Par mois d'émission (HT)",
+      ...months.map((m) => `- ${monthTxt(m)} : facturé ${eur(byMonth.get(m)!.tot)} · encaissé ${eur(byMonth.get(m)!.paid)}`),
+    ].join("\n"));
+  },
+};
+
+const bilans: Tool = {
+  name: "bilans",
+  title: "Bilans de campagne",
+  description: "Page Bilan (Debrief) : bilans de campagne enregistrés, marque × créateur, période, budget HT, CA généré / budget, couverture, engagement et points forts.",
+  inputSchema: { type: "object", properties: { marque: { type: "string" } }, additionalProperties: false },
+  run: async (sb, _c, a) => {
+    const st = await appState(sb);
+    const q = str(a.marque, 80).toLowerCase();
+    const list = (Array.isArray(st.debriefData) ? (st.debriefData as Json[]) : []).filter((d) => !q || String(d.brand ?? "").toLowerCase().includes(q));
+    const v = (x: unknown) => (x == null || String(x).trim() === "" ? "—" : String(x));
+    return ok([
+      `# Bilans · ${list.length}`,
+      ...list.map((d) => `- ${v(d.brand)}${d.creator ? ` × ${titleCase(String(d.creator))}` : ""} · ${v(d.period)} · budget ${v(d.budget)} · CA généré ${v(d.revenue)}${d.roi && d.roi !== "—" ? ` (${d.roi} le budget)` : ""} · couverture ${v(d.reach)} · engagement ${v(d.engagement)}${Array.isArray(d.highlights) && d.highlights.length ? ` · ${(d.highlights as unknown[]).slice(0, 3).join(" ; ")}` : ""}`),
+      list.length ? "" : "Aucun bilan enregistré.",
+    ].filter(Boolean).join("\n"));
+  },
+};
+
+// Étape de la collab à partir de laquelle chaque étape de la checklist est faite (src/lib/checklistCollab.ts).
+const CK_FROM: Record<string, number> = { "brief-1": 2, "brief-2": 2, "brief-3": 2, "prod-1": 4, "prod-2": 5, "prod-3": 5, "valid-1": 5, "valid-2": 5, "pub-1": 6, "pub-2": 6, "pub-3": 7, "fact-1": 8, "fact-2": 9, "fact-3": 10 };
+const checklist: Tool = {
+  name: "checklist",
+  title: "Checklist des collabs",
+  description: "Page Checklist : avancement de chaque checklist (14 étapes). Une checklist reliée à une collab suit l'étape de la collab (même règle que l'app) ; une checklist libre suit ses coches.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  run: async (sb) => {
+    const st = await appState(sb);
+    const { data: cs } = await sb.from("collabs").select("id, brand, creator, step, status");
+    const byId = new Map(((cs as Json[] | null) ?? []).map((c) => [String(c.id), c]));
+    const saved = Array.isArray(st.checklists) ? (st.checklists as Json[]) : [];
+    const used = new Set(saved.map((c) => String(c.collabId ?? "")).filter(Boolean));
+    const rows = saved.map((ck) => {
+      const c = ck.collabId ? byId.get(String(ck.collabId)) : undefined;
+      const done = c ? Object.values(CK_FROM).filter((from) => Number(c.step) >= from).length : Object.values((ck.done ?? {}) as Record<string, boolean>).filter(Boolean).length;
+      return `- ${ck.name} · ${done}/14${c ? ` · suit la collab ${c.brand} × ${titleCase(String(c.creator ?? ""))} (étape ${c.step}/11)` : " · sans collab"}`;
+    });
+    for (const c of byId.values()) {
+      if (used.has(String(c.id)) || !["active", "gagnee"].includes(String(c.status))) continue;
+      rows.push(`- ${c.brand} × ${titleCase(String(c.creator ?? "").split(/\s+/)[0])} · ${Object.values(CK_FROM).filter((from) => Number(c.step) >= from).length}/14 · suit la collab (étape ${c.step}/11)`);
+    }
+    return ok([`# Checklist · ${rows.length}`, ...rows].join("\n"));
+  },
+};
+
+const postsInstagram: Tool = {
+  name: "posts_instagram",
+  title: "Posts Instagram programmés",
+  description: "Page Posts Instagram (compte de l'agence) : publications programmées, brouillons, publiées ou en erreur, avec date, type et légende.",
+  inputSchema: { type: "object", properties: { statut: { type: "string", enum: ["brouillon", "programme", "publie", "erreur"] } }, additionalProperties: false },
+  run: async (sb, _c, a) => {
+    let q = sb.from("ig_planned").select("kind, caption, scheduled_at, status, permalink, error, published_at").order("scheduled_at", { ascending: true, nullsFirst: false }).limit(100);
+    if (str(a.statut)) q = q.eq("status", str(a.statut));
+    const { data, error } = await q;
+    if (error) return fail(`Posts illisibles : ${error.message}`);
+    const rows = (data as Json[] | null) ?? [];
+    return ok([
+      `# Posts Instagram · ${rows.length}`,
+      ...rows.map((r) => `- ${r.scheduled_at ? `${frDay(String(r.scheduled_at).slice(0, 10))} ${String(r.scheduled_at).slice(11, 16)}` : "sans date"} · ${r.kind ?? "post"} · ${r.status}${r.permalink ? ` · ${r.permalink}` : ""}${r.error ? ` · erreur : ${String(r.error).slice(0, 80)}` : ""} · ${String(r.caption ?? "").replace(/\s+/g, " ").slice(0, 120)}`),
+      rows.length ? "" : "Aucun post programmé.",
+    ].filter(Boolean).join("\n"));
+  },
+};
+
+const sourcing: Tool = {
+  name: "sourcing",
+  title: "Sourcing et radar à marques",
+  description: "Page Sourcing : radar à marques (marques citées par les créatrices, les plus actives d'abord, avec le nombre de posts et de partenariats payés) et agences concurrentes suivies (abonnés). Filtre facultatif par marque.",
+  inputSchema: { type: "object", properties: { marque: { type: "string" }, limite: { type: "number" } }, additionalProperties: false },
+  run: async (sb, _c, a) => {
+    const lim = int(a.limite, 20, 1, 100);
+    let q = sb.from("ig_radar").select("brand, posts, status, last_seen").order("last_seen", { ascending: false }).limit(1000);
+    if (str(a.marque)) q = q.ilike("brand", like(str(a.marque, 80)));
+    const [{ data, error }, { data: rv }] = await Promise.all([q, sb.from("ig_rivals").select("username, self, data")]);
+    if (error) return fail(`Radar illisible : ${error.message}`);
+    const brands = ((data as Json[] | null) ?? []).map((r) => {
+      const posts = Array.isArray(r.posts) ? (r.posts as Json[]) : [];
+      return { brand: String(r.brand), n: posts.length, paid: posts.filter((p) => p.paid).length, creators: new Set(posts.map((p) => String(p.c))).size, status: String(r.status ?? ""), last: String(r.last_seen ?? "").slice(0, 10) };
+    }).filter((b) => b.status !== "ignore").sort((x, y) => y.paid - x.paid || y.creators - x.creators || y.n - x.n).slice(0, lim);
+    const rivals = ((rv as Json[] | null) ?? []).filter((r) => !r.self);
+    return ok([
+      `# Radar à marques · ${brands.length} affichée(s)`,
+      ...brands.map((b) => `- @${b.brand} · ${b.n} post(s), ${b.paid} payé(s), ${b.creators} créatrice(s)${b.status ? ` · ${b.status}` : ""} · vu ${b.last}`),
+      `## Agences concurrentes suivies · ${rivals.length}`,
+      ...rivals.map((r) => `- @${r.username}${(r.data as Json | null)?.followers ? ` · ${compact(Number((r.data as Json).followers))} abonnés` : ""}`),
+    ].join("\n"));
+  },
+};
+
+const notifications: Tool = {
+  name: "notifications",
+  title: "Notifications",
+  description: "La cloche de l'app : factures en retard, briefs à valider, prochains rendez-vous, nouveautés des créateurs (7 jours), mails reçus (72 h), ce que l'équipe a fait (3 jours), bugs ouverts. Les notifications effacées dans l'app n'y sont pas. (« Lu » est propre à chaque appareil : non disponible ici.)",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  founder: true,
+  run: async (sb) => {
+    const today = isoDay();
+    const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+    const d3 = new Date(Date.now() - 3 * 86400000).toISOString();
+    const [inv, br, ev, td, idc, mail, bugs, team] = await Promise.all([
+      sb.from("invoices").select("id, ref, party, amount, status, date").in("status", ["retard", "attente"]),
+      sb.from("briefs").select("id, brand, creator").eq("status", "valider"),
+      sb.from("events").select("id, date, time, title").or("deleted.is.null,deleted.eq.false").gte("date", today).order("date").limit(3),
+      sb.from("todos").select("text, creator, created_at").eq("source", "creator").gte("created_at", weekAgo).limit(8),
+      sb.from("ideas").select("text, creator, created_at").eq("source", "creator").gte("created_at", weekAgo).limit(8),
+      sb.from("email_activity").select("subject, contact_name, contact_email, created_at, gmail_message_id").eq("direction", "in").gte("created_at", d3).order("created_at", { ascending: false }).limit(8),
+      sb.from("error_log").select("*").gte("created_at", weekAgo).limit(100),
+      sb.from("agency_activity").select("id, actor_name, verb, entity, label, detail, created_at").gte("created_at", d3).order("created_at", { ascending: false }).limit(15),
+    ]);
+    const st = await appState(sb);
+    const gone = new Set((Array.isArray(st.notifDismissed) ? (st.notifDismissed as unknown[]) : []).map(String));
+    const out: [string, string][] = [];
+    for (const r of (inv.data as Json[] | null) ?? []) if (invoiceLate(r, today)) out.push([`inv:${r.id}`, `Facture en retard · ${r.ref} · ${r.party} · ${money(r.amount)}`]);
+    for (const r of (br.data as Json[] | null) ?? []) out.push([`brief:${r.id}`, `Brief à valider · ${r.brand}${r.creator ? ` × ${titleCase(String(r.creator))}` : ""}`]);
+    for (const r of (ev.data as Json[] | null) ?? []) out.push([`ev:${r.id}`, `Rendez-vous · ${frDay(String(r.date))}${r.time && r.time !== "—" ? ` ${r.time}` : ""} · ${r.title}`]);
+    for (const r of (td.data as Json[] | null) ?? []) out.push([`ctd:${r.created_at}:${String(r.text).slice(0, 40)}`, `Nouvelle tâche d'un créateur · ${titleCase(String(r.creator ?? ""))} · ${r.text}`]);
+    for (const r of (idc.data as Json[] | null) ?? []) out.push([`cid:${r.created_at}:${String(r.text).slice(0, 40)}`, `Nouvelle idée d'un créateur · ${titleCase(String(r.creator ?? ""))} · ${r.text}`]);
+    for (const r of (mail.data as Json[] | null) ?? []) out.push([`mail:${r.gmail_message_id ?? r.created_at}`, `Mail reçu · ${r.contact_name || r.contact_email || "Contact"} · ${r.subject || "(sans objet)"}`]);
+    const openBugs = ((bugs.data as Json[] | null) ?? []).filter((b) => !b.resolved_at);
+    if (openBugs.length) out.push([`bug:${openBugs[0].id}`, `${openBugs.length} bug(s) à regarder · ${String(openBugs[0].message ?? "").slice(0, 90)}`]);
+    for (const r of (team.data as Json[] | null) ?? []) {
+      const t = activityText({ verb: String(r.verb), entity: String(r.entity), label: String(r.label ?? ""), detail: (r.detail as string | null) ?? null });
+      out.push([`team:${r.id}`, `${r.actor_name ?? "L'équipe"} ${t.action} · ${t.what}`]);
+    }
+    const shown = out.filter(([id]) => !gone.has(id));
+    return ok([`# Notifications · ${shown.length}`, ...shown.map(([, t]) => `- ${t}`), shown.length ? "" : "Rien de nouveau."].filter(Boolean).join("\n"));
+  },
+};
+
 export const TOOLS: Tool[] = [
   pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif, aValider, ecarterProposition,
   creerTache, creerEvenement, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur,
   lireBrief, resumerBrief,
-  compta, journalActivite, corbeille,
+  compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, notifications,
   ...ADMIN_TOOLS,
 ];
 

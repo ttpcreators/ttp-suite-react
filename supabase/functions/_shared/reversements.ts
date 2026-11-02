@@ -79,11 +79,10 @@ export function mandatesFrom(history: unknown): Record<string, boolean> {
 }
 
 /** Qui encaisse l'argent de la marque : l'agence ou le créateur. */
-export function cashModeFor(collabId: unknown, creator: unknown, collabModes: Record<string, string>, mandates: Record<string, boolean>): "agence" | "createur" {
+/** Comme l'app : le réglage de la collab, sinon « agence » (le contrat ne réécrit pas le passé). */
+export function cashModeFor(collabId: unknown, _creator: unknown, collabModes: Record<string, string>, _mandates: Record<string, boolean>): "agence" | "createur" {
   const set = collabId ? collabModes[String(collabId)] : undefined;
-  if (set === "agence" || set === "createur") return set;
-  if (set === "mandat") return "agence";
-  return mandates[key(creator)] === false ? "createur" : "agence";
+  return set === "createur" ? "createur" : "agence";
 }
 
 export type RevInvoice = { id: string; amount: unknown; status: unknown; creator: unknown; collab_id?: unknown };

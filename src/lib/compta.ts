@@ -325,15 +325,15 @@ export function collabTake(c: CollabLite, lines: InvoiceLine[], rate: number, mo
 }
 
 /**
- * Mode d'encaissement : réglage de la collab, sinon celui du contrat de représentation
- * du créateur (« mandat d'encaissement » oui → agence, non → créateur), sinon agence.
+ * Mode d'encaissement : le réglage de la collab, sinon « agence ». Chaque nouvelle collab
+ * reçoit son réglage à sa création (page Compta, défaut « createur ») ; une collab plus
+ * ancienne sans réglage a été encaissée par l'agence. Le contrat de représentation n'est
+ * plus lu ici : un nouveau contrat (« le talent encaisse ») ne doit pas réécrire le passé.
  */
-export function cashModeFor(collabId: string | null | undefined, creator: string | null | undefined, collabModes: Record<string, string>, creatorMandates: Record<string, boolean>): CashMode {
+export function cashModeFor(collabId: string | null | undefined, _creator: string | null | undefined, collabModes: Record<string, string>, _creatorMandates: Record<string, boolean>): CashMode {
   const set = collabId ? collabModes[collabId] : undefined;
   if (set === "agence" || set === "createur") return set;
-  if (set === "mandat") return "agence"; // l'agence encaisse, facture au nom du créateur
-  const m = creatorMandates[k(creator)];
-  return m === false ? "createur" : "agence";
+  return "agence"; // « mandat » : l'agence encaisse, facture au nom du créateur
 }
 
 /** Au nom de qui facturer la marque pour cette collab : son choix, sinon le réglage par défaut. */
