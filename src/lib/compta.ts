@@ -161,6 +161,9 @@ export function invoiceLine(inv: ComptaInvoice, detail: ComptaDetail | null | un
       owedCreator = cents(t.reversal + t.tva);
     }
   }
+  // Franchise de TVA (choix de Marc, 2 nov. 2026) : aucune TVA n'est comptée, y compris celle
+  // portée par d'anciennes factures.
+  if (s.vatRegime === "franchise") vatDue = 0;
   return {
     id: inv.id,
     collabId: inv.collab_id ?? null,

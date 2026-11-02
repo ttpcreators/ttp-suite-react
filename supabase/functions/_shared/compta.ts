@@ -53,6 +53,7 @@ function lineOf(inv: ComptaInv, d: (Detail & { issueDate?: string; dueDate?: str
     if (billed === "agence") { agencyCA = t.ht; vatDue = t.tva; owedCreator = t.reversal; }
     else { agencyCA = t.commission; vatDue = s.vatRegime === "assujetti" ? cents((t.commission * s.vatRate) / 100) : 0; owedCreator = cents(t.reversal + t.tva); }
   }
+  if (s.vatRegime === "franchise") vatDue = 0; // franchise : aucune TVA comptée (comme l'app)
   return { creator: k(inv.creator), paid, day, agencyCA: cents(agencyCA), vatDue: cents(vatDue), social: cents((agencyCA * socialRate(s)) / 100), cashIn: cents(cashIn), owedCreator: cents(owedCreator) };
 }
 

@@ -108,12 +108,7 @@ export function Compta() {
       })
       .filter((x) => x.t.commission > 0)
       .sort((a, b) => Number(a.t.received) - Number(b.t.received) || b.t.commission - a.t.commission);
-    // Factures émises avec TVA alors que le réglage dit franchise : nommées, pour les régulariser.
-    const vatRefs = settings.vatRegime === "franchise"
-      ? lines.filter((l) => l.kind === "marque" && l.tva > 0 && l.mode === "agence").map((l) => invoices.find((iv) => iv.id === l.id)?.ref ?? "").filter(Boolean)
-      : [];
-    const vatOnInvoices = vatRefs.length > 0;
-    return { box, takes, alerts: thresholdAlerts(box.caYear, settings), vatOnInvoices, vatRefs, modes };
+    return { box, takes, alerts: thresholdAlerts(box.caYear, settings), modes };
   }, [invoices, collabs, app, creators, settings, local]);
 
   if (!computed) {
@@ -123,7 +118,7 @@ export function Compta() {
       <AnimatedBadge status="loading" size="sm">Chargement…</AnimatedBadge>
     );
   }
-  const { box, takes, alerts, vatOnInvoices, vatRefs, modes } = computed;
+  const { box, takes, alerts, modes } = computed;
 
   const saveMode = async (collabId: string, value: string) => {
     if (savingId || modes[collabId] === value) return;
@@ -159,7 +154,7 @@ export function Compta() {
           Réglages par défaut : {ACTIVITIES[settings.activity].label}, {pct(socialRate(settings))} de cotisations, franchise de TVA. À confirmer avec « Régler ».
         </div>
       )}
-      {[...alerts, ...(vatOnInvoices ? [{ level: "wait" as const, text: `Franchise de TVA, mais ${vatRefs.length > 1 ? "ces factures portent" : "cette facture porte"} de la TVA : ${vatRefs.join(", ")}. Émises avant le passage en franchise : la TVA facturée reste due à l'État, à régulariser avec le comptable (avoir). Les nouvelles factures partent sans TVA.` }] : [])].map((a) => (
+      {alerts.map((a) => (
         <div key={a.text} className={cn("rounded-2xl px-4 py-3 text-[13px]", a.level === "late" ? "bg-dangersoft text-dangertext" : a.level === "wait" ? "bg-wait-soft text-wait" : "bg-panel text-muted-foreground")}>
           {a.text}
         </div>
