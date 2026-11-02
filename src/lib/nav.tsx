@@ -188,6 +188,7 @@ export const NAV: NavFamily[] = [
         icon: TtpInvoice,
         children: [
           { id: "factures", label: "Factures" },
+          { id: "devis", label: "Devis" },
           { id: "relances", label: "Relances", icon: TtpBell, pinnable: true },
         ],
       },

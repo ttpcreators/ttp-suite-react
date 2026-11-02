@@ -1,4 +1,6 @@
-import { takeInvoicePrefill } from "@/lib/invoicePrefill";
+import { peekInvoicePrefill, putInvoicePrefill, takeInvoicePrefill } from "@/lib/invoicePrefill";
+import { addDaysISO, nextQuoteRef, quoteShownStatus, QUOTE_STATUS_LABEL, QUOTE_STATUS_OPTIONS, QUOTE_VALIDITY_DAYS, type QuoteShownStatus, type QuoteStatus } from "@/lib/quotes";
+import { useSetNavSub } from "@/lib/navSub";
 import { setCollabLink } from "@/lib/collabLinksDb";
 import { CollabField, ObjectCollabLink } from "@/components/collab-links";
 import { fmtDay, toISODate } from "@/lib/dates";
@@ -22,12 +24,13 @@ import {
   EyeOff,
   ChevronRight,
   Check,
+  FileSignature,
 } from "@/components/icons";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { cn, titleCase } from "@/lib/utils";
-import { parseAmount, formatEuro, useAppState, saveAppStateKey, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { parseAmount, formatEuro, useAppState, saveAppStateKey, mergeAppStateKey, listAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import type { AnimatedBadgeStatus } from "@/components/ui/be-ui-animated-badge";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
@@ -119,9 +122,29 @@ type Draft = Details & {
   status: InvoiceStatus;
   /** Nouvelle facture : collab à relier à l'enregistrement (« Créer la facture » d'une collab, champ « Collab »). */
   collabId?: string;
+  /** « devis » : l'éditeur travaille sur un devis (onglet Devis), pas une facture. */
+  doc?: "devis";
+  /** Statut du devis (le champ `status` reste celui d'une facture). */
+  quoteStatus?: QuoteStatus;
+  /** Facture créée depuis ce devis : il passe « Accepté » et pointe vers elle à l'enregistrement. */
+  fromQuote?: string;
   /** Saisie brute des champs numériques (clé « id:qty », « id:unit », « commission ») :
    *  garde « 1250, » tel quel pendant la frappe, sinon la virgule disparaît. */
   raw?: Record<string, string>;
+};
+
+/** Devis enregistré (blob agence, clé `quotes`). `dueDate` y est la date de validité. */
+type Quote = Details & {
+  id: string;
+  ref: string;
+  brand: string;
+  creator: string;
+  status: QuoteStatus;
+  createdAt: string;
+  collabId?: string;
+  /** Facture créée depuis ce devis. */
+  invoiceId?: string;
+  invoiceRef?: string;
 };
 
 // ─── Constantes ──────────────────────────────────────────────────────────────
@@ -272,8 +295,13 @@ function invoiceHTML(o: {
   totals: Totals;
   /** Identité du créateur (facture au nom et pour le compte du créateur). */
   creatorLegal?: { address?: string | null; siren?: string | null } | null;
+  /** « devis » : même document, titré Devis, avec la date de validité et le « Bon pour accord ». */
+  doc?: "devis";
 }): string {
-  const { issuer, bank, details: d, ref, brand, creator, totals } = o;
+  const { issuer, details: d, ref, brand, creator, totals } = o;
+  const quote = o.doc === "devis";
+  // Un devis ne se règle pas : pas de coordonnées bancaires.
+  const bank = quote ? null : o.bank;
   // Mandat : le créateur est le vendeur, l'agence émet la facture pour son compte.
   const mandat = !!d.onBehalf && !!creator && d.kind !== "commission";
   const sellerName = mandat ? titleCase(creator as string) : issuer.name;
@@ -281,7 +309,7 @@ function invoiceHTML(o: {
     ? [o.creatorLegal?.address ?? "", o.creatorLegal?.siren ? `SIREN ${o.creatorLegal.siren}` : ""].filter(Boolean).map((l) => `<div>${esc(l)}</div>`).join("")
     : "";
   const mandatLine = mandat
-    ? `Facture émise par ${issuer.name}${issuer.siret ? ` (SIRET ${issuer.siret})` : ""} au nom et pour le compte de ${titleCase(creator as string)}, en vertu d'un mandat de facturation.`
+    ? `${quote ? "Devis émis" : "Facture émise"} par ${issuer.name}${issuer.siret ? ` (SIRET ${issuer.siret})` : ""} au nom et pour le compte de ${titleCase(creator as string)}, en vertu d'un mandat de facturation.`
     : "";
 
   const issuerLegal = [
@@ -335,6 +363,19 @@ function invoiceHTML(o: {
       ? `<section class="sec"><h2>Notes</h2><div class="pre">${esc(d.notes)}</div></section>`
       : "";
 
+  // Devis : cadre de signature du client (acceptation).
+  const accordBlock = quote
+    ? `<section class="sec accord"><h2>Bon pour accord</h2><div class="sign">
+       <div>Date</div><div>Nom, signature et cachet du client, précédés de la mention « Bon pour accord »</div></div></section>`
+    : "";
+  const legalText = quote
+    ? `Devis valable jusqu'au ${frDate(d.dueDate)}. Pour l'accepter, retournez-le daté et signé, précédé de la mention
+  « Bon pour accord ». Les prestations acceptées seront facturées aux montants indiqués ci-dessus.${d.franchise ? " TVA non applicable, art. 293 B du CGI." : ""}`
+    : `Conditions de règlement : paiement par virement au plus tard le ${frDate(d.dueDate)}.
+  En cas de retard de paiement, application de pénalités égales à trois fois le taux d'intérêt légal, ainsi qu'une
+  indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 et D441-5 du Code de commerce).
+  Pas d'escompte pour paiement anticipé.${d.franchise ? " TVA non applicable, art. 293 B du CGI." : ""}`;
+
   const css = `
 .parties{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6mm;margin-top:10mm}
 .parties h3{margin:0 0 2.5mm;font-size:7pt;font-weight:600;letter-spacing:.24em;text-transform:uppercase;color:var(--grey)}
@@ -358,6 +399,9 @@ table.lines tr{break-inside:avoid}
 .tr.total span:first-child{font-size:7pt;font-weight:600;letter-spacing:.24em;text-transform:uppercase}
 .tr.total .v{font-family:var(--serif);font-size:24pt;line-height:1;color:var(--accent)}
 .iban{margin-top:1mm;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.accord{break-inside:avoid}
+.sign{display:grid;grid-template-columns:1fr 2fr;gap:5mm;margin-top:2mm}
+.sign div{height:26mm;border:.5pt solid var(--soft);border-radius:2mm;padding:2.5mm 3mm;font-size:7.6pt;line-height:1.5;color:var(--grey)}
 .legal{margin-top:10mm;padding-top:3.5mm;border-top:.5pt solid var(--soft);font-size:7.6pt;line-height:1.6;color:var(--faint)}
 `;
 
@@ -366,21 +410,21 @@ table.lines tr{break-inside:avoid}
   const who = brand || d.clientName || "";
   const first = creator ? titleCase(creator).split(" ")[0].toLowerCase() : "";
   const withCreator = creator && !who.toLowerCase().includes(first) ? `${who} x ${titleCase(creator)}` : who;
-  const fileTitle = pdfFileTitle(`Facture ${ref}`, withCreator);
+  const fileTitle = pdfFileTitle(`${quote ? "Devis" : "Facture"} ${ref}`, withCreator);
   return `${docHead(fileTitle, css)}<body><div class="wrap">
 <header class="mast"><span class="id">${ttpLogoImg(30)}<span><span class="wm">${esc(issuer.name)}</span></span></span>
 <span class="r"><b>N° ${esc(ref)}</b></span></header>
-<p class="kicker">Facture</p>
+<p class="kicker">${quote ? "Devis" : "Facture"}</p>
 <h1>N° <i>${esc(ref)}</i></h1>
 <dl class="meta">
-  <div class="row"><dt>Émise le</dt><span class="lead"></span><dd>${frDate(d.issueDate)}</dd></div>
-  <div class="row"><dt>Échéance</dt><span class="lead"></span><dd>${frDate(d.dueDate)}</dd></div>
+  <div class="row"><dt>${quote ? "Émis le" : "Émise le"}</dt><span class="lead"></span><dd>${frDate(d.issueDate)}</dd></div>
+  <div class="row"><dt>${quote ? "Valable jusqu'au" : "Échéance"}</dt><span class="lead"></span><dd>${frDate(d.dueDate)}</dd></div>
 </dl>
 
 <div class="parties">
   <div><h3>${mandat ? "Vendeur" : "Émetteur"}</h3><div class="name">${esc(sellerName)}</div><div class="addr">${mandat ? sellerLegal : issuerLegal}</div>
     ${mandat ? `<div class="addr" style="margin-top:2mm">Émise par ${esc(issuer.name)}, mandataire</div>` : ""}</div>
-  <div><h3>Facturé à</h3><div class="name">${esc(d.clientName || brand)}</div><div class="addr">${clientLegal}</div>
+  <div><h3>${quote ? "Client" : "Facturé à"}</h3><div class="name">${esc(d.clientName || brand)}</div><div class="addr">${clientLegal}</div>
     ${d.tpoRef && d.tpoRef.trim() ? `<div class="tpo"><span>Réf. TPO</span> ${esc(d.tpoRef)}</div>` : ""}</div>
   <div><h3>Prestation</h3><div class="name">${d.kind === "commission" ? "Commission d'agence" : esc(brand)}</div>
     ${creator ? `<div class="addr">Créateur : ${esc(titleCase(creator))}</div>` : ""}</div>
@@ -399,12 +443,10 @@ table.lines tr{break-inside:avoid}
 
 ${bankBlock}
 ${notesBlock}
+${accordBlock}
 
 <div class="legal">
-  Conditions de règlement : paiement par virement au plus tard le ${frDate(d.dueDate)}.
-  En cas de retard de paiement, application de pénalités égales à trois fois le taux d'intérêt légal, ainsi qu'une
-  indemnité forfaitaire pour frais de recouvrement de 40 € (art. L441-10 et D441-5 du Code de commerce).
-  Pas d'escompte pour paiement anticipé.${d.franchise ? " TVA non applicable, art. 293 B du CGI." : ""}${mandatLine ? `<br>${esc(mandatLine)}` : ""}
+  ${legalText}${mandatLine ? `<br>${esc(mandatLine)}` : ""}
   <br>Document généré par TTP Suite.
 </div>
 </div></body></html>`;
@@ -491,6 +533,66 @@ function StatusPicker({ row, onPick }: { row: { status: string; date: string | n
   );
 }
 
+const QUOTE_BADGE: Record<QuoteShownStatus, AnimatedBadgeStatus> = {
+  brouillon: "neutral",
+  envoye: "info",
+  accepte: "success",
+  refuse: "neutral",
+  expire: "warning",
+};
+
+/** Badge de statut d'un devis, cliquable comme celui des factures (« Expiré » est calculé, pas choisi). */
+function QuoteStatusPicker({ status, shown, onPick }: { status: QuoteStatus; shown: QuoteShownStatus; onPick: (s: QuoteStatus) => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" onClick={(e) => e.stopPropagation()} title="Changer le statut" aria-label={`Statut : ${QUOTE_STATUS_LABEL[shown]}. Changer`} className="rounded-full transition-opacity hover:opacity-80">
+          <AnimatedBadge status={QUOTE_BADGE[shown]} size="sm">{QUOTE_STATUS_LABEL[shown]}</AnimatedBadge>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-44 p-1" onClick={(e) => e.stopPropagation()}>
+        {QUOTE_STATUS_OPTIONS.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            onClick={() => {
+              setOpen(false);
+              if (o.value !== status) onPick(o.value);
+            }}
+            className="flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-rowhover"
+          >
+            {o.label}
+            {o.value === status && <Check className="h-3.5 w-3.5 text-primary" />}
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Détails enregistrés d'une facture ou d'un devis (sans le numéro, la marque ni le statut). */
+function detailPartOf(draft: Draft): Details {
+  return {
+    clientName: draft.clientName,
+    clientEmail: draft.clientEmail,
+    clientAddress: draft.clientAddress,
+    clientSiret: draft.clientSiret,
+    clientVat: draft.clientVat,
+    tpoRef: draft.tpoRef,
+    issueDate: draft.issueDate,
+    dueDate: draft.dueDate,
+    items: draft.items,
+    franchise: draft.franchise,
+    vatRate: draft.vatRate,
+    commissionRate: draft.commissionRate,
+    bankId: draft.bankId,
+    notes: draft.notes,
+    ...(draft.kind === "commission" ? { kind: "commission" as const } : {}),
+    ...(draft.kind !== "commission" && draft.onBehalf !== undefined ? { onBehalf: draft.onBehalf } : {}),
+  };
+}
+
 /** Nouvelle facture vide (brouillon, TVA 20 % par défaut, modifiable par facture). */
 function blankDraft(refs: string[], bankId: string): Draft {
   return {
@@ -518,7 +620,14 @@ function blankDraft(refs: string[], bankId: string): Draft {
 
 // ─── Vue ─────────────────────────────────────────────────────────────────────
 
-export function Facturation() {
+/** Onglet Devis de la page Facturation : même écran, sur les devis. */
+export function Devis() {
+  return <Facturation mode="devis" />;
+}
+
+export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis" } = {}) {
+  const quoteMode = mode === "devis";
+  const setNavSub = useSetNavSub();
   const [rows, setRows] = useState<Row[] | null>(() => getCache<Row[]>("invoices"));
   const [error, setError] = useState(false);
   const { query } = useSearch();
@@ -544,9 +653,11 @@ export function Facturation() {
   const [banks, setBanks] = useState<BankAccount[]>([]);
   const [details, setDetails] = useState<Record<string, Details>>({});
   const [commissions, setCommissions] = useState<Record<string, number>>({});
+  const [quotes, setQuotes] = useState<Quote[]>([]);
   const inited = useRef(false);
 
   const [statusFilter, setStatusFilter] = useStickyState<InvoiceStatus | "Tous">("facturation:statut", ["Tous", "brouillon", "attente", "payee", "retard", "annulee"], "Tous");
+  const [quoteFilter, setQuoteFilter] = useStickyState<QuoteShownStatus | "Tous">("devis:statut", ["Tous", "brouillon", "envoye", "accepte", "refuse", "expire"], "Tous");
   const [period, setPeriod] = useState("");
   const [draft, setDraft] = useState<Draft | null>(null);
   const [issuerDraft, setIssuerDraft] = useState<Issuer | null>(null);
@@ -604,14 +715,23 @@ export function Facturation() {
     setBanks((appData.invoiceBankAccounts as BankAccount[]) ?? []);
     setDetails((appData.invoiceDetails as Record<string, Details>) ?? {});
     setCommissions((appData.creatorCommission as Record<string, number>) ?? {});
+    setQuotes(Array.isArray(appData.quotes) ? (appData.quotes as Quote[]) : []);
   }, [appData]);
 
-  // « Créer le devis » depuis Tarifs : nouvelle facture en brouillon, lignes remplies, pas
-  // encore enregistrée (quitter sans enregistrer demande confirmation).
+  // Préparé ailleurs : « Créer le devis » (Tarifs) → nouveau devis ; « Créer la facture » (collab,
+  // Compta) ou « Transformer en facture » (devis accepté) → nouvelle facture. Rien n'est encore
+  // enregistré (quitter sans enregistrer demande confirmation). Ce qui est préparé pour l'autre
+  // onglet (Devis / Factures) y est envoyé sans être lu ici.
   // Le roster doit être lu : le taux de commission vient de la fiche du créateur (sinon la
   // facture partait au taux par défaut, et Reversements suit le taux DE LA FACTURE).
   useEffect(() => {
     if (!rows || !appData || !creators.length) return;
+    const peek = peekInvoicePrefill();
+    if (!peek) return;
+    if ((peek.doc === "devis") !== quoteMode) {
+      setNavSub(peek.doc === "devis" ? "devis" : "factures");
+      return;
+    }
     const p = takeInvoicePrefill();
     if (!p) return;
     const blank = blankDraft(rows.map((r) => r.ref), ((appData.invoiceBankAccounts as BankAccount[]) ?? [])[0]?.id ?? "");
@@ -621,16 +741,23 @@ export function Facturation() {
       : p.creator
         ? rateFor(p.creator, commissionMap(creators), (appData.creatorCommission as Record<string, number>) ?? {}, DEFAULT_COMMISSION)
         : blank.commissionRate;
+    const base: Draft = quoteMode
+      ? { ...blank, ref: nextQuoteRef(((appData.quotes as Quote[]) ?? []).map((q) => q.ref)), dueDate: addDaysISO(todayISO(), QUOTE_VALIDITY_DAYS), doc: "devis", quoteStatus: "brouillon" }
+      : blank;
+    const fromQuote = p.details
+      ? { ...p.details, items: p.details.items.map((it) => ({ ...it, id: uid() })), ...(p.fromQuote ? { fromQuote: p.fromQuote } : {}) }
+      : null;
     setDraft({
-      ...blank, creator: p.creator, brand: p.brand, commissionRate, items: lines.length ? lines : blank.items,
+      ...base, creator: p.creator, brand: p.brand, commissionRate, items: lines.length ? lines : base.items,
       ...(p.collabId ? { collabId: p.collabId } : {}),
       ...(p.kind === "commission" ? { kind: "commission" as const, clientName: p.brand } : {}),
       ...(p.franchise !== undefined ? { franchise: p.franchise } : {}),
       ...(p.onBehalf !== undefined ? { onBehalf: p.onBehalf } : {}),
+      ...(fromQuote ?? {}),
     });
-    setBaseline(draftSnapshot(blank));
+    setBaseline(draftSnapshot(base));
     setConfirmLeave(false);
-  }, [rows, appData, creators]);
+  }, [rows, appData, creators, quoteMode, setNavSub]);
 
 
   // Erreur seulement si rien n'est chargé : un raté de rafraîchissement garde la liste.
@@ -733,7 +860,10 @@ export function Facturation() {
 
   // ── Éditeur ──
   function openCreate() {
-    const d: Draft = { ...blankDraft(invoices.map((r) => r.ref), banks[0]?.id ?? ""), onBehalf: readSettings(appData?.comptaSettings).facturation === "mandat" };
+    const base: Draft = { ...blankDraft(invoices.map((r) => r.ref), banks[0]?.id ?? ""), onBehalf: readSettings(appData?.comptaSettings).facturation === "mandat" };
+    const d: Draft = quoteMode
+      ? { ...base, ref: nextQuoteRef(quotes.map((q) => q.ref)), dueDate: addDaysISO(todayISO(), QUOTE_VALIDITY_DAYS), doc: "devis", quoteStatus: "brouillon" }
+      : base;
     setDraft(d);
     setBaseline(draftSnapshot(d));
     setConfirmLeave(false);
@@ -776,6 +906,134 @@ export function Facturation() {
     setDraft(null);
   }
 
+  // ── Devis ──
+  /** Ouvre un devis sur sa version RELUE à l'instant (un autre poste a pu le modifier). */
+  async function openEditQuote(q: Quote) {
+    if (editorLoading) return;
+    setEditorLoading(true);
+    setConfirmLeave(false);
+    let fresh: Quote | undefined;
+    try {
+      invalidateAppState();
+      fresh = ((await getAppState())["quotes"] as Quote[] | undefined)?.find((x) => x.id === q.id);
+    } catch {
+      setEditorLoading(false);
+      toast("Lecture impossible : réessaie dans un instant");
+      return;
+    }
+    const src = fresh ?? q;
+    const next: Draft = { ...src, tpoRef: src.tpoRef ?? "", status: "brouillon", doc: "devis", quoteStatus: src.status };
+    setDraft(next);
+    setBaseline(draftSnapshot(next));
+    setEditorLoading(false);
+  }
+
+  /** Enregistre un devis (entrée par entrée dans le blob agence : un autre poste ne perd pas le sien). */
+  async function doSaveQuote(draft: Draft) {
+    const isNew = !draft.id;
+    invalidateAppState();
+    let freshQuotes: Quote[];
+    try {
+      freshQuotes = ((await getAppState())["quotes"] as Quote[] | undefined) ?? [];
+    } catch {
+      toast("Erreur, réessaie");
+      return;
+    }
+    const prev = draft.id ? freshQuotes.find((x) => x.id === draft.id) : undefined;
+    const quote: Quote = {
+      ...detailPartOf(draft),
+      id: draft.id ?? `q${uid()}`,
+      // Numéro recalculé juste avant la création (deux postes en même temps : pas de doublon).
+      ref: isNew ? nextQuoteRef(freshQuotes.map((x) => x.ref)) : draft.ref,
+      brand: draft.brand.trim(),
+      creator: draft.creator,
+      status: draft.quoteStatus ?? "brouillon",
+      createdAt: prev?.createdAt ?? todayISO(),
+      ...(draft.collabId ? { collabId: draft.collabId } : {}),
+      ...(prev?.invoiceId ? { invoiceId: prev.invoiceId, invoiceRef: prev.invoiceRef } : {}),
+    };
+    if (!(await listAppStateKey("quotes", [quote], [], true))) {
+      toast("Erreur, réessaie");
+      return;
+    }
+    setQuotes((list) => (list.some((x) => x.id === quote.id) ? list.map((x) => (x.id === quote.id ? quote : x)) : [quote, ...list]));
+    toast(isNew ? `Devis ${quote.ref} créé ✓` : "Devis modifié ✓");
+    setConfirmLeave(false);
+    setMobilePreview(false);
+    setDraft(null);
+  }
+
+  /** Change un seul champ d'un devis enregistré (statut…), affiché tout de suite, annulé si la base refuse. */
+  async function patchQuote(q: Quote, patch: Partial<Quote>, okMsg?: string) {
+    const next = { ...q, ...patch };
+    setQuotes((list) => list.map((x) => (x.id === q.id ? next : x)));
+    if (!(await listAppStateKey("quotes", [next]))) {
+      setQuotes((list) => list.map((x) => (x.id === q.id ? q : x)));
+      toast("Devis non enregistré, réessaie");
+      return false;
+    }
+    if (okMsg) toast(okMsg);
+    return true;
+  }
+
+  async function deleteQuote(q: Quote) {
+    if (!(await listAppStateKey("quotes", [], [q.id]))) return toast("Suppression impossible, réessaie");
+    setQuotes((list) => list.filter((x) => x.id !== q.id));
+    toast(`Devis ${q.ref} supprimé`);
+  }
+
+  function quoteHTML(q: Quote): string {
+    const t = totalsOf(q.items ?? [], q.franchise, q.vatRate, q.commissionRate);
+    return invoiceHTML({ issuer, bank: null, details: { ...q, tpoRef: q.tpoRef ?? "" }, ref: q.ref, brand: q.brand, creator: q.creator || null, totals: t, creatorLegal: legalOf(q.creator), doc: "devis" });
+  }
+
+  /** Mail au client + impression du PDF à joindre ; un brouillon passe « Envoyé ». */
+  function sendQuote(q: Quote) {
+    const t = totalsOf(q.items ?? [], q.franchise, q.vatRate, q.commissionRate);
+    const amount = q.franchise ? `${euro2(t.ht)} HT` : `${euro2(t.ht)} HT (${euro2(t.ttc)} TTC)`;
+    const subject = `Devis ${q.ref} · ${issuer.name}`;
+    const body = [
+      `Bonjour,`,
+      ``,
+      `Veuillez trouver ci-joint notre devis ${q.ref} d'un montant de ${amount}, valable jusqu'au ${frDate(q.dueDate)}.`,
+      `Pour l'accepter, il vous suffit de nous le retourner daté et signé, avec la mention « Bon pour accord ».`,
+      ``,
+      `Bien cordialement,`,
+      issuer.name,
+    ].join("\n");
+    window.location.href = `mailto:${encodeURIComponent(q.clientEmail || "")}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+    printHtml(quoteHTML(q));
+    if (q.status === "brouillon") void patchQuote(q, { status: "envoye" }, `Devis ${q.ref} marqué « Envoyé »`);
+  }
+
+  /** Devis accepté → nouvelle facture (onglet Factures) avec tout son contenu, à vérifier puis enregistrer. */
+  function convertQuote(q: Quote) {
+    if (q.invoiceId) return toast(`Ce devis est déjà la facture ${q.invoiceRef ?? ""}`.trim());
+    const ok = putInvoicePrefill({
+      creator: q.creator,
+      brand: q.brand,
+      lines: [],
+      franchise: q.franchise,
+      ...(q.onBehalf !== undefined ? { onBehalf: q.onBehalf } : {}),
+      ...(q.collabId ? { collabId: q.collabId } : {}),
+      fromQuote: q.id,
+      details: {
+        clientName: q.clientName,
+        clientEmail: q.clientEmail,
+        clientAddress: q.clientAddress,
+        clientSiret: q.clientSiret,
+        clientVat: q.clientVat,
+        tpoRef: q.tpoRef ?? "",
+        items: q.items ?? [],
+        vatRate: q.vatRate,
+        commissionRate: q.commissionRate,
+        notes: q.notes,
+      },
+    });
+    if (!ok) return toast("Impossible de préparer la facture");
+    setNavSub("factures");
+  }
+
   async function saveDraft() {
     if (!draft || savingRef.current) return;
     if (!draft.brand.trim()) {
@@ -785,7 +1043,7 @@ export function Facturation() {
     savingRef.current = true;
     setSaving(true);
     try {
-      await doSaveDraft(draft);
+      await (draft.doc === "devis" ? doSaveQuote(draft) : doSaveDraft(draft));
     } catch {
       toast("Erreur, réessaie");
     } finally {
@@ -846,24 +1104,7 @@ export function Facturation() {
     }
 
     // Détails riches (blob)
-    const detailPart: Details = {
-      clientName: draft.clientName,
-      clientEmail: draft.clientEmail,
-      clientAddress: draft.clientAddress,
-      clientSiret: draft.clientSiret,
-      clientVat: draft.clientVat,
-      tpoRef: draft.tpoRef,
-      issueDate: draft.issueDate,
-      dueDate: draft.dueDate,
-      items: draft.items,
-      franchise: draft.franchise,
-      vatRate: draft.vatRate,
-      commissionRate: draft.commissionRate,
-      bankId: draft.bankId,
-      notes: draft.notes,
-      ...(draft.kind === "commission" ? { kind: "commission" as const } : {}),
-      ...(draft.kind !== "commission" && draft.onBehalf !== undefined ? { onBehalf: draft.onBehalf } : {}),
-    };
+    const detailPart = detailPartOf(draft);
     // Relire FRAIS avant de fusionner : deux postes peuvent créer des factures en
     // parallèle → sinon l'instantané local périmé écrase les détails de l'autre.
     invalidateAppState();
@@ -873,6 +1114,14 @@ export function Facturation() {
     } catch {
       toast("Facture enregistrée, mais pas ses détails : clique de nouveau sur « Enregistrer »");
       return;
+    }
+    // Facture tirée d'un devis : le devis passe « Accepté » et garde le numéro de sa facture.
+    if (isNew && draft.fromQuote) {
+      const q = ((freshState["quotes"] as Quote[]) ?? []).find((x) => x.id === draft.fromQuote);
+      if (q) {
+        const done: Quote = { ...q, status: "accepte", invoiceId: id, invoiceRef: summary.ref };
+        if (await listAppStateKey("quotes", [done])) setQuotes((list) => list.map((x) => (x.id === done.id ? done : x)));
+      }
     }
     const freshDetails = (freshState["invoiceDetails"] as Record<string, Details>) ?? {};
     const nextDetails = { ...freshDetails, [id]: detailPart };
@@ -1007,21 +1256,25 @@ export function Facturation() {
           creator: draft.creator || null,
           totals: draftTotals,
           creatorLegal: legalOf(draft.creator),
+          doc: draft.doc,
         })
       : "";
   const dirty = !!draft && draftSnapshot(draft) !== baseline;
   // « Envoyer au client » (mail + PDF) part des détails ENREGISTRÉS : proposé seulement
   // pour une facture déjà enregistrée et sans modification en attente.
-  const savedRow = draft?.id ? invoices.find((x) => x.id === draft.id) : undefined;
-  const canSend = !!savedRow && !dirty;
+  const isQuote = draft?.doc === "devis" || (!draft && quoteMode);
+  const docWord = isQuote ? "devis" : "facture";
+  const savedRow = draft?.id && !isQuote ? invoices.find((x) => x.id === draft.id) : undefined;
+  const savedQuote = draft?.id && isQuote ? quotes.find((x) => x.id === draft.id) : undefined;
+  const canSend = (!!savedRow || !!savedQuote) && !dirty;
 
   function renderEditor() {
-    const crumb = draft ? (draft.id ? `N° ${draft.ref}` : "Nouvelle facture") : "Ouverture…";
+    const crumb = draft ? (draft.id ? `N° ${draft.ref}` : isQuote ? "Nouveau devis" : "Nouvelle facture") : "Ouverture…";
     const bar = (
       <div className="mb-5 flex min-h-[46px] flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-border bg-panel px-4 py-2 text-[13px]">
         <nav aria-label="Fil d'Ariane" className="flex min-w-0 items-center gap-1.5">
           <button type="button" onClick={() => closeEditor()} className="shrink-0 text-muted-foreground transition-colors hover:text-foreground">
-            Factures
+            {isQuote ? "Devis" : "Factures"}
           </button>
           <ChevronRight className="h-3.5 w-3.5 shrink-0 text-faint" />
           <span className="truncate font-medium text-foreground">{crumb}</span>
@@ -1050,14 +1303,15 @@ export function Facturation() {
         <div>
           {bar}
           <div className="grid place-items-center rounded-2xl border border-border bg-surface py-20">
-            <Loader variant="dots" size={18} className="text-faint" label="Ouverture de la facture" />
+            <Loader variant="dots" size={18} className="text-faint" label={`Ouverture du ${isQuote ? "devis" : "document"}`} />
           </div>
         </div>
       );
     }
 
     const who = draft.brand.trim() ? (draft.creator ? `${draft.brand.trim()} × ${firstName(draft.creator)}` : draft.brand.trim()) : "";
-    const subtitle = [who, draft.id ? metaOf(draft.status).label : "Numéro confirmé à l'enregistrement"].filter(Boolean).join(" · ");
+    const statusLabel = isQuote ? QUOTE_STATUS_LABEL[quoteShownStatus({ status: draft.quoteStatus ?? "brouillon", validUntil: draft.dueDate }, todayISO())] : metaOf(draft.status).label;
+    const subtitle = [who, draft.id ? statusLabel : "Numéro confirmé à l'enregistrement", savedQuote?.invoiceRef ? `Facture ${savedQuote.invoiceRef}` : ""].filter(Boolean).join(" · ");
     const setItem = (id: string, patch: Partial<LineItem>, raw?: Record<string, string>) =>
       setDraft({ ...draft, raw: raw ? { ...draft.raw, ...raw } : draft.raw, items: draft.items.map((x) => (x.id === id ? { ...x, ...patch } : x)) });
     const cellCls =
@@ -1078,7 +1332,7 @@ export function Facturation() {
         <div className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
           <div className="min-w-0">
             <h2 className="text-[24px] font-semibold leading-tight tracking-[-0.02em] text-foreground md:text-[28px]">
-              {draft.id ? `Facture ${draft.ref}` : "Nouvelle facture"}
+              {draft.id ? `${isQuote ? "Devis" : "Facture"} ${draft.ref}` : isQuote ? "Nouveau devis" : "Nouvelle facture"}
             </h2>
             <p className="mt-1 text-[14px] text-muted-foreground">{subtitle}</p>
           </div>
@@ -1090,9 +1344,14 @@ export function Facturation() {
             <button type="button" onClick={() => setMobilePreview(true)} className={cn(editorBtn, "xl:hidden")}>
               <Eye className="h-4 w-4" /> Aperçu
             </button>
-            {canSend && savedRow && (
-              <button type="button" onClick={() => sendInvoice(savedRow)} className={editorBtn}>
+            {canSend && (savedRow || savedQuote) && (
+              <button type="button" onClick={() => (savedQuote ? sendQuote(savedQuote) : savedRow && sendInvoice(savedRow))} className={editorBtn}>
                 <Send className="h-4 w-4" /> Envoyer au client
+              </button>
+            )}
+            {canSend && savedQuote && !savedQuote.invoiceId && (
+              <button type="button" onClick={() => convertQuote(savedQuote)} className={editorBtn}>
+                <FileSignature className="h-4 w-4" /> Transformer en facture
               </button>
             )}
             <button type="button" onClick={() => printHtml(liveHtml)} className={editorBtn}>
@@ -1100,7 +1359,7 @@ export function Facturation() {
             </button>
             <button type="button" onClick={saveDraft} disabled={saving} className={cn(editorPrimaryBtn, "max-sm:flex-1")}>
               {saving ? <Spin size={15} /> : <Check className="h-4 w-4" />}
-              {saving ? "Enregistrement…" : "Enregistrer la facture"}
+              {saving ? "Enregistrement…" : `Enregistrer ${isQuote ? "le devis" : "la facture"}`}
             </button>
           </div>
         </div>
@@ -1127,7 +1386,7 @@ export function Facturation() {
                     }
                   />
                 </Field>
-                {draft.id ? (
+                {draft.id && !isQuote ? (
                   <ObjectCollabLink table="invoices" id={draft.id} creator={draft.creator} withLabel />
                 ) : (
                   <CollabField value={draft.collabId ?? ""} onChange={(v) => setDraft({ ...draft, collabId: v || undefined })} creator={draft.creator} />
@@ -1138,7 +1397,7 @@ export function Facturation() {
                 <TextField label="SIRET du client" value={draft.clientSiret} onChange={(v) => setDraft({ ...draft, clientSiret: v })} />
                 <TextField label="N° TVA du client" value={draft.clientVat} onChange={(v) => setDraft({ ...draft, clientVat: v })} />
                 <TextField label="Référence TPO" value={draft.tpoRef} onChange={(v) => setDraft({ ...draft, tpoRef: v.trim() })} placeholder="TPO20261470" />
-                <Field label="N° de facture">
+                <Field label={`N° de ${docWord}`}>
                   <div
                     className="flex h-[42px] items-center gap-2 rounded-lg border border-border bg-muted px-3 text-sm tabular-nums text-foreground"
                     title={draft.id ? undefined : "Le numéro est recalculé juste avant l'enregistrement, pour éviter tout doublon."}
@@ -1147,17 +1406,23 @@ export function Facturation() {
                     {!draft.id && <span className="ml-auto shrink-0 text-[11.5px] text-faint">provisoire</span>}
                   </div>
                 </Field>
-                <TextField label="Émise le" type="date" value={draft.issueDate} onChange={(v) => setDraft({ ...draft, issueDate: v })} />
-                <TextField label="Échéance" type="date" value={draft.dueDate} onChange={(v) => setDraft({ ...draft, dueDate: v })} />
+                <TextField label={isQuote ? "Émis le" : "Émise le"} type="date" value={draft.issueDate} onChange={(v) => setDraft({ ...draft, issueDate: v })} />
+                <TextField label={isQuote ? "Valable jusqu'au" : "Échéance"} type="date" value={draft.dueDate} onChange={(v) => setDraft({ ...draft, dueDate: v })} />
                 <Field label="Statut">
-                  <Picker ariaLabel="Statut" value={draft.status} onChange={(v) => setDraft({ ...draft, status: v as InvoiceStatus })} options={STATUS_OPTIONS} />
+                  {isQuote ? (
+                    <Picker ariaLabel="Statut" value={draft.quoteStatus ?? "brouillon"} onChange={(v) => setDraft({ ...draft, quoteStatus: v as QuoteStatus })} options={QUOTE_STATUS_OPTIONS} />
+                  ) : (
+                    <Picker ariaLabel="Statut" value={draft.status} onChange={(v) => setDraft({ ...draft, status: v as InvoiceStatus })} options={STATUS_OPTIONS} />
+                  )}
                 </Field>
-                <Field label="Compte bancaire">
-                  <Picker ariaLabel="Compte bancaire" value={draft.bankId} onChange={(v) => setDraft({ ...draft, bankId: v })} options={bankOptions} />
-                </Field>
+                {!isQuote && (
+                  <Field label="Compte bancaire">
+                    <Picker ariaLabel="Compte bancaire" value={draft.bankId} onChange={(v) => setDraft({ ...draft, bankId: v })} options={bankOptions} />
+                  </Field>
+                )}
               </div>
               <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1">
-                <button type="button" onClick={openBanks} className={linkBtn}>Gérer les comptes bancaires</button>
+                {!isQuote && <button type="button" onClick={openBanks} className={linkBtn}>Gérer les comptes bancaires</button>}
                 <button type="button" onClick={() => setIssuerDraft(issuer)} className={linkBtn}>Informations émetteur</button>
               </div>
             </EditorSection>
@@ -1224,9 +1489,9 @@ export function Facturation() {
 
               <div className="mt-4 grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2">
                 {draft.kind !== "commission" && (
-                  <Field label="Facture au nom de">
+                  <Field label={isQuote ? "Devis au nom de" : "Facture au nom de"}>
                     <Picker
-                      ariaLabel="Facture au nom de"
+                      ariaLabel={isQuote ? "Devis au nom de" : "Facture au nom de"}
                       value={draft.onBehalf ? "mandat" : "agence"}
                       onChange={(v) => setDraft({ ...draft, onBehalf: v === "mandat" })}
                       options={[
@@ -1254,7 +1519,7 @@ export function Facturation() {
                 </Field>
               </div>
 
-              {/* Totaux (identiques à la facture) + part agence / créateur (interne, non imprimée) */}
+              {/* Totaux (identiques au document) + part agence / créateur (interne, non imprimée) */}
               <div className="mt-5 flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-start sm:justify-between">
                 <dl className="order-2 min-w-0 sm:order-1 sm:max-w-[240px]">
                   <div className="text-[12px] font-medium text-muted-foreground">Interne, non imprimé</div>
@@ -1269,7 +1534,7 @@ export function Facturation() {
               </div>
             </EditorSection>
 
-            <EditorSection title="Notes" hint="Facultatif, imprimées sur la facture.">
+            <EditorSection title="Notes" hint={`Facultatif, imprimées sur ${isQuote ? "le devis" : "la facture"}.`}>
               <textarea
                 value={draft.notes}
                 onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
@@ -1283,7 +1548,7 @@ export function Facturation() {
           {/* ── Aperçu vivant (ordinateur) ── */}
           {showPreview && (
             <div className="sticky top-4 hidden min-w-0 xl:block">
-              <InvoiceSheet html={liveHtml} title={`Facture ${draft.ref}`} className="h-[calc(100dvh-150px)] min-h-[560px]" />
+              <InvoiceSheet html={liveHtml} title={`${isQuote ? "Devis" : "Facture"} ${draft.ref}`} className="h-[calc(100dvh-150px)] min-h-[560px]" />
             </div>
           )}
         </div>
@@ -1303,10 +1568,146 @@ export function Facturation() {
               </>
             }
           >
-            <InvoiceSheet html={liveHtml} title={`Facture ${draft.ref}`} className="h-[62vh] p-2 sm:p-3" />
+            <InvoiceSheet html={liveHtml} title={`${isQuote ? "Devis" : "Facture"} ${draft.ref}`} className="h-[62vh] p-2 sm:p-3" />
           </Modal>
         )}
       </div>
+    );
+  }
+
+  // ── Liste des devis (onglet Devis) ──
+  function renderQuotes() {
+    const today = todayISO();
+    const shown = (q: Quote) => quoteShownStatus({ status: q.status, validUntil: q.dueDate }, today);
+    const htOfQuote = (q: Quote) => totalsOf(q.items ?? [], q.franchise, q.vatRate, q.commissionRate);
+    const list = quotes.filter((q) => matchQuery(query, q.ref, q.brand, q.creator, q.clientName) && (quoteFilter === "Tous" || shown(q) === quoteFilter));
+    const pending = quotes.filter((q) => shown(q) === "envoye");
+    const accepted = quotes.filter((q) => q.status === "accepte");
+    const answered = quotes.filter((q) => ["accepte", "refuse", "expire"].includes(shown(q)));
+    const sumHT = (l: Quote[]) => l.reduce((a, q) => a + htOfQuote(q).ht, 0);
+    const chips = [{ value: "Tous", label: "Tous" }, ...(["brouillon", "envoye", "accepte", "refuse", "expire"] as const).map((v) => ({ value: v, label: QUOTE_STATUS_LABEL[v] }))];
+    const tiles = [
+      { label: "En attente de réponse", value: euroUi(sumHT(pending)), foot: `${pending.length} devis envoyé${pending.length > 1 ? "s" : ""}, HT` },
+      { label: "Acceptés", value: euroUi(sumHT(accepted)), foot: `${accepted.length} devis, HT`, strong: true },
+      { label: "Taux d'acceptation", value: answered.length ? `${Math.round((accepted.length / answered.length) * 100)} %` : "—", foot: "sur les devis acceptés, refusés ou expirés" },
+    ];
+    return (
+      <>
+        <PageHeaderRow>
+          <div className="text-sm text-muted-foreground">
+            {quotes.length} devis
+          </div>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setIssuerDraft(issuer)} className={cn(ghostBtn, "ios-phone-hide flex items-center gap-1.5")} title="Informations émetteur">
+              <Settings2 className="h-3.5 w-3.5" />
+              <span>Émetteur</span>
+            </button>
+            <AddButton label="Devis" onClick={openCreate} />
+          </div>
+        </PageHeaderRow>
+
+        {quotes.length > 0 && (
+          <div className="mb-5 grid grid-cols-1 gap-px overflow-hidden rounded-2xl border border-border bg-border sm:grid-cols-3">
+            {tiles.map((k) => (
+              <div key={k.label} className="flex min-w-0 flex-col bg-surface px-4 py-4 sm:px-5">
+                <span className="text-[12px] leading-snug text-muted-foreground sm:text-[13px]">{k.label}</span>
+                <span className={cn("mt-2 truncate text-[20px] font-semibold leading-none tracking-tight tabular-nums sm:text-[24px]", k.strong && "text-signaltext")}>{k.value}</span>
+                <span className="mt-2.5 text-[12px] leading-snug text-muted-foreground">{k.foot}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <FilterBar value={quoteFilter} onChange={(v) => setQuoteFilter(v as QuoteShownStatus | "Tous")} options={chips} className="min-w-0 flex-1 md:min-w-auto md:flex-initial" />
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-border bg-surface">
+          <div className="hidden grid-cols-[1.1fr_2fr_1fr_1fr_1.1fr_1.4fr] gap-3 border-b border-border px-4 py-3 text-[12px] text-muted-foreground md:grid">
+            <span>Réf.</span>
+            <span>Marque × Créateur</span>
+            <span className="text-right">Montant HT</span>
+            <span className="text-right">TTC</span>
+            <span className="text-center">Valable jusqu'au</span>
+            <span className="text-right">Statut</span>
+          </div>
+          {quotes.length === 0 ? (
+            <div className="px-4 py-8 text-center">
+              <div className="text-sm font-medium text-foreground">Aucun devis</div>
+              <div className="mt-1.5 text-xs text-faint">Crée ton premier devis avec « + Devis », ou depuis Tarifs avec « Créer le devis ».</div>
+            </div>
+          ) : list.length === 0 ? (
+            <div className="px-4 py-8 text-center text-sm text-muted-foreground">
+              {query.trim() ? `Aucun résultat pour « ${query} »` : "Aucun devis pour ce filtre."}
+            </div>
+          ) : (
+            list.map((q) => {
+              const t = htOfQuote(q);
+              const st = shown(q);
+              const party = q.creator ? `${q.brand} × ${firstName(q.creator)}` : q.brand;
+              const items: ActionItem[] = [
+                { key: "edit", label: "Modifier", icon: Pencil, onClick: () => void openEditQuote(q) },
+                { key: "preview", label: "Aperçu", icon: Eye, onClick: () => setPreview({ html: quoteHTML(q), ref: q.ref, email: q.clientEmail, brand: party }) },
+                { key: "send", label: "Envoyer au client", icon: Send, onClick: () => sendQuote(q) },
+                { key: "download", label: "Enregistrer en PDF", icon: Download, onClick: () => printHtml(quoteHTML(q)) },
+                ...(q.invoiceId ? [] : [{ key: "invoice", label: "Transformer en facture", icon: FileSignature, onClick: () => convertQuote(q) }]),
+                { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => void deleteQuote(q), confirm: { title: "Supprimer le devis", message: `Supprimer le devis ${q.ref} (${party}) ?${q.invoiceRef ? ` Sa facture ${q.invoiceRef} reste.` : ""}`, confirmLabel: "Supprimer" } },
+              ];
+              const badge = (
+                <QuoteStatusPicker
+                  status={q.status}
+                  shown={st}
+                  onPick={(v) => {
+                    void patchQuote(q, { status: v }, v === "accepte" && !q.invoiceId ? `Devis ${q.ref} accepté : « Transformer en facture » dans son menu` : `Devis ${q.ref} : ${QUOTE_STATUS_LABEL[v]}`);
+                  }}
+                />
+              );
+              const linked = q.invoiceRef ? <span className="text-[11px] text-muted-foreground">Facture {q.invoiceRef}</span> : null;
+              return (
+                <div key={q.id} className="border-b border-border last:border-0">
+                  <div onClick={() => void openEditQuote(q)} className="hidden cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-rowhover md:grid md:grid-cols-[1.1fr_2fr_1fr_1fr_1.1fr_1.4fr]">
+                    <span className="whitespace-nowrap text-[11px] font-medium text-faint">#{q.ref}</span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-foreground">{party || "—"}</span>
+                      {linked}
+                    </span>
+                    <span className="text-right text-[13px] font-medium tabular-nums text-foreground">{euroUi(t.ht)}</span>
+                    <span className="text-right text-[12px] tabular-nums text-muted-foreground">{euroUi(t.ttc)}</span>
+                    <span className="text-center text-[11px] font-medium text-muted-foreground">{uiDate(q.dueDate)}</span>
+                    <span className="flex items-center justify-end gap-2">
+                      {badge}
+                      <span onClick={(e) => e.stopPropagation()}>
+                        <ActionMenu items={items} />
+                      </span>
+                    </span>
+                  </div>
+                  <div onClick={() => void openEditQuote(q)} className="flex cursor-pointer flex-col gap-2 px-3 py-3 md:hidden">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 text-[10px] font-medium text-faint">
+                          <FileText className="h-3 w-3" /> #{q.ref}
+                        </div>
+                        <div className="mt-0.5 truncate text-[15px] font-semibold text-foreground">{party || "—"}</div>
+                        {linked}
+                      </div>
+                      {badge}
+                    </div>
+                    <div className="flex items-center justify-between gap-2 border-t border-border pt-2.5">
+                      <span className="flex flex-col">
+                        <span className="text-lg font-bold tracking-tight text-foreground">{euroUi(t.ht)} <span className="text-[11px] font-medium text-muted-foreground">HT</span></span>
+                        <span className="text-[11px] font-medium text-muted-foreground">Valable jusqu'au {uiDate(q.dueDate)}</span>
+                      </span>
+                      <span onClick={(e) => e.stopPropagation()}>
+                        <ActionMenu items={items} />
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </>
     );
   }
 
@@ -1315,11 +1716,11 @@ export function Facturation() {
       <div ref={editorTop} className="-mb-4 scroll-mt-4" />
       {/* Téléphone : la facture s'ouvre en feuille (comme les autres « + »), pas dans la page. */}
       {editing && phone ? (
-        <IosSheet onClose={() => closeEditor()} label={draft?.id ? `Facture ${draft.ref}` : "Nouvelle facture"}>
+        <IosSheet onClose={() => closeEditor()} label={draft?.id ? `${isQuote ? "Devis" : "Facture"} ${draft.ref}` : isQuote ? "Nouveau devis" : "Nouvelle facture"}>
           <div className="max-h-[92dvh] overflow-y-auto overscroll-contain rounded-t-[22px] bg-background px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-7">{renderEditor()}</div>
         </IosSheet>
       ) : null}
-      {editing && !phone ? renderEditor() : (<>
+      {editing && !phone ? renderEditor() : quoteMode ? renderQuotes() : (<>
       {/* En-tête */}
       <PageHeaderRow>
         <div className="text-sm text-muted-foreground">
@@ -1660,7 +2061,7 @@ export function Facturation() {
             </>
           }
         >
-          <iframe title={`Facture ${preview.ref}`} srcDoc={preview.html} sandbox="" className="h-[62vh] w-full rounded-lg border border-border bg-white" />
+          <iframe title={`Document ${preview.ref}`} srcDoc={preview.html} sandbox="" className="h-[62vh] w-full rounded-lg border border-border bg-white" />
         </Modal>
       )}
     </>
