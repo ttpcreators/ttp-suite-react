@@ -232,6 +232,8 @@ export function CreatorDetail({
   // Lignes des factures (blob) : le CA encaissé s'affiche en HORS TAXES (choix de Marc, 2026-10-25).
   const { data: invDetails } = useAppState<Record<string, InvoiceDetailLike>>((s: AppState) => (s["invoiceDetails"] as Record<string, InvoiceDetailLike>) ?? {});
   const { data: deadlinesRemote } = useAppState<CtDeadline[]>((s: AppState) => (s["contractDeadlines"] as CtDeadline[]) ?? []);
+  // Contrats de représentation enregistrés (pour l'alerte « contrat manquant »).
+  const { data: repHistory } = useAppState<{ creator?: string }[]>((s: AppState) => (s["contractHistory"] as { creator?: string }[]) ?? []);
   // Copie locale prioritaire après enregistrement du contrat (le blob ne se
   // resynchronise qu'au prochain tick live, ~20 s) — effacée dès que le remote arrive.
   const [deadlinesLocal, setDeadlinesLocal] = useState<CtDeadline[] | null>(null);
@@ -642,6 +644,19 @@ export function CreatorDetail({
           </div>
         )}
         <div className="flex min-w-0 flex-col gap-4">
+          {(() => {
+            // Ce qui manque pour facturer juste : la commission et le contrat de représentation.
+            const key = (c?.name ?? "").trim().toLowerCase();
+            const missing = [
+              !c?.commission?.trim() ? "Commission manquante : renseigne-la (« Modifier ») ou fais son contrat de représentation." : "",
+              key && repHistory && !repHistory.some((h) => (h.creator ?? "").trim().toLowerCase() === key) ? "Aucun contrat de représentation enregistré : fais-le dans Contrats › Représentation." : "",
+            ].filter(Boolean);
+            return missing.length ? (
+              <div role="alert" className="rounded-2xl border border-amber/40 bg-amber/10 px-4 py-3 text-[13px] leading-relaxed text-foreground">
+                {missing.map((m) => <div key={m}>{m}</div>)}
+              </div>
+            ) : null;
+          })()}
           <div className="rounded-2xl border border-border bg-surface p-5">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
               {sectionTitle(IdCard, "Coordonnées")}
@@ -1073,9 +1088,9 @@ export function CreatorDetail({
           totalFollowers > 0 ? followersSub : undefined,
         )}
         {stat(
-          "Engagement",
+          "Engagement (sur les vues)",
           mainEntry ? mainEntry.er : (c?.er ?? null),
-          mainEntry ? `${mainEntry.platformLabel} · au ${mainEntry.date}` : undefined,
+          mainEntry ? `${mainEntry.platformLabel} · ses statistiques au ${mainEntry.date}` : undefined,
         )}
         {founder && stat("CA encaissé HT", caEncaisse > 0 ? formatEuro(caEncaisse) : null)}
         {stat("Couverture", c?.reach ?? null)}

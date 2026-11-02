@@ -1,3 +1,4 @@
+import { guessEventKind } from "@/lib/eventKind";
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { EventCalendar, type Ev } from "@/components/ui/event-calendar";
@@ -101,7 +102,7 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
           date: ((r.date as string) && (r.date as string).trim()) ? (r.date as string) : todayISO(),
           time: (r.time as string) ?? "—",
           title: (r.title as string) ?? "",
-          type: (r.type as string) ?? "call",
+          type: (r.type as string) ?? guessEventKind(r.title as string),
           who: (r.who as string | null) ?? null,
           description: (r.description as string | null) ?? null,
         })) as Ev[];

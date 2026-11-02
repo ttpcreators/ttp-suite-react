@@ -27,6 +27,10 @@ export type InvoicePrefill = {
   franchise?: boolean;
   onBehalf?: boolean;
   doc?: "devis";
+  /** Devise du cachet de la collab (« 550 USD ») : la facture s'ouvre dans cette devise, taux à saisir. */
+  currency?: string;
+  /** Taux de commission de la collab (contrat selon l'origine du deal) : prioritaire sur celui de la fiche. */
+  commissionRate?: number;
   fromQuote?: string;
   details?: {
     clientName: string;

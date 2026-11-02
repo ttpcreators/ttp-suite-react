@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseCommissionPct, commissionMap, DEFAULT_COMMISSION } from "./commission";
+import { parseCommissionPct, commissionMap, collabRateFor, contractRatesFrom, DEFAULT_COMMISSION } from "./commission";
 
 describe("parseCommissionPct", () => {
   it("lit les formats courants", () => {
@@ -49,5 +49,27 @@ describe("commissionMap", () => {
 
   it("DEFAULT_COMMISSION vaut 20", () => {
     expect(DEFAULT_COMMISSION).toBe(20);
+  });
+});
+
+
+describe("commission du contrat", () => {
+  const history = [
+    { creator: "Justine Gentet", createdAt: "2026-07-31", config: { modeCommission: "parOrigine", commUniforme: "17", commApportee: "25", commInitiee: "20", commAutonome: "0" } },
+    { creator: "Ivana", createdAt: "2026-11-02", config: { modeCommission: "uniforme", commUniforme: "20", commApportee: "30", commInitiee: "15", commAutonome: "0" } },
+  ];
+  const contracts = contractRatesFrom(history);
+  it("suit l'origine du deal quand le contrat a un barème par origine", () => {
+    expect(collabRateFor("JUSTINE GENTET", "agence", contracts, {})).toBe(25);
+    expect(collabRateFor("Justine Gentet", "talent", contracts, {})).toBe(20);
+    expect(collabRateFor("Justine Gentet", "autonome", contracts, {})).toBe(0);
+  });
+  it("applique le taux unique d'un contrat uniforme, sauf deal géré seul", () => {
+    expect(collabRateFor("Ivana", "talent", contracts, {})).toBe(20);
+    expect(collabRateFor("Ivana", "autonome", contracts, {})).toBe(0);
+  });
+  it("reprend la fiche sans contrat", () => {
+    expect(collabRateFor("Léna", "agence", contracts, { "Léna": 20 })).toBe(20);
+    expect(collabRateFor("Inconnue", "agence", contracts, {})).toBe(DEFAULT_COMMISSION);
   });
 });

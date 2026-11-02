@@ -76,7 +76,7 @@ export function InstagramCard({ creatorId, name, ig, onChange, className }: {
         <>
           <div className="grid grid-cols-2 gap-2">
             {cell("Abonnés", fmtCompact(ig.followers), delta ? `${delta > 0 ? "+" : "−"}${fmtCompact(Math.abs(delta))} en 30 j` : undefined)}
-            {cell("Engagement public", fmtEr(ig.er), "12 derniers posts")}
+            {cell("Engagement (sur les abonnés)", fmtEr(ig.er), "Meta · 12 derniers posts")}
             {cell("Rythme", fmtPerWeek(ig.perWeek))}
             {cell("Dernier post", fmtAgoSince(ig.lastPost) || EMPTY)}
           </div>

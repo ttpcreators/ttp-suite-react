@@ -1,3 +1,5 @@
+import { relanceRefOf } from "@/lib/relance";
+import { recordReminder } from "@/lib/useRelanceInvoices";
 import { supabase } from "@/lib/supabase";
 import { TtpChecklist, TtpClock, TtpMission, TtpPlanning, TtpProgress, TtpRepeat } from "@/components/icons/ttp-icons";
 import { cn, titleCase } from "@/lib/utils";
@@ -469,6 +471,14 @@ export function Todo() {
     if (saved) {
       setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, ...saved } : r)));
       notifyTaskDone(row, status);
+      // Tâche de relance d'une facture cochée : la relance est notée sur la facture.
+      const ref = status === "Fait" && !row.done ? relanceRefOf(`${row.text} ${row.descr ?? ""}`) : null;
+      if (ref) {
+        void supabase.from("invoices").select("id").eq("ref", ref).limit(1).then(async ({ data }) => {
+          const invId = (data as { id: string }[] | null)?.[0]?.id;
+          if (invId && (await recordReminder(invId))) toast(`Relance notée sur la facture ${ref}`);
+        });
+      }
     } else {
       toast("Statut non enregistré, réessaie");
     }

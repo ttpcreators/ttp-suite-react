@@ -3,7 +3,8 @@
  *   • chaque collab en cours (ou gagnée) a sa checklist, créée d'office (« Marque × Créateur ») ;
  *   • une ancienne checklist dont le nom désigne la collab (« JNPR X LÉNA ») lui est reliée ;
  *   • les étapes de la checklist se cochent toutes seules quand la collab atteint l'étape
- *     correspondante (page Collabs, 11 étapes). Les autres se cochent toujours à la main.
+ *     correspondante (page Collabs, 11 étapes) : c'est l'étape de la collab qui fait foi.
+ *     Seule une checklist sans collab se coche à la main.
  */
 
 /** Une checklist enregistrée : `done` = étapes cochées À LA MAIN ; `collabId` = collab reliée. */
@@ -47,9 +48,13 @@ export function autoChecked(stepId: string, collabStep: number | undefined): boo
   return collabStep != null && from != null && collabStep >= from;
 }
 
-/** Cochée, à la main ou par la collab. */
+/**
+ * Cochée ? Checklist reliée à une collab : SEULE l'étape de la collab compte (une seule
+ * source d'avancement, audit du 2 nov., n° 12). Checklist libre : les coches à la main.
+ */
 export function isChecked(ck: ShownChecklist, stepId: string): boolean {
-  return !!ck.done[stepId] || autoChecked(stepId, ck.collab?.step);
+  if (ck.collab) return autoChecked(stepId, ck.collab.step);
+  return !!ck.done[stepId];
 }
 
 /** Collabs qui ont une checklist : en cours ou gagnées (pas perdues ni archivées). */

@@ -46,18 +46,40 @@ export type InvoiceDetailLike = {
   commissionRate?: number | null;
   /** Facture établie au nom et pour le compte du créateur (mandat) : sa TVA lui revient. */
   onBehalf?: boolean | null;
+  /** Devise de la facture (« EUR » si absente) et valeur d'une unité en euros (`fxRate`). */
+  currency?: string | null;
+  fxRate?: number | null;
 };
+
+/** Devises proposées sur une facture. */
+export const CURRENCIES = ["EUR", "USD", "GBP", "CHF"] as const;
+
+/** Taux de conversion vers l'euro d'une facture : 1 en euros, sinon son `fxRate` (null s'il manque). */
+export function eurRateOf(detail: Pick<InvoiceDetailLike, "currency" | "fxRate"> | null | undefined): number | null {
+  const cur = String(detail?.currency ?? "EUR").toUpperCase();
+  if (cur === "EUR") return 1;
+  const r = Number(detail?.fxRate);
+  return Number.isFinite(r) && r > 0 ? r : null;
+}
+
+/** Totaux convertis en euros (devise étrangère sans taux : laissés tels quels, signalés à l'écran). */
+function inEuros<T extends Totals>(t: T, rate: number | null): T {
+  if (rate == null || rate === 1) return t;
+  return { ...t, ht: cents(t.ht * rate), tva: cents(t.tva * rate), ttc: cents(t.ttc * rate), commission: cents(t.commission * rate), reversal: cents(t.reversal * rate) };
+}
 
 /**
  * Totaux d'une facture ENREGISTRÉE, même règle partout (Facturation, Reversements,
  * gains du créateur) :
  *  - facture détaillée (au moins une ligne) : ses lignes, sa TVA, SON taux ;
  *  - sinon (ancienne facture) : le montant enregistré, supposé HT sans TVA, au taux de la fiche.
+ * Facture en devise étrangère : les totaux sont rendus EN EUROS (taux `fxRate` de la facture),
+ * pour que le chiffre d'affaires, la commission et les reversements ne prennent jamais 1 $ pour 1 €.
  */
 export function invoiceTotals(amount: number, detail: InvoiceDetailLike | null | undefined, rosterRate: number): Totals & { rate: number } {
   if (detail && Array.isArray(detail.items) && detail.items.length > 0) {
     const rate = detail.commissionRate != null && Number.isFinite(Number(detail.commissionRate)) ? Number(detail.commissionRate) : rosterRate;
-    return { ...totalsOf(detail.items, !!detail.franchise, finite(detail.vatRate), rate), rate };
+    return { ...inEuros(totalsOf(detail.items, !!detail.franchise, finite(detail.vatRate), rate), eurRateOf(detail)), rate };
   }
   return { ...totalsOf([{ id: "x", label: "", qty: 1, unit: finite(amount) }], true, 0, rosterRate), rate: rosterRate };
 }

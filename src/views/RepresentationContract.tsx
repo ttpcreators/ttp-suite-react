@@ -19,6 +19,7 @@ import {
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { fmtDay, todayISO } from "@/lib/dates";
 import { viewableUrl } from "@/lib/openLater";
+import { dbTrash } from "@/lib/trash";
 import { CasesBar, ContractDocument, FoldSection, HistoryPanel, PanelSection, SettingsPanel, SwitchRow, docBtn, docIconBtn, docPrimaryBtn } from "@/components/contracts/contract-ui";
 
 type Cfg = Record<string, string>;
@@ -109,6 +110,7 @@ export function RepresentationContract({ initial = null }: { initial?: ContractH
   useEffect(() => {
     setLocalHist(null);
   }, [histData]);
+  const savingRef = useRef(false);
   const [saving, setSaving] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -244,11 +246,13 @@ export function RepresentationContract({ initial = null }: { initial?: ContractH
 
   // ── Historique des contrats : enregistrer / charger / partager / supprimer ──
   const saveContract = async () => {
-    if (saving) return;
+    // Garde synchrone : un double clic ne crée plus deux contrats (audit du 2 nov., n° 57).
+    if (saving || savingRef.current) return;
     if (!config.talentNom?.trim()) {
       toast("Renseigne le nom du Talent avant d'enregistrer");
       return;
     }
+    savingRef.current = true;
     setSaving(true);
     try {
       const html = representationHTML(config);
@@ -327,6 +331,7 @@ export function RepresentationContract({ initial = null }: { initial?: ContractH
           : `Contrat enregistré ✓${deadlineOk ? " · échéance suivie" : ""}`,
       );
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };
@@ -380,9 +385,9 @@ export function RepresentationContract({ initial = null }: { initial?: ContractH
       return;
     }
     setLocalHist(next);
-    const { error: docErr } = await supabase.from("documents").delete().eq("id", e.id);
-    await supabase.storage.from("documents").remove([e.path]).catch(() => {});
-    toast(docErr ? "Contrat retiré des contrats enregistrés, mais toujours visible dans Documents. Supprime-le là-bas" : "Contrat supprimé");
+    // Le document passe par la Corbeille (fichier gardé, restaurable).
+    const docOk = await dbTrash("documents", e.id, e.title || "Contrat de représentation");
+    toast(docOk ? "Contrat déplacé dans la corbeille" : "Contrat retiré des contrats enregistrés, mais toujours visible dans Documents. Supprime-le là-bas");
   };
 
   // Champs courts (nombre, date, petit menu) côte à côte par deux ; un champ court sans

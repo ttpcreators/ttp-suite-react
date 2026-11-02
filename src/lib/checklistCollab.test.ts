@@ -29,7 +29,7 @@ describe("checklist reliée aux collabs", () => {
       ["collab:c2", "c2", true],
     ]);
     expect(isChecked(shown[0], "fact-1")).toBe(true); // collab à l'étape 8
-    expect(isChecked(shown[0], "fact-2")).toBe(true); // coché à la main
+    expect(isChecked(shown[0], "fact-2")).toBe(false); // coché à la main, mais la collab fait foi
     expect(isChecked(shown[0], "fact-3")).toBe(false);
     expect(toSaved(shown[0])).toEqual({ id: "a", name: "JNPR X LÉNA", done: { "fact-2": true }, collabId: "c1" });
   });

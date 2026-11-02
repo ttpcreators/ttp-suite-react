@@ -17,10 +17,14 @@ describe("compta : une facture", () => {
     const l = invoiceLine(inv("a", "1 000 €"), null, 20, "agence", { ...S, facturation: "mandat" });
     expect(l).toMatchObject({ agencyCA: 200, owedCreator: 800, social: 51.6 });
   });
-  it("TVA de la facture : encaissée par l'agence, à reverser à l'État", () => {
+  it("TVA de la facture : encaissée par l'agence, à reverser à l'État (agence assujettie)", () => {
     const detail = { items: [{ id: "x", label: "Reel", qty: 1, unit: 1000 }], franchise: false, vatRate: 20, commissionRate: 20 };
-    const l = invoiceLine(inv("a", "1 200 €"), detail, 20, "agence", S);
+    const l = invoiceLine(inv("a", "1 200 €"), detail, 20, "agence", { ...S, vatRegime: "assujetti" });
     expect(l).toMatchObject({ ttc: 1200, cashIn: 1200, agencyCA: 1000, vatDue: 200, owedCreator: 800 });
+  });
+  it("franchise : la TVA d'une ancienne facture n'est pas comptée", () => {
+    const detail = { items: [{ id: "x", label: "Reel", qty: 1, unit: 1000 }], franchise: false, vatRate: 20, commissionRate: 20 };
+    expect(invoiceLine(inv("a", "1 200 €"), detail, 20, "agence", S).vatDue).toBe(0);
   });
   it("marque qui paie le créateur : rien n'arrive sur le compte de l'agence", () => {
     expect(invoiceLine(inv("a", "1 000 €"), null, 20, "createur", S)).toMatchObject({ cashIn: 0, agencyCA: 0, owedCreator: 0, commission: 200 });

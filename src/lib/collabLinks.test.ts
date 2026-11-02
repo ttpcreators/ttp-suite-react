@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { autoTaskFor, cachetAmount, collabChoices, collabIdMissing, collabLabel, concernsCreator, guessCollabId, hasAutoTask, linkGroups, mentionsBrand, type CollabLite } from "./collabLinks";
+import { autoTaskFor, cachetAmount, cachetCurrency, collabChoices, collabIdMissing, collabLabel, concernsCreator, guessCollabId, hasAutoTask, linkGroups, mentionsBrand, type CollabLite } from "./collabLinks";
 
 const nutri: CollabLite = { id: "c1", brand: "Nutripure", creator: "LÉNA TEST", step: 2, status: "active" };
 
@@ -81,5 +81,15 @@ describe("collab d'une ancienne facture (sans lien enregistré)", () => {
   it("le prénom seul désigne le créateur", () => {
     expect(concernsCreator("Léna", "LÉNA TEST")).toBe(true);
     expect(concernsCreator("Zoé", "LÉNA TEST")).toBe(false);
+  });
+});
+
+describe("cachetCurrency", () => {
+  it("repère la devise écrite dans le cachet", () => {
+    expect(cachetCurrency("550 usd")).toBe("USD");
+    expect(cachetCurrency("$1 200")).toBe("USD");
+    expect(cachetCurrency("300 £")).toBe("GBP");
+    expect(cachetCurrency("1500€")).toBe("EUR");
+    expect(cachetCurrency(null)).toBe("EUR");
   });
 });

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { daysSinceDue, isOverdueInvoice, overdueInvoices, parseDueDate, relanceEmail } from "./relance";
+import { daysSinceDue, isOverdueInvoice, overdueInvoices, parseDueDate, relanceEmail, relanceRefOf } from "./relance";
 
 describe("relances", () => {
   it("lit les échéances ISO et jj/mm/aaaa ; rien d'autre", () => {
@@ -61,5 +61,13 @@ describe("daysSinceDue", () => {
     const now = new Date(2026, 9, 25, 23, 30);
     expect(daysSinceDue(parseDueDate("2026-10-25")!, now)).toBe(0);
     expect(daysSinceDue(parseDueDate("26/10/2026")!, now)).toBe(-1);
+  });
+});
+
+describe("relanceRefOf", () => {
+  it("trouve la facture d'une tâche de relance", () => {
+    expect(relanceRefOf("Relancer Fitaya J+1 pour la facture 2026-191")).toBe("2026-191");
+    expect(relanceRefOf("Facture 2026-191 à envoyer")).toBeNull();
+    expect(relanceRefOf("Relancer Nike")).toBeNull();
   });
 });

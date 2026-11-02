@@ -36,7 +36,7 @@ export type AujBrief = { id: string; brand: string | null; creator: string | nul
 export type MailUnread = { box: string; label: string; count: number }[] | null;
 
 export type ItemKind = "relance" | "event" | "todo" | "brief" | "mails" | "echeance" | "contrat" | "collab" | "stats";
-export type SectionId = "argent" | "today" | "tomorrow" | "week" | "later";
+export type SectionId = "argent" | "today" | "tomorrow" | "collabs" | "week" | "later";
 
 /** Échéance de contrat suivie (blob agence `contractDeadlines`, page Échéances). */
 export type AujDeadline = { id?: string; creator: string; type: string; start: string; months: number; note?: string };
@@ -441,13 +441,17 @@ export function sectionsOf(items: TodayItem[], now: Date): TodaySection[] {
   const argent = pick("argent");
   const today = pick("today");
   const next = pick("tomorrow");
-  const week = pick("week");
+  // Collabs bloquées : leur propre section, comptée (même chiffre que la page Collabs et le
+  // connecteur), au lieu d'être mêlées aux autres lignes de la semaine (audit du 2 nov., n° 9).
+  const stuck = pick("week").filter((i) => i.kind === "collab");
+  const week = pick("week").filter((i) => i.kind !== "collab");
   const later = pick("later");
   const d0 = localISO(now);
   const out: TodaySection[] = [];
   if (argent.length) out.push({ id: "argent", title: "Argent en retard", right: formatEuro(argent.reduce((s, i) => s + (i.amount ?? 0), 0)), items: argent });
   if (today.length) out.push({ id: "today", title: "Aujourd'hui", right: String(today.length), items: today });
   if (next.length) out.push({ id: "tomorrow", title: "Demain", right: shortDayLabel(tomorrow), items: next });
+  if (stuck.length) out.push({ id: "collabs", title: "Collabs à faire avancer", right: `${stuck.length} bloquée${stuck.length > 1 ? "s" : ""}`, items: stuck });
   if (week.length) out.push({ id: "week", title: "Cette semaine", right: rangeLabel(addDaysISO(d0, WEEK_FROM), addDaysISO(d0, WEEK_TO)), items: week });
   if (later.length) out.push({ id: "later", title: "À anticiper", right: rangeLabel(addDaysISO(d0, WEEK_TO + 1), addDaysISO(d0, LATER_TO)), items: later });
   return out;
@@ -462,5 +466,12 @@ export function summaryLine(items: TodayItem[]): string {
   const min = totalMinutes(items);
   // Espaces insécables : « environ 11 min » ne se coupe jamais avant « min » sur téléphone.
   const dur = min >= 60 ? `${Math.floor(min / 60)}\u00a0h${min % 60 ? `\u00a0${String(min % 60).padStart(2, "0")}` : ""}` : `${min}\u00a0min`;
-  return `${n} action${n > 1 ? "s" : ""} à traiter · environ\u00a0${dur}`;
+  // Détail par type (audit du 2 nov., n° 44) : « 2 actions » ne se lit plus comme « 2 tâches ».
+  const by = new Map<string, number>();
+  for (const it of items) by.set(it.kind, (by.get(it.kind) ?? 0) + 1);
+  const parts = [...by.entries()].map(([k, c]) => `${c}\u00a0${(c > 1 ? KIND_PLURAL : KIND_SINGULAR)[k as ItemKind] ?? k}`);
+  return `${n} action${n > 1 ? "s" : ""} à traiter${parts.length > 1 ? ` (${parts.join(", ")})` : ""} · environ\u00a0${dur}`;
 }
+
+const KIND_SINGULAR: Record<ItemKind, string> = { relance: "relance", event: "rendez-vous", todo: "tâche", brief: "brief", mails: "boîte mail", echeance: "échéance", contrat: "contrat", collab: "collab", stats: "stats" };
+const KIND_PLURAL: Record<ItemKind, string> = { relance: "relances", event: "rendez-vous", todo: "tâches", brief: "briefs", mails: "boîtes mail", echeance: "échéances", contrat: "contrats", collab: "collabs", stats: "stats" };

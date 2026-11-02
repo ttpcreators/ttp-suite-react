@@ -1070,7 +1070,8 @@ export function Contacts() {
     // Dernier échange : « 23 j », « 4 mois » ou « — » ; l'orange dit « à relancer ».
     const last =
       info.days == null ? (
-        <span className="text-faint">{EMPTY}</span>
+        // En collab ou en négociation sans échange daté : on le dit (pas un « jamais contacté »).
+        inDeal(row.brand) ? <span className="text-muted-foreground">En cours</span> : <span className="text-faint">{EMPTY}</span>
       ) : (
         <span className={cn("font-semibold tabular-nums", info.due ? TONE_TEXT.wait : "text-foreground")} title={info.due ? "À relancer" : undefined}>
           {fmtAgoDays(info.days)}

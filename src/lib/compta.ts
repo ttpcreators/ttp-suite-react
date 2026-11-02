@@ -18,8 +18,8 @@ import { ACTIVITIES, MICRO_CEILING, VAT_FRANCHISE, type Activity } from "./compt
  *    seule commission si elle facture au nom et pour le compte du créateur (« mandat ») ;
  *  • facture marque encaissée par le créateur : rien (la commission arrive par la facture
  *    de commission).
- * Date d'encaissement : il n'y a pas de date de paiement en base ; on prend la date
- * d'émission de la facture (sinon son échéance). Approximation signalée à l'écran.
+ * Date d'encaissement : la date de paiement (`paid_at`) ; à défaut, la date d'émission
+ * de la facture (sinon son échéance).
  */
 
 export type CashMode = "agence" | "createur";
@@ -42,6 +42,12 @@ export type ComptaSettings = {
   vatRate: number;
   declaration: "mois" | "trimestre";
   facturation: "agence" | "mandat";
+  /**
+   * Qui encaisse sur une NOUVELLE collab (écrit sur la collab à sa création, blob
+   * `collabCashMode`). Défaut « createur » (choix de Marc, 2 nov. 2026) : la marque paie
+   * le créateur, qui reverse la commission. Les collabs déjà créées gardent leur réglage.
+   */
+  encaissement: CashMode;
   /** Réglages enregistrés au moins une fois (sinon : valeurs par défaut, à confirmer). */
   saved?: boolean;
 };
@@ -57,6 +63,7 @@ export const DEFAULT_SETTINGS: ComptaSettings = {
   vatRate: 20,
   declaration: "trimestre",
   facturation: "agence",
+  encaissement: "createur",
 };
 
 const num = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v < 100 ? v : d);
@@ -76,6 +83,7 @@ export function readSettings(raw: unknown): ComptaSettings {
     vatRate: num(r.vatRate, 20),
     declaration: r.declaration === "mois" ? "mois" : "trimestre",
     facturation: r.facturation === "mandat" ? "mandat" : "agence",
+    encaissement: r.encaissement === "agence" ? "agence" : "createur",
     saved: r.saved === true,
   };
 }
@@ -83,7 +91,7 @@ export function readSettings(raw: unknown): ComptaSettings {
 /** % total prélevé sur le chiffre d'affaires : cotisations + formation (+ versement libératoire). */
 export const socialRate = (s: ComptaSettings) => s.urssafRate + s.cfpRate + (s.vl ? s.vlRate : 0);
 
-export type ComptaInvoice = { id: string; amount: string | null; status: string | null; creator: string | null; collab_id?: string | null; date?: string | null; party?: string | null };
+export type ComptaInvoice = { id: string; ref?: string | null; amount: string | null; status: string | null; creator: string | null; collab_id?: string | null; date?: string | null; party?: string | null; paid_at?: string | null };
 export type ComptaDetail = InvoiceDetailLike & { issueDate?: string | null; dueDate?: string | null; kind?: string | null; onBehalf?: boolean | null };
 
 export type InvoiceLine = {
@@ -124,7 +132,9 @@ export function invoiceLine(inv: ComptaInvoice, detail: ComptaDetail | null | un
   const kind = detail?.kind === "commission" ? "commission" : "marque";
   const t = invoiceTotals(parseAmount(inv.amount), detail, kind === "commission" ? 0 : rate);
   const paid = inv.status === "payee";
-  const day = isoDay(detail?.issueDate) ?? isoDay(inv.date) ?? isoDay(detail?.dueDate);
+  // Jour de l'encaissement : la date de paiement (`paid_at`, posée au passage en « Payée »),
+  // sinon l'émission, sinon l'échéance.
+  const day = (paid ? isoDay(inv.paid_at) : null) ?? isoDay(detail?.issueDate) ?? isoDay(inv.date) ?? isoDay(detail?.dueDate);
   let cashIn = 0;
   let agencyCA = 0;
   let vatDue = 0;
@@ -151,6 +161,9 @@ export function invoiceLine(inv: ComptaInvoice, detail: ComptaDetail | null | un
       owedCreator = cents(t.reversal + t.tva);
     }
   }
+  // Franchise de TVA (choix de Marc, 2 nov. 2026) : aucune TVA n'est comptée, y compris celle
+  // portée par d'anciennes factures.
+  if (s.vatRegime === "franchise") vatDue = 0;
   return {
     id: inv.id,
     collabId: inv.collab_id ?? null,
@@ -210,6 +223,10 @@ export type ComptePro = {
   caYear: number;
   /** Périodes non échues prises en compte (« 2026-T4 »…). */
   openPeriods: string[];
+  /** Chiffre d'affaires de ces périodes (base des cotisations à mettre de côté). */
+  openCA: number;
+  /** TVA des périodes déjà échues de l'année (supposée déclarée et payée). */
+  tvaDeclared: number;
 };
 
 const k = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
@@ -236,19 +253,26 @@ export function comptePro(lines: InvoiceLine[], payouts: Record<string, Payout[]
   const open = new Set<string>();
   let urssaf = 0;
   let tva = 0;
+  let openCA = 0;
+  let tvaDeclared = 0;
   for (const l of lines) {
     if (!l.day || (!l.social && !l.vatDue)) continue;
     const p = periodOf(l.day, s.declaration);
-    if (periodDeadline(p) < today) continue; // période échue : déjà déclarée et payée
+    if (periodDeadline(p) < today) {
+      // Période échue : déjà déclarée et payée (affiché à part).
+      if (l.day.startsWith(today.slice(0, 4))) tvaDeclared += l.vatDue;
+      continue;
+    }
     open.add(p);
     urssaf += l.social;
     tva += l.vatDue;
+    openCA += l.agencyCA;
   }
   const year = today.slice(0, 4);
   const caYear = cents(lines.reduce((a, l) => a + (l.day?.startsWith(year) ? l.agencyCA : 0), 0));
   const solde = cents(encaisse - verse);
   const aside = { createurs: cents(createurs), urssaf: cents(urssaf), tva: cents(tva) };
-  return { encaisse, verse, solde, aside, dispo: cents(solde - aside.createurs - aside.urssaf - aside.tva), caYear, openPeriods: [...open].sort() };
+  return { encaisse, verse, solde, aside, dispo: cents(solde - aside.createurs - aside.urssaf - aside.tva), caYear, openPeriods: [...open].sort(), openCA: cents(openCA), tvaDeclared: cents(tvaDeclared) };
 }
 
 // ── Seuils ──────────────────────────────────────────────────────────────────────

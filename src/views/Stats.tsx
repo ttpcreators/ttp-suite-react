@@ -42,7 +42,10 @@ type InvRow = { id?: string; amount: string; status: string; creator: string | n
 type CountRow = { id: string };
 
 /** Instantané mensuel des indicateurs « état du moment » (blob `statsSnapshots`). */
-type Snap = { activeCreators: number; totalFollowers: number; avgEr: number; briefs: number };
+/** `v` : version du calcul. Avant la v2, les abonnés ne comptaient qu'un réseau par créateur :
+ *  comparer à ces anciens mois donnait une fausse croissance (audit du 2 nov., n° 54). */
+type Snap = { activeCreators: number; totalFollowers: number; avgEr: number; briefs: number; v?: number };
+const SNAP_VERSION = 2;
 
 type StatsData = {
   creators: CreatorRow[];
@@ -109,7 +112,7 @@ function RevenueChart({ points }: { points: RevenuePoint[] }) {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="text-sm font-semibold text-foreground">Chiffre d'affaires HT</div>
-          <div className="mt-0.5 text-[11px] text-faint">Évolution mensuelle · facturé vs encaissé</div>
+          <div className="mt-0.5 text-[11px] text-faint">Par mois d'émission de la facture (hors brouillons) · facturé vs encaissé</div>
         </div>
         <Tabs
           size="sm"
@@ -278,6 +281,7 @@ export function Stats() {
       totalFollowers: data.creators.filter((c) => (c.status ?? "actif").toLowerCase() !== "inactif").reduce((s, c) => s + (cumFollowers[c.name.trim().toLowerCase()] || parseCompact(c.followers)), 0),
       avgEr: (() => { const v = data.creators.map((c) => parsePct(c.er)).filter((x) => x > 0); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : 0; })(),
       briefs: data.briefs,
+      v: SNAP_VERSION,
     };
     (async () => {
       invalidateAppState();
@@ -308,10 +312,14 @@ export function Stats() {
 
   // Variation MoM depuis l'instantané du mois PRÉCÉDENT (le plus récent < mois courant).
   const curYM = new Date().toISOString().slice(0, 7);
-  const prevKey = Object.keys(snaps ?? {}).filter((k) => k < curYM).sort().pop();
+  // Seuls les mois calculés avec la méthode actuelle servent de comparaison.
+  const prevKey = Object.keys(snaps ?? {}).filter((k) => k < curYM && ((snaps as Record<string, Snap>)[k]?.v ?? 1) >= SNAP_VERSION).sort().pop();
   const prevSnap = prevKey ? (snaps as Record<string, Snap>)[prevKey] : undefined;
   const prevLbl = prevKey ? monthLabel(prevKey) : "";
-  const snapDelta = (curVal: number, key: keyof Snap) => (prevSnap && prevSnap[key] > 0 ? ((curVal - prevSnap[key]) / prevSnap[key]) * 100 : null);
+  const snapDelta = (curVal: number, key: Exclude<keyof Snap, "v">) => {
+    const prev = prevSnap?.[key] ?? 0;
+    return prev > 0 ? ((curVal - prev) / prev) * 100 : null;
+  };
 
   // Montant HT d'une facture (ses lignes si détaillée, sinon le montant enregistré).
   const htOf = (iv: InvRow) => invoiceHT(parseAmount(iv.amount), iv.id ? invDetails?.[iv.id] : null);

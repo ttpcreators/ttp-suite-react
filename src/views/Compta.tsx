@@ -5,7 +5,7 @@ import { useAppState, saveAppStateKey, mergeAppStateKey, formatEuro, type AppSta
 import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
-import { commissionMap, DEFAULT_COMMISSION, rateFor } from "@/lib/commission";
+import { collabRateFor, commissionMap, contractRatesFrom, dealOriginOf, DEFAULT_COMMISSION, rateFor } from "@/lib/commission";
 import { collabIdMissing, guessCollabId } from "@/lib/collabLinks";
 import {
   billingFor, cashModeFor, collabTake, comptePro, invoiceLine, mandatesFrom, readSettings, socialRate, thresholdAlerts,
@@ -36,7 +36,7 @@ const todayISO = () => {
 const pct = (n: number) => `${String(Math.round(n * 100) / 100).replace(".", ",")} %`;
 
 async function loadInvoices(): Promise<ComptaInvoice[] | null> {
-  const withLink = await supabase.from("invoices").select("id,amount,status,creator,collab_id,date,party");
+  const withLink = await supabase.from("invoices").select("id,ref,amount,status,creator,collab_id,date,party,paid_at");
   if (!withLink.error) return (withLink.data as ComptaInvoice[]) ?? [];
   if (!collabIdMissing(withLink.error)) return null;
   const plain = await supabase.from("invoices").select("id,amount,status,creator,date,party");
@@ -87,6 +87,7 @@ export function Compta() {
     const roster = commissionMap(creators);
     const saved = (app?.creatorCommission as Record<string, number>) ?? {};
     const rateOf = (name: string | null) => rateFor(name, roster, saved, DEFAULT_COMMISSION);
+    const contracts = contractRatesFrom(app?.contractHistory);
     // Facture de commission : son créateur est celui de sa collab (pour le mode et le taux).
     const collabById = new Map(collabs.map((c) => [c.id, c]));
     // Anciennes factures sans collab enregistrée : reliées à LA collab de même marque et même
@@ -100,11 +101,14 @@ export function Compta() {
       });
     const box = comptePro(lines, (app?.creatorPayouts as Record<string, Payout[]>) ?? {}, settings, todayISO());
     const takes = collabs
-      .map((c) => ({ c, billing: billingFor(c.id, modes, settings), t: collabTake(c, lines, rateOf(c.creator), cashModeFor(c.id, c.creator, modes, mandates), settings) }))
+      .map((c) => {
+        // Estimation sans facture : taux du contrat selon l'origine du deal (même règle que la fiche collab).
+        const rate = collabRateFor(c.creator, dealOriginOf(c.id, app?.collabDealOrigin), contracts, roster, saved);
+        return { c, billing: billingFor(c.id, modes, settings), t: collabTake(c, lines, rate, cashModeFor(c.id, c.creator, modes, mandates), settings) };
+      })
       .filter((x) => x.t.commission > 0)
       .sort((a, b) => Number(a.t.received) - Number(b.t.received) || b.t.commission - a.t.commission);
-    const vatOnInvoices = settings.vatRegime === "franchise" && lines.some((l) => l.kind === "marque" && l.tva > 0 && l.mode === "agence");
-    return { box, takes, alerts: thresholdAlerts(box.caYear, settings), vatOnInvoices, modes };
+    return { box, takes, alerts: thresholdAlerts(box.caYear, settings), modes };
   }, [invoices, collabs, app, creators, settings, local]);
 
   if (!computed) {
@@ -114,7 +118,7 @@ export function Compta() {
       <AnimatedBadge status="loading" size="sm">Chargement…</AnimatedBadge>
     );
   }
-  const { box, takes, alerts, vatOnInvoices, modes } = computed;
+  const { box, takes, alerts, modes } = computed;
 
   const saveMode = async (collabId: string, value: string) => {
     if (savingId || modes[collabId] === value) return;
@@ -150,7 +154,7 @@ export function Compta() {
           Réglages par défaut : {ACTIVITIES[settings.activity].label}, {pct(socialRate(settings))} de cotisations, franchise de TVA. À confirmer avec « Régler ».
         </div>
       )}
-      {[...alerts, ...(vatOnInvoices ? [{ level: "wait" as const, text: "Des factures portent de la TVA alors que le réglage dit franchise : vérifie le régime de TVA." }] : [])].map((a) => (
+      {alerts.map((a) => (
         <div key={a.text} className={cn("rounded-2xl px-4 py-3 text-[13px]", a.level === "late" ? "bg-dangersoft text-dangertext" : a.level === "wait" ? "bg-wait-soft text-wait" : "bg-panel text-muted-foreground")}>
           {a.text}
         </div>
@@ -163,7 +167,7 @@ export function Compta() {
             Sur le compte pro
             <HelpTip title="Sur le compte pro">
               <p>Ce qui est arrivé sur le compte de l'agence ({formatEuro(box.encaisse)} : factures payées à l'agence et commissions reçues) moins ce qui a été versé aux créateurs ({formatEuro(box.verse)}).</p>
-              <p>C'est le solde théorique : les autres dépenses et rentrées de l'agence n'y sont pas. Les factures comptent à leur date d'émission (l'app ne connaît pas le jour exact du virement).</p>
+              <p>C'est le solde théorique : les autres dépenses et rentrées de l'agence n'y sont pas. Une facture compte au jour où elle passe « Payée » (date de paiement), sinon à sa date d'émission.</p>
             </HelpTip>
           </div>
           <div className="mt-1.5 text-[28px] font-semibold leading-none tracking-tight tabular-nums text-foreground">{formatEuro(box.solde)}</div>
@@ -173,15 +177,16 @@ export function Compta() {
             À mettre de côté
             <HelpTip title="À mettre de côté">
               <p>Créateurs : leur part des factures payées, pas encore versée.</p>
-              <p>URSSAF : {pct(socialRate(settings))} du chiffre d'affaires des périodes pas encore déclarées ({box.openPeriods.join(", ") || "aucune"}).</p>
+              <p>URSSAF : {pct(socialRate(settings))} du chiffre d'affaires des périodes pas encore déclarées ({box.openPeriods.join(", ") || "aucune"}). Le chiffre d'affaires, c'est ta commission quand le créateur encaisse ou que la facture est à son nom (mandat), mais TOUT le HT d'une facture émise au nom de l'agence : c'est pour ça que ce montant peut dépasser les cotisations de « Ce que je prends ».</p>
               <p>TVA : celle encaissée sur ces mêmes périodes, due à l'État.</p>
             </HelpTip>
           </div>
           <div className="mt-1.5 text-[28px] font-semibold leading-none tracking-tight tabular-nums text-foreground">{formatEuro(aside)}</div>
           <div className="mt-2 flex flex-col gap-0.5 text-[12px] tabular-nums text-muted-foreground">
             <span>Créateurs {formatEuro(box.aside.createurs)}</span>
-            <span>URSSAF {formatEuro(box.aside.urssaf)}</span>
-            {box.aside.tva > 0 && <span>TVA {formatEuro(box.aside.tva)}</span>}
+            <span>URSSAF {formatEuro(box.aside.urssaf)} · {pct(socialRate(settings))} de {formatEuro(box.openCA)} de CA{box.openPeriods.length ? ` (${box.openPeriods.join(", ")})` : ""}</span>
+            {box.aside.tva > 0 && <span>TVA {formatEuro(box.aside.tva)} à déclarer</span>}
+            {box.tvaDeclared > 0 && <span className="text-faint">TVA déjà déclarée cette année : {formatEuro(box.tvaDeclared)}</span>}
           </div>
         </div>
         <div className="bg-surface px-5 py-4">
@@ -319,6 +324,13 @@ function SettingsSheet({ settings, onClose }: { settings: ComptaSettings; onClos
               <button type="button" aria-pressed={s.declaration === "mois"} onClick={() => setS((x) => ({ ...x, declaration: "mois" }))} className={seg(s.declaration === "mois")}>Chaque mois</button>
               <button type="button" aria-pressed={s.declaration === "trimestre"} onClick={() => setS((x) => ({ ...x, declaration: "trimestre" }))} className={seg(s.declaration === "trimestre")}>Chaque trimestre</button>
             </div>
+          </Row>
+          <Row label="Nouvelle collab : qui encaisse">
+            <div role="group" className="flex flex-col gap-1 rounded-[20px] bg-field p-1 sm:flex-row">
+              <button type="button" aria-pressed={s.encaissement === "createur"} onClick={() => setS((x) => ({ ...x, encaissement: "createur" }))} className={seg(s.encaissement === "createur")}>Le créateur</button>
+              <button type="button" aria-pressed={s.encaissement === "agence"} onClick={() => setS((x) => ({ ...x, encaissement: "agence" }))} className={seg(s.encaissement === "agence")}>L'agence</button>
+            </div>
+            <span className="text-[11px] leading-snug text-faint">Le créateur : la marque le paie, il te reverse ta commission (facture de commission). Appliqué à chaque nouvelle collab ; les collabs existantes gardent leur choix (fiche collab).</span>
           </Row>
           <Row label="Factures aux marques, par défaut">
             <div role="group" className="flex flex-col gap-1 rounded-[20px] bg-field p-1 sm:flex-row">

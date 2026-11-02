@@ -48,7 +48,7 @@ import { useCreators } from "@/lib/useCreators";
 import { commissionMap, rateFor } from "@/lib/commission";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
-import { invoiceHT, invoiceTotals, totalsOf, type LineItem, type Totals } from "@/lib/invoice";
+import { CURRENCIES, eurRateOf, invoiceHT, invoiceTotals, totalsOf, type LineItem, type Totals } from "@/lib/invoice";
 import { readSettings } from "@/lib/compta";
 import { printHtml } from "@/lib/printPdf";
 import { docHead, pdfFileTitle, ttpLogoImg } from "@/lib/pdfDoc";
@@ -112,6 +112,9 @@ type Details = {
   kind?: "commission";
   /** Facture à la marque établie au nom et pour le compte du créateur (mandat de facturation). */
   onBehalf?: boolean;
+  /** Devise de la facture (absente = EUR) et valeur d'une unité en euros, pour le CA et la commission. */
+  currency?: string;
+  fxRate?: number;
 };
 
 type Draft = Details & {
@@ -237,6 +240,12 @@ function euroUi(n: number): string {
   const v = Number.isFinite(n) ? n : 0;
   return Math.round(v * 100) % 100 === 0 ? euro2(v).replace(/,00(?=\u00a0€$)/, "") : euro2(v);
 }
+/** Montant dans la devise de la facture (euros : euro2). */
+function money(n: number, currency?: string): string {
+  const cur = (currency || "EUR").toUpperCase();
+  if (cur === "EUR") return euro2(n);
+  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: cur, minimumFractionDigits: 2 }).format(Number.isFinite(n) ? n : 0).replace(/[\u202f]/g, "\u00a0");
+}
 function fmtRate(n: number): string {
   return String(n).replace(".", ",");
 }
@@ -340,9 +349,9 @@ function invoiceHTML(o: {
     d.items
       .map((it) => {
         const lineHT = (it.qty || 0) * (it.unit || 0);
-        return `<tr><td>${esc(it.label || "—")}</td><td class="num">${fmtQty(it.qty)}</td><td class="num">${euro2(
-          it.unit,
-        )}</td><td class="num">${euro2(lineHT)}</td></tr>`;
+        return `<tr><td>${esc(it.label || "—")}</td><td class="num">${fmtQty(it.qty)}</td><td class="num">${money(
+          it.unit, d.currency,
+        )}</td><td class="num">${money(lineHT, d.currency)}</td></tr>`;
       })
       .join("") || `<tr><td colspan="4" class="muted">Aucune ligne</td></tr>`;
 
@@ -350,7 +359,7 @@ function invoiceHTML(o: {
     `<div class="tr${cls}"><span>${l}</span><span class="lead"></span><span class="v">${v}</span></div>`;
   const vatBlock = d.franchise
     ? `<div class="tr note">TVA non applicable, art. 293 B du CGI</div>`
-    : line(`TVA (${fmtRate(d.vatRate)} %)`, euro2(totals.tva));
+    : line(`TVA (${fmtRate(d.vatRate)} %)`, money(totals.tva, d.currency));
 
   const bankBlock = bank
     ? `<section class="sec"><h2>Coordonnées bancaires</h2>
@@ -436,9 +445,9 @@ table.lines tr{break-inside:avoid}
 </table>
 
 <div class="totals">
-  ${line("Total HT", euro2(totals.ht))}
+  ${line("Total HT", money(totals.ht, d.currency))}
   ${vatBlock}
-  ${line("Total TTC", euro2(totals.ttc), " total")}
+  ${line("Total TTC", money(totals.ttc, d.currency), " total")}
 </div>
 
 ${bankBlock}
@@ -590,11 +599,16 @@ function detailPartOf(draft: Draft): Details {
     notes: draft.notes,
     ...(draft.kind === "commission" ? { kind: "commission" as const } : {}),
     ...(draft.kind !== "commission" && draft.onBehalf !== undefined ? { onBehalf: draft.onBehalf } : {}),
+    ...(draft.currency && draft.currency !== "EUR" ? { currency: draft.currency, fxRate: draft.fxRate } : {}),
   };
 }
 
-/** Nouvelle facture vide (brouillon, TVA 20 % par défaut, modifiable par facture). */
-function blankDraft(refs: string[], bankId: string): Draft {
+/**
+ * Nouvelle facture vide (brouillon). TVA : le régime de la page Compta (franchise par défaut,
+ * modifiable par facture). Échéance : 30 jours après l'émission, jamais le jour même (une
+ * facture préparée d'avance passait « en retard » avant même la livraison).
+ */
+function blankDraft(refs: string[], bankId: string, franchise = true): Draft {
   return {
     id: null,
     ref: nextRefFrom(refs),
@@ -608,9 +622,9 @@ function blankDraft(refs: string[], bankId: string): Draft {
     clientVat: "",
     tpoRef: "",
     issueDate: todayISO(),
-    dueDate: todayISO(),
+    dueDate: addDaysISO(todayISO(), 30),
     items: [{ id: uid(), label: "", qty: 1, unit: 0 }],
-    franchise: false,
+    franchise,
     vatRate: 20,
     commissionRate: DEFAULT_COMMISSION,
     bankId,
@@ -734,11 +748,13 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
     }
     const p = takeInvoicePrefill();
     if (!p) return;
-    const blank = blankDraft(rows.map((r) => r.ref), ((appData.invoiceBankAccounts as BankAccount[]) ?? [])[0]?.id ?? "");
+    const blank = blankDraft(rows.map((r) => r.ref), ((appData.invoiceBankAccounts as BankAccount[]) ?? [])[0]?.id ?? "", readSettings(appData.comptaSettings).vatRegime !== "assujetti");
     const lines = p.lines.map((l) => ({ id: uid(), label: l.label, qty: 1, unit: l.unit }));
     const commissionRate = p.kind === "commission"
       ? 0 // la commission ne prend pas de commission
-      : p.creator
+      : p.commissionRate != null
+        ? p.commissionRate
+        : p.creator
         ? rateFor(p.creator, commissionMap(creators), (appData.creatorCommission as Record<string, number>) ?? {}, DEFAULT_COMMISSION)
         : blank.commissionRate;
     const base: Draft = quoteMode
@@ -753,6 +769,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
       ...(p.kind === "commission" ? { kind: "commission" as const, clientName: p.brand } : {}),
       ...(p.franchise !== undefined ? { franchise: p.franchise } : {}),
       ...(p.onBehalf !== undefined ? { onBehalf: p.onBehalf } : {}),
+      ...(p.currency && p.currency !== "EUR" ? { currency: p.currency } : {}),
       ...(fromQuote ?? {}),
     });
     setBaseline(draftSnapshot(base));
@@ -860,7 +877,8 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
 
   // ── Éditeur ──
   function openCreate() {
-    const base: Draft = { ...blankDraft(invoices.map((r) => r.ref), banks[0]?.id ?? ""), onBehalf: readSettings(appData?.comptaSettings).facturation === "mandat" };
+    const compta = readSettings(appData?.comptaSettings);
+    const base: Draft = { ...blankDraft(invoices.map((r) => r.ref), banks[0]?.id ?? "", compta.vatRegime !== "assujetti"), onBehalf: compta.facturation === "mandat" };
     const d: Draft = quoteMode
       ? { ...base, ref: nextQuoteRef(quotes.map((q) => q.ref)), dueDate: addDaysISO(todayISO(), QUOTE_VALIDITY_DAYS), doc: "devis", quoteStatus: "brouillon" }
       : base;
@@ -1059,7 +1077,8 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
     const summary = {
       ref: draft.ref,
       party,
-      amount: euro2(t.ttc),
+      // Montant enregistré EN EUROS (facture en devise : convertie au taux de la facture).
+      amount: euro2(t.ttc * (eurRateOf(draft) ?? 1)),
       date: draft.dueDate || "—",
       status: draft.status,
       creator: draft.creator || null,
@@ -1171,7 +1190,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
     const body = [
       `Bonjour,`,
       ``,
-      `Veuillez trouver ci-joint la facture ${r.ref} d'un montant de ${euro2(t.ttc)}.`,
+      `Veuillez trouver ci-joint la facture ${r.ref} d'un montant de ${money(t.ttc, d.currency)}.`,
       `Échéance : ${frDate(d.dueDate)}.`,
       ``,
       `Bien cordialement,`,
@@ -1317,6 +1336,11 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
     const cellCls =
       "h-10 w-full min-w-0 rounded-lg border border-border bg-surface px-3 text-sm text-foreground outline-none transition-shadow placeholder:text-faint focus:border-primary focus:ring-2 focus:ring-primary/15";
     const linkBtn = "text-[12px] font-medium text-muted-foreground underline-offset-2 transition-colors hover:text-foreground hover:underline";
+    // Facture en devise : montants du document dans la devise, part agence / créateur en euros.
+    const foreign = !!draft.currency && draft.currency !== "EUR";
+    const draftFx = eurRateOf(draft);
+    const inCur = (n: number) => (foreign ? money(n, draft.currency) : euroUi(n));
+    const eurOf = (n: number) => (foreign ? (draftFx ? euroUi(n * draftFx) : "—") : euroUi(n));
     const sumRow = (label: string, value: string, cls = "") => (
       <div className={cn("flex items-baseline justify-between gap-4 py-1.5 text-[13px]", cls)}>
         <dt className="text-muted-foreground">{label}</dt>
@@ -1463,7 +1487,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
                         className={cn(cellCls, "text-right tabular-nums")}
                       />
                       <span className="flex h-10 min-w-0 items-center justify-end truncate rounded-lg bg-muted px-3 text-sm tabular-nums text-muted-foreground">
-                        {euroUi((it.qty || 0) * (it.unit || 0))}
+                        {inCur((it.qty || 0) * (it.unit || 0))}
                       </span>
                       <button
                         type="button"
@@ -1509,6 +1533,26 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
                     options={VAT_OPTIONS}
                   />
                 </Field>
+                <Field label="Devise">
+                  <Picker
+                    ariaLabel="Devise"
+                    value={draft.currency || "EUR"}
+                    onChange={(v) => setDraft({ ...draft, currency: v === "EUR" ? undefined : v, fxRate: v === "EUR" ? undefined : draft.fxRate })}
+                    options={CURRENCIES.map((c) => ({ value: c, label: c === "EUR" ? "Euro (€)" : c }))}
+                  />
+                </Field>
+                {draft.currency && draft.currency !== "EUR" && (
+                  <Field label={`Valeur d'1 ${draft.currency} en euros`}>
+                    <input
+                      value={draft.raw?.fx ?? (draft.fxRate ? fmtRate(draft.fxRate) : "")}
+                      onChange={(e) => setDraft({ ...draft, raw: { ...draft.raw, fx: e.target.value }, fxRate: num(e.target.value) || undefined })}
+                      inputMode="decimal"
+                      placeholder="ex. 0,92"
+                      aria-label="Taux de conversion"
+                      className={cn(cellCls, "h-[42px] tabular-nums", !draft.fxRate && "border-amber")}
+                    />
+                  </Field>
+                )}
                 <Field label="Commission agence (%)">
                   <input
                     value={draft.raw?.commission ?? fmtRate(draft.commissionRate)}
@@ -1523,13 +1567,14 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
               <div className="mt-5 flex flex-col gap-4 border-t border-border pt-4 sm:flex-row sm:items-start sm:justify-between">
                 <dl className="order-2 min-w-0 sm:order-1 sm:max-w-[240px]">
                   <div className="text-[12px] font-medium text-muted-foreground">Interne, non imprimé</div>
-                  {sumRow(`Commission TTP · ${fmtRate(draft.commissionRate)} %`, euroUi(draftTotals.commission), "[&_dd]:font-medium [&_dd]:text-signaltext")}
-                  {draft.creator && sumRow(`Reversé à ${firstName(draft.creator)}`, euroUi(draftTotals.reversal))}
+                  {sumRow(`Commission TTP · ${fmtRate(draft.commissionRate)} %`, eurOf(draftTotals.commission), "[&_dd]:font-medium [&_dd]:text-signaltext")}
+                  {draft.creator && sumRow(`Reversé à ${firstName(draft.creator)}`, eurOf(draftTotals.reversal))}
+                  {foreign && <div className="pt-1 text-[11.5px] text-muted-foreground">{draftFx ? `En euros, au taux de la facture (1 ${draft.currency} = ${fmtRate(draftFx)} €).` : "Taux de conversion à renseigner : sans lui, rien n'est compté en euros."}</div>}
                 </dl>
                 <dl className="order-1 w-full sm:order-2 sm:max-w-[300px]">
-                  {sumRow("Sous-total HT", euroUi(draftTotals.ht))}
-                  {sumRow(draft.franchise ? "TVA non applicable" : `TVA ${fmtRate(draft.vatRate)} %`, euroUi(draftTotals.tva))}
-                  {sumRow("Total TTC", euroUi(draftTotals.ttc), "mt-1 border-t border-border pt-2.5 text-[15px] [&_dd]:font-semibold [&_dt]:font-semibold [&_dt]:text-foreground")}
+                  {sumRow("Sous-total HT", inCur(draftTotals.ht))}
+                  {sumRow(draft.franchise ? "TVA non applicable" : `TVA ${fmtRate(draft.vatRate)} %`, inCur(draftTotals.tva))}
+                  {sumRow("Total TTC", inCur(draftTotals.ttc), "mt-1 border-t border-border pt-2.5 text-[15px] [&_dd]:font-semibold [&_dt]:font-semibold [&_dt]:text-foreground")}
                 </dl>
               </div>
             </EditorSection>

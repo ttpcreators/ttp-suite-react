@@ -4,7 +4,7 @@ import { useAppState, mergeAppStateKey, formatEuro, type AppState } from "@/lib/
 import { useCreators } from "@/lib/useCreators";
 import { useIsFounder } from "@/lib/useFounder";
 import { useLiveKey } from "@/lib/useLive";
-import { commissionMap, DEFAULT_COMMISSION, rateFor } from "@/lib/commission";
+import { collabRateFor, commissionMap, contractRatesFrom, dealOriginOf, DEAL_ORIGINS, type DealOrigin } from "@/lib/commission";
 import { billingFor, cashModeFor, collabTake, invoiceLine, mandatesFrom, readSettings, socialRate, type Billing, type CashMode, type ComptaDetail, type ComptaInvoice } from "@/lib/compta";
 import { collabIdMissing } from "@/lib/collabLinks";
 import { HelpTip } from "@/components/ui/help-tip";
@@ -25,6 +25,7 @@ export function CollabTakeCard({ collab }: { collab: { id: string; brand: string
   const [invoices, setInvoices] = useState<ComptaInvoice[]>([]);
   // Valeur enregistrée pour la collab : « agence », « mandat » (agence encaisse, facture au nom du créateur) ou « createur ».
   const [localSet, setLocalSet] = useState<string | null>(null);
+  const [localOrigin, setLocalOrigin] = useState<DealOrigin | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -32,7 +33,7 @@ export function CollabTakeCard({ collab }: { collab: { id: string; brand: string
     let alive = true;
     void supabase
       .from("invoices")
-      .select("id,amount,status,creator,collab_id,date")
+      .select("id,amount,status,creator,collab_id,date,paid_at")
       .eq("collab_id", collab.id)
       .then(({ data, error }) => {
         if (!alive) return;
@@ -50,10 +51,17 @@ export function CollabTakeCard({ collab }: { collab: { id: string; brand: string
   const modes = localSet ? { ...stored, [collab.id]: localSet } : stored;
   const mode = cashModeFor(collab.id, collab.creator, modes, mandatesFrom(app?.contractHistory));
   const billing = billingFor(collab.id, modes, settings);
-  const rate = rateFor(collab.creator, commissionMap(creators), (app?.creatorCommission as Record<string, number>) ?? {}, DEFAULT_COMMISSION);
+  // Taux du contrat signé selon l'origine du deal, sinon celui de la fiche du créateur.
+  const origin = localOrigin ?? dealOriginOf(collab.id, app?.collabDealOrigin);
+  const contracts = contractRatesFrom(app?.contractHistory);
+  const hasContract = !!contracts[(collab.creator ?? "").trim().toLowerCase()];
+  const rate = collabRateFor(collab.creator, origin, contracts, commissionMap(creators), (app?.creatorCommission as Record<string, number>) ?? {});
   const take = useMemo(() => {
     const details = (app?.invoiceDetails as Record<string, ComptaDetail>) ?? {};
-    const lines = invoices.map((iv) => invoiceLine(iv, details[iv.id], rate, mode, settings, billing));
+    // Même base que la page Compta : factures émises seulement (ni brouillon, ni annulée).
+    const lines = invoices
+      .filter((iv) => iv.status !== "brouillon" && iv.status !== "annulee")
+      .map((iv) => invoiceLine(iv, details[iv.id], rate, mode, settings, billing));
     return collabTake(collab, lines, rate, mode, settings);
   }, [app, invoices, rate, mode, billing, settings, collab]);
 
@@ -67,6 +75,17 @@ export function CollabTakeCard({ collab }: { collab: { id: string; brand: string
     setSaving(false);
     if (!ok) {
       setLocalSet(null);
+      toast("Erreur, réessaie");
+    }
+  };
+  const saveOrigin = async (next: DealOrigin) => {
+    if (saving || next === origin) return;
+    setSaving(true);
+    setLocalOrigin(next);
+    const ok = await mergeAppStateKey("collabDealOrigin", { [collab.id]: next });
+    setSaving(false);
+    if (!ok) {
+      setLocalOrigin(null);
       toast("Erreur, réessaie");
     }
   };
@@ -92,6 +111,14 @@ export function CollabTakeCard({ collab }: { collab: { id: string; brand: string
           </HelpTip>
         </h3>
         <span className={cn("text-[12px] font-medium", take.received ? "text-ok" : take.commissionToBill ? "text-wait" : "text-muted-foreground")}>{status}</span>
+      </div>
+      <div className="mb-3 flex flex-col gap-1.5">
+        <span className="px-1 text-[12px] text-muted-foreground">Origine du deal{hasContract ? " (taux du contrat)" : " (pas de contrat : taux de la fiche)"}</span>
+        <div role="group" aria-label="Origine du deal" className="flex flex-col gap-0.5 rounded-[20px] bg-field p-0.5 sm:flex-row">
+          {DEAL_ORIGINS.map((o) => (
+            <button key={o.value} type="button" aria-pressed={origin === o.value} disabled={saving} onClick={() => void saveOrigin(o.value)} className={seg(origin === o.value)}>{o.label}</button>
+          ))}
+        </div>
       </div>
       <div role="group" aria-label="Qui encaisse" className="mb-3 flex rounded-full bg-field p-0.5">
         <button type="button" aria-pressed={mode === "agence"} disabled={saving} onClick={() => setMode("agence")} className={seg(mode === "agence")}>Agence encaisse</button>
