@@ -4,6 +4,7 @@
  * (lu une fois, puis effacé).
  */
 import type { QuoteLine } from "./pricingForm";
+import type { LineItem } from "./invoice";
 
 /**
  * `collabId` : facture créée depuis une collab (reliée à l'enregistrement).
@@ -12,7 +13,34 @@ import type { QuoteLine } from "./pricingForm";
  * (aucun reversement, invisible dans l'espace du créateur), `franchise` suit le régime de TVA.
  */
 /** `onBehalf` : facture à la marque établie au nom et pour le compte du créateur (mandat), choix de la collab. */
-export type InvoicePrefill = { creator: string; brand: string; lines: QuoteLine[]; collabId?: string; kind?: "commission"; franchise?: boolean; onBehalf?: boolean };
+/**
+ * `doc: "devis"` : ouvre un nouveau DEVIS (onglet Devis) au lieu d'une facture (« Créer le devis » de Tarifs).
+ * `fromQuote` + `details` : facture créée depuis un devis accepté, avec tout son contenu (client,
+ * lignes, TVA, commission, notes) ; le devis est marqué « Accepté » et relié à l'enregistrement.
+ */
+export type InvoicePrefill = {
+  creator: string;
+  brand: string;
+  lines: QuoteLine[];
+  collabId?: string;
+  kind?: "commission";
+  franchise?: boolean;
+  onBehalf?: boolean;
+  doc?: "devis";
+  fromQuote?: string;
+  details?: {
+    clientName: string;
+    clientEmail: string;
+    clientAddress: string;
+    clientSiret: string;
+    clientVat: string;
+    tpoRef: string;
+    items: LineItem[];
+    vatRate: number;
+    commissionRate: number;
+    notes: string;
+  };
+};
 
 const KEY = "ttp:invoice-prefill";
 
@@ -22,6 +50,16 @@ export function putInvoicePrefill(p: InvoicePrefill): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/** Regarde ce qui est préparé sans l'effacer (l'onglet Factures cède la place à l'onglet Devis, et inversement). */
+export function peekInvoicePrefill(): InvoicePrefill | null {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(KEY) ?? "null") as InvoicePrefill | null;
+    return v && Array.isArray(v.lines) ? v : null;
+  } catch {
+    return null;
   }
 }
 

@@ -278,12 +278,12 @@ export function Pricing() {
     navigator.clipboard?.writeText(txt).then(() => toast("Copié ✓")).catch(() => toast("Copie impossible"));
   };
 
-  /** « Créer le devis » : nouvelle facture en brouillon dans Facturation, au prix cible. */
+  /** « Créer le devis » : nouveau devis dans Facturation (onglet Devis), au prix cible. */
   const createQuote = () => {
     const lines = mode === "influence"
       ? tarifQuoteLines(tarif)
       : quoteInvoiceLines(ugc.itemsPriced.map((r) => ({ label: ugcLineLabel(r.item), mid: r.mid })), { pct: ugc.optionsPct, mid: ugc.options.mid }, { pct: ugc.discountPct, mid: ugc.discount.mid });
-    const ok = putInvoicePrefill({ creator: selName ?? "", brand: mode === "influence" ? deal.brand.trim() : "", lines });
+    const ok = putInvoicePrefill({ creator: selName ?? "", brand: mode === "influence" ? deal.brand.trim() : "", lines, doc: "devis" });
     if (!ok) return toast("Impossible de préparer le devis");
     window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "facturation" }));
   };

@@ -55,6 +55,7 @@ const RosterTabs = lazy(lazyImport(() => import("@/views/RosterTabs").then((m) =
 const Aujourdhui = lazy(lazyImport(() => import("@/views/Aujourdhui").then((m) => ({ default: m.Aujourdhui }))));
 const Stats = lazy(lazyImport(() => import("@/views/Stats").then((m) => ({ default: m.Stats }))));
 const Facturation = lazy(lazyImport(() => import("@/views/Facturation").then((m) => ({ default: m.Facturation }))));
+const Devis = lazy(lazyImport(() => import("@/views/Facturation").then((m) => ({ default: m.Devis }))));
 const Briefs = lazy(lazyImport(() => import("@/views/Briefs").then((m) => ({ default: m.Briefs }))));
 const Collabs = lazy(lazyImport(() => import("@/views/Collabs").then((m) => ({ default: m.Collabs }))));
 const AgentView = lazy(lazyImport(() => import("@/views/Agent").then((m) => ({ default: m.AgentView }))));
@@ -95,7 +96,7 @@ const Pricing = lazy(lazyImport(() => import("@/views/Pricing").then((m) => ({ d
 
 // Pages regroupées en onglets (refonte du menu) : l'onglet suit la sous-page de la sidebar.
 const FacturationPage = () => (
-  <MergedPage label="Sous-pages Facturation" orderKey="facturation" tabs={[{ value: "factures", label: "Factures", View: Facturation }, { value: "relances", label: "Relances", View: Relances }]} />
+  <MergedPage label="Sous-pages Facturation" orderKey="facturation" tabs={[{ value: "factures", label: "Factures", View: Facturation }, { value: "devis", label: "Devis", View: Devis }, { value: "relances", label: "Relances", View: Relances }]} />
 );
 const StatsPage = () => (
   <MergedPage label="Sous-pages Stats" orderKey="stats" tabs={[{ value: "chiffres", label: "Chiffres", View: Stats }, { value: "objectifs", label: "Objectifs", View: Objectifs }]} />
