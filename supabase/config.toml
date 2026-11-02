@@ -208,3 +208,9 @@ verify_jwt = false
 # l'auth (secret ou fondateur) est vérifiée dans le code.
 [functions.monthly-backup]
 verify_jwt = false
+
+# mediakit-publish : bouton « Publier maintenant » des media kits → relance le déploiement
+# du site (GitHub Actions, websitettpcreators). verify_jwt=false comme les fonctions
+# récentes ; l'accès (rôle agence) est vérifié dans le code.
+[functions.mediakit-publish]
+verify_jwt = false

@@ -3,6 +3,7 @@ import { Plus, Trash2, Save, ExternalLink, Building2, CalendarHeart, FileText, B
 import { supabase } from "@/lib/supabase";
 import { toast } from "@/components/ui/toast";
 import { ImageField } from "@/components/ui/image-field";
+import { PublishSiteButton } from "@/components/publish-site-button";
 import { MediakitThemePicker } from "@/components/ui/mediakit-theme-picker";
 
 /**
@@ -248,7 +249,7 @@ export function AgencyTab() {
           Le contenu de cadrage du deck agence.{" "}
           <span className="text-faint">Les créateurs se gèrent dans l'onglet « Créateurs » ; la liste des marques partenaires est gérée sur le site.</span>
         </p>
-        <div className="flex w-full items-center gap-2 sm:w-auto">
+        <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
           <a
             href={PUBLIC_URL}
             target="_blank"
@@ -266,6 +267,10 @@ export function AgencyTab() {
           >
             <Languages className="h-3.5 w-3.5" /> <span>En anglais</span>
           </a>
+          <PublishSiteButton
+            disabled={saving}
+            className="flex h-9 items-center gap-1.5 whitespace-nowrap rounded-full border border-border bg-surface px-3.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+          />
           <button
             type="button"
             onClick={save}

@@ -16,6 +16,7 @@ import { creatorAudience, type AudienceRow } from "@/lib/creatorAudience";
 import { mergeRates, ratesFromPricing, type RatesMerge } from "@/lib/mediakitRates";
 import type { RateOverrides } from "@/lib/pricing";
 import { KitRatesDialog } from "@/components/kit-rates-dialog";
+import { PublishSiteButton } from "@/components/publish-site-button";
 
 /**
  * Éditeur du MEDIA KIT EN LIGNE (par créatrice). Tout est écrit dans la colonne
@@ -458,7 +459,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
         </Select>
 
         {selId && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {publicUrl && (
               <a
                 href={publicUrl}
@@ -489,6 +490,12 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
               >
                 <Sparkles className="h-3.5 w-3.5" /> <span>Voir le kit UGC</span>
               </a>
+            )}
+            {publicUrl && (
+              <PublishSiteButton
+                disabled={saving}
+                className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-2 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+              />
             )}
             <button
               type="button"
