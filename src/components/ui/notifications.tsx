@@ -6,7 +6,7 @@ import { NotificationPanel, type PanelItem } from "@/components/ui/notification-
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
 import { viewTitle } from "@/lib/nav";
-import { actorInitials, readIds, toggleIds, writeIds } from "@/lib/notifLocal";
+import { actorInitials, toggleIds, unreadCount as countUnread, useNotifLocal, writeIds } from "@/lib/notifLocal";
 import type { StatusTone } from "@/lib/statusTone";
 
 export type NotifKind = "team" | "creator" | "email" | "facture" | "brief" | "event" | "contrat" | "bug";
@@ -138,18 +138,10 @@ export function Notifications({
 }) {
   const [open, setOpen] = React.useState(false);
   // Lue / archivée : propre à cet appareil (lib/notifLocal).
-  const [read, setRead] = React.useState(() => readIds("read"));
-  const [archived, setArchived] = React.useState(() => readIds("archived"));
-  const mark = (ids: string[], on: boolean) => {
-    const next = toggleIds(read, ids, on);
-    setRead(next);
-    writeIds("read", next);
-  };
-  const archive = (ids: string[], on: boolean) => {
-    const next = toggleIds(archived, ids, on);
-    setArchived(next);
-    writeIds("archived", next);
-  };
+  // Partagé avec les autres cloches de l'écran et la pastille de l'icône.
+  const { read, archived } = useNotifLocal();
+  const mark = (ids: string[], on: boolean) => writeIds("read", toggleIds(read, ids, on));
+  const archive = (ids: string[], on: boolean) => writeIds("archived", toggleIds(archived, ids, on));
 
   const panelItems: PanelItem[] = items.map((n) => {
     const kind = n.kind ?? "team";
@@ -170,7 +162,7 @@ export function Notifications({
       actions: action && n.page && onOpenPage ? [{ id: "open", label: action, tone: "primary" }] : undefined,
     };
   });
-  const unreadCount = panelItems.filter((n) => n.unread && !n.archived).length;
+  const unreadCount = countUnread(items.map((n) => n.id), read, archived);
   const go = (id: string) => {
     const page = items.find((n) => n.id === id)?.page;
     if (page && onOpenPage) {

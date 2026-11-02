@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { actorInitials, toggleIds } from "./notifLocal";
+import { actorInitials, toggleIds, unreadCount } from "./notifLocal";
 
 describe("notifLocal", () => {
   it("ajoute et retire des ids", () => {
@@ -13,6 +13,10 @@ describe("notifLocal", () => {
     expect(out.size).toBe(400);
     expect(out.has("nouveau")).toBe(true);
     expect(out.has("id0")).toBe(false);
+  });
+  it("compte comme la cloche : ni lues ni archivées (chiffre de l'icône)", () => {
+    expect(unreadCount(["a", "b", "c", "d"], new Set(["a"]), new Set(["b"]))).toBe(2);
+    expect(unreadCount(["a", "b"], new Set(["a", "b", "vieille"]), new Set())).toBe(0);
   });
   it("trouve l'initiale de la personne", () => {
     expect(actorInitials("Gianni a terminé la tâche")).toBe("G");
