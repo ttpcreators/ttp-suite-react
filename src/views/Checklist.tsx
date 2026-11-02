@@ -13,7 +13,7 @@ import { Tabs } from "@/components/ui/animated-tabs";
 import { supabase } from "@/lib/supabase";
 import { useLiveKey } from "@/lib/useLive";
 import { stepDef } from "@/lib/collabs";
-import { autoChecked, isChecked, mergeChecklists, toSaved, type CollabLite, type ShownChecklist } from "@/lib/checklistCollab";
+import { isChecked, mergeChecklists, toSaved, type CollabLite, type ShownChecklist } from "@/lib/checklistCollab";
 
 /**
  * Une checklist nommée : `done` mappe { stepId: true } pour les étapes cochées à la main ;
@@ -215,7 +215,9 @@ export function Checklist() {
   const toggleStep = async (id: string) => {
     const ckId = selectedId;
     const cur = shown.find((c) => c.id === ckId);
-    if (!cur || autoChecked(id, cur.collab?.step)) return; // cochée par la collab
+    if (!cur) return;
+    // Reliée à une collab : c'est l'étape de la collab qui coche (une seule source d'avancement).
+    if (cur.collab) return toast("Cette checklist suit l'étape de la collab : fais avancer la collab");
     // Valeur CIBLE (pas une inversion) : appliquée telle quelle sur l'état frais.
     const target = !cur.done[id];
     // Checklist créée d'office (pas encore enregistrée) ou reliée par son nom : on l'enregistre
@@ -506,15 +508,15 @@ export function Checklist() {
 
               <ul className="space-y-1">
                 {phase.steps.map((step) => {
-                  const auto = autoChecked(step.id, selected.collab?.step);
-                  const checked = auto || !!selected.done[step.id];
+                  const auto = !!selected.collab;
+                  const checked = isChecked(selected, step.id);
                   return (
                     <li key={step.id}>
                       <button
                         type="button"
                         onClick={() => toggleStep(step.id)}
                         disabled={auto}
-                        title={auto ? "Cochée par la collab" : undefined}
+                        title={auto ? "Suit l'étape de la collab" : undefined}
                         className="group flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-rowhover disabled:cursor-default disabled:hover:bg-transparent"
                       >
                         {/* Case animée */}

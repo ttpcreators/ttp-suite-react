@@ -10,7 +10,8 @@ import {
   formatEuro,
   type AppState,
 } from "@/lib/appState";
-import { parseAmountStrict } from "@/lib/money";
+import { parseAmount, parseAmountStrict } from "@/lib/money";
+import { invoiceHT, type InvoiceDetailLike } from "@/lib/invoice";
 import { supabase } from "@/lib/supabase";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { toast } from "@/components/ui/toast";
@@ -399,7 +400,13 @@ export function Debrief() {
     setBrand(c.brand);
     setCreator(cr?.name ?? c.creator ?? "");
     setPeriod(r.period);
-    setBudget(r.budget);
+    // Budget = ce que la marque a payé (factures payées de la collab, HT), sinon le cachet
+    // (audit du 2 nov., n° 43). Montant des factures en euros, même calcul que Facturation.
+    const paid = await supabase.from("invoices").select("id, amount").eq("collab_id", c.id).eq("status", "payee");
+    const st = await getAppState().catch(() => ({}) as AppState);
+    const det = (st.invoiceDetails as Record<string, InvoiceDetailLike>) ?? {};
+    const paidHT = ((paid.data as { id: string; amount: string }[] | null) ?? []).reduce((a, iv) => a + invoiceHT(parseAmount(iv.amount), det[iv.id]), 0);
+    setBudget(paidHT > 0 ? formatEuro(paidHT) : r.budget);
     setDeliverables(r.deliverables);
     setSummary(r.summary);
     setReach(r.reach);
@@ -424,7 +431,8 @@ export function Debrief() {
     if ((budget.trim() && budN === null) || (revenue.trim() && revN === null)) {
       toast("Montant à plusieurs nombres : enregistré tel quel, sans calcul. Indique un seul montant pour avoir les coûts");
     }
-    const roi = budN && budN > 0 && revN !== null ? (revN / budN).toFixed(1).replace(".", ",") + "×" : "—";
+    // CA généré par la marque inconnu ou nul : pas de ratio (« 0,0× le budget » laissait croire à un échec).
+    const roi = budN && budN > 0 && revN !== null && revN > 0 ? (revN / budN).toFixed(1).replace(".", ",") + "×" : "—";
     // Coûts réels de la campagne (budget ÷ chiffres du calculateur) : ce que la marque compare.
     const calcStats = calc.mode === "global" ? calc.stats.slice(0, 1) : calc.stats;
     const tot = engTotals(calcStats, engParse(calc.followers), calc.mode === "global" ? engParse(calc.postsCount) : undefined);

@@ -76,6 +76,9 @@ export function RivalWatch() {
   const [roster, setRoster] = useState<Set<string>>(new Set());
   const [known, setKnown] = useState<{ handles: Set<string>; names: Set<string> }>({ handles: new Set(), names: new Set() });
   const [reload, setReload] = useState(0);
+  // Comptes connus comme créateurs (pas des marques) : retirés de « Marques avec qui elle travaille ».
+  const [people, setPeople] = useState<Set<string>>(new Set());
+  const [emailDom, setEmailDom] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     let alive = true;
@@ -87,7 +90,19 @@ export function RivalWatch() {
         setRows([]);
         return;
       }
-      setRows((r.data as Rival[] | null) ?? []);
+      const list = (r.data as Rival[] | null) ?? [];
+      setRows(list);
+      // Profils lus par le radar et reconnus comme personnes (isBrand = false), parmi les
+      // « marques » citées par les agences (audit du 2 nov., n° 47 : Isabeau De la Tour, JADE…).
+      const cited = [...new Set(list.flatMap((x) => (x.brands ?? []).map((b) => b.u.toLowerCase())))];
+      if (cited.length) {
+        void supabase.from("ig_profiles").select("username, isBrand:data->>isBrand, email:data->>email").in("username", cited.slice(0, 500)).then(({ data }) => {
+          if (!alive) return;
+          const rowsP = (data as { username: string; isBrand: string | null; email: string | null }[] | null) ?? [];
+          setPeople(new Set(rowsP.filter((x) => x.isBrand === "false").map((x) => x.username.toLowerCase())));
+          setEmailDom(new Map(rowsP.filter((x) => x.email?.includes("@")).map((x) => [x.username.toLowerCase(), (x.email as string).split("@")[1].toLowerCase()])));
+        });
+      }
       const [pr, pl, cr, ct] = await Promise.all([
         supabase.from("ig_profiles").select("agency:data->>agency").not("data->>agency", "is", null).limit(2000),
         supabase.from("creator_pool").select("handle"),
@@ -232,6 +247,8 @@ export function RivalWatch() {
             pool={pool}
             roster={roster}
             known={known}
+            people={people}
+            emailDom={emailDom}
             onRefresh={() => void refresh(r.username)}
             onRemove={() => setRemove(r)}
             onScouting={(c) => void toScouting(c, r.username)}
@@ -257,15 +274,27 @@ export function RivalWatch() {
   );
 }
 
-function RivalCard({ r, busy, pool, roster, known, onRefresh, onRemove, onScouting, onPipeline }: {
-  r: Rival; busy: boolean; pool: Set<string>; roster: Set<string>; known: { handles: Set<string>; names: Set<string> };
+function RivalCard({ r, busy, pool, roster, known, people, emailDom, onRefresh, onRemove, onScouting, onPipeline }: {
+  r: Rival; busy: boolean; pool: Set<string>; roster: Set<string>; known: { handles: Set<string>; names: Set<string> }; people: Set<string>; emailDom: Map<string, string>;
   onRefresh: () => void; onRemove: () => void; onScouting: (c: RivalCreator) => void; onPipeline: (b: RivalBrand) => void;
 }) {
   const [allC, setAllC] = useState(false);
   const [allB, setAllB] = useState(false);
   const d = r.data;
   const creators = r.creators ?? [];
-  const brands = r.brands ?? [];
+  // Une créatrice (roster, scouting, mise en avant par l'agence, ou reconnue par le radar)
+  // n'est pas une marque.
+  const notBrand = new Set([...creators.map((c) => c.u.toLowerCase()), ...people, ...roster, ...pool]);
+  // Plusieurs « marques » d'une agence avec une adresse au même domaine (isabeau@foll-ow.com,
+  // jade@foll-ow.com) : ce sont ses talents, une marque a son propre domaine (audit du 2 nov., n° 47).
+  const FREE = /^(gmail|hotmail|outlook|yahoo|icloud|live|orange|free|sfr|laposte|wanadoo|protonmail|me)\./;
+  const domCount = new Map<string, number>();
+  for (const b of r.brands ?? []) {
+    const d = emailDom.get(b.u.toLowerCase());
+    if (d && !FREE.test(d)) domCount.set(d, (domCount.get(d) ?? 0) + 1);
+  }
+  const sharedDomain = (u: string) => (domCount.get(emailDom.get(u.toLowerCase()) ?? "") ?? 0) >= 2;
+  const brands = (r.brands ?? []).filter((b) => !notBrand.has(b.u.toLowerCase()) && !sharedDomain(b.u));
   const shownC = allC ? creators : creators.slice(0, 6);
   const shownB = allB ? brands : brands.slice(0, 6);
   return (

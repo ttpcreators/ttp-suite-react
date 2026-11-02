@@ -1269,12 +1269,28 @@ export function Mails() {
     () => folderList.filter((t) => (box === "all" || t.box === box) && (!creatorKey || rowCreators(t).includes(creatorKey))),
     [folderList, box, creatorKey, rowCreators],
   );
-  const boxThreads = useMemo(
-    () => (unreadOnly && folder === "inbox" ? boxAll.filter((t) => t.unread || unreadOnly.has(keyOf(t))) : boxAll),
-    [boxAll, unreadOnly, folder],
-  );
-  const unreadHere = useMemo(() => boxAll.filter((t) => t.unread).length, [boxAll]);
-  const toggleUnread = () => setUnreadOnly((cur) => (cur ? null : new Set(boxAll.filter((t) => t.unread).map(keyOf))));
+  // Non lus plus anciens que les fils chargés : demandés au serveur quand le filtre s'ouvre, pour
+  // que « Non lus » montre le même chiffre que la boîte (audit du 2 nov., n° 56).
+  const [unreadExtra, setUnreadExtra] = useState<InboxThread[]>([]);
+  const boxThreads = useMemo(() => {
+    if (!(unreadOnly && folder === "inbox")) return boxAll;
+    const here = boxAll.filter((t) => t.unread || unreadOnly.has(keyOf(t)));
+    const seen = new Set(here.map(keyOf));
+    const more = unreadExtra.filter((t) => !seen.has(keyOf(t)) && (box === "all" || t.box === box) && (!creatorKey || rowCreators(t).includes(creatorKey)));
+    return [...here, ...more];
+  }, [boxAll, unreadOnly, folder, unreadExtra, box, creatorKey, rowCreators]);
+  const unreadLoaded = useMemo(() => boxAll.filter((t) => t.unread).length, [boxAll]);
+  // Même chiffre que la pastille de la boîte (compte du serveur), sauf filtre par créateur.
+  const unreadHere = creatorKey ? unreadLoaded : Math.max(unreadLoaded, unreadShown);
+  const toggleUnread = () => {
+    if (unreadOnly) return setUnreadOnly(null);
+    setUnreadOnly(new Set(boxAll.filter((t) => t.unread).map(keyOf)));
+    if (unreadHere > unreadLoaded) {
+      void invokeJson<ListRes>("gmail-history", { inbox: true, box: "all", folder: "inbox", q: "is:unread" }).then((res) => {
+        if (res.ok) setUnreadExtra(effList(res.threads ?? []).filter((t) => t.unread));
+      });
+    }
+  };
   const inboxQ = inboxQuery.trim().toLowerCase();
   const localMatches = useMemo(
     () => (inboxQ ? boxThreads.filter((t) => `${t.name} ${t.email} ${t.subject} ${decodeEntities(t.snippet)}`.toLowerCase().includes(inboxQ)) : boxThreads),

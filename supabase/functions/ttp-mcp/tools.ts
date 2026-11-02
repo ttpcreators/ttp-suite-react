@@ -16,6 +16,8 @@ import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExc
 import type { Ctx } from "./oauth.ts";
 import { boxesFor, createDraft, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
+import { guessEventKind } from "../_shared/eventKind.ts";
+import { comptaSummary, type ComptaInv } from "../_shared/compta.ts";
 import { amountOf, contractList, invoiceTotals, owesMoney, pctOf, reversementRows, type Detail, type Payout } from "../_shared/reversements.ts";
 import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/audience.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
@@ -988,7 +990,7 @@ const creerEvenement: Tool = {
       who = found.name;
     }
     const { error } = await sb.from("events").insert({
-      date, time, title: str(a.titre, 200), type: ["call", "reunion", "collab", "shoot", "event", "voyage", "deadline"].includes(str(a.type)) ? str(a.type) : "call",
+      date, time, title: str(a.titre, 200), type: ["call", "reunion", "collab", "shoot", "event", "voyage", "deadline"].includes(str(a.type)) ? str(a.type) : guessEventKind(str(a.titre, 200)),
       who, description: str(a.details, 2000) || null, source: "agency", sync_source: "agence",
     });
     if (error) return fail(`Rendez-vous non créé : ${error.message}`);
@@ -1483,11 +1485,91 @@ const resumerBrief: Tool = {
   },
 };
 
+// ── Pages que le connecteur ne voyait pas (audit du 2 nov., n° 20) ─────────────
+const compta: Tool = {
+  name: "compta",
+  title: "Compta de l'agence",
+  description: "Page Compta (réservé aux fondateurs) : ce qu'il devrait y avoir sur le compte pro, à mettre de côté (créateurs, URSSAF, TVA), vraiment disponible, chiffre d'affaires encaissé de l'année. Mêmes chiffres que la page Compta.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  founder: true,
+  run: async (sb) => {
+    const [{ data: inv, error }, { data: cr }] = await Promise.all([
+      sb.from("invoices").select("id, amount, status, creator, collab_id, date, paid_at").limit(5000),
+      sb.from("creators").select("name, commission"),
+    ]);
+    if (error) return fail(`Factures illisibles : ${error.message}`);
+    const st = await appState(sb);
+    const roster: Record<string, number> = {};
+    for (const c of (cr as Json[] | null) ?? []) {
+      const v = pctOf(c.commission);
+      if (v != null) roster[String(c.name).trim().toLowerCase()] = v;
+    }
+    const saved = Object.fromEntries(Object.entries((st.creatorCommission ?? {}) as Record<string, number>).map(([n, v]) => [n.trim().toLowerCase(), v]));
+    const today = new Date().toISOString().slice(0, 10);
+    const c = comptaSummary({
+      invoices: (inv as unknown as ComptaInv[]) ?? [],
+      details: (st.invoiceDetails ?? {}) as Record<string, Detail>,
+      settings: st.comptaSettings,
+      payouts: (st.creatorPayouts ?? {}) as Record<string, Payout[]>,
+      collabModes: (st.collabCashMode ?? {}) as Record<string, string>,
+      contractHistory: st.contractHistory,
+      rateOf: (who) => { const n = String(who ?? "").trim().toLowerCase(); return roster[n] ?? saved[n] ?? 20; },
+      today,
+    });
+    const pctTxt = `${String(Math.round(c.rate * 100) / 100).replace(".", ",")} %`;
+    return ok([
+      `# Compta · ${c.activity} · TVA ${c.settings.vatRegime === "franchise" ? "franchise (293 B)" : `${c.settings.vatRate} %`}`,
+      `- Sur le compte pro : ${eur(c.solde)} (encaissé ${eur(c.encaisse)} − versé aux créateurs ${eur(c.verse)})`,
+      `- À mettre de côté : ${eur(c.aside.createurs + c.aside.urssaf + c.aside.tva)} · créateurs ${eur(c.aside.createurs)} · URSSAF ${eur(c.aside.urssaf)} (${pctTxt} de ${eur(c.openCA)} de CA${c.openPeriods.length ? `, ${c.openPeriods.join(", ")}` : ""}) · TVA ${eur(c.aside.tva)}`,
+      `- Vraiment disponible : ${eur(c.dispo)}`,
+      `- CA encaissé ${today.slice(0, 4)} : ${eur(c.caYear)}`,
+    ].join("\n"));
+  },
+};
+
+const journalActivite: Tool = {
+  name: "journal_activite",
+  title: "Journal d'activité",
+  description: "Ce que l'équipe a fait dans l'app (ajouts, modifications, suppressions), le plus récent d'abord, comme la page Activité. Filtres facultatifs : jours (défaut 7), recherche dans le libellé.",
+  inputSchema: { type: "object", properties: { jours: { type: "number" }, recherche: { type: "string" } }, additionalProperties: false },
+  founder: true,
+  run: async (sb, _c, a) => {
+    const days = Math.min(90, Math.max(1, Number(a.jours) || 7));
+    const since = new Date(Date.now() - days * 86400000).toISOString();
+    const { data, error } = await sb.from("agency_activity").select("created_at, actor_name, verb, entity, label").gte("created_at", since).order("created_at", { ascending: false }).limit(200);
+    if (error) return fail(`Journal illisible : ${error.message}`);
+    const q = str(a.recherche, 80).toLowerCase();
+    const rows = ((data as Json[] | null) ?? []).filter((r) => !q || String(r.label ?? "").toLowerCase().includes(q));
+    const VERB: Record<string, string> = { add: "a ajouté", update: "a modifié", delete: "a supprimé" };
+    return ok([
+      `# Activité · ${days} derniers jours · ${rows.length} action(s)`,
+      ...rows.map((r) => `- ${frDay(String(r.created_at).slice(0, 10))} ${String(r.created_at).slice(11, 16)} · ${r.actor_name ?? "?"} ${VERB[String(r.verb)] ?? r.verb} · ${r.entity} · ${r.label ?? ""}`),
+    ].join("\n"));
+  },
+};
+
+const corbeille: Tool = {
+  name: "corbeille",
+  title: "Corbeille",
+  description: "Éléments supprimés dans l'app et restaurables (page Corbeille), le plus récent d'abord. Lecture seule.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  founder: true,
+  run: async (sb) => {
+    const st = await appState(sb);
+    const bin = (Array.isArray(st.trashBin) ? (st.trashBin as Json[]) : []).slice().sort((x, y) => String(y.deletedAt ?? "").localeCompare(String(x.deletedAt ?? "")));
+    return ok([
+      `# Corbeille · ${bin.length} élément(s)`,
+      ...bin.slice(0, 100).map((e) => `- ${frDay(String(e.deletedAt ?? "").slice(0, 10))} · ${e.table} · ${e.label ?? ""}${e.sub ? ` · ${e.sub}` : ""}`),
+    ].join("\n"));
+  },
+};
+
 export const TOOLS: Tool[] = [
   pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif, aValider, ecarterProposition,
   creerTache, creerEvenement, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur,
   lireBrief, resumerBrief,
+  compta, journalActivite, corbeille,
   ...ADMIN_TOOLS,
 ];
 

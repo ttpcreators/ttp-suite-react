@@ -2,7 +2,8 @@ import { EMPTY, fmtDay } from "@/lib/dates";
 import { useEffect, useRef, useState } from "react";
 import { Upload, FileText, ExternalLink, Trash2, Image as ImageIcon, Link2, Mail, X, Send, Pencil, Plus, Check } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
-import { dbInsert, dbDelete } from "@/lib/db";
+import { dbInsert } from "@/lib/db";
+import { dbTrash } from "@/lib/trash";
 import { notifyCreator } from "@/lib/push";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { useCreators } from "@/lib/useCreators";
@@ -279,17 +280,10 @@ function MediakitFiles() {
   };
 
   const remove = async (row: ArchiveRow) => {
-    if (!(await dbDelete("documents", row.id))) return toast("Erreur, réessaie");
-    if (!isLink(row.path)) {
-      try {
-        const { error: rmErr } = await supabase.storage.from("documents").remove([row.path]);
-        if (rmErr) console.warn("[mediakit] suppression fichier", row.path, rmErr.message);
-      } catch (e) {
-        console.warn("[mediakit] suppression fichier", row.path, e);
-      }
-    }
+    // Par la Corbeille, fichier gardé (restaurable).
+    if (!(await dbTrash("documents", row.id, row.name))) return toast("Erreur, réessaie");
     setArchives((prev) => (prev ?? []).filter((x) => x.id !== row.id));
-    toast("Media kit supprimé");
+    toast("Media kit déplacé dans la corbeille");
   };
 
   // Objet par défaut d'un envoi = sujet du template avec {{creator}} résolu.

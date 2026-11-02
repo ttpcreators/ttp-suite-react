@@ -84,3 +84,14 @@ partnerships@ttpcreators.pro`;
 export function relanceMailto(to: string, subject: string, body: string): string {
   return `mailto:${encodeURIComponent(to.trim())}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 }
+
+/**
+ * Facture visée par une tâche de relance (« Relancer Fitaya J+1 pour la facture 2026-191 ») :
+ * son numéro, sinon null. Une telle tâche cochée compte comme une relance (audit du 2 nov., n° 41).
+ */
+export function relanceRefOf(text: string | null | undefined): string | null {
+  const t = String(text ?? "");
+  if (!/relan/i.test(t)) return null;
+  const m = /\b(20\d{2}-\d{3})\b/.exec(t);
+  return m ? m[1] : null;
+}

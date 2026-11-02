@@ -387,9 +387,20 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
     } else toast("Erreur, réessaie");
   };
 
+  // Fiche contact de la négociation : son lien, sinon la personne écrite dans « Contact »
+  // (adresse ou prénom) parmi les contacts de la marque, sinon un contact de la marque
+  // (audit du 2 nov., n° 42 : « Tiffany » chez Teveo, pas l'adresse générique press@).
   const contactOf = (r: Row) => {
     const byId = r.contact_id ? brandContacts.find((c) => c.id === r.contact_id) : undefined;
-    return byId ?? brandContacts.find((c) => (c.brand ?? "").trim().toLowerCase() === r.brand.trim().toLowerCase() && c.email);
+    if (byId) return byId;
+    const said = (r.contact ?? "").trim().toLowerCase();
+    if (said) {
+      const exact = brandContacts.find((c) => (c.email ?? "").toLowerCase() === said);
+      if (exact) return exact;
+    }
+    const same = brandContacts.filter((c) => (c.brand ?? "").trim().toLowerCase() === r.brand.trim().toLowerCase() && c.email);
+    const named = said && !said.includes("@") ? same.find((c) => (c.person ?? "").toLowerCase().split(/\s+/).includes(said.split(/\s+/)[0])) : undefined;
+    return named ?? same.find((c) => c.person && c.person !== "—") ?? same[0];
   };
   const photoOf = (name?: string | null) => (name ? creators.find((c) => c.name.toLowerCase() === name.toLowerCase())?.photo_url ?? null : null);
 

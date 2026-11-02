@@ -1,3 +1,4 @@
+import { dbTrash } from "./trash";
 import { supabase } from "@/lib/supabase";
 import { getAppState, invalidateAppState, listAppStateKey } from "@/lib/appState";
 import type { BrandContact, ContractRow, ContractStatus, HistKey } from "@/lib/contractRegistry";
@@ -36,10 +37,11 @@ export async function deleteContractRow(row: Pick<ContractRow, "key" | "id">): P
     const cur = row.key === "contractHistory" ? await freshEntry(row.key, row.id) : null;
     if (!(await listAppStateKey(row.key, [], [row.id]))) return "error";
     if (row.key !== "contractHistory") return "ok";
-    const { error } = await supabase.from("documents").delete().eq("id", row.id);
-    const path = typeof cur?.path === "string" ? cur.path : "";
-    if (path) await supabase.storage.from("documents").remove([path]).catch(() => {});
-    return error ? "partial" : "ok";
+    // Document par la Corbeille (fichier gardé, restaurable) ; pas de document : rien à faire.
+    const { data } = await supabase.from("documents").select("id").eq("id", row.id).limit(1);
+    if (!data?.length) return "ok";
+    const label = typeof cur?.title === "string" && cur.title ? cur.title : "Contrat de représentation";
+    return (await dbTrash("documents", row.id, label)) ? "ok" : "partial";
   } catch {
     return "error";
   }

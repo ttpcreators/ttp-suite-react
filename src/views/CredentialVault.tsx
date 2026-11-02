@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
-import { KeyRound, Eye, EyeOff, Copy, Plus, Trash2, Save } from "@/components/icons";
+import { KeyRound, Copy, Plus, Trash2, Save } from "@/components/icons";
 import { useAppState, saveAppStateKey, invalidateAppState, getAppState, type AppState } from "@/lib/appState";
 import { toast } from "@/components/ui/toast";
 
 /**
- * Coffre d'identifiants : adresses e-mail + mots de passe des boîtes que l'agence
- * gère pour certains créateurs. Blob agence-only `credVault` (RLS : invisible aux
- * créateurs). ⚠️ Stocké EN CLAIR côté base (choix assumé) — jamais partagé créateur.
+ * Boîtes e-mail que l'agence gère pour certains créateurs : libellé, adresse, note.
+ * Blob agence-only `credVault` (RLS : invisible aux créateurs). Les MOTS DE PASSE ne sont
+ * plus dans l'app (choix de Marc, 2 nov. 2026, audit n° 29) : ils vivent dans un
+ * gestionnaire de mots de passe. Un ancien mot de passe encore en base n'est jamais
+ * affiché ni copié ; il est conservé tel quel à l'enregistrement, en attendant sa purge.
  * Utilisé dans Accès → sous-page « E-mails créateurs ».
  */
-type CredEntry = { id: string; label: string; email: string; password: string; note: string };
+type CredEntry = { id: string; label: string; email: string; password?: string; note: string };
 const CRED_KEY = "credVault";
 let _cid = 0;
 const cid = () => `c${Date.now().toString(36)}${(_cid += 1)}`;
@@ -23,7 +25,6 @@ export function CredentialVault() {
   const [base, setBase] = useState<CredEntry[]>([]);
   const [deleted, setDeleted] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  const [reveal, setReveal] = useState<Record<string, boolean>>({});
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   // Initialisée UNE fois (ne pas écraser une saisie en cours à chaque rafraîchissement).
   useEffect(() => {
@@ -34,7 +35,7 @@ export function CredentialVault() {
   }, [loading, error, data, list]);
 
   const rows = list ?? [];
-  const add = () => setList([{ id: cid(), label: "", email: "", password: "", note: "" }, ...rows]);
+  const add = () => setList([{ id: cid(), label: "", email: "", note: "" }, ...rows]);
   const edit = (id: string, patch: Partial<CredEntry>) => setList(rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   const del = (id: string) => { setList(rows.filter((r) => r.id !== id)); setDeleted((d) => [...d, id]); setConfirmDel(null); };
   const copy = async (text: string, what: string) => {
@@ -75,8 +76,8 @@ export function CredentialVault() {
         <div className="flex items-center gap-2">
           <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground"><KeyRound className="h-4 w-4" /></span>
           <div>
-            <div className="text-sm font-semibold text-foreground">Identifiants des créateurs</div>
-            <div className="text-[11px] text-faint">Boîtes e-mail que tu gères. Agence uniquement. Stocké en clair : n'ajoute que ce que tu acceptes.</div>
+            <div className="text-sm font-semibold text-foreground">Boîtes e-mail des créateurs</div>
+            <div className="text-[11px] text-faint">Les boîtes que tu gères. Agence uniquement. Les mots de passe ne sont plus dans l'app : garde-les dans ton gestionnaire de mots de passe.</div>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -96,7 +97,7 @@ export function CredentialVault() {
           </div>
         ) : rows.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border bg-panel/40 px-4 py-8 text-center text-[13px] text-muted-foreground">
-            Aucun identifiant enregistré. « Ajouter » crée une entrée (créateur, e-mail, mot de passe).
+            Aucune boîte enregistrée. « Ajouter » crée une entrée (créateur, e-mail, note).
           </div>
         ) : (
           <div className="flex flex-col gap-3">
@@ -125,20 +126,8 @@ export function CredentialVault() {
                   </button>
                 </div>
 
-                {/* Mot de passe */}
-                <label className="mb-1 block text-[12px] font-medium text-muted-foreground">Mot de passe</label>
-                <div className="flex items-center gap-2">
-                  <input type={reveal[r.id] ? "text" : "password"} value={r.password} onChange={(e) => edit(r.id, { password: e.target.value })} placeholder="••••••••" autoComplete="new-password" spellCheck={false} className={CIN + " font-mono"} />
-                  <button type="button" onClick={() => setReveal((s) => ({ ...s, [r.id]: !s[r.id] }))} title={reveal[r.id] ? "Masquer" : "Afficher"} className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-                    {reveal[r.id] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
-                  <button type="button" onClick={() => copy(r.password, "Mot de passe")} title="Copier le mot de passe" className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-                    <Copy className="h-4 w-4" />
-                  </button>
-                </div>
-
                 {/* Note */}
-                <input value={r.note} onChange={(e) => edit(r.id, { note: e.target.value })} placeholder="Note (ex : hébergeur, e-mail de récupération, question secrète…)" className={CIN + " mt-2 text-[12px]"} />
+                <input value={r.note} onChange={(e) => edit(r.id, { note: e.target.value })} placeholder="Note (ex : hébergeur, où est rangé le mot de passe)" className={CIN + " mt-2 text-[12px]"} />
               </div>
             ))}
           </div>

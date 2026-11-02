@@ -14,7 +14,7 @@ import { brandDomainFrom, brandInitials, siteDomain } from "@/lib/mailAvatar";
 import { getAppState, mergeAppStateKey, useAppState, type AppState } from "@/lib/appState";
 import { CollabTakeCard } from "@/components/collab-take";
 import { billingFor, cashModeFor, commissionInvoiceLabel, mandatesFrom, readSettings } from "@/lib/compta";
-import { commissionMap, DEFAULT_COMMISSION, rateFor } from "@/lib/commission";
+import { collabRateFor, commissionMap, contractRatesFrom, dealOriginOf } from "@/lib/commission";
 import { totalsOf } from "@/lib/invoice";
 import { StatusPill } from "@/components/ui/status-pill";
 import { useEffect, useState, type ReactElement } from "react";
@@ -45,7 +45,7 @@ import { useBlockedCreators } from "@/lib/useExclusivites";
 import { CollabLinkedPanel, useCollabAutoTasks } from "@/components/collab-links";
 import { CollabExcluPanel } from "@/components/exclu-alert";
 import { createStepTask } from "@/lib/collabLinksDb";
-import { autoTaskFor, cachetAmount } from "@/lib/collabLinks";
+import { autoTaskFor, cachetAmount, cachetCurrency } from "@/lib/collabLinks";
 import { putInvoicePrefill } from "@/lib/invoicePrefill";
 import { useIsWide } from "@/lib/iosUi";
 
@@ -416,6 +416,10 @@ export function Collabs() {
     const created = await dbInsert("collabs", row);
     if (!created) return toast("Erreur, réessaie");
     setRows([created as unknown as Row, ...(rows ?? [])]);
+    // Qui encaisse : le réglage de la page Compta (défaut : le créateur), écrit sur la collab
+    // pour que les collabs déjà créées ne changent pas si le réglage change.
+    const st = await getAppState().catch(() => ({}) as AppState);
+    void mergeAppStateKey("collabCashMode", { [(created as unknown as Row).id]: readSettings(st.comptaSettings).encaissement });
     toast("Collab créée ✓");
     setFormOpen(false);
     resetForm();
@@ -463,8 +467,9 @@ export function Collabs() {
     const st = await getAppState().catch(() => ({}) as AppState);
     const mode = cashModeFor(row.id, row.creator, (st.collabCashMode as Record<string, string>) ?? {}, mandatesFrom(st.contractHistory));
     let ok: boolean;
+    // Taux du contrat selon l'origine du deal (fiche collab), sinon celui de la fiche du créateur.
+    const rate = collabRateFor(row.creator, dealOriginOf(row.id, st.collabDealOrigin), contractRatesFrom(st.contractHistory), commissionMap(creators), (st.creatorCommission as Record<string, number>) ?? {});
     if (mode === "createur") {
-      const rate = rateFor(row.creator, commissionMap(creators), (st.creatorCommission as Record<string, number>) ?? {}, DEFAULT_COMMISSION);
       const commission = totalsOf([{ id: "c", label: "", qty: 1, unit: amount }], true, 0, rate).commission;
       ok = putInvoicePrefill({
         creator: "",
@@ -480,6 +485,8 @@ export function Collabs() {
         brand: row.brand,
         lines: [{ label: row.deliverables?.trim() || row.title?.trim() || `Collab ${row.brand}`, unit: amount }],
         collabId: row.id,
+        currency: cachetCurrency(row.cachet),
+        commissionRate: rate,
         // Au nom de l'agence, ou du créateur (mandat) : choix de la collab, sinon le réglage de la page Compta.
         onBehalf: billingFor(row.id, (st.collabCashMode as Record<string, string>) ?? {}, readSettings(st.comptaSettings)) === "mandat",
       });

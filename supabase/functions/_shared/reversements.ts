@@ -38,7 +38,18 @@ export type Detail = {
   commissionRate?: unknown;
   onBehalf?: boolean | null;
   kind?: string | null;
+  /** Devise (« EUR » si absente) et valeur d'une unité en euros. */
+  currency?: string | null;
+  fxRate?: unknown;
 };
+
+/** Taux vers l'euro (copie de src/lib/invoice.ts eurRateOf) : null si devise étrangère sans taux. */
+export function eurRateOf(detail: Detail | null | undefined): number | null {
+  const cur = String(detail?.currency ?? "EUR").toUpperCase();
+  if (cur === "EUR") return 1;
+  const r = Number(detail?.fxRate);
+  return Number.isFinite(r) && r > 0 ? r : null;
+}
 
 /** Totaux d'une facture (lignes détaillées si elles existent, sinon montant enregistré, sans TVA). */
 export function invoiceTotals(amount: number, detail: Detail | null | undefined, rosterRate: number) {
@@ -47,7 +58,10 @@ export function invoiceTotals(amount: number, detail: Detail | null | undefined,
   const ht = cents((items ?? [{ qty: 1, unit: amount }]).reduce((s, it) => s + finite(it?.qty) * finite(it?.unit), 0));
   const tva = items && !detail!.franchise ? cents(ht * (finite(detail!.vatRate) / 100)) : 0;
   const commission = ht < COMMISSION_FLOOR_EUR ? 0 : cents(ht * (finite(rate) / 100));
-  return { ht, tva, ttc: cents(ht + tva), commission, reversal: cents(ht - commission), rate };
+  // Devise étrangère : totaux rendus en euros (même règle que l'app).
+  const fx = items ? eurRateOf(detail) ?? 1 : 1;
+  const eur = (n: number) => (fx === 1 ? n : cents(n * fx));
+  return { ht: eur(ht), tva: eur(tva), ttc: eur(cents(ht + tva)), commission: eur(commission), reversal: eur(cents(ht - commission)), rate };
 }
 
 /** Mandat d'encaissement par créateur (dernier contrat de représentation qui le précise). */

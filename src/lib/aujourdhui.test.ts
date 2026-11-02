@@ -152,7 +152,7 @@ describe("estimation, filtres, sections", () => {
 
   it("minutes = somme des constantes par type", () => {
     expect(totalMinutes(r.items)).toBe(2 + 2 + 3 + 2 + 2);
-    expect(summaryLine(r.items).replace(/\u00a0/g, " ")).toBe("5 actions à traiter · environ 11 min");
+    expect(summaryLine(r.items).replace(/\u00a0/g, " ")).toBe("5 actions à traiter (2 relances, 1 tâche, 1 boîte mail, 1 rendez-vous) · environ 11 min");
   });
 
   it("filtres Argent / Talents / Boîte", () => {

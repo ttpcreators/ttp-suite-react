@@ -98,6 +98,15 @@ export function hasAutoTask(todos: readonly { text: string; collab_id?: string |
 
 /** Montant du cachet (« 1 500 € », « 1500€ HT », « 1.500 € », « 1,5k ») → nombre, 0 si illisible.
  *  Même lecture que les autres montants (src/lib/money.ts) : « 1.500 » vaut 1500, pas 1,50. */
+/** Devise écrite dans un cachet (« 550 usd », « $550 », « £300 »), sinon « EUR ». */
+export function cachetCurrency(cachet: string | null | undefined): string {
+  const t = String(cachet ?? "").toLowerCase();
+  if (/\busd\b|\$|dollar/.test(t)) return "USD";
+  if (/\bgbp\b|£|livre/.test(t)) return "GBP";
+  if (/\bchf\b|franc suisse/.test(t)) return "CHF";
+  return "EUR";
+}
+
 export function cachetAmount(cachet: string | null | undefined): number {
   return parseAmountStrict(cachet) ?? firstAmount(cachet);
 }

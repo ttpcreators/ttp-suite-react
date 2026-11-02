@@ -20,6 +20,7 @@
 // ============================================================================
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { guessEventKind } from "./eventKind.ts";
 
 // ----------------------------------------------------------------------------
 // Constantes & environnement
@@ -567,7 +568,8 @@ export function googleToEvent(g: GoogleEvent): {
     date,
     time,
     day,
-    type: priv.ttp_type && priv.ttp_type.length > 0 ? priv.ttp_type : "call",
+    // Sans type choisi dans l'app : deviné d'après le titre (« Poster pour Nakd » = deadline).
+    type: priv.ttp_type && priv.ttp_type.length > 0 ? priv.ttp_type : guessEventKind(g.summary),
     who: priv.ttp_who && priv.ttp_who.length > 0 ? priv.ttp_who : null,
     description: g.description && g.description.trim() ? g.description : null,
     sort_order: Number.isFinite(parsedSort) ? parsedSort : 0,

@@ -1,3 +1,4 @@
+import { parseCommissionPct } from "@/lib/commission";
 import { useEffect, useState } from "react";
 import { typeHandle } from "@/lib/touches";
 import { supabase } from "@/lib/supabase";
@@ -103,6 +104,7 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
   const [name, setName] = useState("");
   const [handle, setHandle] = useState("");
   const [niche, setNiche] = useState("");
+  const [commission, setCommission] = useState("");
 
   useEffect(() => {
     supabase
@@ -179,10 +181,16 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
       toast("Renseigne le nom du créateur");
       return;
     }
+    // Commission obligatoire (audit du 2 nov., n° 58) : celle de son contrat de représentation.
+    if (parseCommissionPct(commission) == null) {
+      toast("Renseigne sa commission (%), celle de son contrat");
+      return;
+    }
     const row = {
       name: name.trim(),
       handle: handle.trim() || null,
       niche: niche.trim() || null,
+      commission: `${parseCommissionPct(commission)}`,
       sort_order: nextOrder(rows),
     };
     const created = await dbInsert("creators", row);
@@ -196,6 +204,7 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
     setName("");
     setHandle("");
     setNiche("");
+    setCommission("");
   };
 
   // Marque (ou annule) « données à jour ce mois » pour un créateur.
@@ -327,6 +336,7 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
           placeholder="@pseudo"
         />
         <TextField label="Niche" value={niche} onChange={setNiche} />
+        <TextField label="Commission (%)" value={commission} onChange={setCommission} placeholder="20" />
       </InlineForm>
 
       {rows.length > 0 && (

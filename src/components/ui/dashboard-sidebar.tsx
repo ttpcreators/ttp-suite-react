@@ -87,8 +87,13 @@ function AccentGradientDef() {
 }
 /** Pastille de nombre (notifications) à droite d'une ligne du menu. */
 export function SbCount({ n, className, tone, onActive }: { n: number; className?: string; tone?: "late"; onActive?: boolean }) {
+  // Ce que compte la pastille (audit du 2 nov., n° 44) : les nouveautés depuis la dernière visite
+  // de la page, pas le nombre d'éléments de la page.
+  const what = `${n} nouveauté${n > 1 ? "s" : ""} depuis ta dernière visite`;
   return (
     <span
+      title={what}
+      aria-label={what}
       className={cn(
         "grid h-[20px] min-w-[22px] shrink-0 place-items-center rounded-full px-1.5 text-[11.5px] font-semibold tabular-nums",
         onActive ? "bg-primary-foreground/25 text-primary-foreground" : tone === "late" ? "bg-late-soft text-late" : "bg-field text-foreground/70",

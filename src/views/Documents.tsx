@@ -11,7 +11,8 @@ import { PeriodFilter, periodsFrom, inPeriod } from "@/components/ui/period-filt
 import { isoDay } from "@/lib/dateRange";
 import { FileCard, fileFormatOf, type FormatFileProps } from "@/components/ui/file-card-collections";
 import { ActionMenu } from "@/components/ui/action-menu";
-import { dbInsert, dbDelete, nextOrder } from "@/lib/db";
+import { dbInsert, nextOrder } from "@/lib/db";
+import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
@@ -270,17 +271,15 @@ export function Documents() {
     }
   };
 
+  // Toute suppression passe par la Corbeille (audit du 2 nov., n° 57) : le fichier stocké est
+  // gardé, pour qu'une restauration retrouve le document entier.
   const del = async (row: Row) => {
-    if (!(await dbDelete("documents", row.id))) {
+    if (!(await dbTrash("documents", row.id, row.name))) {
       toast("Erreur, réessaie");
       return;
     }
-    if (row.path && !isExternalUrl(row.path)) {
-      const { error: rmErr } = await supabase.storage.from("documents").remove([row.path]);
-      if (rmErr) console.error("Suppression du fichier stocké échouée:", rmErr);
-    }
     setRows((prev) => (prev ?? []).filter((r) => r.id !== row.id));
-    toast("Supprimé");
+    toast("Déplacé dans la corbeille");
   };
 
   const formatDate = (value: string) => {

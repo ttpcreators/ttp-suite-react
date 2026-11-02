@@ -43,3 +43,63 @@ export function commissionMap(creators: { name: string; commission?: string | nu
   }
   return out;
 }
+
+/** Origine d'un deal (contrat de représentation, barème « par origine »). */
+export type DealOrigin = "agence" | "talent" | "autonome";
+export const DEAL_ORIGINS: { value: DealOrigin; label: string }[] = [
+  { value: "agence", label: "Apporté par l'agence" },
+  { value: "talent", label: "Initié par le talent" },
+  { value: "autonome", label: "Géré par le talent seul" },
+];
+
+type ContractRates = { uniform: number | null; agence: number; talent: number; autonome: number };
+
+/**
+ * Taux du DERNIER contrat de représentation de chaque créateur (blob `contractHistory`) :
+ * taux unique si le contrat est « uniforme », sinon un taux par origine du deal.
+ */
+export function contractRatesFrom(history: unknown): Record<string, ContractRates> {
+  const out: Record<string, ContractRates> = {};
+  if (!Array.isArray(history)) return out;
+  const n = (v: unknown, d: number) => {
+    const x = parseCommissionPct(v == null ? null : String(v));
+    return x == null ? d : x;
+  };
+  const sorted = [...history].sort((a, b) => String(a?.createdAt ?? "").localeCompare(String(b?.createdAt ?? "")));
+  for (const h of sorted) {
+    const name = String(h?.creator ?? "").trim().toLowerCase();
+    const c = h?.config;
+    if (!name || !c) continue;
+    const uniform = c.modeCommission === "uniforme" ? n(c.commUniforme, DEFAULT_COMMISSION) : null;
+    out[name] = { uniform, agence: n(c.commApportee, DEFAULT_COMMISSION), talent: n(c.commInitiee, DEFAULT_COMMISSION), autonome: n(c.commAutonome, 0) };
+  }
+  return out;
+}
+
+/** Taux du contrat pour un deal de cette origine (null : pas de contrat). */
+export function contractRateFor(name: string | null | undefined, origin: DealOrigin, rates: Record<string, ContractRates>): number | null {
+  const r = rates[(name ?? "").trim().toLowerCase()];
+  if (!r) return null;
+  if (origin === "autonome") return r.autonome;
+  return r.uniform ?? (origin === "talent" ? r.talent : r.agence);
+}
+
+/**
+ * Taux d'une collab : celui du contrat signé selon l'origine du deal (choix de Marc, 2 nov. 2026),
+ * sinon le taux de la fiche du créateur (rateFor).
+ */
+export function collabRateFor(
+  name: string | null | undefined,
+  origin: DealOrigin | null | undefined,
+  contracts: Record<string, ContractRates>,
+  roster: Record<string, number>,
+  saved: Record<string, number> = {},
+): number {
+  return contractRateFor(name, origin ?? "agence", contracts) ?? rateFor(name, roster, saved);
+}
+
+/** Origine enregistrée d'une collab (blob `collabDealOrigin`), « agence » par défaut. */
+export function dealOriginOf(collabId: string | null | undefined, origins: unknown): DealOrigin {
+  const v = collabId && origins && typeof origins === "object" ? (origins as Record<string, unknown>)[collabId] : null;
+  return v === "talent" || v === "autonome" ? v : "agence";
+}
