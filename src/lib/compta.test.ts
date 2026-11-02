@@ -84,14 +84,16 @@ describe("compta : réglages, seuils, collabs", () => {
     const brandOnly = [invoiceLine(inv("a", "1 000 €", "payee", { collab_id: "c1" }), null, 20, "createur", S)];
     expect(collabTake(c, brandOnly, 20, "createur", S)).toMatchObject({ commission: 200, received: false, commissionToBill: true });
   });
-  it("mode d'encaissement : collab, sinon contrat de représentation, sinon agence", () => {
+  it("mode d'encaissement : réglage de la collab, sinon agence", () => {
     const mandates = mandatesFrom([
       { creator: "Léa Test", createdAt: "2026-01-01", config: { mandatEncaissement: "true" } },
       { creator: "LÉA TEST", createdAt: "2026-06-01", config: { mandatEncaissement: "false" } },
     ]);
     expect(mandates).toEqual({ "léa test": false });
     expect(cashModeFor("c1", "Léa Test", { c1: "agence" }, mandates)).toBe("agence");
-    expect(cashModeFor("c2", "Léa Test", {}, mandates)).toBe("createur");
+    // Le contrat ne réécrit pas le passé : une collab sans réglage a été encaissée par l'agence.
+    expect(cashModeFor("c2", "Léa Test", {}, mandates)).toBe("agence");
+    expect(cashModeFor("c4", "Léa Test", { c4: "createur" }, mandates)).toBe("createur");
     expect(cashModeFor(null, "Inconnue", {}, mandates)).toBe("agence");
     expect(cashModeFor("c3", "Léa Test", { c3: "mandat" }, mandates)).toBe("agence");
   });
