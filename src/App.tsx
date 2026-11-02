@@ -48,6 +48,7 @@ import { collabTabRedirect } from "@/lib/collabTabs";
 import { PAGE_MERGES, pageMerge } from "@/lib/pageMerges";
 import { MergedPage } from "@/components/ui/merged-page";
 import { useAppBadge, useCloseMailNotifications } from "@/lib/appBadge";
+import { unreadCount, useNotifLocal } from "@/lib/notifLocal";
 
 // Vues chargées à la demande (code-splitting → démarrage plus léger, mobile compris).
 const RosterTabs = lazy(lazyImport(() => import("@/views/RosterTabs").then((m) => ({ default: m.RosterTabs }))));
@@ -745,11 +746,13 @@ export default function App() {
   }, [screenKey, iosPhone]);
   const scrollTop = () => scrollRef.current?.scrollTo({ top: 0, behavior: "smooth" });
 
-  // Pastille sur l'icône de l'app (écran d'accueil iPhone) : nombre de notifications de
-  // la cloche, remise au bon chiffre au retour au premier plan (le service worker l'augmente
-  // à chaque push reçu app fermée). Côté créateur, c'est l'espace créateur qui la tient.
+  // Pastille sur l'icône de l'app (écran d'accueil iPhone) : même chiffre que la cloche
+  // (notifications ni lues ni archivées), remise au bon chiffre au retour au premier plan
+  // (le service worker l'augmente à chaque push reçu app fermée). Côté créateur, c'est
+  // l'espace créateur qui la tient.
   const isAgency = profile?.role === "agency";
-  useAppBadge(notifs.length, isAgency);
+  const notifLocal = useNotifLocal();
+  useAppBadge(unreadCount(notifs.map((n) => n.id), notifLocal.read, notifLocal.archived), isAgency);
 
   // Notifications de mails : ouvrir Mails les retire (comme Gmail) ; le service worker
   // demande où l'on est pour ne pas afficher un mail qu'on a déjà sous les yeux.
