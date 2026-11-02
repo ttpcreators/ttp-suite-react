@@ -9,7 +9,7 @@ import { useCreators } from "@/lib/useCreators";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
-import { openLater } from "@/lib/openLater";
+import { openLater, viewableUrl } from "@/lib/openLater";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { RecipientPicker } from "@/components/ui/recipient-picker";
 import { SignaturePicker } from "@/components/ui/signature-picker";
@@ -270,7 +270,7 @@ function MediakitFiles() {
   const resolveUrl = async (row: ArchiveRow, seconds: number): Promise<string | null> => {
     if (isLink(row.path)) return row.path;
     const { data, error } = await supabase.storage.from("documents").createSignedUrl(row.path, seconds);
-    return error || !data?.signedUrl ? null : data.signedUrl;
+    return error || !data?.signedUrl ? null : viewableUrl(data.signedUrl);
   };
 
   const open = async (row: ArchiveRow) => {

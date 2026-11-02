@@ -18,6 +18,7 @@ import {
 } from "@/lib/representationContract";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { fmtDay, todayISO } from "@/lib/dates";
+import { viewableUrl } from "@/lib/openLater";
 import { CasesBar, ContractDocument, FoldSection, HistoryPanel, PanelSection, SettingsPanel, SwitchRow, docBtn, docIconBtn, docPrimaryBtn } from "@/components/contracts/contract-ui";
 
 type Cfg = Record<string, string>;
@@ -345,7 +346,7 @@ export function RepresentationContract({ initial = null }: { initial?: ContractH
       toast("Lien indisponible, réessaie");
       return;
     }
-    const url = data.signedUrl;
+    const url = viewableUrl(data.signedUrl);
     // Après un await, iOS refuse souvent le presse-papiers : repli partage natif puis affichage du lien
     try {
       if (!navigator.clipboard) throw new Error("no clipboard");

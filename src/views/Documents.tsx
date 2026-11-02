@@ -16,7 +16,7 @@ import { toast } from "@/components/ui/toast";
 import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
 import { getCache, setCache } from "@/lib/viewCache";
-import { goToTab } from "@/lib/openLater";
+import { goToTab, viewableUrl } from "@/lib/openLater";
 import { useEffect, useRef, useState } from "react";
 import { PencilLine, LayoutGrid, ReceiptText, FileSignature, FileText, Download, Eye, Share2, X, Trash2, BarChart3, ChevronLeft, type LucideIcon } from "@/components/icons";
 import { PageHeaderRow } from "@/components/ui/page-header";
@@ -82,24 +82,6 @@ const isHtmlPath = (p: string) => /\.html?$/i.test(p);
 /** Media kit ajouté PAR LIEN (Drive, Canva…) : le `path` est une URL http(s),
  *  pas un fichier du bucket → on l'ouvre/partage tel quel, rien à supprimer. */
 const isExternalUrl = (p: string) => /^https?:\/\//i.test(p);
-
-/**
- * Rend du HTML dans un onglet, MAIS dans une iframe `sandbox` (scripts désactivés) :
- * un fichier HTML uploadé (média-kit d'une marque, etc.) ne doit jamais exécuter de
- * script dans NOTRE origine (il pourrait lire la session Supabase). Le document
- * extérieur qu'on écrit ne contient que l'iframe (aucun script) ; le contenu non fiable
- * vit à l'intérieur, neutralisé. L'attribut `srcdoc` est échappé pour rester valide.
- */
-function renderHtmlInWindow(w: Window, html: string) {
-  const srcdoc = html.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
-  w.document.open();
-  w.document.write(
-    `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>Document</title>` +
-      `<style>html,body{margin:0;height:100%}iframe{border:0;width:100%;height:100vh;display:block}</style></head>` +
-      `<body><iframe sandbox srcdoc="${srcdoc}"></iframe></body></html>`,
-  );
-  w.document.close();
-}
 
 /** Tri de la liste (le tri par défaut « Plus récents » remplace l'ordre d'insertion). */
 const SORT_OPTIONS: FilterOpt[] = [
@@ -214,37 +196,16 @@ export function Documents() {
       window.open(row.path, "_blank", "noopener");
       return;
     }
-    const html = isHtmlPath(row.path);
     // On pré-ouvre l'onglet DANS le geste utilisateur (sinon le popup est bloqué
-    // après l'await, surtout sur iPhone) : pour un .html comme pour les autres fichiers.
+    // après l'await, surtout sur iPhone). Un .html passe par la page de lecture (goToTab).
     const w = window.open("", "_blank");
-    if (html && !w) {
-      // window.open a renvoyé null → bloqué par le navigateur. On prévient plutôt que
-      // d'échouer en silence (l'utilisateur croirait que le bouton ne marche pas).
-      toast("Autorise les pop-ups pour ouvrir le contrat");
-      return;
-    }
     const { data, error } = await supabase.storage.from("documents").createSignedUrl(row.path, 3600);
     if (error || !data?.signedUrl) {
       w?.close();
       toast("Lien indisponible");
       return;
     }
-    if (!html) {
-      goToTab(w, data.signedUrl); // onglet refusé : ouverture comme avant
-      return;
-    }
-    // Supabase sert les .html en pièce/texte brut (sécurité anti-hébergement) → le
-    // navigateur affiche la SOURCE, avec les accents cassés. On récupère les octets
-    // (fetch.text() décode toujours en UTF-8 → règle le mojibake) et on écrit la page
-    // dans l'onglet, rendue proprement comme du HTML.
-    try {
-      const res = await fetch(data.signedUrl);
-      const src = await res.text();
-      if (w) renderHtmlInWindow(w, src);
-    } catch {
-      if (w) w.location.href = data.signedUrl; // repli
-    }
+    goToTab(w, data.signedUrl);
   };
 
   const preview = async (row: Row) => {
@@ -291,7 +252,7 @@ export function Documents() {
         toast("Lien de partage indisponible");
         return;
       }
-      url = data.signedUrl;
+      url = viewableUrl(data.signedUrl);
     }
     if (navigator.share) {
       try {
@@ -509,14 +470,7 @@ export function Documents() {
                 {previewDoc.kind === "html" ? (
                   <button
                     type="button"
-                    onClick={() => {
-                      const w = window.open("", "_blank");
-                      if (!w) {
-                        toast("Autorise les pop-ups pour ouvrir ce fichier");
-                        return;
-                      }
-                      if (previewDoc.html) renderHtmlInWindow(w, previewDoc.html);
-                    }}
+                    onClick={() => goToTab(null, previewDoc.url)}
                     className="grid h-8 w-8 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
                     title="Ouvrir dans un onglet"
                   >
