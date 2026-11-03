@@ -56,6 +56,8 @@ export const RC_FIELDS: RcField[] = [
   { key: "essaiActif", label: "Période d'essai réciproque", type: "bool", default: "true", group: "Durée" },
   { key: "essaiJours", label: "Durée période d'essai (jours)", type: "number", default: "15", group: "Durée" },
   { key: "essaiParEmail", label: "Résiliation d'essai par email admise", type: "bool", default: "false", group: "Durée" },
+  { key: "resiliationLibre", label: "Résiliation libre à tout moment (e-mail ou message)", type: "bool", default: "false", group: "Durée", help: "Remplace l'article 10.1." },
+  { key: "resiliationLibreJours", label: "Préavis de résiliation libre (jours)", type: "number", default: "1", group: "Durée" },
 
   { key: "modeCommission", label: "Barème de commission", type: "select", default: "parOrigine", group: "Commission", options: [{ value: "parOrigine", label: "Par origine du deal (apporté / initié)" }, { value: "uniforme", label: "Taux uniforme" }] },
   { key: "regimeFiscalComm", label: "Base de la commission", type: "select", default: "HT", group: "Commission", options: [{ value: "HT", label: "Hors taxes (HT)" }, { value: "TTC", label: "Toutes taxes comprises (TTC)" }] },
@@ -139,8 +141,9 @@ export const RC_ARTICLES: Article[] = [
   { id: "art7_obligations_mail", number: "Article 7", title: "Obligations du Talent — accès mail", variant: "both", includeIf: "gestionMail", body: "Le Talent s'engage en outre à maintenir les accès à la boîte mail professionnelle actifs pendant toute la durée du contrat." },
   { id: "art8_pi_image", number: "Article 8", title: "Propriété intellectuelle et droit à l'image", variant: "both", body: "8.1 Le Talent conserve la pleine propriété de ses contenus. Les droits d'exploitation consentis aux marques sont négociés au cas par cas.\n\n8.2 Le Talent accorde à l'Agence un droit NON exclusif, gratuit et mondial d'utiliser son image, son nom et ses identifiants dans ses communications commerciales (portfolio, site, pitchs), {dureeDroitImage}." },
   { id: "art9_confidentialite", number: "Article 9", title: "Confidentialité", variant: "both", body: "Les Parties sont tenues à une obligation de confidentialité absolue portant sur les conditions financières, les stratégies internes et les informations relatives aux marques, prospects et partenaires{mentionContenuMail}. Cette obligation s'applique pendant toute la durée du contrat et pendant {confidentialiteApresAns} ans après son terme.{mentionRgpdConfid}" },
-  { id: "art10_fin_terme", number: "Article 10", title: "Fin et résiliation", variant: "both", includeIf: "modeDureeDeterminee", body: "10.1 Le contrat prend fin de plein droit à son terme, le {dateFin}, sans qu'aucune formalité ne soit requise." },
-  { id: "art10_fin_amiable", number: "Article 10", title: "Fin et résiliation", variant: "both", includeIf: "modeDureeReconductible", body: "10.1 Après la période d'essai, chaque Partie peut résilier à l'amiable, sans motif, par lettre recommandée avec accusé de réception, moyennant un préavis de {preavisJours} jours." },
+  { id: "art10_fin_terme", number: "Article 10", title: "Fin et résiliation", variant: "both", includeIf: "finAuTerme", body: "10.1 Le contrat prend fin de plein droit à son terme, le {dateFin}, sans qu'aucune formalité ne soit requise." },
+  { id: "art10_fin_amiable", number: "Article 10", title: "Fin et résiliation", variant: "both", includeIf: "finAmiable", body: "10.1 Après la période d'essai, chaque Partie peut résilier à l'amiable, sans motif, par lettre recommandée avec accusé de réception, moyennant un préavis de {preavisJours} jours." },
+  { id: "art10_resiliation_libre", number: "Article 10", title: "Fin et résiliation", variant: "both", includeIf: "resiliationLibre", body: "10.1 Résiliation libre — Chaque Partie peut résilier le présent contrat à tout moment, sans motif, par simple notification écrite (e-mail ou message), moyennant un préavis de {preavisResiliationLibre}. La résiliation prend effet {effetResiliationLibre}. Les deals signés avant cette date restent gérés par l'Agence jusqu'à leur terme, conformément à l'article 10.3, et la commission correspondante reste due." },
   { id: "art10_faute_grave", number: "Article 10", title: "Fin et résiliation — faute grave", variant: "both", body: "10.2 Résiliation anticipée pour faute grave — En cas de manquement grave (retard de paiement supérieur à {retardPaiementJours} jours, atteinte à l'image, violation de la confidentialité{mentionExclusiviteFaute}{mentionMailFaute}), la Partie lésée peut résilier par lettre recommandée avec accusé de réception motivée, avec effet immédiat.\n\n10.3 Deals en cours — L'Agence continue de gérer les deals en cours{mentionJusquauTerme} ; la commission correspondante reste due." },
   { id: "art10_revocation_mail", number: "Article 10", title: "Fin et résiliation — révocation des accès mail", variant: "both", includeIf: "gestionMail", body: "10.4 Révocation des accès — Les accès à la boîte mail sont révoqués à la date d'effet de la fin du contrat ; l'Agence cesse toute consultation dans un délai de {mailRevocationHeures} heures." },
   { id: "art10_clause_penale", number: "Article 10", title: "Fin et résiliation — clause pénale", variant: "both", includeIf: "clausePenaleActive", body: "10.{numClausePenale} Clause pénale — {libelleClausePenale} ouvre droit, au profit de l'Agence, à des dommages-intérêts forfaitaires égaux à {clausePenaleMois} mois de commission moyenne, sans préjudice de tout autre recours." },
@@ -204,12 +207,23 @@ function ph(key: string, c: Record<string, string>): string {
         return "Collaborations initiées par le Talent — Le Talent peut initier et gérer lui-même des collaborations qu'il obtient par ses propres moyens (démarchage direct d'une marque, relance d'anciens partenaires). Il s'engage toutefois à en informer l'Agence, à des fins de transparence, de suivi et de cohérence de son image ; la commission éventuellement applicable est celle prévue à l'article 4.";
       return "Collaborations initiées par le Talent — Toute opportunité de collaboration commerciale que le Talent viendrait à initier lui-même (démarchage direct d'une marque, relance d'anciens partenaires) est portée à la connaissance de l'Agence, qui en assure la gestion, la négociation et la conclusion. Le Talent s'interdit de conclure directement une collaboration commerciale sans l'intervention préalable de l'Agence.";
     }
+    case "preavisResiliationLibre": return joursEnLettres(Number(c.resiliationLibreJours || "1"));
+    case "effetResiliationLibre": return Number(c.resiliationLibreJours || "1") === 1 ? "le lendemain de la notification" : "à l'expiration de ce préavis";
     case "mentionJusquauTerme": return c.modeDuree === "determinee" ? " jusqu'à leur terme" : "";
     case "numClausePenale": return is(c, "gestionMail") ? "5" : "4";
     case "libelleClausePenale": return c.variante === "exclusif" ? "Toute violation avérée de l'exclusivité (collaboration conclue sans l'Agence, contournement)" : "Toute violation avérée des obligations du Talent ayant causé un préjudice à l'Agence (non-déclaration d'une collaboration manageable, contournement)";
     case "organeMediation": return c.mediationOrg === "mediateurInfluence" ? "(médiateur spécialisé en influence commerciale)" : "(CCI de Lyon)";
     default: return c[key] ?? "";
   }
+}
+
+const NOMBRES = ["zéro", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix", "onze", "douze", "treize", "quatorze", "quinze", "seize"];
+
+/** 1 → « un (1) jour », 7 → « sept (7) jours » (chiffres seuls au-delà de seize). */
+export function joursEnLettres(n: number): string {
+  const v = Number.isFinite(n) && n > 0 ? Math.round(n) : 1;
+  const unit = v > 1 ? "jours" : "jour";
+  return NOMBRES[v] ? `${NOMBRES[v]} (${v}) ${unit}` : `${v} ${unit}`;
 }
 
 /**
@@ -235,6 +249,9 @@ function includeOk(token: string | undefined, c: Record<string, string>): boolea
     case "mandatEncaissementFalse": return !is(c, "mandatEncaissement");
     case "modeDureeDeterminee": return c.modeDuree === "determinee";
     case "modeDureeReconductible": return c.modeDuree === "reconductible";
+    // 10.1 : la résiliation libre remplace la fin au terme / la résiliation amiable.
+    case "finAuTerme": return c.modeDuree === "determinee" && !is(c, "resiliationLibre");
+    case "finAmiable": return c.modeDuree === "reconductible" && !is(c, "resiliationLibre");
     default: return is(c, token);
   }
 }
