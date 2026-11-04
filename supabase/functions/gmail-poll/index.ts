@@ -26,6 +26,7 @@ import { gfetch, mapPool } from "../_shared/gfetch.ts";
 import { sendTo } from "../_shared/push.ts";
 import { agencyMailPayloads, creatorMailPayloads, creatorsForMail, type CreatorMailSetting, type Lang, type NewMail } from "../_shared/mailNotif.ts";
 import { closeAnsweredTasks, tasksFromMails } from "./tasks.ts";
+import { excluFromMails } from "./exclu.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
@@ -317,6 +318,16 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Contrats PDF reçus : exclusivité lue toute seule, à confirmer (voir exclu.ts).
+  let exclu = 0;
+  if (added.length && prefs.mailExclu !== false) {
+    try {
+      exclu = await excluFromMails(sb, tokens, added, blob, AGENCY_DOMAIN, await creatorMailSettings(sb));
+    } catch (e) {
+      console.error("gmail-poll exclu", (e as Error)?.message);
+    }
+  }
+
   // Tâches de mail déjà faites (réponse envoyée dans le fil) : cochées toutes seules.
   let tasksDone = 0;
   if (prefs.mailTasks !== false) {
@@ -328,7 +339,7 @@ Deno.serve(async (req: Request) => {
   }
 
   return jsonRes({
-    ok: true, new: added.length, pushed, creatorPushed, tasks, tasksDone,
+    ok: true, new: added.length, pushed, creatorPushed, tasks, tasksDone, exclu,
     ...(baseline ? { baseline: true } : {}),
     ...(more ? { more: true } : {}),
     ...(failedBoxes.length ? { partial: true, failedBoxes } : {}),
