@@ -17,10 +17,14 @@ import { useVisitedTabs } from "@/lib/useVisitedTabs";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
 import { IgPlanner } from "@/components/IgPlanner";
 import { KIND_LABEL, type PlanKind } from "@/lib/igPlanner";
+import { useAppState, type AppState } from "@/lib/appState";
+import { useExclusivites } from "@/lib/useExclusivites";
+import type { AujDeadline } from "@/lib/aujourdhui";
+import { birthdayEcheances, contractEcheances, excluEcheances, type BirthCreator } from "@/lib/planningEcheances";
 
 /**
  * PLANNING = 2 onglets : l'AGENDA (rendez-vous, échéances de briefs / to-do /
- * factures, posts Instagram programmés) et les POSTS INSTAGRAM du compte TTP
+ * factures, fins de contrat et d'exclusivité, anniversaires, posts Instagram programmés) et les POSTS INSTAGRAM du compte TTP
  * (programmation, publiés tout seuls à l'heure). Un clic sur un post de l'agenda
  * ouvre ce post dans l'onglet Posts Instagram.
  */
@@ -80,6 +84,28 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
   const [error, setError] = useState(false);
   const creators = useCreators();
   const live = useLiveKey();
+  // Fins de contrat, fins d'exclusivité et anniversaires (lecture seule, clic = page d'origine).
+  const { data: deadlines } = useAppState<AujDeadline[]>((s: AppState) => (Array.isArray(s.contractDeadlines) ? (s.contractDeadlines as AujDeadline[]) : []));
+  const { list: exclus } = useExclusivites();
+  const [births, setBirths] = useState<BirthCreator[]>([]);
+  useEffect(() => {
+    let alive = true;
+    supabase.from("creators").select("name,birth,status").then(({ data }) => {
+      if (alive && data) setBirths(data as BirthCreator[]);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [live]);
+  const echeances = useMemo<Ev[]>(
+    () =>
+      [...contractEcheances(deadlines ?? []), ...excluEcheances(exclus), ...birthdayEcheances(births, todayISO())].map((e) => ({
+        ...e,
+        time: "",
+        type: "deadline",
+      })),
+    [deadlines, exclus, births],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -184,7 +210,7 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
   }, [live]);
 
   // Vrais événements + échéances superposées (briefs/to-do).
-  const allEvents = useMemo(() => [...(rows ?? []), ...overlays], [rows, overlays]);
+  const allEvents = useMemo(() => [...(rows ?? []), ...overlays, ...echeances], [rows, overlays, echeances]);
 
   if (error && !rows)
     return (
@@ -260,13 +286,13 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
         onCreate={onCreate}
         onUpdate={onUpdate}
         onDelete={onDelete}
-        onNavigate={(kind, ev) =>
-          kind === "post"
-            ? onOpenPost(ev.id.replace(/^post:/, ""))
-            : window.dispatchEvent(
-                new CustomEvent("ttp-navigate", { detail: kind === "brief" ? "briefs" : kind === "facture" ? "facturation" : "todo" }),
-              )
-        }
+        onNavigate={(kind, ev) => {
+          if (kind === "post") return onOpenPost(ev.id.replace(/^post:/, ""));
+          const page: Record<string, string> = { brief: "briefs", facture: "facturation", todo: "todo", contrat: "echeances", exclu: "exclusivites" };
+          // Anniversaire : la fiche du créateur.
+          const detail = kind === "anniv" ? `creator:${ev.who ?? ""}` : page[kind] ?? "todo";
+          window.dispatchEvent(new CustomEvent("ttp-navigate", { detail }));
+        }}
         creators={creators}
         navAdd
         collabLinks
