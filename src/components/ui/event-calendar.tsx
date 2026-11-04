@@ -25,11 +25,16 @@ export type Ev = {
   /** Création seulement : collab à relier (agence, après le SQL collab_id). Jamais écrit dans `events` tel quel. */
   collabId?: string;
   /** Catégorie de la puce. Par défaut "event" (vrai rendez-vous, modifiable).
-   *  "brief" / "todo" / "facture" = échéances superposées en LECTURE SEULE (clic = navigation). */
-  kind?: "event" | "brief" | "todo" | "facture" | "post";
+   *  "brief" / "todo" / "facture" / "contrat" / "exclu" / "anniv" = échéances superposées en
+   *  LECTURE SEULE (clic = navigation). */
+  kind?: Kind;
 };
 
-type Kind = "event" | "brief" | "todo" | "facture" | "post";
+type Kind = "event" | "brief" | "todo" | "facture" | "post" | "contrat" | "exclu" | "anniv";
+/** Puces superposées : jamais modifiables ici, un clic ouvre leur page. */
+export type OverlayKind = Exclude<Kind, "event">;
+/** Catégories affichées seulement quand il y en a (agenda agence, pas l'espace créateur). */
+const OPTIONAL_KINDS: Kind[] = ["post", "contrat", "exclu", "anniv"];
 
 type View = "month" | "week" | "list";
 
@@ -70,8 +75,9 @@ function evKind(e: Ev): Kind {
 /** Trait de couleur d'une puce : le type pour un rendez-vous, gris pour une échéance
  *  (brief, to-do, facture, lecture seule), rose Instagram pour un post. */
 function chipBg(e: Ev) {
-  if (e.kind === "brief" || e.kind === "todo" || e.kind === "facture") return "bg-zinc-300 dark:bg-zinc-600";
+  if (e.kind === "brief" || e.kind === "todo" || e.kind === "facture" || e.kind === "contrat" || e.kind === "exclu") return "bg-zinc-300 dark:bg-zinc-600";
   if (e.kind === "post") return "bg-pink-500";
+  if (e.kind === "anniv") return "bg-yellow-400";
   return typeBg(e.type);
 }
 /** Libellé de catégorie (vue Semaine et Liste) : discret, la couleur est portée par le trait. */
@@ -83,6 +89,9 @@ function chipLabel(e: Ev, t: T) {
   if (e.kind === "todo") return t("To-do");
   if (e.kind === "facture") return t("Facture");
   if (e.kind === "post") return t("Post Instagram");
+  if (e.kind === "contrat") return t("Fin de contrat");
+  if (e.kind === "exclu") return t("Fin d'exclu");
+  if (e.kind === "anniv") return t("Anniversaire");
   return typeLabel(e.type, t);
 }
 
@@ -92,6 +101,9 @@ const KIND_META: { id: Kind; label: string; dot: string }[] = [
   { id: "todo", label: "To-do", dot: "bg-indigo" },
   { id: "facture", label: "Factures", dot: "bg-signal" },
   { id: "post", label: "Posts Instagram", dot: "bg-pink-500" },
+  { id: "contrat", label: "Contrats", dot: "bg-zinc-400" },
+  { id: "exclu", label: "Exclusivités", dot: "bg-zinc-400" },
+  { id: "anniv", label: "Anniversaires", dot: "bg-yellow-400" },
 ];
 
 // ─── Helpers de date (locaux, sans dépendance) ───────────────────────────────
@@ -200,7 +212,7 @@ export function EventCalendar({
   /** « Avec qui » imposé (champ masqué, jamais vidé) : ex. espace créateur. */
   fixedWho?: string;
   /** Clic sur une échéance brief/to-do/facture (lecture seule) → navigation vers sa page. */
-  onNavigate?: (kind: "brief" | "todo" | "facture" | "post", ev: Ev) => void;
+  onNavigate?: (kind: OverlayKind, ev: Ev) => void;
   creators?: { name: string; photo_url?: string | null }[];
   /** Téléphone : « + » dans la barre de titre pour créer un événement (Planning agence). */
   navAdd?: boolean;
@@ -221,7 +233,7 @@ export function EventCalendar({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false); // enregistrement / suppression en cours
   // Filtres de catégorie (événements / briefs / to-do) — actifs par défaut.
-  const [kinds, setKinds] = useState<Record<Kind, boolean>>({ event: true, brief: true, todo: true, facture: true, post: true });
+  const [kinds, setKinds] = useState<Record<Kind, boolean>>({ event: true, brief: true, todo: true, facture: true, post: true, contrat: true, exclu: true, anniv: true });
 
   const tKey = todayKey();
 
@@ -282,7 +294,7 @@ export function EventCalendar({
   }
   // Un vrai événement s'édite ; une échéance brief/to-do renvoie vers sa page.
   function handleEventClick(e: Ev) {
-    if (e.kind === "brief" || e.kind === "todo" || e.kind === "facture" || e.kind === "post") {
+    if (e.kind && e.kind !== "event") {
       onNavigate?.(e.kind, e);
       return;
     }
@@ -384,7 +396,7 @@ export function EventCalendar({
           const on = kinds[k.id];
           const count = events.filter((e) => evKind(e) === k.id).length;
           // Posts Instagram : seulement là où il y en a (agenda agence), pas dans l'espace créateur.
-          if (k.id === "post" && !count) return null;
+          if (OPTIONAL_KINDS.includes(k.id) && !count) return null;
           return (
             <button
               key={k.id}

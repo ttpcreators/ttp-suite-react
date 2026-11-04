@@ -501,8 +501,20 @@ export default function App() {
   useEffect(() => {
     const onNav = (e: Event) => {
       const id = (e as CustomEvent<string>).detail;
+      // « creator:Nom » : fiche du créateur, par-dessus la page en cours (Retour y revient).
+      if (typeof id === "string" && id.startsWith("creator:")) {
+        const name = id.slice("creator:".length).trim();
+        if (!name) return;
+        setPhoneScreen(null);
+        setDetailCreator(name);
+        setSpace("agency");
+        return;
+      }
       if (id && isNavView(id)) {
-        navigateCurrentTab(id as ViewId);
+        // Page devenue onglet d'une autre (Échéances, Exclusivités…) : page hôte, bon onglet.
+        const merged = pageMerge(id);
+        navigateCurrentTab((merged?.view ?? id) as ViewId);
+        setSub(merged?.sub ?? null);
         setDetailCreator(null);
         setSpace("agency");
       }
