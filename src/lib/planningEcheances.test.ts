@@ -16,6 +16,10 @@ describe("contractEcheances", () => {
     ]);
     expect(out.map((e) => e.date).sort()).toEqual(["2026-07-01", "2027-11-01"]);
   });
+  it("lit une durée enregistrée en texte", () => {
+    const [e] = contractEcheances([{ creator: "A", type: "marque", start: "2026-01-15", months: "6" as unknown as number }]);
+    expect(e.date).toBe("2026-07-15");
+  });
   it("ignore un contrat sans date ou sans créateur", () => {
     expect(contractEcheances([{ creator: "", type: "marque", start: "2026-01-01", months: 3 }, { creator: "A", type: "marque", start: "", months: 3 }])).toEqual([]);
   });
@@ -24,7 +28,7 @@ describe("contractEcheances", () => {
 describe("excluEcheances", () => {
   const base: Exclusivite = { id: "x", creator: "LÉNA PASQUALE", brand: "Nutripure", scope: "", competitors: [], start: "2026-11-01", end: "2027-02-01", points: [], source: "manuel", createdAt: 0 };
   it("pose la fin d'une exclusivité confirmée", () => {
-    expect(excluEcheances([base])).toEqual([{ id: "exclu:x", date: "2027-02-01", title: "Léna Pasquale × Nutripure", who: "LÉNA PASQUALE", kind: "exclu" }]);
+    expect(excluEcheances([base])).toEqual([{ id: "exclu:x", date: "2027-02-01", title: "Léna Pasquale × Nutripure", label: "Nutripure", who: "LÉNA PASQUALE", kind: "exclu" }]);
   });
   it("ignore celles à confirmer et celles sans fin", () => {
     expect(excluEcheances([{ ...base, pending: true }, { ...base, id: "y", end: null }])).toEqual([]);

@@ -1,6 +1,6 @@
 import { CollabField, ObjectCollabLink } from "@/components/collab-links";
 import { useStickyState } from "@/lib/useStickyState";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, X, Trash2 } from "@/components/icons";
 import { AddButton, Field, TextField, TextAreaField, SelectField } from "@/components/ui/form";
 import { CreatorPicker } from "@/components/ui/creator-picker";
@@ -201,6 +201,7 @@ export function EventCalendar({
   fixedWho,
   navAdd = false,
   collabLinks = false,
+  toolbarExtra,
 }: {
   events: Ev[];
   /** Peuvent renvoyer false (ou Promise<false>) en cas d'échec : la modale reste ouverte. */
@@ -218,6 +219,8 @@ export function EventCalendar({
   navAdd?: boolean;
   /** Champ « Collab » (Planning agence seulement, jamais l'espace créateur). */
   collabLinks?: boolean;
+  /** Contrôle ajouté en tête de la ligne des filtres (ex. choix d'une créatrice). */
+  toolbarExtra?: ReactNode;
 }) {
   const t = useT();
   const phone = useIsPhone();
@@ -392,6 +395,7 @@ export function EventCalendar({
 
       {/* Filtres de catégorie (cliquables), puis la légende des types de rendez-vous. */}
       <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5">
+        {toolbarExtra}
         {KIND_META.map((k) => {
           const on = kinds[k.id];
           const count = events.filter((e) => evKind(e) === k.id).length;

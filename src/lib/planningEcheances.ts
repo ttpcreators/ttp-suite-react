@@ -13,7 +13,8 @@ import type { Exclusivite } from "../../supabase/functions/_shared/exclusivites.
  */
 
 export type EcheanceKind = "contrat" | "exclu" | "anniv";
-export type Echeance = { id: string; date: string; title: string; who: string | null; kind: EcheanceKind };
+/** `label` = le titre sans le nom du créateur (type de contrat, marque, âge), pour son propre agenda. */
+export type Echeance = { id: string; date: string; title: string; label: string; who: string | null; kind: EcheanceKind };
 export type BirthCreator = { name: string; birth: string | null; status?: string | null };
 
 /** « 1999-11-05 », « 05/11/1999 » → « 1999-11-05 » ; illisible ou vide → "". */
@@ -30,7 +31,8 @@ const leap = (y: number) => (y % 4 === 0 && y % 100 !== 0) || y % 400 === 0;
 export function contractEcheances(list: readonly AujDeadline[]): Echeance[] {
   const key = (d: AujDeadline) => `${(d.type || "").toLowerCase()}|${(d.creator || "").trim().toLowerCase()}`;
   const withEnd = list.flatMap((d) => {
-    const end = d && d.creator ? contractEnd(d.start, d.months) : null;
+    // `months` peut être enregistré en texte (« 12 ») : en nombre, sinon « 10 + "12" » concatène.
+    const end = d && d.creator ? contractEnd(d.start, Number(d.months) || 0) : null;
     return end ? [{ d, end }] : [];
   });
   const latest = new Map<string, string>();
@@ -45,6 +47,7 @@ export function contractEcheances(list: readonly AujDeadline[]): Echeance[] {
       id: `contrat:${d.id ?? k}`,
       date: end,
       title: `${titleCase(d.creator.trim())} · ${contractTypeLabel(d.type)}`,
+      label: contractTypeLabel(d.type),
       who: d.creator.trim(),
       kind: "contrat",
     });
@@ -52,7 +55,7 @@ export function contractEcheances(list: readonly AujDeadline[]): Echeance[] {
   return out;
 }
 
-export function excluEcheances(list: readonly Exclusivite[]): Echeance[] {
+export function excluEcheances(list: readonly Pick<Exclusivite, "id" | "creator" | "brand" | "end" | "pending">[]): Echeance[] {
   return list.flatMap((x) => {
     const end = isoOf(x.end);
     if (x.pending || !end || !x.creator?.trim()) return [];
@@ -61,6 +64,7 @@ export function excluEcheances(list: readonly Exclusivite[]): Echeance[] {
       id: `exclu:${x.id}`,
       date: end,
       title: `${titleCase(x.creator.trim())}${brand ? ` × ${brand}` : ""}`,
+      label: brand ?? "",
       who: x.creator.trim(),
       kind: "exclu" as const,
     }];
@@ -83,6 +87,7 @@ export function birthdayEcheances(creators: readonly BirthCreator[], today: stri
         id: `anniv:${c.name.trim()}:${y}`,
         date: `${y}-${md}`,
         title: `${titleCase(c.name.trim())}${age ? ` · ${age} ans` : ""}`,
+        label: age ? `${age} ans` : "",
         who: c.name.trim(),
         kind: "anniv",
       });
