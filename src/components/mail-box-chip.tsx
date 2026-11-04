@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { BOX_LABEL, BOX_STYLE, type MailBox } from "@/lib/mailSend";
 
-/** Pastille de boîte d'envoi : violet = partnerships@, vert fluo = talent@. */
+/** Étiquette de boîte d'envoi : violet = partnerships@, vert = talent@. */
 export function BoxChip({ box, prefix, className }: { box: MailBox; prefix?: string; className?: string }) {
   return (
     <span className={cn("inline-flex shrink-0 items-center rounded-full px-1.5 py-px text-[11px] font-semibold", BOX_STYLE[box].chip, className)}>

@@ -5,7 +5,7 @@ import { contextPrompt, threadTranscript } from "@/lib/mailThreadContext";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ExpandableActionBar } from "@/components/ui/expandable-action-bar";
 import { Loader, Spin } from "@/components/ui/loader";
-import { Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, PenLine, Reply, Forward, Settings2, RefreshCw, Send, Copy, MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X, Plus, FilePen, Smartphone, type LucideIcon } from "@/components/icons";
+import { Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, PenLine, Reply, Forward, Settings2, RefreshCw, Send, Copy, MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X, FilePen, Smartphone, type LucideIcon } from "@/components/icons";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import {
   deleteGmailDraft, draftBodyText, draftDeleteErrText, gmailDraftLocalKey, isReplyDraft, parseDraftsRes, parseReplyDraftKey, seedReplyDraft,
@@ -18,7 +18,8 @@ import { getCache, setCache } from "@/lib/viewCache";
 import { invalidateMailUnread } from "@/lib/useMailUnread";
 import { brandFromEmail } from "@/lib/mailModels";
 import { Initial, MailItem, fmtWhen } from "@/components/mail-reader";
-import { Kbd, RailButton, SearchField, Tip, ToolButton, mailCardBtnCls, mailCardCls, mailCardListCls, mailRowCls, pillCls, type TipSide, UnreadToggle } from "@/components/mail-shell";
+import { dayGroup } from "@/lib/mailDayGroup";
+import { Kbd, RailButton, SearchField, Tip, ToolButton, mailCardBtnCls, mailCardCls, mailCardListCls, mailRowCls, pillCls, type TipSide } from "@/components/mail-shell";
 import { SwipeRow, type SwipeAction } from "@/components/mobile/swipe-row";
 import { STORED_STATUSES, saveBase64, statusMeta, type MailAttachment, type MailMessage } from "@/lib/creatorMail";
 import { toast } from "@/components/ui/toast";
@@ -345,7 +346,7 @@ const MODES: { id: Mode; label: string; short: string; wide: string; icon: Lucid
   { id: "creators", label: "Par créateur", short: "Créateurs", wide: "Suivi créateurs", icon: UsersRound },
 ];
 const BOX_FILTERS: { id: "all" | MailBox; label: string }[] = [
-  { id: "all", label: "Toutes" },
+  { id: "all", label: "Les deux boîtes" },
   { id: "partnerships", label: BOX_LABEL.partnerships },
   { id: "talent", label: BOX_LABEL.talent },
 ];
@@ -474,30 +475,7 @@ function RowAction({ icon: Icon, label, shortcut, onClick, danger, side = "botto
   );
 }
 
-/** Ligne de la colonne de gauche (grand écran) : icône ou pastille de couleur, libellé, compteur. */
-function FolderRow({ label, active, count, onClick, icon: Icon, swatch, title, shortcut }: {
-  label: string; active?: boolean; count?: number | null; onClick: () => void; icon?: LucideIcon; swatch?: string; title?: string; shortcut?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      title={title}
-      aria-keyshortcuts={shortcut}
-      className={cn(
-        "flex h-9 w-full min-w-0 shrink-0 items-center gap-3 rounded-lg px-3 text-left text-[13px] transition-colors",
-        active ? "bg-muted font-semibold text-foreground dark:bg-white/[0.08]" : "font-medium text-muted-foreground hover:bg-rowhover hover:text-foreground",
-      )}
-    >
-      {Icon ? <Icon className="h-4 w-4 shrink-0" /> : <span aria-hidden className={cn("size-3 shrink-0 rounded-[4px]", swatch)} />}
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      {count ? <span className={cn("shrink-0 text-[12px] tabular-nums", active ? "text-foreground" : "text-faint")}>{count > 99 ? "99+" : count}</span> : null}
-    </button>
-  );
-}
-
-/** Une conversation de la liste, en carte : objet, expéditeur, heure, extrait sur deux lignes. */
+/** Une conversation de la liste : expéditeur et heure, objet, une ligne d'extrait. */
 function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhoto, tags, onOpen, onArchive, onTrash, onToggleRead }: {
   t: InboxThread; folder: Folder; on: boolean; cursor: boolean; showBox: boolean; draft: boolean;
   creator: string | null; creatorPhoto: string | null;
@@ -512,55 +490,58 @@ function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhot
   ];
   return (
     <li className={mailCardCls(on, cursor)} data-key={keyOf(t)}>
-      {/* Bord coloré : la boîte du fil (violet = partnerships@, vert = talent@). */}
-      {showBox && <span aria-hidden title={BOX_LABEL[t.box]} className={cn("absolute right-1.5 top-[19px] z-[1] h-1.5 w-1.5 rounded-full", BOX_STYLE[t.box].dot)} />}
       <SwipeRow actions={swipe}>
-        <button type="button" aria-current={on || undefined} onClick={onOpen} className={cn(mailCardBtnCls, "bg-surface dark:bg-transparent")}>
+        <button type="button" aria-current={on || undefined} onClick={onOpen} className={mailCardBtnCls}>
           <span className="flex w-full min-w-0 items-start gap-3">
             <Initial name={name} email={t.email} size="md" />
-            <span className="min-w-0 flex-1 pt-px">
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+              {/* Ligne 1 : qui, puis l'heure (remplacée par les actions au survol). */}
               <span className="flex min-w-0 items-center gap-1.5">
                 {t.unread && <span className="size-2 shrink-0 rounded-full bg-primary"><span className="sr-only">Non lu</span></span>}
-                <span className={cn("min-w-0 truncate text-[13px] leading-[18px] text-foreground", t.unread ? "font-bold" : "font-semibold")}>{t.subject || "(sans objet)"}</span>
-                <span className="flex-1" />
-                <span className={cn("shrink-0 pl-1 text-[11px] leading-4 tabular-nums lg:group-focus-within:invisible lg:group-hover:invisible", t.unread ? "font-semibold text-foreground" : "text-faint")}>
-                  {fmtWhen(t.ts)}
-                </span>
-              </span>
-              <span className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                <span className={cn("min-w-0 truncate text-[12.5px] leading-4", t.unread ? "font-medium text-foreground" : "text-muted-foreground")}>
-                  {folder === "sent" && <span className="font-normal">À : </span>}
+                <span className={cn("min-w-0 truncate text-[13.5px] leading-5 text-foreground", t.unread ? "font-semibold" : "font-medium")}>
+                  {folder === "sent" && <span className="font-normal text-muted-foreground">À : </span>}
                   {name}
                 </span>
-                {t.count > 1 && <span className="shrink-0 text-[11.5px] leading-4 text-faint">{t.count}</span>}
+                {t.count > 1 && <span className="shrink-0 text-[12px] tabular-nums leading-5 text-faint">{t.count}</span>}
                 {creator && (
                   <span title={`Créateur : ${titleCase(creator)}`} className="shrink-0">
                     <CreatorAvatar name={creator} photoUrl={creatorPhoto} className="h-4 w-4 rounded-full text-[7px]" />
                   </span>
                 )}
-                {draft && <span className="shrink-0 text-[11.5px] italic leading-4 text-dangertext">Brouillon</span>}
-                {/* Dernier message = le nôtre : on a répondu, la balle est chez eux. */}
+                <span className="flex-1" />
+                {showBox && <BoxDot box={t.box} className="size-1.5" />}
+                <span className={cn("shrink-0 text-[12px] leading-5 tabular-nums lg:group-focus-within:invisible lg:group-hover:invisible", t.unread ? "font-medium text-foreground" : "text-faint")}>
+                  {fmtWhen(t.ts)}
+                </span>
+              </span>
+              {/* Ligne 2 : l'objet. */}
+              <span className={cn("min-w-0 truncate text-[13px] leading-5", t.unread ? "font-medium text-foreground" : "text-foreground/85")}>
+                {t.subject || "(sans objet)"}
+              </span>
+              {/* Ligne 3 : l'extrait, et où en est l'échange. */}
+              <span className="flex min-w-0 items-center gap-1.5">
+                {draft && <span className="shrink-0 rounded bg-muted px-1.5 text-[11px] font-medium leading-[18px] text-muted-foreground">Brouillon</span>}
                 {folder === "inbox" && t.direction === "out" && (
-                  <span title="Tu as répondu en dernier" className="inline-flex shrink-0 items-center gap-1 rounded bg-muted px-1.5 py-px text-[10.5px] font-medium leading-4 text-muted-foreground">
+                  <span title="Tu as répondu en dernier : la balle est chez eux" className="inline-flex shrink-0 items-center gap-1 text-[12px] leading-[18px] text-faint">
                     <Reply className="h-3 w-3" /> Répondu
                   </span>
                 )}
-                {t.archived && <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10px] font-medium text-muted-foreground">Archivé</span>}
+                {t.archived && <span className="shrink-0 rounded bg-muted px-1.5 text-[11px] font-medium leading-[18px] text-muted-foreground">Archivé</span>}
+                <span className="min-w-0 truncate text-[12.5px] leading-[18px] text-muted-foreground">
+                  {t.direction === "out" && folder === "inbox" && <span className="text-faint">Toi : </span>}
+                  {decodeEntities(t.snippet)}
+                </span>
               </span>
+              {!!tags?.length && (
+                <span className="mt-1 flex flex-wrap gap-1">
+                  {tags.map((g) => <MailTagChip key={g.key} tag={g} />)}
+                </span>
+              )}
             </span>
           </span>
-          <span className="line-clamp-2 w-full text-[12.5px] leading-[18px] text-muted-foreground">
-            {t.direction === "out" && folder === "inbox" && <span className="text-faint">Toi : </span>}
-            {decodeEntities(t.snippet)}
-          </span>
-          {!!tags?.length && (
-            <span className="flex flex-wrap gap-1">
-              {tags.map((g) => <MailTagChip key={g.key} tag={g} />)}
-            </span>
-          )}
         </button>
       </SwipeRow>
-      <div className="pointer-events-none absolute right-3 top-2 z-[2] hidden items-center gap-0.5 rounded-full bg-surface p-0.5 opacity-0 shadow-sm ring-1 ring-border transition-opacity lg:flex lg:group-focus-within:pointer-events-auto lg:group-focus-within:opacity-100 lg:group-hover:pointer-events-auto lg:group-hover:opacity-100">
+      <div className="pointer-events-none absolute right-3 top-2.5 z-[2] hidden items-center gap-0.5 rounded-lg bg-surface p-0.5 opacity-0 shadow-sm ring-1 ring-border transition-opacity lg:flex lg:group-focus-within:pointer-events-auto lg:group-focus-within:opacity-100 lg:group-hover:pointer-events-auto lg:group-hover:opacity-100">
         {folder === "inbox" && !t.archived && <RowAction icon={Archive} label="Archiver" shortcut="e" onClick={onArchive} />}
         <RowAction icon={Trash2} label="Corbeille" shortcut="#" onClick={onTrash} danger />
         <RowAction icon={t.unread ? MailOpen : Mail} label={t.unread ? "Marquer comme lu" : "Marquer non lu"} shortcut={t.unread ? undefined : "⇧U"} onClick={onToggleRead} />
@@ -576,31 +557,31 @@ function DraftRow({ k, subject, to, email, snippet, ts, box, showBox, byClaude, 
 }) {
   return (
     <li className={mailCardCls(on)} data-key={k}>
-      {showBox && box && <span aria-hidden title={BOX_LABEL[box]} className={cn("absolute right-1.5 top-[19px] z-[1] h-1.5 w-1.5 rounded-full", BOX_STYLE[box].dot)} />}
       <SwipeRow actions={[{ key: "delete", label: "Supprimer", icon: Trash2, tone: "red", onClick: onDelete }]}>
-        <button type="button" aria-current={on || undefined} onClick={onOpen} className={cn(mailCardBtnCls, "bg-surface dark:bg-transparent")}>
+        <button type="button" aria-current={on || undefined} onClick={onOpen} className={mailCardBtnCls}>
           <span className="flex w-full min-w-0 items-start gap-3">
             <Initial name={to || email || "?"} email={email} size="md" />
-            <span className="min-w-0 flex-1 pt-px">
+            <span className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="flex min-w-0 items-center gap-1.5">
-                <span className="min-w-0 truncate text-[13px] font-semibold leading-[18px] text-foreground">{subject || "(sans objet)"}</span>
-                <span className="flex-1" />
-                {ts > 0 && <span className="shrink-0 pl-1 text-[11px] leading-4 tabular-nums text-faint lg:group-focus-within:invisible lg:group-hover:invisible">{fmtWhen(ts)}</span>}
-              </span>
-              <span className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                <span className="min-w-0 truncate text-[12.5px] leading-4 text-muted-foreground">
-                  <span className="font-normal">À : </span>{to || "(aucun destinataire)"}
+                <span className="min-w-0 truncate text-[13.5px] font-medium leading-5 text-foreground">
+                  <span className="font-normal text-muted-foreground">À : </span>{to || "(aucun destinataire)"}
                 </span>
-                <span className="shrink-0 rounded bg-muted px-1.5 py-px text-[10.5px] font-medium leading-4 text-muted-foreground">Brouillon</span>
-                {byClaude && <span title="Préparé par Claude (connecteur)" className="shrink-0 text-[11px] leading-4 text-faint">par Claude</span>}
-                {hint && <span className="shrink-0 text-[11px] leading-4 text-faint">{hint}</span>}
+                {byClaude && <span title="Préparé par Claude (connecteur)" className="shrink-0 text-[12px] leading-5 text-faint">par Claude</span>}
+                <span className="flex-1" />
+                {showBox && box && <BoxDot box={box} className="size-1.5" />}
+                {ts > 0 && <span className="shrink-0 text-[12px] leading-5 tabular-nums text-faint lg:group-focus-within:invisible lg:group-hover:invisible">{fmtWhen(ts)}</span>}
+              </span>
+              <span className="min-w-0 truncate text-[13px] leading-5 text-foreground/85">{subject || "(sans objet)"}</span>
+              <span className="flex min-w-0 items-center gap-1.5">
+                <span className="shrink-0 rounded bg-muted px-1.5 text-[11px] font-medium leading-[18px] text-muted-foreground">Brouillon</span>
+                {hint && <span className="shrink-0 text-[12px] leading-[18px] text-faint">{hint}</span>}
+                {snippet && <span className="min-w-0 truncate text-[12.5px] leading-[18px] text-muted-foreground">{snippet}</span>}
               </span>
             </span>
           </span>
-          {snippet && <span className="line-clamp-2 w-full text-[12.5px] leading-[18px] text-muted-foreground">{snippet}</span>}
         </button>
       </SwipeRow>
-      <div className="pointer-events-none absolute right-3 top-2 z-[2] hidden items-center gap-0.5 rounded-full bg-surface p-0.5 opacity-0 shadow-sm ring-1 ring-border transition-opacity lg:flex lg:group-focus-within:pointer-events-auto lg:group-focus-within:opacity-100 lg:group-hover:pointer-events-auto lg:group-hover:opacity-100">
+      <div className="pointer-events-none absolute right-3 top-2.5 z-[2] hidden items-center gap-0.5 rounded-lg bg-surface p-0.5 opacity-0 shadow-sm ring-1 ring-border transition-opacity lg:flex lg:group-focus-within:pointer-events-auto lg:group-focus-within:opacity-100 lg:group-hover:pointer-events-auto lg:group-hover:opacity-100">
         <RowAction icon={Trash2} label="Supprimer le brouillon" onClick={onDelete} danger />
       </div>
     </li>
@@ -1265,6 +1246,14 @@ export function Mails() {
   // « Non lus » : les fils non lus, plus ceux qui l'étaient quand on a activé le filtre
   // (un mail ouvert ne disparaît pas de la liste pendant qu'on le lit).
   const [unreadOnly, setUnreadOnly] = useState<Set<string> | null>(null);
+  // « À traiter » : les fils dont le dernier message vient de l'extérieur (on n'a pas
+  // encore répondu). Le fil ouvert reste affiché même après la réponse.
+  const [todoOnly, setTodoOnlyState] = useState(() => readPref("ttp:mails-vue", ["todo", "all"] as const, "todo") === "todo");
+  const setTodoOnly = (v: boolean) => {
+    setTodoOnlyState(v);
+    writePref("ttp:mails-vue", v ? "todo" : "all");
+  };
+  const openKey = thread ? keyOf(thread) : null;
   const boxAll = useMemo(
     () => folderList.filter((t) => (box === "all" || t.box === box) && (!creatorKey || rowCreators(t).includes(creatorKey))),
     [folderList, box, creatorKey, rowCreators],
@@ -1273,17 +1262,22 @@ export function Mails() {
   // que « Non lus » montre le même chiffre que la boîte (audit du 2 nov., n° 56).
   const [unreadExtra, setUnreadExtra] = useState<InboxThread[]>([]);
   const boxThreads = useMemo(() => {
-    if (!(unreadOnly && folder === "inbox")) return boxAll;
+    if (!(unreadOnly && folder === "inbox")) {
+      if (todoOnly && folder === "inbox") return boxAll.filter((t) => t.direction !== "out" || keyOf(t) === openKey);
+      return boxAll;
+    }
     const here = boxAll.filter((t) => t.unread || unreadOnly.has(keyOf(t)));
     const seen = new Set(here.map(keyOf));
     const more = unreadExtra.filter((t) => !seen.has(keyOf(t)) && (box === "all" || t.box === box) && (!creatorKey || rowCreators(t).includes(creatorKey)));
     return [...here, ...more];
-  }, [boxAll, unreadOnly, folder, unreadExtra, box, creatorKey, rowCreators]);
+  }, [boxAll, unreadOnly, todoOnly, openKey, folder, unreadExtra, box, creatorKey, rowCreators]);
+  const todoCount = useMemo(() => boxAll.filter((t) => t.direction !== "out").length, [boxAll]);
   const unreadLoaded = useMemo(() => boxAll.filter((t) => t.unread).length, [boxAll]);
   // Même chiffre que la pastille de la boîte (compte du serveur), sauf filtre par créateur.
   const unreadHere = creatorKey ? unreadLoaded : Math.max(unreadLoaded, unreadShown);
   const toggleUnread = () => {
     if (unreadOnly) return setUnreadOnly(null);
+    setTodoOnly(false);
     setUnreadOnly(new Set(boxAll.filter((t) => t.unread).map(keyOf)));
     if (unreadHere > unreadLoaded) {
       void invokeJson<ListRes>("gmail-history", { inbox: true, box: "all", folder: "inbox", q: "is:unread" }).then((res) => {
@@ -2055,7 +2049,7 @@ export function Mails() {
   // ── Barre d'icônes (ordinateur moyen) : dossiers ─────────────────────────
   const creatorOn = (n: string) => !!creatorFilter && sameName(creatorFilter, n) && (mode === "inbox" || mode === "sent");
   const rail = (
-    <nav aria-label="Dossiers" className="hidden min-h-0 flex-col items-center gap-1 border-r border-border py-3 lg:flex xl:hidden">
+    <nav aria-label="Dossiers" className="hidden min-h-0 flex-col items-center gap-1 border-r border-border py-3 lg:flex">
       <button
         type="button"
         onClick={openNewMail}
@@ -2114,74 +2108,6 @@ export function Mails() {
     </nav>
   );
 
-  // ── Colonne de gauche (grand écran) : dossiers avec libellés et créateurs ─
-  const wideRail = (
-    <nav aria-label="Dossiers" className="hidden min-h-0 flex-col border-r border-border xl:flex">
-      <div className="shrink-0 px-3 pb-2 pt-3">
-        <button
-          type="button"
-          onClick={openNewMail}
-          aria-keyshortcuts="c"
-          title="Nouveau mail (c)"
-          className="flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 text-[13px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90"
-        >
-          <PenLine className="h-4 w-4" /> Nouveau mail
-        </button>
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3 [scrollbar-width:thin]">
-        <div className="flex flex-col gap-0.5">
-          {MODES.map((m) => (
-            <FolderRow
-              key={m.id}
-              icon={m.icon}
-              label={m.wide}
-              title={m.shortcut ? `${m.label} (${m.shortcut})` : m.label}
-              active={mode === m.id}
-              count={m.id === "inbox" ? unreadShown : m.id === "creators" ? mailTotal : m.id === "drafts" ? draftsCount : null}
-              onClick={() => goMode(m.id)}
-            />
-          ))}
-        </div>
-        <div className="mt-5">
-          <div className="flex items-center gap-1 pb-1 pl-3 pr-1">
-            <span className="min-w-0 flex-1 text-[11.5px] font-semibold text-muted-foreground">Créateurs</span>
-            <button
-              type="button"
-              onClick={() => goMode("creators")}
-              aria-label="Relier un créateur"
-              title="Relier un créateur (alias talent@)"
-              className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground"
-            >
-              <Plus className="h-3.5 w-3.5" />
-            </button>
-          </div>
-          {linked.length ? (
-            <div className="flex flex-col gap-0.5">
-              {linked.map((l) => (
-                <FolderRow
-                  key={l.creator}
-                  swatch={creatorTone(l.creator)}
-                  label={titleCase(l.creator)}
-                  title={`Mails de ${titleCase(l.creator)}${l.addresses.length ? ` (${l.addresses.join(", ")})` : ""}`}
-                  active={creatorOn(l.creator)}
-                  count={creatorUnread.get(l.creator.trim().toLowerCase())}
-                  onClick={() => pickCreator(l.creator)}
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="px-3 text-[12px] leading-snug text-faint">Relie l'adresse d'un créateur pour classer ses mails ici.</p>
-          )}
-        </div>
-        <span className="min-h-4 flex-1" />
-        <div className="flex flex-col gap-0.5 border-t border-border pt-2">
-          <FolderRow icon={Keyboard} label="Raccourcis" title="Raccourcis clavier (?)" onClick={() => setHelpOpen((v) => !v)} />
-          <FolderRow icon={Settings2} label="Réglages" title="Signature et délai d'annulation" onClick={() => setSettingsOpen(true)} />
-        </div>
-      </div>
-    </nav>
-  );
-
   // ── Même barre, en ligne (téléphone, tablette) ──────────────────────────
   const mobileNav = (
     <nav aria-label="Dossiers" className={cn("flex gap-1.5 overflow-x-auto border-b border-border p-2 pr-7 [scrollbar-width:none] [mask-image:linear-gradient(to_right,#000_calc(100%-28px),transparent)] lg:hidden", readerOpen && "max-lg:hidden")}>
@@ -2222,9 +2148,8 @@ export function Mails() {
   // ── Liste : boîte de réception / envoyés ────────────────────────────────
   const busyNow = listBusy[folder];
   const errNow = listErr[folder];
-  const boxCount = (id: "all" | MailBox) => (mode === "inbox" ? unreadBy[id] : 0);
   const boxSelect = (
-    <label className="relative flex shrink-0 items-center lg:hidden">
+    <label className="relative flex shrink-0 items-center">
       <span className="sr-only">Boîte affichée</span>
       <span aria-hidden className="pointer-events-none absolute left-2.5 flex gap-0.5">
         {box === "all" ? (
@@ -2239,12 +2164,11 @@ export function Mails() {
       <select
         value={box}
         onChange={(e) => setBox(e.target.value as "all" | MailBox)}
-        className="h-8 appearance-none rounded-full border border-border bg-surface pl-7 pr-7 text-[12px] font-semibold text-foreground outline-none focus:border-primary"
+        className="h-8 appearance-none rounded-lg border border-border bg-surface pl-7 pr-7 text-[12px] font-medium text-foreground outline-none transition-colors hover:bg-rowhover focus:border-primary"
       >
         {BOX_FILTERS.map((b) => (
           <option key={b.id} value={b.id}>
             {b.label}
-            {boxCount(b.id) ? ` (${boxCount(b.id)})` : ""}
           </option>
         ))}
       </select>
@@ -2290,38 +2214,43 @@ export function Mails() {
     <section className={cn(listCls, readerOpen && "max-lg:hidden")} aria-label={folder === "sent" ? "Envoyés" : "Boîte de réception"}>
       <div className="shrink-0 border-b border-border px-3 pb-2.5 pt-3 sm:px-4">
         <div className="flex items-center gap-1">
-          <h2 className="min-w-0 flex-1 truncate pl-1 text-[17px] font-semibold tracking-tight text-foreground">{folder === "sent" ? "Envoyés" : "Boîte de réception"}</h2>
+          <h2 className="min-w-0 flex-1 truncate pl-1 text-[17px] font-semibold text-foreground">{folder === "sent" ? "Envoyés" : "Réception"}</h2>
           {boxSelect}
           <ToolButton icon={RefreshCw} label="Actualiser" spin={busyNow} disabled={busyNow} onClick={() => void refreshList(folder)} className="h-8 w-8" />
           <ToolButton icon={Keyboard} label="Raccourcis clavier" shortcut="?" tipSide="bottom-end" onClick={() => setHelpOpen((v) => !v)} className="h-8 w-8 max-lg:hidden" />
         </div>
-        <Tabs
-          className="mt-2 max-lg:hidden"
-          size="sm"
-          fullWidth
-          label="Boîte affichée"
-          value={box}
-          onValueChange={(v) => setBox(v as "all" | MailBox)}
-          items={BOX_FILTERS.map((b) => ({
-            value: b.id,
-            label: b.label,
-            dot: b.id === "all" ? undefined : BOX_STYLE[b.id].dot,
-            count: boxCount(b.id) || undefined,
-          }))}
-        />
-        <div className="mt-2 flex items-center gap-2">
-          <div className="min-w-0 flex-1">
-            <SearchField size="sm" inputRef={searchRef} value={inboxQuery} onChange={setInboxQuery} placeholder="Rechercher dans les mails…"
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  e.preventDefault();
-                  if (inboxQuery) setInboxQuery("");
-                  else e.currentTarget.blur();
-                }
-              }} />
-          </div>
-          {folder === "inbox" && <UnreadToggle on={!!unreadOnly} count={unreadHere} onToggle={toggleUnread} />}
+        <div className="mt-2">
+          <SearchField size="sm" inputRef={searchRef} value={inboxQuery} onChange={setInboxQuery} placeholder="Rechercher"
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                if (inboxQuery) setInboxQuery("");
+                else e.currentTarget.blur();
+              }
+            }} />
         </div>
+        {folder === "inbox" && (
+          <Tabs
+            className="mt-2"
+            size="sm"
+            fullWidth
+            label="Mails affichés"
+            value={unreadOnly ? "unread" : todoOnly ? "todo" : "all"}
+            onValueChange={(v) => {
+              if (v === "unread") {
+                if (!unreadOnly) toggleUnread();
+                return;
+              }
+              setUnreadOnly(null);
+              setTodoOnly(v === "todo");
+            }}
+            items={[
+              { value: "todo", label: "À traiter", count: todoCount || undefined },
+              { value: "unread", label: "Non lus", count: unreadHere || undefined },
+              { value: "all", label: "Tout" },
+            ]}
+          />
+        )}
         {creatorFilter && (
           <div className="mt-2 flex min-w-0 items-center gap-2 pl-1">
             <span className="inline-flex min-w-0 items-center gap-1.5 rounded-full border border-border bg-surface py-0.5 pl-2 pr-0.5 text-[12px] font-semibold text-foreground">
@@ -2337,7 +2266,7 @@ export function Mails() {
             </button>
           </div>
         )}
-        <p className="mt-1.5 truncate pl-1 text-[11.5px] text-muted-foreground" aria-live="polite">{cur ? metaText : busyNow ? "Chargement…" : ""}</p>
+        {(inboxQ || (!cur && busyNow)) && <p className="mt-1.5 truncate pl-1 text-[12px] text-muted-foreground" aria-live="polite">{cur ? metaText : "Chargement…"}</p>}
       </div>
       <div ref={listRef} className="min-h-0 flex-1 overflow-y-auto" aria-busy={busyNow}>
         {errNow && cur && (
@@ -2362,7 +2291,9 @@ export function Mails() {
           centerNote(
             <Inbox className="h-5 w-5 text-faint" />,
             unreadOnly && folder === "inbox"
-              ? "Aucun mail non lu. Tout est à jour ✓"
+              ? "Aucun mail non lu"
+              : todoOnly && folder === "inbox"
+              ? "Rien à traiter : tu as répondu à tout"
               : creatorFilter
               ? `Aucun mail de ${titleCase(creatorFilter)} dans les mails chargés.`
               : folder === "sent" ? "Aucun mail envoyé depuis cette boîte." : "Aucun mail dans cette boîte.",
@@ -2372,7 +2303,15 @@ export function Mails() {
             {inboxQ && !localMatches.length && (
               <p className="px-5 py-4 text-[12.5px] text-muted-foreground">Aucun mail de la liste ne correspond à « {inboxQuery.trim()} ».</p>
             )}
-            <ul className={mailCardListCls}>{localMatches.map(rowFor)}</ul>
+            <ul className={mailCardListCls}>
+              {inboxQ
+                ? localMatches.map(rowFor)
+                : localMatches.map((t, i) => {
+                    const g = dayGroup(t.ts);
+                    const head = i === 0 || dayGroup(localMatches[i - 1].ts) !== g;
+                    return head ? [<li key={`g:${g}:${i}`} className="sticky top-0 z-[3] border-b border-border/70 bg-panel/95 px-4 pb-1.5 pt-3 text-[12px] font-medium text-muted-foreground backdrop-blur-sm">{g}</li>, rowFor(t)] : rowFor(t);
+                  })}
+            </ul>
             {inboxQ && searchLive && search && !search.off && (
               <div className="border-t border-border">
                 <div className="flex items-center gap-2 bg-muted/40 px-4 py-2 text-[11.5px] font-semibold uppercase tracking-wide text-muted-foreground sm:px-5">
@@ -2457,7 +2396,7 @@ export function Mails() {
     <section className={cn(listCls, readerOpen && "max-lg:hidden")} aria-label="Brouillons">
       <div className="shrink-0 border-b border-border px-3 pb-2.5 pt-3 sm:px-4">
         <div className="flex items-center gap-1">
-          <h2 className="min-w-0 flex-1 truncate pl-1 text-[17px] font-semibold tracking-tight text-foreground">Brouillons</h2>
+          <h2 className="min-w-0 flex-1 truncate pl-1 text-[17px] font-semibold text-foreground">Brouillons</h2>
           {boxSelect}
           <ToolButton icon={RefreshCw} label="Actualiser" spin={draftsBusy} disabled={draftsBusy} onClick={() => void refreshDrafts(true)} className="h-8 w-8" />
         </div>
@@ -2520,7 +2459,7 @@ export function Mails() {
   const contactsCol = (
     <section className={cn(listCls, readerOpen && "max-lg:hidden")} aria-label="Contacts">
       <div className="shrink-0 border-b border-border px-3 pb-3 pt-3 sm:px-4">
-        <h2 className="truncate pl-1 text-[17px] font-semibold tracking-tight text-foreground">Contacts</h2>
+        <h2 className="truncate pl-1 text-[17px] font-semibold text-foreground">Contacts</h2>
         <p className="mt-0.5 pl-1 text-[11.5px] text-muted-foreground">
           {contacts ? `${filtered.length} contact${filtered.length > 1 ? "s" : ""} avec e-mail` : "Chargement…"}
         </p>
@@ -2669,16 +2608,20 @@ export function Mails() {
           {/* Grand lecteur : encart « Collab liée » à droite ; sinon en haut du mail. */}
           <div className={cn(threadCollabs.length > 0 && "@3xl:grid @3xl:grid-cols-[minmax(0,1fr)_248px] @3xl:items-start @3xl:gap-8")}>
             <div className="min-w-0">
-              {/* En-tête : qui (logo + nom en grand), l'objet dessous, puis une ligne de méta. */}
-              <div className="flex items-start gap-3">
-                <Initial name={listName || thread.contact} email={thread.contact} size="lg" />
-                <div className="min-w-0 flex-1">
-                  <h1 className="truncate text-[22px] font-bold leading-tight tracking-[-0.02em] text-foreground">{listName || thread.contact}</h1>
-                  <p className="mt-0.5 text-[15px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">{thread.subject || "(sans objet)"}</p>
-                  <p className="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
-                    <BoxChip box={thread.box} className="text-[10px]" />
-                    {threadMsgs && <span>{threadMsgs.length} message{threadMsgs.length > 1 ? "s" : ""}</span>}
-                  </p>
+              {/* En-tête : l'objet en titre, puis avec qui, la boîte et le nombre de messages. */}
+              <div className="flex flex-col gap-2">
+                <h1 className="text-[22px] font-semibold leading-tight text-foreground [overflow-wrap:anywhere]">{thread.subject || "(sans objet)"}</h1>
+                <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-muted-foreground">
+                  <Initial name={listName || thread.contact} email={thread.contact} size="sm" />
+                  <span className="min-w-0 truncate font-medium text-foreground">{listName || thread.contact}</span>
+                  <span aria-hidden className="text-faint">·</span>
+                  <BoxChip box={thread.box} className="text-[11px] font-medium" />
+                  {threadMsgs && (
+                    <>
+                      <span aria-hidden className="text-faint">·</span>
+                      <span className="tabular-nums">{threadMsgs.length} message{threadMsgs.length > 1 ? "s" : ""}</span>
+                    </>
+                  )}
                 </div>
               </div>
               <LinkedCollabCard collabs={threadCollabs} photoOf={photoOf} onOpen={openCollab} className="mt-3 @3xl:hidden" />
@@ -2697,7 +2640,8 @@ export function Mails() {
                   {/* Fil long (maquette) : les anciens messages repliés derrière un bouton en haut. */}
                   {many && (
                     <button type="button" onClick={() => setShowAllMsgs(true)}
-                      className="h-11 w-full rounded-2xl bg-surface text-[14px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                      className="flex h-9 items-center gap-2 self-start rounded-lg px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                      <ChevronDown className="h-4 w-4" />
                       Charger {readerMsgs.length - 2 > 1 ? `les ${readerMsgs.length - 2} messages précédents` : "le message précédent"}
                     </button>
                   )}
@@ -2999,12 +2943,11 @@ export function Mails() {
           // Téléphone : une discussion ouverte occupe tout l'écran, sans cadre (façon app Mail).
           thread && "max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent",
           mode === "creators"
-            ? "lg:grid-cols-[72px_minmax(0,1fr)] xl:grid-cols-[208px_minmax(0,1fr)]"
-            : "lg:grid-cols-[72px_minmax(320px,360px)_minmax(0,1fr)] xl:grid-cols-[208px_minmax(300px,360px)_minmax(0,1fr)] 2xl:grid-cols-[220px_minmax(330px,400px)_minmax(0,1fr)]",
+            ? "lg:grid-cols-[72px_minmax(0,1fr)]"
+            : "lg:grid-cols-[72px_minmax(320px,360px)_minmax(0,1fr)] 2xl:grid-cols-[72px_minmax(340px,400px)_minmax(0,1fr)]",
         )}
       >
         {rail}
-        {wideRail}
         {mobileNav}
         {mode === "creators" ? (
           creatorsCol

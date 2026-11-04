@@ -176,20 +176,20 @@ export function SearchField({ value, onChange, placeholder, size = "md", inputRe
   );
 }
 
-/** Liste en cartes (maquette « boîte mail ») : cartes blanches espacées sur le fond gris. */
-export const mailCardListCls = "flex flex-col gap-2 p-2.5 sm:p-3";
-/** Carte d'un fil : relief léger, plus marqué quand il est ouvert (ou au clavier). */
+/** Liste des fils : lignes simples séparées d'un filet (plus de cartes). */
+export const mailCardListCls = "flex flex-col";
+/** Ligne d'un fil : ouverte = fond léger et trait bleu à gauche ; au clavier = fond léger. */
 export const mailCardCls = (on: boolean, cursor = false) =>
   cn(
-    "group relative overflow-hidden rounded-xl bg-surface ring-1 transition-shadow dark:bg-white/[0.05]",
+    "group relative border-b border-border/70 transition-colors before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-r-full before:transition-colors",
     on
-      ? "shadow-[0_8px_24px_-10px_rgba(15,23,42,0.28)] ring-primary/35"
+      ? "bg-primary/[0.06] before:bg-primary dark:bg-white/[0.06]"
       : cursor
-        ? "shadow-[0_1px_2px_rgba(15,23,42,0.05)] ring-primary/30"
-        : "shadow-[0_1px_2px_rgba(15,23,42,0.05)] ring-border/70 hover:shadow-[0_6px_18px_-10px_rgba(15,23,42,0.22)]",
+        ? "bg-rowhover before:bg-transparent"
+        : "before:bg-transparent hover:bg-rowhover",
   );
-/** Intérieur cliquable d'une carte. */
-export const mailCardBtnCls = "flex w-full flex-col gap-2 px-3.5 py-3 text-left";
+/** Intérieur cliquable d'une ligne. */
+export const mailCardBtnCls = "flex w-full flex-col gap-1 px-4 py-3 text-left";
 
 /** Ligne de la liste : fond blanc quand ouverte, léger survol sinon. */
 export const mailRowCls = (on: boolean) =>

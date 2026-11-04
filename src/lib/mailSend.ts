@@ -13,17 +13,18 @@ import { saveAppStateKey, type AppState } from "@/lib/appState";
 
 export type MailBox = "partnerships" | "talent";
 export const BOX_LABEL: Record<MailBox, string> = { partnerships: "partnerships@", talent: "talent@" };
-/** Code couleur des boîtes : violet = partnerships@, vert fluo = talent@. */
+/** Code couleur des boîtes : violet = partnerships@, vert = talent@. */
 export const BOX_STYLE: Record<MailBox, { dot: string; chip: string; soft: string }> = {
+  // Repères discrets : un point de couleur et une étiquette pâle (plus de pastille pleine).
   partnerships: {
     dot: "bg-violet-500",
-    chip: "bg-violet-600 text-white",
+    chip: "bg-violet-500/12 text-violet-700 dark:text-violet-300",
     soft: "bg-violet-500/12 text-violet-700 dark:text-violet-300",
   },
   talent: {
-    dot: "bg-[#39ff6a]",
-    chip: "bg-[#39ff6a] text-zinc-900",
-    soft: "bg-[#39ff6a]/20 text-emerald-800 dark:text-[#6dff92]",
+    dot: "bg-emerald-500",
+    chip: "bg-emerald-500/14 text-emerald-800 dark:text-emerald-300",
+    soft: "bg-emerald-500/14 text-emerald-800 dark:text-emerald-300",
   },
 };
 export type MailSettings = { signatureHtml: string; signatureOn: boolean; delaySec: number };

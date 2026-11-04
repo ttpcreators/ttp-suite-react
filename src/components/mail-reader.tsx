@@ -41,23 +41,23 @@ export function Initial({ name, agency, size = "md", email }: { name: string; ag
   return <MailAvatar name={agency ? "TTP" : name} email={email} agency={agency} size={size} />;
 }
 
-/** Pastille du type de fichier (PDF rouge, tableur vert…), comme dans les clients mail. */
+/** Repère du type de fichier : extension en petites capitales, teinte discrète par famille. */
 const FILE_TONE: [RegExp, string][] = [
-  [/^pdf$/, "bg-danger"],
-  [/^(docx?|odt|rtf|pages)$/, "bg-blue-500"],
-  [/^(xlsx?|csv|ods|numbers)$/, "bg-signal"],
-  [/^(pptx?|key|odp)$/, "bg-orange-500"],
-  [/^(zip|rar|7z|tar|gz)$/, "bg-violet-500"],
-  [/^(png|jpe?g|gif|webp|heic|svg)$/, "bg-pink-500"],
-  [/^(mp4|mov|webm|avi)$/, "bg-zinc-700"],
+  [/^pdf$/, "text-red-700 dark:text-red-300"],
+  [/^(docx?|odt|rtf|pages)$/, "text-blue-700 dark:text-blue-300"],
+  [/^(xlsx?|csv|ods|numbers)$/, "text-emerald-700 dark:text-emerald-300"],
+  [/^(pptx?|key|odp)$/, "text-orange-700 dark:text-orange-300"],
+  [/^(zip|rar|7z|tar|gz)$/, "text-violet-700 dark:text-violet-300"],
+  [/^(png|jpe?g|gif|webp|heic|svg)$/, "text-pink-700 dark:text-pink-300"],
+  [/^(mp4|mov|webm|avi)$/, "text-foreground"],
 ];
-/** Tuile de pièce jointe (maquette) : carré arrondi de la couleur du type, trombone blanc. */
+/** Tuile de pièce jointe : carré neutre avec l'extension du fichier (PDF, XLS…). */
 function FileBadge({ name }: { name: string }) {
   const ext = (name.includes(".") ? name.split(".").pop() ?? "" : "").toLowerCase().slice(0, 4);
-  const tone = FILE_TONE.find(([re]) => re.test(ext))?.[1] ?? "bg-zinc-500";
+  const tone = FILE_TONE.find(([re]) => re.test(ext))?.[1] ?? "text-muted-foreground";
   return (
-    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-[10px] text-white shadow-sm ${tone}`}>
-      <Paperclip className="h-[18px] w-[18px]" strokeWidth={2} />
+    <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-muted text-[10.5px] font-semibold uppercase ${tone}`}>
+      {ext || <Paperclip className="h-4 w-4" />}
     </span>
   );
 }

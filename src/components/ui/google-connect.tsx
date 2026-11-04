@@ -96,6 +96,42 @@ export function GoogleConnect() {
   const connected = status?.connected === true;
   const needsReconnect = !connected && status?.lastError === "invalid_grant";
 
+  // Connecté : une ligne discrète (le calendrier garde la place) ; le grand bloc ne
+  // revient que s'il faut connecter ou reconnecter le compte.
+  if (connected) {
+    return (
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
+        <GoogleLogo className="h-3.5 w-3.5" />
+        <span className="font-medium text-foreground">Google Agenda</span>
+        <span aria-hidden className="text-faint">·</span>
+        <span title={status?.email ?? undefined}>synchro {formatDate(status?.lastSyncAt ?? null)}</span>
+        <button type="button" onClick={onSync} disabled={syncing || disconnecting}
+          className="ml-1 inline-flex h-7 items-center gap-1.5 rounded-lg px-2 font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-60">
+          <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} />
+          {syncing ? "Synchronisation…" : "Synchroniser"}
+        </button>
+        <button type="button" onClick={() => setConfirmDisc(true)} disabled={syncing || disconnecting}
+          className="inline-flex h-7 items-center gap-1.5 rounded-lg px-2 font-medium text-faint transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-60">
+          <Unlink className="h-3.5 w-3.5" /> {disconnecting ? "Déconnexion…" : "Déconnecter"}
+        </button>
+        {confirmDisc && (
+          <ConfirmDialog
+            title="Déconnecter Google Agenda ?"
+            message="La synchronisation avec Google Agenda sera coupée. Tu devras te reconnecter et réautoriser l'accès Google pour la relancer."
+            confirmLabel="Déconnecter"
+            cancelLabel="Annuler"
+            danger
+            onCancel={() => setConfirmDisc(false)}
+            onConfirm={() => {
+              setConfirmDisc(false);
+              onDisconnect();
+            }}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="rounded-2xl border border-border bg-surface p-4 shadow-sm sm:p-5">
       <div className="flex items-start justify-between gap-3">

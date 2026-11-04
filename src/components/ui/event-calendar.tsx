@@ -43,32 +43,18 @@ const TYPE_OPTIONS = [
   { value: "deadline", label: "Deadline" },
 ];
 
-// Couleur (fond de puce) par type — une couleur DISTINCTE par type (code couleur)
+// Couleur du trait de la puce, une par type de rendez-vous (seule légende de couleur).
 const TYPE_BG: Record<string, string> = {
-  call: "bg-primary",
-  reunion: "bg-cyan",
-  collab: "bg-signal",
-  shoot: "bg-indigo",
-  event: "bg-cyan",
-  voyage: "bg-amber",
-  deadline: "bg-wait",
+  call: "bg-blue-500",
+  reunion: "bg-sky-400",
+  collab: "bg-emerald-500",
+  shoot: "bg-zinc-800 dark:bg-zinc-200",
+  event: "bg-violet-500",
+  voyage: "bg-amber-500",
+  deadline: "bg-red-500",
 };
-
-const TYPE_TEXT: Record<string, string> = {
-  call: "text-primary",
-  reunion: "text-cyan",
-  collab: "text-signal",
-  shoot: "text-indigo",
-  event: "text-cyan",
-  voyage: "text-amber",
-  deadline: "text-wait",
-};
-
 function typeBg(t: string) {
-  return TYPE_BG[t] ?? "bg-indigo";
-}
-function typeText(t: string) {
-  return TYPE_TEXT[t] ?? "text-indigo";
+  return TYPE_BG[t] ?? "bg-violet-500";
 }
 function typeLabel(t: string, tr: T) {
   const label = TYPE_OPTIONS.find((o) => o.value === t)?.label;
@@ -81,29 +67,16 @@ function typeLabel(t: string, tr: T) {
 function evKind(e: Ev): Kind {
   return e.kind ?? "event";
 }
+/** Trait de couleur d'une puce : le type pour un rendez-vous, gris pour une échéance
+ *  (brief, to-do, facture, lecture seule), rose Instagram pour un post. */
 function chipBg(e: Ev) {
-  if (e.kind === "brief") return "bg-info";
-  if (e.kind === "todo") return "bg-indigo";
-  if (e.kind === "facture") return "bg-signal";
+  if (e.kind === "brief" || e.kind === "todo" || e.kind === "facture") return "bg-zinc-300 dark:bg-zinc-600";
   if (e.kind === "post") return "bg-pink-500";
   return typeBg(e.type);
 }
-/** Texte d'une puce pleine : sur le primaire (blanc en sombre Minuit) il faut
- *  son texte dédié, sinon blanc sur blanc (puces « Appel » illisibles). */
-function chipFg(e: Ev) {
-  const bg = chipBg(e);
-  if (bg === "bg-primary") return "text-primary-foreground";
-  // Niveaux d’encre (indigo = encre forte, amber/cyan = gris) : presque blancs en
-  // sombre → texte de la couleur du FOND pour rester lisible dans les deux thèmes.
-  if (bg === "bg-indigo" || bg === "bg-amber" || bg === "bg-cyan" || bg === "bg-info") return "text-background";
-  return "text-onsignal";
-}
-function chipText(e: Ev) {
-  if (e.kind === "brief") return "text-info";
-  if (e.kind === "todo") return "text-indigo";
-  if (e.kind === "facture") return "text-signaltext";
-  if (e.kind === "post") return "text-pink-500";
-  return typeText(e.type);
+/** Libellé de catégorie (vue Semaine et Liste) : discret, la couleur est portée par le trait. */
+function chipText(_e: Ev) {
+  return "text-muted-foreground";
 }
 function chipLabel(e: Ev, t: T) {
   if (e.kind === "brief") return t("Brief");
@@ -361,7 +334,7 @@ export function EventCalendar({
           <button
             type="button"
             onClick={() => shift(-1)}
-            className="grid h-8 w-8 place-items-center rounded-full border border-border bg-surface text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-surface text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             aria-label={t("Précédent")}
           >
             <ChevronLeft className="h-4 w-4" />
@@ -369,7 +342,7 @@ export function EventCalendar({
           <button
             type="button"
             onClick={() => shift(1)}
-            className="grid h-8 w-8 place-items-center rounded-full border border-border bg-surface text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="grid h-8 w-8 place-items-center rounded-lg border border-border bg-surface text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
             aria-label={t("Suivant")}
           >
             <ChevronRight className="h-4 w-4" />
@@ -377,11 +350,11 @@ export function EventCalendar({
           <button
             type="button"
             onClick={goToday}
-            className="rounded-full border border-border bg-surface px-3 py-1.5 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+            className="h-8 rounded-lg border border-border bg-surface px-3 text-[12px] font-medium text-foreground transition-colors hover:bg-rowhover"
           >
             {t("Aujourd'hui")}
           </button>
-          <div className="ml-1 text-base font-semibold capitalize text-foreground">{headerTitle}</div>
+          <div className="ml-2 text-[18px] font-semibold capitalize text-foreground">{headerTitle}</div>
         </div>
         ) : <div />}
 
@@ -405,8 +378,8 @@ export function EventCalendar({
         />
       </div>
 
-      {/* Filtres de catégorie (cliquables) + légende des types d'événement */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-xl border border-border bg-surface px-3 py-2 shadow-sm">
+      {/* Filtres de catégorie (cliquables), puis la légende des types de rendez-vous. */}
+      <div className="flex flex-wrap items-center gap-x-1 gap-y-1.5">
         {KIND_META.map((k) => {
           const on = kinds[k.id];
           const count = events.filter((e) => evKind(e) === k.id).length;
@@ -416,26 +389,28 @@ export function EventCalendar({
             <button
               key={k.id}
               type="button"
+              aria-pressed={on}
               onClick={() => setKinds((s) => ({ ...s, [k.id]: !s[k.id] }))}
               className={cn(
-                "flex items-center gap-1.5 rounded-full px-1.5 py-0.5 text-[11px] font-semibold transition-colors hover:bg-rowhover",
-                on ? "text-foreground" : "text-faint",
+                "flex h-7 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium transition-colors",
+                on ? "border-border bg-surface text-foreground" : "border-transparent text-faint line-through decoration-faint/60 hover:text-muted-foreground",
               )}
               title={on ? t("Masquer : {label}", { label: t(k.label) }) : t("Afficher : {label}", { label: t(k.label) })}
             >
-              <span className={cn("size-2.5 shrink-0 rounded-full transition-opacity", k.dot, !on && "opacity-25")} />
               {t(k.label)}
-              <span className="tabular-nums opacity-50">{count}</span>
+              <span className="tabular-nums text-faint no-underline">{count}</span>
             </button>
           );
         })}
-        <span className="mx-0.5 h-3.5 w-px shrink-0 bg-border" />
-        {TYPE_OPTIONS.map((o) => (
-          <span key={o.value} className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-            <span className={cn("size-2.5 shrink-0 rounded-full", typeBg(o.value))} />
-            {t(o.label)}
-          </span>
-        ))}
+        <span className="mx-2 h-4 w-px shrink-0 bg-border max-sm:hidden" />
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {TYPE_OPTIONS.map((o) => (
+            <span key={o.value} className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+              <span className={cn("h-3 w-[3px] shrink-0 rounded-full", typeBg(o.value))} />
+              {t(o.label)}
+            </span>
+          ))}
+        </div>
       </div>
 
       {navAdd && phone && <AddButton navBar label={t("Événement")} onClick={() => openCreate(tKey)} />}
@@ -494,6 +469,7 @@ function MonthView({
   const cells = Array.from({ length: 42 }, (_, i) => addDays(gridStart, i));
   const curMonth = cursor.getMonth();
   const lang = useLang();
+  const t = useT();
 
   return (
     <div className="overflow-x-auto overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
@@ -518,17 +494,18 @@ function MonthView({
               type="button"
               onClick={() => onCellClick(key)}
               className={cn(
-                "group relative flex min-h-[92px] flex-col gap-1 border-b border-r border-border p-1.5 text-left transition-colors hover:bg-rowhover md:min-h-[110px]",
+                "group relative flex min-h-[92px] flex-col gap-1 border-b border-r border-border p-1.5 text-left transition-colors hover:bg-rowhover md:min-h-[112px]",
                 i % 7 === 6 && "border-r-0",
                 i >= 35 && "border-b-0",
-                !inMonth && "bg-panel/40",
+                (!inMonth || i % 7 >= 5) && "bg-panel/50",
+                isToday && "bg-primary/[0.05]",
               )}
             >
               <span
                 className={cn(
-                  "grid h-6 w-6 place-items-center self-end rounded-full text-[11px] font-medium tabular-nums",
+                  "grid h-6 min-w-6 place-items-center self-start rounded-full px-1 text-[12px] font-medium tabular-nums",
                   inMonth ? "text-foreground" : "text-faint",
-                  isToday && "border border-primary bg-primary/10 text-primary",
+                  isToday && "bg-primary text-primary-foreground",
                 )}
               >
                 {d.getDate()}
@@ -579,19 +556,19 @@ function MonthView({
                         onEventClick(e);
                       }
                     }}
-                    className={cn(
-                      "flex items-center gap-1 truncate rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-opacity hover:opacity-90",
-                      chipBg(e),
-                      chipFg(e),
-                    )}
-                    title={`${e.time ? e.time + " · " : ""}${e.title}`}
+                    className="relative flex items-center gap-1.5 truncate rounded-md bg-surface py-0.5 pl-2.5 pr-1.5 text-[11.5px] text-foreground ring-1 ring-border/70 transition-colors hover:bg-rowhover"
+                    title={`${e.time ? e.time + " · " : ""}${e.kind && e.kind !== "event" ? `${chipLabel(e, t)} · ` : ""}${e.title}`}
                   >
-                    {e.time && <span className="shrink-0 tabular-nums opacity-80">{e.time}</span>}
+                    <span aria-hidden className={cn("absolute inset-y-1 left-1 w-[3px] rounded-full", chipBg(e))} />
+                    {e.time && e.time !== "—" && <span className="shrink-0 tabular-nums text-muted-foreground">{e.time}</span>}
+                    {e.kind && e.kind !== "event" && !e.title.toLowerCase().startsWith(chipLabel(e, t).toLowerCase()) && (
+                      <span className="shrink-0 text-muted-foreground">{chipLabel(e, t)}</span>
+                    )}
                     <span className="truncate">{e.title}</span>
                   </span>
                 ))}
                 {extra > 0 && (
-                  <span className="px-1 text-[10px] font-medium text-muted-foreground">+{extra}</span>
+                  <span className="px-1 text-[11px] font-medium text-muted-foreground">{extra} de plus</span>
                 )}
               </div>
             </button>
