@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useLive } from "./useLive";
 import { supabase } from "./supabase";
 
@@ -33,13 +33,24 @@ function parseRow(data: unknown[] | null): AppState {
   }
 }
 
+// Texte brut des deux lignes à la dernière lecture : si rien n'a changé, on rend le
+// MÊME objet (pas de JSON.parse de ~250 Ko, et les vues ne se redessinent pas).
+let _lastRaw: string | null = null;
+let _lastParsed: AppState | null = null;
+const rawOf = (data: unknown[] | null) => String((data?.[0] as { a?: string } | undefined)?.a ?? "");
+
 async function loadAppState(): Promise<AppState> {
   const [app, fin] = await Promise.all([readRow("__app_state__"), readRow("__finance_state__")]);
   // Lecture ratée ≠ ligne absente (y compris la ligne finance : une clé argent lue vide
   // serait réécrite à partir de rien).
   if (app.error) throw app.error;
   if (fin.error) throw fin.error;
-  return { ...parseRow(app.data), ...parseRow(fin.data) };
+  const raw = `${rawOf(app.data)}\u0000${rawOf(fin.data)}`;
+  if (raw === _lastRaw && _lastParsed) return _lastParsed;
+  const parsed = { ...parseRow(app.data), ...parseRow(fin.data) };
+  _lastRaw = raw;
+  _lastParsed = parsed;
+  return parsed;
 }
 
 // Compteur d'écritures : une écriture optimiste en cours "gagne" contre un
@@ -245,12 +256,15 @@ export function useAppState<T = AppState>(select?: (s: AppState) => T) {
   );
   const [loading, setLoading] = useState(!_cache);
   const [error, setError] = useState(false);
+  // Dernier blob reçu par cette vue (même objet = rien de neuf).
+  const seen = useRef<AppState | null>(_cache);
 
   useEffect(() => {
     let alive = true;
     getAppState()
       .then((s) => {
         if (!alive) return;
+        seen.current = s;
         setData(select ? select(s) : (s as unknown as T));
         setLoading(false);
       })
@@ -274,7 +288,11 @@ export function useAppState<T = AppState>(select?: (s: AppState) => T) {
       .then((s) => {
         // Ignore ce refetch si une écriture optimiste a démarré entre-temps
         // (sinon on annulerait visuellement la modif en cours).
-        if (_writeGen === gen) setData(select ? select(s) : (s as unknown as T));
+        if (_writeGen !== gen) return;
+        // Même blob qu'au dernier passage (rien n'a changé en base) : pas de redessin.
+        if (s === seen.current) return;
+        seen.current = s;
+        setData(select ? select(s) : (s as unknown as T));
       })
       .catch(() => {});
   });
