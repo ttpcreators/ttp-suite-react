@@ -25,7 +25,7 @@ import { boxToken, talentAddress, type Box } from "../_shared/gmailBox.ts";
 import { gfetch, mapPool } from "../_shared/gfetch.ts";
 import { sendTo } from "../_shared/push.ts";
 import { agencyMailPayloads, creatorMailPayloads, creatorsForMail, type CreatorMailSetting, type Lang, type NewMail } from "../_shared/mailNotif.ts";
-import { tasksFromMails } from "./tasks.ts";
+import { closeAnsweredTasks, tasksFromMails } from "./tasks.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
@@ -317,8 +317,18 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Tâches de mail déjà faites (réponse envoyée dans le fil) : cochées toutes seules.
+  let tasksDone = 0;
+  if (prefs.mailTasks !== false) {
+    try {
+      tasksDone = await closeAnsweredTasks(sb, tokens);
+    } catch (e) {
+      console.error("gmail-poll tâches faites", (e as Error)?.message);
+    }
+  }
+
   return jsonRes({
-    ok: true, new: added.length, pushed, creatorPushed, tasks,
+    ok: true, new: added.length, pushed, creatorPushed, tasks, tasksDone,
     ...(baseline ? { baseline: true } : {}),
     ...(more ? { more: true } : {}),
     ...(failedBoxes.length ? { partial: true, failedBoxes } : {}),

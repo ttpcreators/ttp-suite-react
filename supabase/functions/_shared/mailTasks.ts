@@ -248,3 +248,36 @@ export function brandFromEmail(email: string): string | null {
   if (!core || core.length < 2) return null;
   return core.charAt(0).toUpperCase() + core.slice(1);
 }
+
+// ── Fermeture automatique : la tâche est faite quand l'agence a répondu dans le fil ──
+
+/** Sujet d'une tâche d'après son titre (« Envoyer les stats à Prepmymeal » → « stats »). */
+export function kindOfTitle(title: string): MailTaskKind | null {
+  for (const r of RULES) {
+    const [pre, post] = r.title("\u0000").split("\u0000");
+    if (title.length > pre.length + post.length && title.startsWith(pre) && title.endsWith(post)) return r.kind;
+  }
+  return null;
+}
+
+/**
+ * Ce qui prouve qu'une tâche est faite, dans un mail ENVOYÉ par l'agence dans le même fil
+ * après la création de la tâche : une pièce jointe (stats, facture) ou une simple réponse.
+ * Contrat, retours et paiement ne se ferment jamais seuls (une réponse ne prouve rien).
+ */
+const DONE_BY_REPLY: Partial<Record<MailTaskKind, "piece" | "reponse">> = {
+  stats: "piece",
+  facture: "piece",
+  adresse: "reponse",
+  tarifs: "reponse",
+  call: "reponse",
+  brief: "reponse",
+  publication: "reponse",
+};
+
+/** Réponse de l'agence qui fait la tâche, ou null. `since` = création de la tâche (ms). */
+export function replyThatDoes(kind: MailTaskKind | null, sent: { at: number; attachment: boolean }[], since: number): { at: number } | null {
+  const need = kind ? DONE_BY_REPLY[kind] : undefined;
+  if (!need) return null;
+  return sent.filter((m) => m.at > since && (need === "reponse" || m.attachment)).sort((a, b) => a.at - b.at)[0] ?? null;
+}

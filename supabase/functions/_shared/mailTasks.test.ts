@@ -73,3 +73,27 @@ describe("expéditeur et marque", () => {
     expect(taskKey("t1", "stats")).toBe("t1:stats");
   });
 });
+
+import { kindOfTitle, replyThatDoes } from "./mailTasks.ts";
+
+describe("tâche de mail faite → fermée toute seule", () => {
+  it("retrouve le sujet d'après le titre, même avec un nom raccourci", () => {
+    expect(kindOfTitle("Envoyer les stats à Prepmymeal")).toBe("stats");
+    expect(kindOfTitle("Envoyer la facture à Une marque au nom très lo…")).toBe("facture");
+    expect(kindOfTitle("Signer le contrat YADE Whitelisting pour Lén…")).toBe("contrat");
+    expect(kindOfTitle("Prospecter 20 marques via le MCP")).toBeNull();
+  });
+  it("stats et facture : il faut une pièce jointe envoyée après la tâche", () => {
+    const since = 1_000;
+    expect(replyThatDoes("stats", [{ at: 2_000, attachment: false }], since)).toBeNull();
+    expect(replyThatDoes("stats", [{ at: 500, attachment: true }], since)).toBeNull();
+    expect(replyThatDoes("stats", [{ at: 3_000, attachment: true }, { at: 2_000, attachment: true }], since)).toEqual({ at: 2_000, attachment: true });
+  });
+  it("adresse, tarifs, call : une réponse suffit ; contrat, retours, paiement jamais", () => {
+    expect(replyThatDoes("adresse", [{ at: 2_000, attachment: false }], 1_000)).not.toBeNull();
+    expect(replyThatDoes("contrat", [{ at: 2_000, attachment: true }], 1_000)).toBeNull();
+    expect(replyThatDoes("retours", [{ at: 2_000, attachment: true }], 1_000)).toBeNull();
+    expect(replyThatDoes("paiement", [{ at: 2_000, attachment: true }], 1_000)).toBeNull();
+    expect(replyThatDoes(null, [{ at: 2_000, attachment: true }], 1_000)).toBeNull();
+  });
+});
