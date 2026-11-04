@@ -14,7 +14,7 @@ import type { getServiceClient } from "../_shared/google.ts";
 import { gfetch } from "../_shared/gfetch.ts";
 import { brandMatcher, norm } from "../_shared/brandmatch.ts";
 import { creatorsForMail, type CreatorMailSetting, type NewMail } from "../_shared/mailNotif.ts";
-import { brandFromEmail, ignoredSender, mailTasks, taskKey } from "../_shared/mailTasks.ts";
+import { brandFromEmail, ignoredSender, kindOfTitle, mailTasks, replyThatDoes, taskKey } from "../_shared/mailTasks.ts";
 
 type Sb = ReturnType<typeof getServiceClient>;
 type Box = NewMail["box"];
@@ -157,4 +157,60 @@ export async function tasksFromMails(
     if (error) console.error("gmail-poll mailTaskKeys", error.message);
   }
   return made;
+}
+
+// ── Tâches déjà faites : fermées toutes seules ──────────────────────────────
+// Une tâche créée par un mail (tag « Mail », lien « Voir le mail ») est cochée quand
+// l'agence a répondu dans le même fil APRÈS sa création : avec une pièce jointe pour
+// les stats et la facture, une simple réponse pour l'adresse, les tarifs, un call, un
+// brief ou une date de publication (règles : _shared/mailTasks.ts, replyThatDoes).
+
+type OpenTask = { id: string; text: string; descr: string | null; created_at: string; attachments: { path?: string }[] | null };
+type ThreadMsg = { internalDate?: string; labelIds?: string[]; payload?: { filename?: string; parts?: { filename?: string; parts?: { filename?: string }[] }[] } };
+
+const hasFile = (m: ThreadMsg) =>
+  !!m.payload?.filename || (m.payload?.parts ?? []).some((p) => !!p.filename || (p.parts ?? []).some((q) => !!q.filename));
+
+export async function closeAnsweredTasks(sb: Sb, tokens: Partial<Record<Box, string>>): Promise<number> {
+  const since = new Date(Date.now() - 45 * 86400000).toISOString();
+  const { data, error } = await sb.from("todos").select("id, text, descr, created_at, attachments")
+    .eq("tag", "Mail").eq("done", false).gte("created_at", since).order("created_at", { ascending: false }).limit(30);
+  if (error || !data?.length) return 0;
+  let closed = 0;
+  const threads = new Map<string, ThreadMsg[] | null>();
+  for (const t of data as OpenTask[]) {
+    const kind = kindOfTitle(t.text);
+    if (!kind) continue;
+    const link = (t.attachments ?? []).map((a) => a?.path ?? "").find((p) => p.includes("thread="));
+    if (!link) continue;
+    const q = new URLSearchParams(link.split("?")[1] ?? "");
+    const thread = q.get("thread");
+    const box = (q.get("box") ?? "partnerships") as Box;
+    const token = tokens[box];
+    if (!thread || !token) continue;
+    const key = `${box}:${thread}`;
+    if (!threads.has(key)) {
+      const r = await gfetch(`${GMAIL}/threads/${encodeURIComponent(thread)}?format=full&fields=messages(internalDate,labelIds,payload(filename,parts(filename,parts(filename))))`, {
+        headers: { Authorization: `Bearer ${token}` },
+      }).catch(() => null);
+      const j = r?.ok ? await r.json().catch(() => null) as { messages?: ThreadMsg[] } | null : null;
+      threads.set(key, j?.messages ?? null);
+    }
+    const msgs = threads.get(key);
+    if (!msgs) continue;
+    const sent = msgs.filter((m) => (m.labelIds ?? []).includes("SENT")).map((m) => ({ at: Number(m.internalDate ?? 0), attachment: hasFile(m) }));
+    const reply = replyThatDoes(kind, sent, Date.parse(t.created_at));
+    if (!reply) continue;
+    const note = `Cochée toute seule : réponse envoyée le ${frDay(reply.at)}${sent.find((m) => m.at === reply.at)?.attachment ? " avec pièce jointe" : ""}.`;
+    const { error: upErr } = await sb.from("todos").update({
+      done: true,
+      status: "Fait",
+      done_at: new Date(reply.at).toISOString(),
+      done_by: "Automatique (mail envoyé)",
+      descr: [t.descr, note].filter(Boolean).join("\n\n"),
+    }).eq("id", t.id).eq("done", false);
+    if (upErr) console.error("gmail-poll tâche faite", upErr.message);
+    else closed++;
+  }
+  return closed;
 }
