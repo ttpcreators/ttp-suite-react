@@ -34,7 +34,7 @@ import { useCreators } from "@/lib/useCreators";
 import { useCreatorMailCounts } from "@/lib/creatorMailCounts";
 import { connect as connectGoogle, consumeOAuthReturn } from "@/lib/googleCalendar";
 import { useSearch } from "@/lib/search";
-import { useLiveKey } from "@/lib/useLive";
+import { appInUse, useLiveKey } from "@/lib/useLive";
 import { buildBrandIndex, collabTag, creatorTone, matchCollabs, relanceDays, type BrandIndex, type CollabLite, type MailTag } from "@/lib/mailCollab";
 import { LinkedCollabCard, MailTagChip } from "@/components/mail-collab";
 import { MailReactions } from "@/components/mail-reactions";
@@ -1508,7 +1508,9 @@ export function Mails() {
       peekSig = sig;
     };
     const first = window.setTimeout(() => void check(), 4000);
-    const iv = window.setInterval(() => void check(), 60_000);
+    // Au repos (fenêtre derrière une autre, pas de geste depuis 2 min) : pas de sondage ;
+    // le retour sur la fenêtre relance un coup d'œil (onFocus).
+    const iv = window.setInterval(() => { if (appInUse()) void check(); }, 60_000);
     const onFocus = () => {
       if (!visible()) return;
       if (peekOff) fullIfStale(30_000);
