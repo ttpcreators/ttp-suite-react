@@ -75,3 +75,32 @@ describe("contrats", () => {
     expect(readContract("Contrat simple. La marque paie 500 € pour 1 post.", { creators: [], brands: [] }, today).exclusivity).toBeNull();
   });
 });
+
+import { looksLikeContract, proposalFromMail } from "./exclusivites.ts";
+
+describe("contrats reçus par mail", () => {
+  it("repère un PDF de contrat par son nom ou l'objet du mail", () => {
+    expect(looksLikeContract("Contrat_Nutripure_Lena.pdf", "Documents")).toBe(true);
+    expect(looksLikeContract("Agreement-HER-Ana.pdf", "")).toBe(true);
+    expect(looksLikeContract("Doc 2026.pdf", "Contrat de collaboration à signer")).toBe(true);
+    expect(looksLikeContract("Brief Yade.pdf", "Brief de la campagne")).toBe(false);
+    expect(looksLikeContract("Contrat.docx", "Contrat")).toBe(false);
+  });
+
+  it("propose une exclusivité à confirmer, qui ne bloque personne tant qu'elle n'est pas confirmée", () => {
+    const text = "Contrat de collaboration entre Nutripure et Léna Pasquale, signé le 1er octobre 2026. Le Talent s'engage à ne pas collaborer avec une marque concurrente du secteur de la nutrition sportive, notamment Myprotein, Bulk et Foodspring, pendant une durée de 3 mois à compter du 1er octobre 2026. Rémunération : 1 500 € HT.";
+    const r = readContract(text, { creators: ["LÉNA PASQUALE"], brands: ["Nutripure"] }, "2026-11-04");
+    const p = proposalFromMail(r, { creatorHint: null, brandHint: null, fileName: "Contrat.pdf", docPath: "contrats/x.pdf", mail: { threadId: "t1", box: "talent" }, today: "2026-11-04" });
+    expect(p).toMatchObject({ creator: "LÉNA PASQUALE", brand: "Nutripure", pending: true, source: "mail", start: "2026-10-01", end: "2027-01-01" });
+    expect(p?.competitors).toEqual(["Myprotein", "Bulk", "Foodspring"]);
+    expect(p?.scope).toBe("nutrition sportive");
+    const e = { ...p!, id: "x", createdAt: 0 };
+    expect(conflictsFor([e], "LÉNA PASQUALE", "Myprotein", "2026-11-04")).toEqual([]);
+    expect(conflictsFor([{ ...e, pending: false }], "LÉNA PASQUALE", "Myprotein", "2026-11-04")).toHaveLength(1);
+  });
+
+  it("pas de clause d'exclusivité : pas de proposition", () => {
+    const r = readContract("Contrat de cession de droits. Rémunération : 500 €.", { creators: [], brands: [] }, "2026-11-04");
+    expect(proposalFromMail(r, { creatorHint: "Ana", brandHint: "HER", fileName: "c.pdf", docPath: null, mail: { threadId: "t", box: "talent" }, today: "2026-11-04" })).toBeNull();
+  });
+});

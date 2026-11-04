@@ -26,7 +26,14 @@ export type Exclusivite = {
   /** Points clés de la collab gardés en mémoire (droits, livrables, montant, délais…). */
   points: string[];
   collabId?: string | null;
-  source: "manuel" | "contrat" | "pdf";
+  source: "manuel" | "contrat" | "pdf" | "mail";
+  /** Lue toute seule dans un contrat reçu par mail : en attente de la confirmation de l'agence.
+   *  Tant qu'elle n'est pas confirmée, elle ne bloque aucun créateur. */
+  pending?: boolean;
+  /** Phrase du contrat qui parle de l'exclusivité (lecture automatique). */
+  quote?: string | null;
+  /** Mail d'où vient le contrat (lien « Voir le mail »). */
+  mail?: { threadId: string; box: string; subject?: string } | null;
   /** Référence du contrat de l'app, ou nom du PDF lu. */
   contractRef?: string | null;
   /** Chemin du PDF dans le bucket documents. */
@@ -92,7 +99,7 @@ export function hitsBrand(e: Exclusivite, brand: string, brandTags: readonly str
 
 /** Exclusivités en cours ou à venir d'un créateur qui bloquent cette marque. */
 export function conflictsFor(list: readonly Exclusivite[], creator: string, brand: string, today: string, brandTags: readonly string[] = []): Exclusivite[] {
-  return list.filter((e) => foldName(e.creator) === foldName(creator) && excluState(e, today) !== "terminee" && hitsBrand(e, brand, brandTags));
+  return list.filter((e) => !e.pending && foldName(e.creator) === foldName(creator) && excluState(e, today) !== "terminee" && hitsBrand(e, brand, brandTags));
 }
 
 /** Créateurs bloqués pour une marque : nom (minuscules) → raison courte (« Exclu Nike · 12 déc. »). */
@@ -105,7 +112,7 @@ export function blockedCreators(
 ): Map<string, string> {
   const out = new Map<string, string>();
   for (const e of list) {
-    if (excluState(e, today) === "terminee" || !hitsBrand(e, brand, brandTags)) continue;
+    if (e.pending || excluState(e, today) === "terminee" || !hitsBrand(e, brand, brandTags)) continue;
     const k = e.creator.trim().toLowerCase();
     if (!out.has(k)) out.set(k, `Exclu ${e.brand}${e.end ? ` · ${fmtDate(e.end)}` : ""}`);
   }
@@ -116,7 +123,7 @@ export function blockedCreators(
 export function activeByCreator(list: readonly Exclusivite[], today: string): Map<string, Exclusivite[]> {
   const out = new Map<string, Exclusivite[]>();
   for (const e of list) {
-    if (excluState(e, today) !== "en_cours") continue;
+    if (e.pending || excluState(e, today) !== "en_cours") continue;
     const k = e.creator.trim().toLowerCase();
     out.set(k, [...(out.get(k) ?? []), e]);
   }
@@ -223,9 +230,9 @@ function listedBrands(sentence: string): string[] {
 /** Secteur écrit après « secteur », « catégorie », « marques de/du »… */
 function sectorOf(sentence: string): string {
   const f = foldName(sentence);
-  const m = /\b(?:secteur|categorie|category|domaine|industry|sector|segment|univers)(?: d'activite)?(?: de| des| du| d'| of| :)?\s+(?:la |le |les |l')?([a-z0-9' ]{3,60}?)(?=\s+(?:pendant|pour|durant|a compter|des|jusqu|during|for|until|from|sur|,)|$)/.exec(f);
+  const m = /\b(?:secteur|categorie|category|domaine|industry|sector|segment|univers)(?: d'activite)?(?: de| des| du| d'| of| :)?\s+(?:la |le |les |l')?([a-z0-9' ]{3,60}?)(?=\s+(?:pendant|pour|durant|a compter|des|jusqu|during|for|until|from|sur|notamment|tels?|telles?|such|including|comme|par exemple|,)|$)/.exec(f);
   if (m) return m[1].trim();
-  const m2 = /\bmarques? (?:concurrentes? )?(?:de|du|des|d'|dans le|dans la|of)\s+(?:la |le |les |l')?([a-z0-9' ]{3,40}?)(?=\s+(?:pendant|pour|durant|a compter|des|jusqu|during|for|until|,)|$)/.exec(f);
+  const m2 = /\bmarques? (?:concurrentes? )?(?:de|du|des|d'|dans le|dans la|of)\s+(?:la |le |les |l')?([a-z0-9' ]{3,40}?)(?=\s+(?:pendant|pour|durant|a compter|des|jusqu|during|for|until|notamment|tels?|telles?|such|including|comme|,)|$)/.exec(f);
   return m2 ? m2[1].trim() : "";
 }
 
@@ -287,4 +294,41 @@ export function readContract(text: string, known: { creators: readonly string[];
   ].filter((x): x is string => !!x);
 
   return { creator, brand, exclusivity, points };
+}
+
+// ── Contrats reçus par mail ─────────────────────────────────────────────────
+
+const CONTRACT_RE = /\b(contrats?|contracts?|agreements?|avenants?|accords? de (partenariat|collaboration)|conventions?|docusign|yousign|terms of collaboration|bon de commande signe)\b/;
+
+/** Pièce jointe qui ressemble à un contrat : un PDF dont le nom ou l'objet du mail parle de contrat. */
+export function looksLikeContract(fileName: string, subject: string): boolean {
+  if (!/\.pdf$/i.test(fileName.trim())) return false;
+  return CONTRACT_RE.test(foldName(fileName.replace(/[_\-.]+/g, " "))) || CONTRACT_RE.test(foldName(subject));
+}
+
+/**
+ * Proposition d'exclusivité « à confirmer » tirée d'un contrat reçu par mail, ou null quand
+ * le contrat n'a pas de clause d'exclusivité. Créateur et marque : ceux lus dans le contrat,
+ * sinon ceux du mail (créatrice destinataire, marque de l'expéditeur).
+ */
+export function proposalFromMail(
+  r: ContractReading,
+  ctx: { creatorHint: string | null; brandHint: string | null; fileName: string; docPath: string | null; mail: { threadId: string; box: string; subject?: string }; today: string },
+): Omit<Exclusivite, "id" | "createdAt"> | null {
+  if (!r.exclusivity) return null;
+  return {
+    creator: r.creator ?? ctx.creatorHint ?? "",
+    brand: r.brand ?? ctx.brandHint ?? "",
+    scope: r.exclusivity.scope,
+    competitors: r.exclusivity.competitors,
+    start: r.exclusivity.start ?? ctx.today,
+    end: r.exclusivity.end,
+    points: r.points,
+    source: "mail",
+    contractRef: ctx.fileName,
+    docPath: ctx.docPath,
+    pending: true,
+    quote: r.exclusivity.quote,
+    mail: ctx.mail,
+  };
 }

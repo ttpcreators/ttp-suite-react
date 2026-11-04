@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FileText, Pencil, Search, ShieldAlert } from "@/components/icons";
+import { FileText, Mail, Pencil, Search, ShieldAlert } from "@/components/icons";
 import { Spin } from "@/components/ui/loader";
 import { AddButton, InlineForm, TextField, TextAreaField, DeleteButton } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
@@ -13,6 +13,7 @@ import { useCreators } from "@/lib/useCreators";
 import { fmtDay } from "@/lib/dates";
 import { cn, titleCase } from "@/lib/utils";
 import { openLater } from "@/lib/openLater";
+import { requestIntent } from "@/lib/openIntent";
 import { pdfText } from "@/lib/pdfText";
 import { freshExclusivites, saveExclusivites, todayParis, useExclusivites } from "@/lib/useExclusivites";
 import {
@@ -70,7 +71,7 @@ export function Exclusivites() {
 
   const groups = useMemo(() => {
     const by: Record<ExcluState, Exclusivite[]> = { en_cours: [], a_venir: [], terminee: [] };
-    for (const e of list) by[excluState(e, today)].push(e);
+    for (const e of list) if (!e.pending) by[excluState(e, today)].push(e);
     by.en_cours.sort((a, b) => (a.end ?? "9999").localeCompare(b.end ?? "9999"));
     by.a_venir.sort((a, b) => a.start.localeCompare(b.start));
     by.terminee.sort((a, b) => (b.end ?? "").localeCompare(a.end ?? ""));
@@ -85,6 +86,20 @@ export function Exclusivites() {
       .map((c) => ({ c, d: fromAppContract(c, durationToMonths(c.form?.duration ?? "")) }))
       .filter((x): x is { c: AppContract; d: NonNullable<typeof x.d> } => !!x.d && excluState(x.d, today) !== "terminee");
   }, [contracts, list, today]);
+
+  // Exclusivités lues toutes seules dans un contrat reçu par mail : à confirmer.
+  const toConfirm = useMemo(() => list.filter((e) => e.pending).sort((a, b) => b.createdAt - a.createdAt), [list]);
+  const confirm = async (e: Exclusivite) => {
+    if (!e.creator.trim() || !e.brand.trim()) {
+      toast("Précise la créatrice et la marque, puis enregistre");
+      return openEdit(e);
+    }
+    if (await persist([{ ...e, pending: false }])) toast(`Exclusivité ${e.brand} confirmée ✓`);
+  };
+  const openMail = (m: NonNullable<Exclusivite["mail"]>) => {
+    requestIntent("mail:open", JSON.stringify({ thread: m.threadId, box: m.box }));
+    window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "mails" }));
+  };
 
   const checkResult = useMemo(() => (check.trim() ? blockedCreators(list, check, today, [], (d) => fmtDay(d)) : null), [check, list, today]);
 
@@ -106,7 +121,7 @@ export function Exclusivites() {
   const openEdit = (e: Exclusivite) => {
     setDraft({
       id: e.id, creator: e.creator, brand: e.brand, scope: e.scope, competitors: e.competitors.join(", "), start: e.start, end: e.end ?? "",
-      points: e.points.join("\n"), source: e.source, contractRef: e.contractRef ?? null, docPath: e.docPath ?? null, quote: "",
+      points: e.points.join("\n"), source: e.source, contractRef: e.contractRef ?? null, docPath: e.docPath ?? null, quote: e.quote ?? "",
     });
     setFormOpen(true);
   };
@@ -282,6 +297,49 @@ export function Exclusivites() {
         <TextAreaField label="Points clés (un par ligne)" value={draft.points} onChange={(v) => setDraft({ ...draft, points: v })} rows={4} placeholder="ex. Droits d'usage : 6 mois, réseaux de la marque" />
       </InlineForm>
 
+      {toConfirm.length > 0 && (
+        <section className="flex flex-col gap-2.5">
+          <h3 className="px-1 text-[13px] font-semibold text-muted-foreground">À confirmer · {toConfirm.length}</h3>
+          <p className="-mt-1 px-1 text-[12.5px] text-muted-foreground">Lues toutes seules dans des contrats reçus par mail. Elles ne bloquent personne tant que tu ne les confirmes pas.</p>
+          {toConfirm.map((e) => (
+            <div key={e.id} className="flex flex-col gap-3 rounded-2xl border border-dashed border-border bg-surface p-4 sm:p-5">
+              <div className="min-w-0">
+                <div className="truncate text-[15px] font-semibold text-foreground">
+                  {e.creator ? titleCase(e.creator) : "Créatrice à préciser"} × {e.brand || "marque à préciser"}
+                </div>
+                <div className="mt-1 text-[12.5px] text-muted-foreground">
+                  {fmtDay(e.start)} → {e.end ? fmtDay(e.end) : "sans fin lue"}{e.scope ? ` · ${e.scope}` : ""}
+                  {e.competitors.length > 0 ? ` · ${e.competitors.join(", ")}` : ""}
+                </div>
+              </div>
+              {e.quote && <p className="rounded-[14px] bg-panel px-3.5 py-2.5 text-[12.5px] leading-snug text-muted-foreground">« {e.quote} »</p>}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                {e.mail && (
+                  <button type="button" onClick={() => openMail(e.mail!)} className="flex items-center gap-1.5 text-[12.5px] font-medium text-primary hover:underline">
+                    <Mail className="h-3.5 w-3.5" /> Voir le mail
+                  </button>
+                )}
+                {e.docPath && (
+                  <button type="button" onClick={() => openPdf(e.docPath as string)} className="flex items-center gap-1.5 text-[12.5px] font-medium text-primary hover:underline">
+                    <FileText className="h-3.5 w-3.5" /> Voir le contrat
+                  </button>
+                )}
+                <span className="flex-1" />
+                <button type="button" onClick={() => setConfirmDel(e)} className="h-9 rounded-full px-3 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                  Écarter
+                </button>
+                <button type="button" onClick={() => openEdit(e)} className="h-9 rounded-full border border-border bg-surface px-3.5 text-[13px] font-medium text-foreground transition-colors hover:bg-rowhover">
+                  Modifier
+                </button>
+                <button type="button" onClick={() => void confirm(e)} className="h-9 rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+                  Confirmer
+                </button>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
+
       {fromContracts.length > 0 && (
         <section className="flex flex-col gap-2.5">
           <h3 className="px-1 text-[13px] font-semibold text-muted-foreground">Dans tes contrats · {fromContracts.length}</h3>
@@ -301,7 +359,7 @@ export function Exclusivites() {
 
       {loading && !list.length ? (
         <div className="flex justify-center py-10"><Spin size={18} /></div>
-      ) : list.length === 0 ? (
+      ) : list.length === toConfirm.length && !toConfirm.length ? (
         <div className="rounded-2xl border border-border bg-surface p-8 text-center text-sm text-muted-foreground">Aucune exclusivité suivie.</div>
       ) : (
         <>
