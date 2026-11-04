@@ -8,6 +8,7 @@ import { toast } from "@/components/ui/toast";
 import type { NotificationItem } from "@/components/ui/notifications";
 import { teamNames } from "./team";
 import { activityText } from "../../supabase/functions/_shared/activityText";
+import { upcomingBirthdays } from "../../supabase/functions/_shared/birthdays";
 
 type Deadline = { creator: string; type: string; start: string; months: number };
 function ctEnd(start: string, months: number): Date | null {
@@ -82,7 +83,8 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
         .gte("created_at", new Date(Date.now() - 3 * 86400000).toISOString())
         .order("created_at", { ascending: false }).limit(15),
       teamNames(),
-    ]).then(([inv, br, ev, app, tdC, idC, evC, mailIn, bugs, mailAvis, mailNotes, team, names]) => {
+      supabase.from("creators").select("name,birth,status"),
+    ]).then(([inv, br, ev, app, tdC, idC, evC, mailIn, bugs, mailAvis, mailNotes, team, names, crea]) => {
       if (!alive) return;
       if (inv.error || br.error || ev.error) {
         console.error("Chargement des notifications échoué:", { inv: inv.error, br: br.error, ev: ev.error });
@@ -107,6 +109,21 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       }
       // Activité créateur en premier (7 derniers jours) — désactivable dans Paramètres.
       const prefs = ((app as Record<string, unknown>).notifPrefs as Record<string, boolean | undefined>) ?? {};
+      // Anniversaires des créateurs : la veille et le jour J (même réglage que le résumé du matin).
+      if (prefs.digestBirthdays !== false && !crea.error) {
+        for (const b of upcomingBirthdays((crea.data ?? []) as { name: string; birth: string | null; status: string | null }[], todayStr)) {
+          const who = titleCase(b.name);
+          const age = b.age ? `${b.age} ans` : "";
+          out.push({
+            id: `${b.when === "today" ? "bday" : "bday-eve"}:${b.date}:${b.name}`,
+            title: b.when === "today" ? `Anniversaire de ${who} aujourd'hui` : `Anniversaire de ${who} demain`,
+            description: [age, b.when === "today" ? "Pense à lui souhaiter" : "Un message ou un petit cadeau ?"].filter(Boolean).join(" · "),
+            time: b.when === "today" ? "aujourd'hui" : "demain",
+            kind: "event",
+            page: "roster",
+          });
+        }
+      }
       // Équipe : « Gianni a terminé la tâche … » (désactivable dans Paramètres).
       if (prefs.bellTeamActivity !== false && !team.error) {
         for (const a of (team.data ?? []) as { id: string; actor_id: string | null; actor_name: string | null; verb: string; entity: string; label: string; detail: string | null; created_at: string }[]) {
