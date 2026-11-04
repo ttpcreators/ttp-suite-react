@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState, useRef, useCallback, type ComponentType, type MouseEvent as ReactMouseEvent } from "react";
 import { lazyImport } from "@/lib/appUpdate";
+import { PageActiveContext } from "@/lib/useLive";
 import { SIGNATURE_KEY, setCurrentSignature, validSig } from "@/lib/agencySignature";
 import { Loader } from "@/components/ui/loader";
 import { Moon, Sun, X, Columns2, SquareArrowRight, Plus, LogOut, Star, StarOff, Trash2, Eye } from "@/components/icons";
@@ -1138,6 +1139,7 @@ export default function App() {
                         const tabTitle = viewTitle(id);
                         return (
                           <div key={id} hidden={overlayActive || id !== active}>
+                            <PageActiveContext.Provider value={!overlayActive && id === active}>
                             <ErrorBoundary variant="inline" label="Cette page" resetKey={`tab:${id}`}>
                               <Suspense fallback={PANE_FALLBACK}>
                                 <NavSubContext.Provider value={id === active ? sub : null}>
@@ -1151,6 +1153,7 @@ export default function App() {
                                 </NavSubContext.Provider>
                               </Suspense>
                             </ErrorBoundary>
+                            </PageActiveContext.Provider>
                           </div>
                         );
                       })}

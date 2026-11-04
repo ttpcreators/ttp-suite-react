@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 
 /**
  * Synchronisation temps quasi-réel, sans backend supplémentaire.
@@ -38,10 +38,14 @@ export function pollAllowed(s: { visible: boolean; focused: boolean; lastActivit
   return s.visible && s.focused && s.now - s.lastActivity < IDLE_MS;
 }
 
+/** true si on se sert de l'app en ce moment (pour les sondages propres à une page). */
+export function appInUse(): boolean {
+  if (typeof document === "undefined") return false;
+  return pollAllowed({ visible: document.visibilityState === "visible", focused: document.hasFocus(), lastActivity, now: Date.now() });
+}
+
 function pollTick() {
-  if (typeof document === "undefined") return;
-  if (!pollAllowed({ visible: document.visibilityState === "visible", focused: document.hasFocus(), lastActivity, now: Date.now() })) return;
-  fireAll();
+  if (appInUse()) fireAll();
 }
 
 /** Geste de l'utilisateur : premier geste après une pause → une resynchro. */
@@ -92,21 +96,40 @@ function ensureStarted() {
 }
 
 /**
+ * false pour une page gardée en mémoire mais masquée (onglet non affiché, fiche ouverte
+ * par-dessus) : ses rafraîchissements attendent qu'elle redevienne visible.
+ */
+export const PageActiveContext = createContext(true);
+
+/**
  * Enregistre `cb` pour qu'il s'exécute à chaque « tick » de rafraîchissement.
  * `cb` peut changer à chaque rendu sans se ré-abonner (on garde la dernière
- * version via une ref).
+ * version via une ref). Dans une page masquée, les ticks sont mis de côté et
+ * rejoués UNE fois quand elle réapparaît.
  */
 export function useLive(cb: () => void) {
+  const active = useContext(PageActiveContext);
   const ref = useRef(cb);
   ref.current = cb;
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const missed = useRef(false);
   useEffect(() => {
     ensureStarted();
-    const l = () => ref.current();
+    const l = () => {
+      if (activeRef.current) ref.current();
+      else missed.current = true;
+    };
     listeners.add(l);
     return () => {
       listeners.delete(l);
     };
   }, []);
+  useEffect(() => {
+    if (!active || !missed.current) return;
+    missed.current = false;
+    ref.current();
+  }, [active]);
 }
 
 /**
