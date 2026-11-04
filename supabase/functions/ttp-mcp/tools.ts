@@ -19,6 +19,7 @@ import { ADMIN_TOOLS } from "./admin.ts";
 import { guessEventKind } from "../_shared/eventKind.ts";
 import { comptaSummary, type ComptaInv } from "../_shared/compta.ts";
 import { activityText } from "../_shared/activityText.ts";
+import { upcomingBirthdays } from "../_shared/birthdays.ts";
 import { amountOf, contractList, invoiceTotals, owesMoney, pctOf, reversementRows, type Detail, type Payout } from "../_shared/reversements.ts";
 import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/audience.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
@@ -1707,14 +1708,14 @@ const sourcing: Tool = {
 const notifications: Tool = {
   name: "notifications",
   title: "Notifications",
-  description: "La cloche de l'app : factures en retard, briefs à valider, prochains rendez-vous, nouveautés des créateurs (7 jours), mails reçus (72 h), ce que l'équipe a fait (3 jours), bugs ouverts. Les notifications effacées dans l'app n'y sont pas. (« Lu » est propre à chaque appareil : non disponible ici.)",
+  description: "La cloche de l'app : anniversaires des créateurs (la veille et le jour J), factures en retard, briefs à valider, prochains rendez-vous, nouveautés des créateurs (7 jours), mails reçus (72 h), ce que l'équipe a fait (3 jours), bugs ouverts. Les notifications effacées dans l'app n'y sont pas. (« Lu » est propre à chaque appareil : non disponible ici.)",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   founder: true,
   run: async (sb) => {
     const today = isoDay();
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
     const d3 = new Date(Date.now() - 3 * 86400000).toISOString();
-    const [inv, br, ev, td, idc, mail, bugs, team] = await Promise.all([
+    const [inv, br, ev, td, idc, mail, bugs, team, crea] = await Promise.all([
       sb.from("invoices").select("id, ref, party, amount, status, date").in("status", ["retard", "attente"]),
       sb.from("briefs").select("id, brand, creator").eq("status", "valider"),
       sb.from("events").select("id, date, time, title").or("deleted.is.null,deleted.eq.false").gte("date", today).order("date").limit(3),
@@ -1723,10 +1724,17 @@ const notifications: Tool = {
       sb.from("email_activity").select("subject, contact_name, contact_email, created_at, gmail_message_id").eq("direction", "in").gte("created_at", d3).order("created_at", { ascending: false }).limit(8),
       sb.from("error_log").select("*").gte("created_at", weekAgo).limit(100),
       sb.from("agency_activity").select("id, actor_name, verb, entity, label, detail, created_at").gte("created_at", d3).order("created_at", { ascending: false }).limit(15),
+      sb.from("creators").select("name, birth, status"),
     ]);
     const st = await appState(sb);
     const gone = new Set((Array.isArray(st.notifDismissed) ? (st.notifDismissed as unknown[]) : []).map(String));
     const out: [string, string][] = [];
+    const prefs = (st.notifPrefs ?? {}) as Record<string, boolean | undefined>;
+    if (prefs.digestBirthdays !== false) {
+      for (const b of upcomingBirthdays((crea.data as { name: string; birth: string | null; status: string | null }[] | null) ?? [], today)) {
+        out.push([`${b.when === "today" ? "bday" : "bday-eve"}:${b.date}:${b.name}`, `Anniversaire de ${titleCase(b.name)} ${b.when === "today" ? "aujourd'hui" : "demain"}${b.age ? ` (${b.age} ans)` : ""}`]);
+      }
+    }
     for (const r of (inv.data as Json[] | null) ?? []) if (invoiceLate(r, today)) out.push([`inv:${r.id}`, `Facture en retard · ${r.ref} · ${r.party} · ${money(r.amount)}`]);
     for (const r of (br.data as Json[] | null) ?? []) out.push([`brief:${r.id}`, `Brief à valider · ${r.brand}${r.creator ? ` × ${titleCase(String(r.creator))}` : ""}`]);
     for (const r of (ev.data as Json[] | null) ?? []) out.push([`ev:${r.id}`, `Rendez-vous · ${frDay(String(r.date))}${r.time && r.time !== "—" ? ` ${r.time}` : ""} · ${r.title}`]);
