@@ -73,7 +73,8 @@ import { CreatorTodos } from "@/components/CreatorTodos";
 import { invoiceHT } from "@/lib/invoice";
 import { invoiceTone, netGains, netShare, partyBrand, PAYOUT_LABEL, payoutStatus, realGains, type RealPayout, type ReportDetail, type ReportInvoice } from "@/lib/creatorGains";
 import { DEFAULT_COMMISSION, parseCommissionPct } from "@/lib/commission";
-import { daysBetween as daysBetweenIso } from "@/lib/aujourdhui";
+import { daysBetween as daysBetweenIso, type AujDeadline } from "@/lib/aujourdhui";
+import { birthdayEcheances, contractEcheances, excluEcheances } from "@/lib/planningEcheances";
 import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
 import { OfflineBanner } from "@/components/mobile/offline-banner";
 import { Delta, DashPanel, DashSectionTitle, DashWideLink } from "@/components/ui/dash";
@@ -705,6 +706,9 @@ export function CreatorSpace({
   // étape, date ; jamais les montants, le contact ni les notes). Avant le SQL : liste vide.
   const [discussions, setDiscussions] = useState<CreatorDiscussion[] | null>(null);
   const [events, setEvents] = useState<Ev[]>([]);
+  // Ses fins de contrat et ses exclusivités confirmées (fonction creator_echeances : le blob
+  // agence n'est pas lisible par le créateur). Fonction absente ou erreur : rien.
+  const [myEcheances, setMyEcheances] = useState<{ contrats: AujDeadline[]; exclusivites: { id: string; creator: string; brand: string; end: string | null }[] }>({ contrats: [], exclusivites: [] });
   const [docs, setDocs] = useState<Doc[]>([]);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   // Vrais versements et net exact : fonction serveur `creator-report` (filtrée sur la créatrice).
@@ -824,6 +828,11 @@ export function CreatorSpace({
         if (apply(error)) setBriefs(((data as unknown as Brief[]) ?? []).map((x) => ({ ...x, resume: parseResume(x.resume) })));
       });
     supabase.from("gifting").select(GIFT_COLS).eq("creator", name).order("sort_order", { ascending: false }).then(({ data, error }) => apply(error) && setGifts((data as GiftRow[]) ?? []));
+    void supabase.rpc("creator_echeances", { p_creator: name }).then(({ data, error }) => {
+      if (!alive || error || !data) return;
+      const d = data as { contrats?: AujDeadline[]; exclusivites?: { id: string; creator: string; brand: string; end: string | null }[] };
+      setMyEcheances({ contrats: Array.isArray(d.contrats) ? d.contrats : [], exclusivites: Array.isArray(d.exclusivites) ? d.exclusivites : [] });
+    });
     void supabase.rpc("creator_discussions", { p_creator: name }).then(({ data, error }) => {
       if (!alive) return;
       setDiscussions(error ? [] : sortDiscussions((data as CreatorDiscussion[]) ?? []));
@@ -3570,8 +3579,17 @@ export function CreatorSpace({
                   const title = [ref ? t("Facture {ref}", { ref }) : t("Facture"), party].filter(Boolean).join(" · ");
                   return [{ id: `facture:${ref}:${i}`, date, time: "", title, type: "deadline", who: titleCase(name), kind: "facture" }];
                 }),
+                // Fin de son contrat, fin de ses exclusivités, son anniversaire.
+                ...[...contractEcheances(myEcheances.contrats), ...excluEcheances(myEcheances.exclusivites)].map(
+                  ({ id, date, kind, label }): CalEv => ({ id, date, kind, time: "", type: "deadline", who: titleCase(name), title: t(label) || (kind === "contrat" ? t("Contrat") : t("Exclusivité")) }),
+                ),
+                ...birthdayEcheances(creator ? [{ name, birth: creator.birth }] : [], todayISO()).map(
+                  ({ id, date, kind }): CalEv => ({ id, date, kind, time: "", type: "deadline", who: titleCase(name), title: t("Ton anniversaire") }),
+                ),
               ]}
-              onNavigate={(kind) => setTab(kind === "brief" ? "briefs" : kind === "facture" ? "facturation" : "todo")}
+              onNavigate={(kind) =>
+                setTab(kind === "brief" ? "briefs" : kind === "facture" ? "facturation" : kind === "contrat" || kind === "exclu" ? "documents" : kind === "anniv" ? "infos" : "todo")
+              }
               creators={[]}
               // Évènement partagé (« A, B ») : la RLS refuserait l'écriture → lecture seule.
               isReadOnly={(e) => (e.who ?? "").includes(",")}

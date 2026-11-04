@@ -20,6 +20,8 @@ import { KIND_LABEL, type PlanKind } from "@/lib/igPlanner";
 import { useAppState, type AppState } from "@/lib/appState";
 import { useExclusivites } from "@/lib/useExclusivites";
 import type { AujDeadline } from "@/lib/aujourdhui";
+import { ChevronDown } from "@/components/icons";
+import { titleCase } from "@/lib/utils";
 import { birthdayEcheances, contractEcheances, excluEcheances, type BirthCreator } from "@/lib/planningEcheances";
 
 /**
@@ -69,6 +71,9 @@ const PLANNING_TABS: FolderTabItem[] = [
   { value: "instagram", label: "Posts Instagram" },
 ];
 
+const CREATOR_FILTER_KEY = "ttp:planning-createur";
+const sameName = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase() && !!a.trim();
+
 /** Date locale « YYYY-MM-DD » et heure « HH:mm » d'un horodatage. */
 function localDay(iso: string): { date: string; time: string } | null {
   const d = new Date(iso);
@@ -99,11 +104,9 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
   }, [live]);
   const echeances = useMemo<Ev[]>(
     () =>
-      [...contractEcheances(deadlines ?? []), ...excluEcheances(exclus), ...birthdayEcheances(births, todayISO())].map((e) => ({
-        ...e,
-        time: "",
-        type: "deadline",
-      })),
+      [...contractEcheances(deadlines ?? []), ...excluEcheances(exclus), ...birthdayEcheances(births, todayISO())].map(
+        ({ label: _label, ...e }): Ev => ({ ...e, time: "", type: "deadline" }),
+      ),
     [deadlines, exclus, births],
   );
 
@@ -146,7 +149,7 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
     Promise.all([
       supabase.from("briefs").select("id,brand,creator,due"),
       supabase.from("todos").select("id,text,creator,due,done"),
-      supabase.from("invoices").select("id,ref,party,date,status"),
+      supabase.from("invoices").select("id,ref,party,date,status,creator"),
       supabase.from("ig_planned").select("id,kind,caption,scheduled_at,status").not("scheduled_at", "is", null),
     ]).then(([b, t, iv, ig]) => {
       if (!alive) return;
@@ -190,7 +193,7 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
           time: "",
           title: `Facture ${String(r.ref ?? "").trim()}${r.party ? ` · ${r.party}` : ""}`.trim(),
           type: "deadline",
-          who: null,
+          who: (r.creator as string | null) ?? null,
           kind: "facture",
         });
       }
@@ -210,7 +213,35 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
   }, [live]);
 
   // Vrais événements + échéances superposées (briefs/to-do).
-  const allEvents = useMemo(() => [...(rows ?? []), ...overlays, ...echeances], [rows, overlays, echeances]);
+  // Filtre par créatrice (gardé sur cet appareil) : ses rendez-vous, échéances, factures,
+  // contrats, exclus et son anniversaire. « Avec qui » peut lister plusieurs noms (« A, B »).
+  const [onlyCreator, setOnlyCreatorState] = useState<string>(() => {
+    try {
+      return localStorage.getItem(CREATOR_FILTER_KEY) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const setOnlyCreator = (v: string) => {
+    setOnlyCreatorState(v);
+    try {
+      if (v) localStorage.setItem(CREATOR_FILTER_KEY, v);
+      else localStorage.removeItem(CREATOR_FILTER_KEY);
+    } catch {
+      /* stockage indisponible : le filtre vaut pour la visite */
+    }
+  };
+  const creatorNames = useMemo(
+    () => creators.filter((c) => String(c.status ?? "actif").toLowerCase() !== "inactif").map((c) => c.name.trim()).filter(Boolean),
+    [creators],
+  );
+  // Créatrice retirée du roster depuis : on revient à « Toutes ».
+  const filterName = creatorNames.some((n) => sameName(n, onlyCreator)) ? onlyCreator : "";
+  const allEvents = useMemo(() => {
+    const all = [...(rows ?? []), ...overlays, ...echeances];
+    if (!filterName) return all;
+    return all.filter((e) => (e.who ?? "").split(",").some((w) => sameName(w, filterName)));
+  }, [rows, overlays, echeances, filterName]);
 
   if (error && !rows)
     return (
@@ -296,6 +327,26 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
         creators={creators}
         navAdd
         collabLinks
+        toolbarExtra={
+          creatorNames.length > 1 && (
+            <label className="relative mr-2 flex items-center">
+              <span className="sr-only">Créatrice affichée</span>
+              <select
+                value={filterName}
+                onChange={(e) => setOnlyCreator(e.target.value)}
+                className={`h-7 appearance-none rounded-lg border bg-surface pl-2.5 pr-7 text-[12px] font-medium outline-none transition-colors hover:bg-rowhover focus:border-primary ${filterName ? "border-primary text-foreground" : "border-border text-foreground"}`}
+              >
+                <option value="">Toutes les créatrices</option>
+                {creatorNames.map((n) => (
+                  <option key={n} value={n}>
+                    {titleCase(n)}
+                  </option>
+                ))}
+              </select>
+              <ChevronDown aria-hidden className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-faint" />
+            </label>
+          )
+        }
       />
     </div>
   );
