@@ -126,6 +126,9 @@ export function ActionMenu({ items, buttonClassName, align = "right" }: { items:
         type="button"
         onClick={toggle}
         title={t("Actions")}
+        aria-label={t("Actions")}
+        aria-haspopup="menu"
+        aria-expanded={open}
         className={cn("grid h-9 w-9 shrink-0 place-items-center rounded-full text-faint transition-colors hover:bg-rowhover hover:text-foreground", buttonClassName)}
       >
         <MoreHorizontal className="h-4 w-4" />

@@ -1,4 +1,5 @@
 import { useStickyState } from "@/lib/useStickyState";
+import { useIsPhone } from "@/lib/iosUi";
 import { ExcluAlert } from "@/components/exclu-alert";
 import { lazyImport } from "@/lib/appUpdate";
 import { contextPrompt, threadTranscript } from "@/lib/mailThreadContext";
@@ -610,6 +611,7 @@ export function Mails() {
   const [linkedTick, setLinkedTick] = useState(0);
   const [emailPro, setEmailPro] = useState<Map<string, string> | null>(null);
   const [creatorView, setCreatorView] = useState<{ name: string; threadId?: string } | null>(null);
+  const phone = useIsPhone();
   useEffect(() => {
     let alive = true;
     // « * » : marche avant et après l'ajout de la colonne `aliases` (adresses en plus).
@@ -2870,7 +2872,8 @@ export function Mails() {
           <Tabs
             className="mt-3"
             size="sm"
-            wrap
+            // Téléphone : une ligne qui défile au doigt (en plusieurs lignes, le fond devenait une bulle).
+            wrap={!phone}
             label="Créateur"
             value={creatorView.name}
             onValueChange={(v) => openCreator(v)}
