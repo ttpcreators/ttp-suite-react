@@ -10,7 +10,11 @@ import { useEffect, useRef, useState } from "react";
  *   - quand la fenêtre reprend le focus (on revient sur l'onglet / l'app) ;
  *   - quand l'onglet redevient visible (mobile : retour depuis l'arrière-plan) ;
  *   - à la reconnexion réseau ;
- *   - périodiquement (poll léger) tant que l'onglet est visible.
+ *   - périodiquement (poll léger) tant qu'on s'en sert : fenêtre au premier plan ET
+ *     activité (souris, clavier, toucher) depuis moins de 2 min. Une appli Chrome
+ *     ouverte toute la journée derrière d'autres fenêtres reste « visible » : sans
+ *     cette garde, elle relisait toute la base toutes les 20 s, du matin au soir.
+ *     Au retour (fenêtre reprise, premier geste après une pause), UNE resynchro.
  *
  * Résultat : ce qu'un créateur ajoute apparaît côté agence (et inversement)
  * en quelques secondes, sur tous les appareils.
@@ -25,6 +29,28 @@ const POLL_MS = 20000;
 // qui suit le précédent de moins de MIN_GAP_MS (le poll de 20 s n'est pas affecté).
 const MIN_GAP_MS = 5000;
 let lastFire = 0;
+/** Sans geste depuis IDLE_MS, l'app est « au repos » : plus de poll. */
+export const IDLE_MS = 2 * 60_000;
+let lastActivity = Date.now();
+
+/** Le poll périodique ne tourne que si on se sert de l'app (fenêtre au premier plan, geste récent). */
+export function pollAllowed(s: { visible: boolean; focused: boolean; lastActivity: number; now: number }): boolean {
+  return s.visible && s.focused && s.now - s.lastActivity < IDLE_MS;
+}
+
+function pollTick() {
+  if (typeof document === "undefined") return;
+  if (!pollAllowed({ visible: document.visibilityState === "visible", focused: document.hasFocus(), lastActivity, now: Date.now() })) return;
+  fireAll();
+}
+
+/** Geste de l'utilisateur : premier geste après une pause → une resynchro. */
+function onActivity() {
+  const now = Date.now();
+  const wasIdle = now - lastActivity >= IDLE_MS;
+  lastActivity = now;
+  if (wasIdle) fireAll();
+}
 
 function fireAll() {
   // On ne rafraîchit que si l'onglet est visible (économise la bande passante).
@@ -50,12 +76,19 @@ export function refreshNow() {
 function ensureStarted() {
   if (started || typeof window === "undefined") return;
   started = true;
-  window.addEventListener("focus", fireAll);
+  const back = () => {
+    lastActivity = Date.now();
+    fireAll();
+  };
+  window.addEventListener("focus", back);
   window.addEventListener("online", fireAll);
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") fireAll();
+    if (document.visibilityState === "visible") back();
   });
-  setInterval(fireAll, POLL_MS);
+  for (const ev of ["pointerdown", "pointermove", "keydown", "wheel", "touchstart"]) {
+    window.addEventListener(ev, onActivity, { passive: true, capture: true });
+  }
+  setInterval(pollTick, POLL_MS);
 }
 
 /**
