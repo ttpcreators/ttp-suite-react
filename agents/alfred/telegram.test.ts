@@ -46,4 +46,12 @@ describe("Alfred : messages Telegram", () => {
     expect(r.text).toContain("- [x] 2026-11-12 15:00 · Appeler Lorna");
     expect(r.text).toContain("- [ ] 2026-11-12 18:00 · Relancer Fitaya");
   });
+
+  it("garde aussi un vocal de Marc, pour le transcrire", () => {
+    const updates = [{ update_id: 20, message: { date: 1793919600, from: { id: 42 }, chat: { type: "private" }, voice: { file_id: "VOC1", duration: 12 } } }];
+    const { kept } = marcMessages(updates, "42", 0);
+    expect(kept).toHaveLength(1);
+    expect(kept[0].voice).toBe("VOC1");
+    expect(kept[0].text).toBe("");
+  });
 });
