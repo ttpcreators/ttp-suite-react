@@ -96,6 +96,13 @@ export function nextInvoiceRef(refs: string[], year = new Date().getFullYear()):
   return `${year}-${String(max + 1).padStart(3, "0")}`;
 }
 
+/** Prochain numéro de devis « D-AAAA-NNN » (comme l'onglet Devis : la suite de l'année, à partir de 001). */
+export function nextQuoteRef(refs: string[], year = new Date().getFullYear()): string {
+  const prefix = `D-${year}-`;
+  const max = refs.reduce((m, ref) => (String(ref).startsWith(prefix) ? Math.max(m, Number(String(ref).slice(prefix.length)) || 0) : m), 0);
+  return `${prefix}${String(max + 1).padStart(3, "0")}`;
+}
+
 /** « 1 273,00 € » (espaces insécables), le format du montant enregistré. */
 export function euro2(n: number): string {
   return new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })

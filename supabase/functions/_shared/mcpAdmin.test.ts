@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressList, blockedSetting, euro2, invoiceParty, invoiceTotals, mailHtml, nextInvoiceRef, pct, readableRow, writableFields } from "./mcpAdmin.ts";
+import { addressList, blockedSetting, euro2, invoiceParty, invoiceTotals, mailHtml, nextInvoiceRef, nextQuoteRef, pct, readableRow, writableFields } from "./mcpAdmin.ts";
 
 describe("accès complet de Claude", () => {
   it("champs modifiables : jamais l'id, la synchro Google ni un secret", () => {
@@ -23,6 +23,9 @@ describe("accès complet de Claude", () => {
     expect(invoiceTotals([{ id: "1", label: "Story", qty: 1, unit: 80 }], true, 20, 25).commission).toBe(0);
     expect(nextInvoiceRef(["2026-190", "2026-191", "brouillon"], 2026)).toBe("2026-192");
     expect(nextInvoiceRef([], 2026)).toBe("2026-181");
+    // Devis : suite de l'année en cours, à partir de 001, sans compter les autres années.
+    expect(nextQuoteRef(["D-2026-004", "D-2025-120", "D-2026-011"], 2026)).toBe("D-2026-012");
+    expect(nextQuoteRef(["D-2025-120"], 2026)).toBe("D-2026-001");
     expect(euro2(1273)).toBe("1 273,00 €");
     expect(invoiceParty("Aroma Zone", "ana milanovic")).toBe("Aroma Zone × Ana");
     expect(pct("25,5 %")).toBe(25.5);

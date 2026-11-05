@@ -16,9 +16,9 @@ import { readAppState } from "../_shared/appState.ts";
 import { pageAccess, postGraph } from "../_shared/instagram.ts";
 import { cleanDm, sendWhy } from "../_shared/igSend.ts";
 import {
-  TABLES, addressList, blockedSetting, euro2, invoiceParty, invoiceTotals, mailHtml, nextInvoiceRef, pct, readableRow, writableFields, type InvoiceLine,
+  TABLES, addressList, blockedSetting, euro2, invoiceParty, invoiceTotals, mailHtml, nextInvoiceRef, nextQuoteRef, pct, readableRow, writableFields, type InvoiceLine,
 } from "../_shared/mcpAdmin.ts";
-import { sendMail, type MailBox } from "./gmail.ts";
+import { sendDraft, sendMail, type MailBox } from "./gmail.ts";
 import type { Ctx } from "./oauth.ts";
 
 type Json = Record<string, unknown>;
@@ -355,6 +355,96 @@ const preparerFacture: AdminTool = {
   },
 };
 
+// ── 6 bis. Devis (onglet Devis de Facturation) ──────────────────────────────
+// Un devis n'est pas une facture : il vit dans le blob agence (clé `quotes`, écrite entrée
+// par entrée avec app_state_list, comme l'app), ne compte ni dans le CA ni dans les relances,
+// et devient une facture dans l'app une fois accepté. Toujours créé en brouillon.
+const QUOTE_VALIDITY_DAYS = 30;
+const addDays = (iso: string, days: number) => {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+};
+const preparerDevis: AdminTool = {
+  name: "preparer_devis",
+  title: "Préparer un devis",
+  description:
+    "Crée ou met à jour un DEVIS en brouillon dans Facturation → Devis (fondateurs), mêmes règles que l'app : lignes HT, TVA (20 % par défaut, ou franchise), commission du créateur (fiche roster, sinon 20 %), numéro « D-AAAA-NNN » automatique, valable 30 jours. Rien n'est envoyé : Marc vérifie le devis, en fait le PDF et l'envoie depuis l'app. Sans `ref` : nouveau devis. Avec `ref` : modifie ce devis (seuls les champs donnés changent ; `lignes` remplace toutes les lignes). Prix : toujours la méthode de l'agence (methode_tarif) et le flag « À vérifier ».",
+  inputSchema: {
+    type: "object",
+    properties: {
+      ref: { type: "string", description: "Numéro d'un devis existant, ex. D-2026-004" },
+      marque: { type: "string" }, createur: { type: "string" },
+      client: { type: "object", properties: { nom: { type: "string" }, email: { type: "string" }, adresse: { type: "string" }, siret: { type: "string" }, tva: { type: "string" } }, additionalProperties: false },
+      lignes: { type: "array", items: { type: "object", properties: { libelle: { type: "string" }, quantite: { type: "number" }, prix_ht: { type: "number" } }, required: ["libelle", "prix_ht"], additionalProperties: false } },
+      tva: { type: "number" }, franchise: { type: "boolean" }, commission: { type: "number" },
+      valable_jusqu_au: { type: "string", description: "AAAA-MM-JJ (défaut : dans 30 jours)" },
+      notes: { type: "string" }, collab_id: { type: "string" },
+    },
+    additionalProperties: false,
+  },
+  write: true,
+  founder: true,
+  run: async (sb, _c, a) => {
+    const st = await readAppState(sb);
+    const quotes = Array.isArray(st.quotes) ? (st.quotes as Json[]) : [];
+    const prev = str(a.ref) ? quotes.find((q) => String(q.ref) === str(a.ref)) : undefined;
+    if (str(a.ref) && !prev) return fail(`Devis introuvable (${str(a.ref)}).`);
+    if (prev && prev.status !== "brouillon") return fail(`Le devis ${prev.ref} n'est plus en brouillon (${prev.status}) : à modifier dans l'app.`);
+    const client = obj(a.client) ?? {};
+    const creator = "createur" in a ? str(a.createur, 120) : String(prev?.creator ?? "");
+    const brand = str(a.marque, 200) || String(prev?.brand ?? "");
+    if (!brand) return fail("Indique la marque.");
+    let commission = typeof a.commission === "number" ? a.commission : typeof prev?.commissionRate === "number" ? (prev.commissionRate as number) : null;
+    if (commission == null && creator) {
+      const { data: c } = await sb.from("creators").select("commission").ilike("name", creator.replace(/[%_\\]/g, (x) => `\\${x}`)).limit(1);
+      const saved = (st.creatorCommission as Record<string, number> | undefined) ?? {};
+      commission = pct(((c as Json[] | null) ?? [])[0]?.commission) ?? saved[creator] ?? null;
+    }
+    commission = commission ?? 20;
+    const items: InvoiceLine[] = Array.isArray(a.lignes)
+      ? (a.lignes as Json[]).map((l, i) => ({ id: `l${Date.now().toString(36)}${i}`, label: str(l.libelle, 300), qty: Number(l.quantite ?? 1) || 1, unit: Number(l.prix_ht) || 0 }))
+      : ((prev?.items as InvoiceLine[] | undefined) ?? []);
+    if (!items.length) return fail("Ajoute au moins une ligne (libellé et prix HT).");
+    const banks = (st.invoiceBankAccounts as { id?: string }[] | undefined) ?? [];
+    const issueDate = String(prev?.issueDate ?? "") || todayIso();
+    const quote: Json = {
+      clientName: str(client.nom, 200) || String(prev?.clientName ?? ""),
+      clientEmail: str(client.email, 200) || String(prev?.clientEmail ?? ""),
+      clientAddress: str(client.adresse, 500) || String(prev?.clientAddress ?? ""),
+      clientSiret: str(client.siret, 40) || String(prev?.clientSiret ?? ""),
+      clientVat: str(client.tva, 40) || String(prev?.clientVat ?? ""),
+      tpoRef: String(prev?.tpoRef ?? ""),
+      issueDate,
+      dueDate: str(a.valable_jusqu_au, 10) || String(prev?.dueDate ?? "") || addDays(todayIso(), QUOTE_VALIDITY_DAYS),
+      items,
+      franchise: typeof a.franchise === "boolean" ? a.franchise : !!prev?.franchise,
+      vatRate: typeof a.tva === "number" ? a.tva : typeof prev?.vatRate === "number" ? prev.vatRate : 20,
+      commissionRate: commission,
+      bankId: String(prev?.bankId ?? "") || banks[0]?.id || "",
+      notes: "notes" in a ? str(a.notes, 2000) : String(prev?.notes ?? ""),
+      id: prev ? String(prev.id) : `q${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`,
+      // Numéro recalculé sur la liste relue à l'instant (comme l'app : pas de doublon).
+      ref: prev ? String(prev.ref) : nextQuoteRef(quotes.map((q) => String(q.ref))),
+      brand,
+      creator,
+      status: "brouillon",
+      createdAt: String(prev?.createdAt ?? "") || todayIso(),
+      ...(str(a.collab_id) ? { collabId: str(a.collab_id) } : prev?.collabId ? { collabId: prev.collabId } : {}),
+    };
+    const { error } = await sb.rpc("app_state_list", { p_key: "quotes", p_upsert: [quote], p_remove: [], p_prepend: true });
+    if (error) return fail(`Devis non enregistré : ${error.message}`);
+    const tot = invoiceTotals(items, quote.franchise as boolean, quote.vatRate as number, commission);
+    const fmt = (n: number) => euro2(n).replace(/\u202f/g, " ");
+    return ok([
+      `✓ Devis ${quote.ref} ${prev ? "mis à jour" : "créé"} (brouillon) : ${invoiceParty(brand, creator)}`,
+      ...items.map((l) => `- ${l.label} : ${l.qty} × ${fmt(l.unit)}`),
+      `HT ${fmt(tot.ht)} · TVA ${quote.franchise ? "franchise" : `${quote.vatRate} %`} ${fmt(tot.tva)} · TTC ${fmt(tot.ttc)} · valable jusqu'au ${quote.dueDate}`,
+      "À vérifier dans Facturation → Devis, puis à envoyer depuis l'app (le PDF est fait par l'app).",
+    ].join("\n"));
+  },
+};
+
 // ── 7. Envoyer un mail ──────────────────────────────────────────────────────
 const envoyerMail: AdminTool = {
   name: "envoyer_mail",
@@ -401,6 +491,42 @@ const envoyerMail: AdminTool = {
   },
 };
 
+// ── 7 bis. Envoyer un brouillon préparé par Claude ─────────────────────────
+// Pour Alfred (talent manager) : Marc lit le brouillon, répond « oui » pour CE brouillon, et
+// il part tel quel (pas de mail retapé, pas de brouillon oublié qui ferait doublon).
+const envoyerBrouillon: AdminTool = {
+  name: "envoyer_brouillon",
+  title: "Envoyer un brouillon",
+  description:
+    "ENVOIE un brouillon Gmail préparé par Claude (creer_brouillon_mail donne son id), exactement tel qu'il est dans Gmail, puis il quitte les brouillons. Un brouillon écrit à la main est refusé. N'appeler qu'après un « oui » explicite de l'utilisateur pour CE brouillon précis (destinataire et objet montrés avant).",
+  inputSchema: {
+    type: "object",
+    properties: {
+      boite: { type: "string", enum: ["partnerships", "talent"] },
+      brouillon: { type: "string", description: "Id du brouillon Gmail (donné par creer_brouillon_mail)" },
+    },
+    required: ["boite", "brouillon"],
+    additionalProperties: false,
+  },
+  write: true,
+  founder: true,
+  run: async (sb, _c, a) => {
+    const box = str(a.boite) as MailBox;
+    if (box !== "partnerships" && box !== "talent") return fail("Boîte : partnerships ou talent.");
+    const id = str(a.brouillon, 64);
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) return fail("Id de brouillon invalide.");
+    try {
+      const r = await sendDraft(sb, box, id);
+      return ok(`✓ Brouillon envoyé depuis ${box}@ à ${r.to} · objet « ${r.subject} ».`);
+    } catch (e) {
+      const m = (e as Error).message ?? "";
+      if (m === "not_claude") return fail("Ce brouillon n'a pas été préparé par Claude : à envoyer depuis Gmail ou l'app.");
+      if (/gmail_404/.test(m)) return fail("Brouillon introuvable : déjà envoyé ou supprimé.");
+      return fail(/not_connected|invalid_grant/.test(m) ? "La boîte n'est pas connectée à l'app (Planning → Google Agenda → Connecter)." : /403|insufficient/i.test(m) ? "Gmail refuse l'envoi : le droit d'envoi manque pour cette boîte." : `Envoi impossible : ${m}`);
+    }
+  },
+};
+
 // ── 8. Envoyer un DM Instagram ─────────────────────────────────────────────
 const envoyerDm: AdminTool = {
   name: "envoyer_dm",
@@ -437,4 +563,4 @@ const envoyerDm: AdminTool = {
   },
 };
 
-export const ADMIN_TOOLS: AdminTool[] = [lireDonnees, creerElement, modifierElement, supprimerElement, reglagesApp, preparerFacture, envoyerMail, envoyerDm];
+export const ADMIN_TOOLS: AdminTool[] = [lireDonnees, creerElement, modifierElement, supprimerElement, reglagesApp, preparerFacture, preparerDevis, envoyerMail, envoyerBrouillon, envoyerDm];

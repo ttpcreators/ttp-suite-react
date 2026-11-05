@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Alfred : toutes les heures pile, jour et nuit. alfred.sh envoie les rappels arrivés à
+     l'heure et fait le point à 9 h et 17 h en semaine (les réponses à Marc passent par
+     l'écoute continue, com.ttp.alfred.ecoute).
+     Installé par installer.sh dans ~/Library/LaunchAgents (HOME remplacé à l'installation). -->
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.ttp.alfred</string>
+  <key>ProgramArguments</key><array>
+    <string>/bin/zsh</string>
+    <string>__HOME__/Code/TTPAlfred/alfred.sh</string>
+  </array>
+  <key>StartCalendarInterval</key><dict><key>Minute</key><integer>0</integer></dict>
+</dict></plist>
