@@ -54,4 +54,17 @@ describe("Alfred : messages Telegram", () => {
     expect(kept[0].voice).toBe("VOC1");
     expect(kept[0].text).toBe("");
   });
+
+  it("garde le message auquel Marc répond, pour le contexte", () => {
+    const updates = [{
+      update_id: 30,
+      message: {
+        date: 1793919600, from: { id: 42 }, chat: { type: "private" }, text: "oui",
+        reply_to_message: { from: { id: 7, is_bot: true }, text: "Mail à Lorna (Seoni) · réponds « oui Seoni » pour l'envoyer" },
+      },
+    }];
+    const [m] = marcMessages(updates, "42", 0).kept;
+    expect(m.text).toBe("oui");
+    expect(m.reply).toBe("(en réponse à ton message : « Mail à Lorna (Seoni) · réponds « oui Seoni » pour l'envoyer »)");
+  });
 });

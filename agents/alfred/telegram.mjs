@@ -87,7 +87,13 @@ export function marcMessages(updates, marcId, offset = 0) {
     const voice = m.voice?.file_id ?? m.audio?.file_id ?? null;
     const text = String(m.text ?? m.caption ?? "").trim();
     if ((!text && !voice) || text === "/start") continue;
-    kept.push({ at: new Date(Number(m.date) * 1000), text, ...(voice ? { voice } : {}) });
+    // « Répondre » sur un message : on garde le passage cité (ou tout le message) pour le contexte.
+    const cited = m.reply_to_message;
+    const quoted = String(m.quote?.text ?? cited?.text ?? cited?.caption ?? "").replace(/\s+/g, " ").trim();
+    const reply = cited
+      ? `(en réponse à ${cited.from?.is_bot ? "ton message" : "son propre message"}${quoted ? ` : « ${quoted.length > 600 ? `${quoted.slice(0, 600)}…` : quoted} »` : ""})`
+      : null;
+    kept.push({ at: new Date(Number(m.date) * 1000), text, ...(voice ? { voice } : {}), ...(reply ? { reply } : {}) });
   }
   return { kept, next };
 }
@@ -190,8 +196,9 @@ async function main() {
       m.text = dit ? `(vocal) ${dit}${m.text ? `\n${m.text}` : ""}` : `(vocal que je n'ai pas réussi à transcrire)${m.text ? `\n${m.text}` : ""}`;
     }
     for (const m of kept) {
-      appendFileSync(join(here, "etat/file-recue.txt"), `[${stamp(m.at)}] ${m.text}\n\n`);
-      appendFileSync(fil, `\n### ${stamp(m.at)} · Marc\n${m.text}\n`);
+      const full = m.reply ? `${m.reply}\n${m.text}` : m.text;
+      appendFileSync(join(here, "etat/file-recue.txt"), `[${stamp(m.at)}] ${full}\n\n`);
+      appendFileSync(fil, `\n### ${stamp(m.at)} · Marc\n${full}\n`);
     }
     // L'offset n'avance qu'une fois les messages rangés : rien ne se perd si on s'arrête avant.
     if (next !== offset) writeFileSync(offsetFile, String(next));
