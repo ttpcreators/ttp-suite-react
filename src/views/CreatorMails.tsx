@@ -1,10 +1,11 @@
 import { fmtDay as fmtDayShared, fmtDayTime } from "@/lib/dates";
 import { useStickyState } from "@/lib/useStickyState";
+import { dayGroup } from "@/lib/mailDayGroup";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { TONE_SOLID, TONE_TILE } from "@/lib/statusTone";
 import { Loader, Spin } from "@/components/ui/loader";
 import { Picker } from "@/components/ui/form";
-import { ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Mail, MessageSquare, MessageSquarePlus, Plus, RefreshCw, SearchCheck, Send, Settings2, Tag, X, Copy, type LucideIcon, Megaphone, EyeOff } from "@/components/icons";
+import { ArrowLeft, AtSign, Check, ChevronLeft, ChevronRight, CircleAlert, CircleHelp, History, Hourglass, ImageOff, Inbox, Info, Link2, Mail, MessageSquare, MessageSquarePlus, Plus, RefreshCw, SearchCheck, Send, Settings2, Tag, X, Copy, type LucideIcon, Megaphone, EyeOff, ChevronDown } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -1045,7 +1046,20 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   );
 
   // ── Même barre, en ligne (téléphone, tablette) ; masquée pendant la lecture ──
-  const pills = simple ? null : (
+  const pills = simple ? (
+    <nav aria-label={t("Dossiers")} className={cn("flex gap-1.5 border-b border-border p-2 lg:hidden", openId && "max-lg:hidden")}>
+      {([
+        { key: "recus", label: t("Reçus"), icon: Inbox, on: filter !== "envoyes", n: mode === "creator" ? unseenReceived : 0, go: () => filter === "envoyes" && setFilter("tous") },
+        { key: "envoyes", label: t("Envoyés"), icon: Send, on: filter === "envoyes", n: 0, go: () => { setUnreadOnly(null); setFilter("envoyes"); } },
+      ]).map((b) => (
+        <button key={b.key} type="button" onClick={b.go} aria-pressed={b.on}
+          className={cn(pillCls, b.on ? "bg-foreground text-background" : "text-muted-foreground hover:bg-rowhover hover:text-foreground")}>
+          <b.icon className="h-3.5 w-3.5" /> {b.label}
+          {b.n ? <span className={cn("tabular-nums", b.on ? "opacity-70" : "text-faint")}>{b.n}</span> : null}
+        </button>
+      ))}
+    </nav>
+  ) : (
     <nav aria-label={t("Ranger les échanges")} className={cn("flex flex-wrap gap-1.5 border-b border-border p-2 lg:hidden", openId && "max-lg:hidden")}>
       {FILTERS.map((f) => {
         const on = filter === f.key;
@@ -1067,67 +1081,97 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
 
   // ── Liste ────────────────────────────────────────────────────────────────
   const listBroken = !!err && threads.length === 0; // rien à montrer : l'erreur prend la place
-  // Espace créateur : pastilles fines, « À traiter » d'abord s'il y en a.
-  const simpleOrder = [
-    ...(counts.atraiter > 0 ? (["atraiter"] as const) : []),
-    "tous", "encours", "valide", "refuse",
-    ...(counts.atraiter > 0 ? [] : (["atraiter"] as const)),
-    "envoyes",
-  ] as const;
+  // Espace créateur : même en-tête que la page Mails de l'agence (titre, recherche, « À traiter /
+  // Non lus / Tout »). Les statuts (En cours, Validés, Refusés, Démarchage) passent dans un menu
+  // discret à côté du titre, comme le choix de la boîte côté agence.
+  const sentView = filter === "envoyes";
+  const STATUS_KEYS = ["tous", "encours", "valide", "refuse", "demarchage"] as const;
+  const statusValue = (STATUS_KEYS as readonly string[]).includes(filter) ? filter : "tous";
+  const viewValue = unreadOnly ? "unread" : filter === "atraiter" ? "todo" : "all";
+  const statusSelect = (
+    <label className="relative flex min-w-0 shrink items-center">
+      <span className="sr-only">{t("Statut affiché")}</span>
+      <select
+        value={statusValue}
+        onChange={(e) => {
+          setUnreadOnly(null);
+          setFilter(e.target.value as typeof filter);
+        }}
+        className="h-8 min-w-0 max-w-[170px] appearance-none truncate rounded-lg border border-border bg-surface pl-2.5 pr-7 text-[12px] font-medium text-foreground outline-none transition-colors hover:bg-rowhover focus:border-primary"
+      >
+        {STATUS_KEYS.filter((k) => k !== "demarchage" || counts.demarchage > 0).map((k) => (
+          <option key={k} value={k}>
+            {k === "tous" ? t("Tous les statuts") : `${t(FILTERS.find((x) => x.key === k)!.short)} · ${counts[k]}`}
+          </option>
+        ))}
+      </select>
+      <ChevronDown aria-hidden className="pointer-events-none absolute right-2 h-3.5 w-3.5 text-faint" />
+    </label>
+  );
   const simpleHead = (
-    <div className={cn("shrink-0 px-4 pb-3 pt-1 lg:pt-3", openId && "max-lg:hidden")}>
-      {/* Son adresse, discrète, copiable d'un tap */}
-      {shownAddresses.length > 0 && (
-        <div className="flex min-w-0 flex-col gap-0.5">
-          {shownAddresses.map((a) => (
-            <button key={a} type="button" onClick={() => void copyAddress(a)} aria-label={t("Copier {address}", { address: a })}
-              className="flex min-h-11 min-w-0 items-center gap-2 text-left text-[15px] text-muted-foreground transition-colors hover:text-foreground">
-              <AtSign className="h-4 w-4 shrink-0" />
-              <span className="min-w-0 truncate">{a}</span>
-              <span className="shrink-0 font-semibold text-primary">{t("Copier")}</span>
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="mt-3 flex items-center gap-2">
-        <div className="min-w-0 flex-1">
-          <SearchField size="sm" value={query} onChange={setQuery} placeholder={t("Rechercher une marque, un objet…")} />
-        </div>
-        {mode === "creator" && unseen.size > 0 && (
-          <UnreadToggle label={t("Non lus")} on={!!unreadOnly} count={unseen.size} onToggle={() => setUnreadOnly((c) => (c ? null : new Set(unseen)))} />
-        )}
-        <ToolButton icon={RefreshCw} label={t("Actualiser")} spin={loading} disabled={loading} onClick={retry} className="h-11 w-11 max-lg:hidden" />
+    <div className={cn("shrink-0 border-b border-border px-3 pb-2.5 pt-3 sm:px-4", openId && "max-lg:hidden")}>
+      <div className="flex items-center gap-1">
+        <h2 className="min-w-0 flex-1 truncate pl-1 text-[17px] font-semibold text-foreground">{sentView ? t("Envoyés") : t("Réception")}</h2>
+        {!sentView && statusSelect}
+        <ToolButton icon={RefreshCw} label={t("Actualiser")} spin={loading} disabled={loading} onClick={retry} className="h-8 w-8" />
       </div>
-      <nav aria-label={t("Ranger les échanges")} className="mt-4 flex flex-wrap gap-2">
-        {simpleOrder.map((key) => {
-          const f = FILTERS.find((x) => x.key === key)!;
-          const on = filter === key;
-          return (
-            <button key={key} type="button" onClick={() => setFilter(key)} aria-pressed={on}
-              className={cn("inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full px-4 text-[14px] font-medium transition-colors",
-                on ? "bg-foreground text-background" : "bg-surface text-muted-foreground shadow-sm shadow-black/[0.03] ring-1 ring-border/60 hover:text-foreground")}>
-              {t(f.short)}
-              {key !== "envoyes" && <span className={cn("tabular-nums", on ? "opacity-70" : "text-faint")}>{counts[key]}</span>}
-            </button>
-          );
-        })}
-      </nav>
+      {/* Son adresse, discrète, copiable d'un tap */}
+      {shownAddresses.map((a) => (
+        <button key={a} type="button" onClick={() => void copyAddress(a)} aria-label={t("Copier {address}", { address: a })}
+          className="flex min-h-8 max-w-full min-w-0 items-center gap-1.5 pl-1 text-left text-[12.5px] text-muted-foreground transition-colors hover:text-foreground">
+          <AtSign className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 truncate">{a}</span>
+          <span className="shrink-0 font-medium text-primary">{t("Copier")}</span>
+        </button>
+      ))}
+      <div className={shownAddresses.length ? "mt-1" : "mt-2"}>
+        <SearchField size="sm" value={query} onChange={setQuery} placeholder={t("Rechercher")} />
+      </div>
+      {sentView ? (
+        <p className="mt-2 pl-1 text-[12.5px] text-muted-foreground">
+          {asAgency ? t("Les échanges où l'agence a écrit pour {name}.", { name: creatorName.split(" ")[0] }) : t("Les mails que ton agence envoie pour toi : démarchages et réponses aux marques.")}
+        </p>
+      ) : (
+        <Tabs
+          className="mt-2"
+          size="sm"
+          fullWidth
+          label={t("Mails affichés")}
+          value={viewValue}
+          onValueChange={(v) => {
+            if (v === "unread") {
+              if (!unreadOnly) setUnreadOnly(new Set(unseen));
+              if (filter === "atraiter") setFilter("tous");
+              return;
+            }
+            setUnreadOnly(null);
+            setFilter(v === "todo" ? "atraiter" : filter === "atraiter" ? "tous" : filter);
+          }}
+          items={[
+            { value: "todo", label: t("À traiter"), count: counts.atraiter || undefined },
+            { value: "unread", label: t("Non lus"), count: unseen.size || undefined },
+            { value: "all", label: t("Tout") },
+          ]}
+        />
+      )}
       {/* Démarchage de l'agence : une ligne compacte, un tap filtre ces échanges */}
-      {pitch.pitched > 0 && filter !== "envoyes" && (
-        <button type="button" onClick={() => setFilter(filter === "demarchage" ? "tous" : "demarchage")} aria-pressed={filter === "demarchage"}
-          className="mt-4 flex min-h-11 w-full items-center gap-3 rounded-2xl bg-surface px-4 py-3 text-left text-[14px] text-muted-foreground shadow-sm shadow-black/[0.03] ring-1 ring-border/60 transition-colors hover:text-foreground">
-          <Megaphone className="h-4 w-4 shrink-0 text-primary" />
-          <span className="min-w-0 flex-1 leading-snug">
+      {pitch.pitched > 0 && !sentView && (
+        <button type="button" onClick={() => { setUnreadOnly(null); setFilter(filter === "demarchage" ? "tous" : "demarchage"); }} aria-pressed={filter === "demarchage"}
+          className={cn("mt-2 flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-[12px] transition-colors",
+            filter === "demarchage" ? "bg-primary text-primary-foreground" : "bg-primary/[0.07] text-foreground hover:bg-primary/[0.12]")}>
+          <Megaphone className={cn("h-4 w-4 shrink-0", filter === "demarchage" ? "" : "text-primary")} />
+          <span className="min-w-0 flex-1">
             {t(pitch.pitched > 1 ? "Ton agence a démarché {n} marques ce mois-ci" : "Ton agence a démarché {n} marque ce mois-ci", { n: pitch.pitched })}
-            {pitch.replied > 0 && t(pitch.replied > 1 ? " · {n} ont répondu" : " · {n} a répondu", { n: pitch.replied })}
+            {pitch.replied > 0 && <span className={filter === "demarchage" ? "opacity-80" : "text-muted-foreground"}>{t(pitch.replied > 1 ? " · {n} ont répondu" : " · {n} a répondu", { n: pitch.replied })}</span>}
           </span>
-          <span className="shrink-0 font-semibold text-primary">{filter === "demarchage" ? t("Tout voir") : t("Voir")}</span>
+          <span className="shrink-0 font-semibold">{filter === "demarchage" ? t("Tout voir") : t("Voir")}</span>
         </button>
       )}
+      {q && <p className="mt-1.5 truncate pl-1 text-[12px] text-muted-foreground" aria-live="polite">{t("{a} sur {b}", { a: shown.length, b: counts[cur.key] })} {counts[cur.key] > 1 ? t("échanges") : t("échange")}</p>}
     </div>
   );
   const list = (
-    <section className={cn("flex min-h-0 min-w-0 flex-col lg:border-r lg:border-border", simple ? "lg:bg-panel" : "bg-panel", openId && "max-lg:hidden")}>
+    <section className={cn("flex min-h-0 min-w-0 flex-col bg-panel lg:border-r lg:border-border", openId && "max-lg:hidden")}>
       {simple ? simpleHead : (
       <div className="shrink-0 px-3 pb-2.5 pt-3 sm:px-4">
         <div className="flex items-center gap-1">
@@ -1227,87 +1271,52 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
           <button type="button" onClick={retry} disabled={loading} className="shrink-0 font-semibold text-foreground underline-offset-2 hover:underline disabled:opacity-50">{t("Réessayer")}</button>
         </div>
       )}
-      <div className={cn("min-h-0 flex-1 overflow-y-auto border-t border-border", simple && "max-lg:border-t-0")} aria-busy={loading}>
+      <div className={cn("min-h-0 flex-1 overflow-y-auto", !simple && "border-t border-border")} aria-busy={loading}>
         {listBroken ? (
           <StatePanel icon={CircleAlert} text={unavailable} action={{ label: t("Réessayer"), busy: loading, onClick: retry }} />
         ) : shown.length === 0 ? (
           <StatePanel icon={Mail} text={emptyText} />
-        ) : simple ? (
-          // Liste en cartes arrondies, bien lisibles : logo en grand, marque, date, objet,
-          // extrait sur 2 lignes et statut en pastille. Non lu : point bleu + gras.
-          <ul className="flex flex-col gap-3 px-4 pb-6 pt-2 lg:px-3 lg:pt-3">
-            {shown.map((th) => {
-              const on = openId === th.id;
-              const fresh = unseen.has(th.id) || activity.keys.has(`mail:${th.id}`);
-              return (
-                <li key={th.id}>
-                  <button type="button" aria-current={on || undefined} onClick={() => openFromList(th.id)}
-                    className={cn("flex w-full min-w-0 items-start gap-3.5 rounded-[20px] border px-4 py-4 text-left shadow-sm shadow-black/[0.03] transition-colors",
-                      on ? "border-primary/40 bg-primary/[0.06]" : "border-border/60 bg-surface hover:bg-rowhover")}>
-                    <span className="relative shrink-0">
-                      <Initial name={prettyName(th.brand)} email={th.brandEmail} size="lg" />
-                      {fresh && <span aria-label={t("Nouveau")} className="absolute -right-0.5 -top-0.5 size-3 rounded-full border-2 border-surface bg-primary" />}
-                    </span>
-                    <span className="flex min-w-0 flex-1 flex-col gap-1">
-                      <span className="flex min-w-0 items-baseline gap-2">
-                        <span className={cn("min-w-0 flex-1 truncate text-[17px] tracking-[-0.01em] text-foreground", fresh ? "font-bold" : "font-semibold")}>{prettyName(th.brand) || t("Marque")}</span>
-                        <span className={cn("shrink-0 text-[13px] tabular-nums", fresh ? "font-semibold text-primary" : "text-muted-foreground")}>{fmtWhen(th.ts, locale)}</span>
-                      </span>
-                      <span className={cn("min-w-0 truncate text-[15px]", fresh ? "font-semibold text-foreground" : "font-medium text-foreground/90")}>{th.subject || t("(sans objet)")}</span>
-                      <span className="line-clamp-2 text-[15px] leading-[1.4] text-muted-foreground">{th.excerpt}</span>
-                      <span className="mt-1.5 flex min-w-0 items-center gap-2">
-                        <span className="inline-flex min-w-0 items-center rounded-full bg-field px-2.5 py-1">
-                          <StatusDot status={th.status} by={th.decidedBy ? authorName(th.decidedBy, mode, creatorName, t) : undefined} />
-                        </span>
-                        {th.notes > 0 && (
-                          <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-field px-2.5 py-1 text-[12px] text-muted-foreground" title={t("Remarques")}>
-                            <MessageSquare className="h-3 w-3" />{th.notes}
-                          </span>
-                        )}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
         ) : (
+          // Lignes simples, comme la page Mails de l'agence : qui et quand, l'objet, l'extrait,
+          // puis où en est l'échange. Groupées par jour (sauf pendant une recherche).
           <ul className={mailCardListCls}>
-            {shown.map((th) => {
+            {shown.map((th, i) => {
               const on = openId === th.id;
               const fresh = unseen.has(th.id) || activity.keys.has(`mail:${th.id}`);
-              return (
+              const row = (
                 <li key={th.id} className={mailCardCls(on)}>
                   <button type="button" aria-current={on || undefined} onClick={() => openFromList(th.id)} className={mailCardBtnCls}>
                     <span className="flex w-full min-w-0 items-start gap-3">
                       <Initial name={prettyName(th.brand)} email={th.brandEmail} size="md" />
-                      <span className="min-w-0 flex-1 pt-px">
+                      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                         <span className="flex min-w-0 items-center gap-1.5">
-                          {fresh && <span aria-label={t("Nouveau")} className="size-2 shrink-0 rounded-full bg-primary" />}
-                          <span className={cn("min-w-0 truncate text-[13px] leading-[18px] text-foreground", fresh ? "font-bold" : "font-semibold")}>{th.subject || t("(sans objet)")}</span>
+                          {fresh && <span className="size-2 shrink-0 rounded-full bg-primary"><span className="sr-only">{t("Nouveau")}</span></span>}
+                          <span className={cn("min-w-0 truncate text-[13.5px] leading-5 text-foreground", fresh ? "font-semibold" : "font-medium")}>{prettyName(th.brand) || t("Marque")}</span>
+                          {th.count > 1 && <span className="shrink-0 text-[12px] tabular-nums leading-5 text-faint">{th.count}</span>}
                           <span className="flex-1" />
-                          <span className={cn("shrink-0 pl-1 text-[11px] leading-4 tabular-nums", fresh ? "font-semibold text-foreground" : "text-faint")}>{fmtWhen(th.ts, locale)}</span>
+                          <span className={cn("shrink-0 text-[12px] leading-5 tabular-nums", fresh ? "font-medium text-foreground" : "text-faint")}>{fmtWhen(th.ts, locale)}</span>
                         </span>
-                        <span className="mt-0.5 flex min-w-0 items-center gap-1.5">
-                          <span className={cn("min-w-0 truncate text-[12.5px] leading-4", fresh ? "font-medium text-foreground" : "text-muted-foreground")}>
-                            {prettyName(th.brand) || t("Marque")}
-                          </span>
-                          {th.count > 1 && <span className="shrink-0 text-[11.5px] leading-4 text-faint">{th.count}</span>}
+                        <span className={cn("min-w-0 truncate text-[13px] leading-5", fresh ? "font-medium text-foreground" : "text-foreground/85")}>{th.subject || t("(sans objet)")}</span>
+                        <span className="min-w-0 truncate text-[12.5px] leading-[18px] text-muted-foreground">{th.excerpt}</span>
+                        <span className="mt-1 flex min-w-0 items-center gap-3">
+                          <StatusDot status={th.status} by={th.decidedBy ? authorName(th.decidedBy, mode, creatorName, t) : undefined} />
+                          {th.notes > 0 && (
+                            <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground" title={t("Remarques")}>
+                              <MessageSquare className="h-3 w-3" />{th.notes}
+                            </span>
+                          )}
                         </span>
                       </span>
-                    </span>
-                    <span className="line-clamp-2 w-full text-[12.5px] leading-[18px] text-muted-foreground">{th.excerpt}</span>
-                    <span className="flex min-w-0 items-center gap-3">
-                      <StatusDot status={th.status} by={th.decidedBy ? authorName(th.decidedBy, mode, creatorName, t) : undefined} />
-                      {th.notes > 0 && (
-                        <span className="flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground" title={t("Remarques")}>
-                          <MessageSquare className="h-3 w-3" />{th.notes}
-                        </span>
-                      )}
                     </span>
                   </button>
                 </li>
               );
+              if (q) return row;
+              const g = dayGroup(th.ts, new Date(), locale);
+              const head = i === 0 || dayGroup(shown[i - 1].ts, new Date(), locale) !== g;
+              return head
+                ? [<li key={`g:${g}:${i}`} className="sticky top-0 z-[3] border-b border-border/70 bg-panel/95 px-4 pb-1.5 pt-3 text-[12px] font-medium text-muted-foreground backdrop-blur-sm">{t(g)}</li>, row]
+                : row;
             })}
           </ul>
         )}
