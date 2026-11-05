@@ -768,7 +768,7 @@ const planning: Tool = {
 const taches: Tool = {
   name: "taches",
   title: "Tâches",
-  description: "To-do de l'agence : tâches ouvertes (par défaut) ou faites, avec échéance, priorité et créateurs concernés (une tâche peut en avoir plusieurs).",
+  description: "To-do de l'agence : tâches ouvertes (par défaut) ou faites, avec échéance, priorité, créateurs concernés (une tâche peut en avoir plusieurs) et id (pour cocher_tache).",
   inputSchema: { type: "object", properties: { faites: { type: "boolean" }, createur: { type: "string" } }, additionalProperties: false },
   run: async (sb, _c, a) => {
     const who = str(a.createur);
@@ -780,9 +780,9 @@ const taches: Tool = {
       if (who) q = multi && named ? q.or(`creator.ilike.${JSON.stringify(like(who))},creators.cs.{${JSON.stringify(named)}}`) : q.ilike("creator", like(who));
       return q;
     };
-    let res = await query("text, descr, due, creator, creators, priority, status, done_at", true);
+    let res = await query("id, text, descr, due, creator, creators, priority, status, done_at", true);
     // Colonne `creators` absente (SQL pas encore lancé) : ancienne lecture.
-    if (res.error && /creators/i.test(res.error.message)) res = await query("text, descr, due, creator, priority, status, done_at", false);
+    if (res.error && /creators/i.test(res.error.message)) res = await query("id, text, descr, due, creator, priority, status, done_at", false);
     if (res.error) return fail(`Lecture des tâches impossible : ${res.error.message}`);
     const namesOf = (t: Json) => {
       const list = Array.isArray(t.creators) ? (t.creators as unknown[]).map((x) => String(x ?? "").trim()).filter(Boolean) : [];
@@ -790,7 +790,7 @@ const taches: Tool = {
     };
     return ok([`# Tâches ${a.faites === true ? "faites" : "ouvertes"}`, lines(((res.data as unknown as Json[] | null) ?? []).map((t) => {
       const names = namesOf(t);
-      return `- ${t.text}${names.length ? ` (${names.map((n) => titleCase(n)).join(", ")})` : ""}${t.due ? ` · échéance ${t.due}` : ""}${t.priority ? ` · ${t.priority}` : ""}${t.descr ? `\n  ${String(t.descr).slice(0, 160)}` : ""}`;
+      return `- ${t.text}${names.length ? ` (${names.map((n) => titleCase(n)).join(", ")})` : ""}${t.due ? ` · échéance ${t.due}` : ""}${t.priority ? ` · ${t.priority}` : ""} · id ${t.id}${t.descr ? `\n  ${String(t.descr).slice(0, 160)}` : ""}`;
     }), "Aucune.")].join("\n"));
   },
 };
@@ -798,7 +798,7 @@ const taches: Tool = {
 const factures: Tool = {
   name: "factures",
   title: "Factures",
-  description: "Factures de l'agence (réservé aux fondateurs) : référence, marque, créateur, montants HT, TVA et TTC, commission de l'agence (taux) et part du créateur, échéance, statut, et totaux par statut. Mêmes calculs que la page Facturation (commission sur le HT, rien sous 100 € HT). « En retard » = même règle que l'app (statut « En retard », ou « En attente » dont l'échéance est passée). Filtre par statut ou mois (AAAA-MM, échéance).",
+  description: "Factures de l'agence (réservé aux fondateurs) : référence, marque, créateur, client facturé (nom et email), montants HT, TVA et TTC, commission de l'agence (taux) et part du créateur, échéance, statut, et totaux par statut. Mêmes calculs que la page Facturation (commission sur le HT, rien sous 100 € HT). « En retard » = même règle que l'app (statut « En retard », ou « En attente » dont l'échéance est passée). Filtre par statut ou mois (AAAA-MM, échéance).",
   inputSchema: { type: "object", properties: { statut: { type: "string", enum: ["brouillon", "attente", "retard", "payee", "annulee"] }, mois: { type: "string", description: "AAAA-MM (échéance)" } }, additionalProperties: false },
   founder: true,
   run: async (sb, _c, a) => {
@@ -830,7 +830,7 @@ const factures: Tool = {
         const t = invoiceTotals(amountOf(r.amount), d, rateOf(r.creator));
         // Facture de commission au créateur : tout le HT revient à l'agence.
         const fin = d?.kind === "commission" ? { ...t, commission: t.ht, reversal: 0 } : t;
-        return { r, st: invoiceStatus(r, today), fin };
+        return { r, d, st: invoiceStatus(r, today), fin };
       })
       .filter(({ r, st }) => (!want || st === want) && (!month || dueIso(r.date).startsWith(month)));
     type Tot = { n: number; ht: number; tva: number; ttc: number; commission: number; reversal: number };
@@ -840,13 +840,20 @@ const factures: Tool = {
       totals[st] = { n: cur.n + 1, ht: cur.ht + fin.ht, tva: cur.tva + fin.tva, ttc: cur.ttc + fin.ttc, commission: cur.commission + fin.commission, reversal: cur.reversal + fin.reversal };
     }
     const shown = rows.slice(0, 150);
+    // Client facturé (nom et email saisis dans Facturation) : pour préparer une relance.
+    const clientOf = (d: Detail | undefined) => {
+      const x = d as (Detail & { clientName?: unknown; clientEmail?: unknown }) | undefined;
+      const name = String(x?.clientName ?? "").trim();
+      const mail = String(x?.clientEmail ?? "").trim();
+      return name || mail ? ` · client ${[name, mail ? `<${mail}>` : ""].filter(Boolean).join(" ")}` : "";
+    };
     return ok([
       `# Factures · ${rows.length}${rows.length > shown.length ? ` (150 plus récentes affichées)` : ""}`,
       "Totaux par statut (HT · TVA · TTC · commission agence · part créateurs) :",
       ...(Object.entries(totals).map(([k, v]) => `- ${INVOICE_STATUS[k] ?? k} (${v.n}) : HT ${eur(v.ht)} · TVA ${eur(v.tva)} · TTC ${eur(v.ttc)} · commission ${eur(v.commission)} · créateurs ${eur(v.reversal)}`)),
       Object.keys(totals).length ? "" : "Aucune facture.",
       "## Factures",
-      ...shown.map(({ r, st, fin }) => `- ${r.ref} · ${r.party}${r.creator ? ` · ${titleCase(String(r.creator))}` : ""} · HT ${eur(fin.ht)} · TVA ${eur(fin.tva)} · TTC ${eur(fin.ttc)} · commission ${eur(fin.commission)} (${fin.rate} %) · créateur ${eur(fin.reversal)} · échéance ${dueText(r.date)} · ${INVOICE_STATUS[st] ?? st}`),
+      ...shown.map(({ r, d, st, fin }) => `- ${r.ref} · ${r.party}${r.creator ? ` · ${titleCase(String(r.creator))}` : ""}${clientOf(d)} · HT ${eur(fin.ht)} · TVA ${eur(fin.tva)} · TTC ${eur(fin.ttc)} · commission ${eur(fin.commission)} (${fin.rate} %) · créateur ${eur(fin.reversal)} · échéance ${dueText(r.date)} · ${INVOICE_STATUS[st] ?? st}`),
     ].filter((x) => x !== "").join("\n"));
   },
 };
@@ -912,6 +919,44 @@ const methodeTarif: Tool = {
 };
 
 // ── Actions ────────────────────────────────────────────────────────────────
+// Cocher (ou décocher) une tâche, comme le bouton « Terminer » de l'app (src/lib/todoStatus.ts) :
+// statut « Fait », date et auteur du « Fait » ; repli sans la trace si ces colonnes manquent.
+const cocherTache: Tool = {
+  name: "cocher_tache",
+  title: "Cocher une tâche",
+  description: "Marque une tâche de la to-do comme faite (ou la rouvre avec fait = false). Donner son id (outil taches) ou son titre exact ; plusieurs tâches au même titre : l'outil les liste et ne coche rien.",
+  write: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      tache: { type: "string", description: "Id de la tâche (outil taches) ou son titre" },
+      fait: { type: "boolean", description: "true (défaut) : faite ; false : à refaire" },
+    },
+    required: ["tache"],
+    additionalProperties: false,
+  },
+  run: async (sb, ctx, a) => {
+    const key = str(a.tache, 200);
+    if (!key) return fail("Indique la tâche (id ou titre).");
+    const done = a.fait !== false;
+    let { data, error } = await sb.from("todos").select("id, text, done").eq("id", key).limit(1);
+    if (error || !(data as Json[] | null)?.length) {
+      ({ data, error } = await sb.from("todos").select("id, text, done").ilike("text", key.replace(/[%_\\]/g, (c) => `\\${c}`)).eq("done", !done).limit(5));
+    }
+    if (error) return fail(`Lecture des tâches impossible : ${error.message}`);
+    const rows = (data as Json[] | null) ?? [];
+    if (!rows.length) return fail(`Aucune tâche ${done ? "ouverte" : "faite"} « ${key} ». Utilise l'id donné par taches.`);
+    if (rows.length > 1) return fail(`Plusieurs tâches correspondent, rien n'est coché :\n${rows.map((r) => `- ${r.text} · id ${r.id}`).join("\n")}`);
+    const t = rows[0];
+    const status = done ? "Fait" : "À faire";
+    const traced = done ? { status, done, done_at: new Date().toISOString(), done_by: ctx.name ? `Claude · ${ctx.name}` : "Claude" } : { status, done, done_at: null, done_by: null };
+    let { error: e } = await sb.from("todos").update(traced).eq("id", String(t.id));
+    if (e && /done_at|done_by/i.test(e.message)) ({ error: e } = await sb.from("todos").update({ status, done }).eq("id", String(t.id)));
+    if (e) return fail(`Tâche non modifiée : ${e.message}`);
+    return ok(`✓ Tâche ${done ? "cochée" : "rouverte"} : ${t.text}`);
+  },
+};
+
 const creerTache: Tool = {
   name: "creer_tache",
   title: "Créer une tâche",
@@ -1033,7 +1078,7 @@ const brouillonMail: Tool = {
       const how = r.replaced
         ? `Brouillon MIS À JOUR dans ${box}@ (il remplace celui déjà préparé pour ${to}, aucun doublon${r.removed ? `, ${r.removed} ancien${r.removed > 1 ? "s" : ""} doublon${r.removed > 1 ? "s" : ""} supprimé${r.removed > 1 ? "s" : ""}` : ""})`
         : `Brouillon prêt dans ${box}@ pour ${to}`;
-      return ok(`${how} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail ou l'app (Mails, dossier Brouillons).`);
+      return ok(`${how} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail ou l'app (Mails, dossier Brouillons).${r.id ? ` Id du brouillon : ${r.id}.` : ""}`);
     } catch (e) {
       return fail(`Brouillon non créé : ${(e as Error).message}`);
     }
@@ -1754,7 +1799,7 @@ const notifications: Tool = {
 
 export const TOOLS: Tool[] = [
   pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif, aValider, ecarterProposition,
-  creerTache, creerEvenement, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
+  creerTache, cocherTache, creerEvenement, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur,
   lireBrief, resumerBrief,
   compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, notifications,

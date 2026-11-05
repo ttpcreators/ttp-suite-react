@@ -237,6 +237,24 @@ export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, 
 }
 
 /**
+ * ENVOI d'un brouillon déjà préparé par Claude (outil envoyer_brouillon, fondateurs) : part
+ * EXACTEMENT tel qu'il est dans Gmail (relu, éventuellement retouché par Marc), puis Gmail le
+ * retire des brouillons. Un brouillon écrit à la main n'est jamais envoyé par ici.
+ */
+export async function sendDraft(sb: SupabaseClient, box: MailBox, draftId: string): Promise<{ to: string; subject: string; threadId: string }> {
+  const token = await tokenFor(sb, box, "modify");
+  const d = (await gjson(token, `${GMAIL}/drafts/${encodeURIComponent(draftId)}?format=metadata`)) as DraftRes;
+  const h = d.message?.payload?.headers;
+  if (header(h, "x-ttp-source").toLowerCase() !== "claude") throw new Error("not_claude");
+  const res = await gjson(token, `${GMAIL}/drafts/send`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: draftId }),
+  });
+  return { to: header(h, "to"), subject: header(h, "subject"), threadId: String(res.threadId ?? d.message?.threadId ?? "") };
+}
+
+/**
  * ENVOI d'un mail (outil envoyer_mail, fondateurs). `threadId` : réponse dans ce fil
  * (In-Reply-To / References du dernier message, objet « Re: » repris s'il manque).
  */
