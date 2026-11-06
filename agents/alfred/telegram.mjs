@@ -14,6 +14,7 @@
 //
 // Fichier « …-whatsapp.txt » ou « …-copier.txt » : 1re ligne = intitulé, la suite = texte à copier, mis dans un
 // bloc de code (un toucher le copie sur Telegram). Les autres partent en texte simple.
+// Tout autre fichier que .txt (contrat .html…) part en pièce jointe.
 // Tout ce qui part et tout ce qui arrive est ajouté à etat/conversation.md (le fil).
 
 import { execFile, spawn } from "node:child_process";
@@ -152,6 +153,15 @@ async function transcrire(token, fileId, model) {
   }
 }
 
+/** Envoie un fichier à Marc (contrat rédigé, document), 50 Mo au plus. */
+async function sendDocument(token, chatId, path, name) {
+  const form = new FormData();
+  form.append("chat_id", String(chatId));
+  form.append("document", new Blob([readFileSync(path)]), name);
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, { method: "POST", body: form }).then((r) => r.json());
+  if (!res.ok) throw new Error(`Telegram a refusé le document ${name} : ${res.description ?? "erreur inconnue"}`);
+}
+
 async function send(token, chatId, msg) {
   const call = (body) => api(token, "sendMessage", { chat_id: chatId, disable_web_page_preview: true, ...body });
   let res = await call(msg.md ? { text: msg.text, parse_mode: "MarkdownV2" } : { text: msg.text });
@@ -241,11 +251,18 @@ async function main() {
   if (mode === "texte") messages = messagesFor("alerte.txt", arg ?? "");
   else if (mode === "dossier") {
     const dir = arg ?? "etat/envoi";
-    for (const name of readdirSync(dir).filter((n) => n.endsWith(".txt")).sort()) {
-      messages.push(...messagesFor(name, readFileSync(join(dir, name), "utf8")));
+    for (const name of readdirSync(dir).filter((n) => !n.startsWith(".")).sort()) {
+      // Un .txt = un message ; tout autre fichier (contrat .html, document) part en pièce jointe.
+      if (name.endsWith(".txt")) messages.push(...messagesFor(name, readFileSync(join(dir, name), "utf8")));
+      else messages.push({ file: join(dir, name), name });
     }
   } else throw new Error("Usage : node telegram.mjs dossier <chemin> | texte <message> | recevoir | rappels | ecoute");
   for (const m of messages) {
+    if (m.file) {
+      await sendDocument(token, chatId, m.file, m.name);
+      appendFileSync(fil, `\n### ${stamp()} · Alfred\n(document envoyé : ${m.name})\n`);
+      continue;
+    }
     await send(token, chatId, m);
     appendFileSync(fil, `\n### ${stamp()} · Alfred\n${m.plain ?? m.text}\n`);
   }

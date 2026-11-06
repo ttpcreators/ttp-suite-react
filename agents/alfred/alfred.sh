@@ -13,7 +13,7 @@
 # Aucun secret ici.
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin"
 export LC_TIME=fr_FR.UTF-8
-# Un motif sans fichier (etat/envoi/*.txt vide) donne une liste vide, pas une erreur.
+# Un motif sans fichier (etat/envoi/ vide) donne une liste vide, pas une erreur.
 setopt null_glob
 cd "$HOME/Code/TTPAlfred" || exit 1
 mkdir -p etat/envoi
@@ -78,21 +78,28 @@ done < etat/delegations.md
 # brouillons de mails et des devis, tenir la to-do, les collabs (création, étapes, briefs,
 # contacts, échanges, rendez-vous ; choix de Marc le 2026-11-06 : il le fait et le dit), la
 # mémoire des créateurs, lire ses fichiers et écrire dans etat/ (Edit couvre aussi Write).
-# Jamais : supprimer, régler l'app, factures, envoyer un mail ou un DM sans « oui ». Envoyer un brouillon et retenir une leçon :
+# Sans message de Marc : jamais supprimer, régler l'app, toucher aux factures, ni envoyer.
+# Quand Marc écrit : tous les outils de TTP Suite, pour faire ce qu'il demande. Envoyer un brouillon et retenir une leçon :
 # seulement quand Marc vient d'écrire, ou pendant une délégation avec envoi autorisé.
 ttp="mcp__claude_ai_TTP_Suite__"
 lire="lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
 agir="creer_brouillon_mail preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
 sur_oui="envoyer_brouillon noter_lecon"
 interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture ecarter_proposition proposer_action preparer_reponse_mail ajouter_au_scouting changer_statut_scouting resumer_brief"
-allowed=("Read" "Edit(./etat/**)" "WebFetch(domain:ttpcreators.pro)")
-for t in ${=lire} ${=agir}; do allowed+=("$ttp$t"); done
-denied=("Bash" "WebSearch" "mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram")
-for t in ${=interdits}; do denied+=("$ttp$t"); done
-if (( recus > 0 || delegue )); then
-  for t in ${=sur_oui}; do allowed+=("$ttp$t"); done
+allowed=("Read" "Edit(./etat/**)" "WebFetch" "WebSearch")
+denied=("Bash" "mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram")
+if (( recus > 0 )); then
+  # Marc vient d'écrire : Alfred gère toute l'app sur sa demande (choix de Marc le 2026-11-06).
+  # Ses consignes gardent la règle : un mail ou un DM ne part que sur un « oui » explicite.
+  allowed+=("mcp__claude_ai_TTP_Suite")
 else
-  for t in ${=sur_oui}; do denied+=("$ttp$t"); done
+  for t in ${=lire} ${=agir}; do allowed+=("$ttp$t"); done
+  for t in ${=interdits}; do denied+=("$ttp$t"); done
+  if (( delegue )); then
+    for t in ${=sur_oui}; do allowed+=("$ttp$t"); done
+  else
+    for t in ${=sur_oui}; do denied+=("$ttp$t"); done
+  fi
 fi
 if (( recus > 0 )); then
   messages="Marc t'a écrit $recus message(s) sur Telegram : ils sont dans etat/recu.txt (le fil complet est dans etat/conversation.md). Réponds-lui en premier."
@@ -102,7 +109,7 @@ fi
 (( delegue )) && messages="$messages Une délégation avec envoi autorisé est en cours (etat/delegations.md) : tu peux envoyer ce qu'elle couvre, et seulement ça."
 (( recus == 0 && ! delegue )) && messages="$messages Tu ne peux envoyer aucun mail pendant ce passage."
 
-rm -f etat/envoi/*.txt
+rm -f etat/envoi/*
 {
   echo "===== $(date) · $mode ($recus message(s) de Marc) ====="
   claude -p "Il est $(date '+%H:%M') ce $(date '+%A %d %B %Y'). C'est $mode. $messages Dernier point fait : $(date -r "$last" '+%A %d %B à %H:%M'). Requête Gmail pour les mails reçus depuis : « $requete ». Fais ce passage selon ton CLAUDE.md, puis dépose tes messages pour Marc dans etat/envoi/." \
@@ -113,7 +120,7 @@ rm -f etat/envoi/*.txt
   echo "===== fin $(date) · code $code ====="
 } >> "$LOG" 2>&1
 
-envois=(etat/envoi/*.txt)
+envois=(etat/envoi/*)
 if [ "$code" -eq 0 ] && (( ${#envois} > 0 )); then
   if node telegram.mjs dossier etat/envoi >> "$LOG" 2>&1; then
     [[ "$mode" == "le point"* ]] && echo "$now" > etat/dernier-passage
