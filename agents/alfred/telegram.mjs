@@ -99,7 +99,7 @@ export function marcMessages(updates, marcId, offset = 0) {
     const reply = cited
       ? `(en réponse à ${cited.from?.is_bot ? "ton message" : "son propre message"}${quoted ? ` : « ${quoted.length > 600 ? `${quoted.slice(0, 600)}…` : quoted} »` : ""})`
       : null;
-    kept.push({ at: new Date(Number(m.date) * 1000), text, ...(voice ? { voice } : {}), ...(media ? { media } : {}), ...(reply ? { reply } : {}) });
+    kept.push({ id: Number(m.message_id) || null, at: new Date(Number(m.date) * 1000), text, ...(voice ? { voice } : {}), ...(media ? { media } : {}), ...(reply ? { reply } : {}) });
   }
   return { kept, next };
 }
@@ -386,16 +386,18 @@ export async function telechargerVideo(lien, dir, model) {
 }
 
 /** Envoie un fichier à Marc (contrat rédigé, document), 50 Mo au plus. */
-async function sendDocument(token, chatId, path, name) {
+async function sendDocument(token, chatId, path, name, replyTo = null) {
   const form = new FormData();
   form.append("chat_id", String(chatId));
+  if (replyTo) form.append("reply_parameters", JSON.stringify({ message_id: replyTo, allow_sending_without_reply: true }));
   form.append("document", new Blob([readFileSync(path)]), name);
   const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, { method: "POST", body: form }).then((r) => r.json());
   if (!res.ok) throw new Error(`Telegram a refusé le document ${name} : ${res.description ?? "erreur inconnue"}`);
 }
 
-async function send(token, chatId, msg) {
-  const call = (body) => api(token, "sendMessage", { chat_id: chatId, disable_web_page_preview: true, ...body });
+async function send(token, chatId, msg, replyTo = null) {
+  const cite = replyTo ? { reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } } : {};
+  const call = (body) => api(token, "sendMessage", { chat_id: chatId, disable_web_page_preview: true, ...cite, ...body });
   let res = await call(msg.md ? { text: msg.text, parse_mode: "MarkdownV2" } : { text: msg.text });
   // Mise en forme refusée : on renvoie le même texte, sans mise en forme.
   if (!res.ok && msg.md) res = await call({ text: msg.plain });
@@ -456,6 +458,8 @@ async function main() {
     for (const m of kept) {
       const full = m.reply ? `${m.reply}\n${m.text}` : m.text;
       appendFileSync(join(here, "etat/file-recue.txt"), `[${stamp(m.at)}] ${full}\n\n`);
+      // Pour qu'Alfred réponde en citant ce message (comme « Répondre » sur Telegram).
+      if (m.id) appendFileSync(join(here, "etat/file-recue-ids.txt"), `${m.id}\n`);
       appendFileSync(fil, `\n### ${stamp(m.at)} · Marc\n${full}\n`);
     }
     // L'offset n'avance qu'une fois les messages rangés : rien ne se perd si on s'arrête avant.
@@ -515,13 +519,18 @@ async function main() {
       else messages.push({ file: join(dir, name), name });
     }
   } else throw new Error("Usage : node telegram.mjs dossier <chemin> | texte <message> | recevoir | rappels | ecoute");
+  // Réponse à Marc : le premier message cite son dernier message (comme « Répondre »).
+  const ids = mode === "dossier" && existsSync(join(here, "etat/recu-ids.txt")) ? readFileSync(join(here, "etat/recu-ids.txt"), "utf8").split("\n").map(Number).filter(Boolean) : [];
+  let replyTo = ids.length ? ids[ids.length - 1] : null;
   for (const m of messages) {
     if (m.file) {
-      await sendDocument(token, chatId, m.file, m.name);
+      await sendDocument(token, chatId, m.file, m.name, replyTo);
+      replyTo = null;
       appendFileSync(fil, `\n### ${stamp()} · Alfred\n(document envoyé : ${m.name})\n`);
       continue;
     }
-    await send(token, chatId, m);
+    await send(token, chatId, m, replyTo);
+    replyTo = null;
     appendFileSync(fil, `\n### ${stamp()} · Alfred\n${m.plain ?? m.text}\n`);
   }
   console.log(`${messages.length} message(s) envoyé(s) à Marc sur Telegram.`);

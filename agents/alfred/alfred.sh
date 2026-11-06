@@ -44,10 +44,13 @@ garder etat/suivi.md 600
 # Rappels arrivés à l'heure : envoyés tels quels, sans réveiller Claude.
 [[ "$1" != "--reponse" ]] && node telegram.mjs rappels >> "$LOG" 2>&1
 
-# Messages de Marc en attente : la file passe dans etat/recu.txt pour ce passage.
+# Messages de Marc en attente : la file passe dans etat/recu.txt pour ce passage (et leurs
+# numéros dans etat/recu-ids.txt, pour que la réponse cite son dernier message).
 : > etat/recu.txt
+: > etat/recu-ids.txt
 if [ -s etat/file-recue.txt ]; then
   mv etat/file-recue.txt etat/recu.txt
+  [ -f etat/file-recue-ids.txt ] && mv etat/file-recue-ids.txt etat/recu-ids.txt
 fi
 recus=$(grep -c '^\[' etat/recu.txt)
 
@@ -132,6 +135,7 @@ else
   # Passage raté (souvent la connexion de Claude) : les messages de Marc restent en file pour
   # le prochain passage, et Marc est prévenu.
   [ -s etat/recu.txt ] && { cat etat/recu.txt; [ -f etat/file-recue.txt ] && cat etat/file-recue.txt; } > etat/file-recue.tmp && mv etat/file-recue.tmp etat/file-recue.txt
+  [ -s etat/recu-ids.txt ] && { cat etat/recu-ids.txt; [ -f etat/file-recue-ids.txt ] && cat etat/file-recue-ids.txt; } > etat/file-recue-ids.tmp && mv etat/file-recue-ids.tmp etat/file-recue-ids.txt
   raison=$(tail -n 4 "$LOG" | grep -i -m1 "authenticate\|login\|error\|erreur")
   node telegram.mjs texte "Alfred n'a pas pu faire $mode. ${raison:+Raison : $raison. }Si c'est la connexion : ouvre le Terminal, tape claude puis /login." >> "$LOG" 2>&1
 fi

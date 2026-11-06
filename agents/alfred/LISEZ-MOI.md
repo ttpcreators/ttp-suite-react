@@ -4,7 +4,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 
 | Ce qu'il fait | Comment |
 |---|---|
-| Répond tout de suite quand Marc lui écrit | Écoute Telegram en continu, lance Claude dès qu'un message arrive |
+| Répond tout de suite quand Marc lui écrit | Écoute Telegram en continu, lance Claude dès qu'un message arrive ; sa réponse cite le message de Marc (comme « Répondre ») |
 | Comprend les vocaux de Marc | Transcrits sur le Mac (whisper.cpp et ffmpeg, gratuit, sans internet), puis traités comme un message écrit |
 | Le point à 9 h et 17 h en semaine | Mails des marques et DM, devis, factures en retard, créateurs, argent à aller chercher |
 | Réponses aux mails, relances | Brouillons Gmail montrés sur Telegram ; envoyés seulement sur « oui Marque » de Marc |

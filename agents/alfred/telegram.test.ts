@@ -34,6 +34,7 @@ describe("Alfred : messages Telegram", () => {
     ];
     const { kept, next } = marcMessages(updates, "42", 10);
     expect(kept.map((m: { text: string }) => m.text)).toEqual(["oui Seoni"]);
+    expect(kept[0].id).toBeNull(); // pas de message_id dans ce test
     expect(next).toBe(14);
     expect(marcMessages([], "42", 14).next).toBe(14);
   });
@@ -97,5 +98,10 @@ describe("Alfred : messages Telegram", () => {
     expect(trouverLien("le site https://ttpcreators.pro/")).toBeNull();
     expect(lienSimple("drive", "https://drive.google.com/file/d/1AbCdEfGhIjK/view?usp=sharing")).toBe("https://drive.usercontent.google.com/download?id=1AbCdEfGhIjK&export=download&confirm=t");
     expect(lienSimple("dropbox", "https://www.dropbox.com/scl/fi/xyz/preview.mp4?rlkey=k&dl=0")).toBe("https://www.dropbox.com/scl/fi/xyz/preview.mp4?rlkey=k&dl=1");
+  });
+
+  it("garde le numéro du message de Marc, pour y répondre en le citant", () => {
+    const [m] = marcMessages([{ update_id: 50, message: { message_id: 321, date: 1793919600, from: { id: 42 }, chat: { type: "private" }, text: "où en est Fitaya ?" } }], "42", 0).kept;
+    expect(m.id).toBe(321);
   });
 });
