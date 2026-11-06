@@ -4,10 +4,13 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 
 | Ce qu'il fait | Comment |
 |---|---|
-| Répond tout de suite quand Marc lui écrit | Écoute Telegram en continu, lance Claude dès qu'un message arrive |
+| Répond tout de suite quand Marc lui écrit | Écoute Telegram en continu, lance Claude dès qu'un message arrive ; sa réponse cite le message de Marc (comme « Répondre ») |
 | Comprend les vocaux de Marc | Transcrits sur le Mac (whisper.cpp et ffmpeg, gratuit, sans internet), puis traités comme un message écrit |
 | Le point à 9 h et 17 h en semaine | Mails des marques et DM, devis, factures en retard, créateurs, argent à aller chercher |
-| Réponses aux mails, relances | Brouillons Gmail montrés sur Telegram ; envoyés seulement sur « oui Marque » de Marc |
+| Réponses aux mails, relances | Brouillons Gmail montrés sur Telegram, avec un lien qui les ouvre dans Spark (Marc peut les envoyer lui même) ; envoyés par Alfred seulement sur « oui Marque » de Marc |
+| Brouillons en double | Quand Marc a répondu lui même dans un fil, Alfred supprime son brouillon devenu inutile (jamais un brouillon écrit par Marc) |
+| Spams | Fouille les spams à chaque point pour repêcher les vraies demandes de marques |
+| Captures d'écran | Marc envoie des captures d'une discussion (WhatsApp, Instagram, LinkedIn) : Alfred les lit, retrouve le contexte et prépare la réponse à copier |
 | Devis | Brouillon dans Facturation › Devis ; Marc l'envoie depuis l'app |
 | Messages aux créateurs, DM, réponse à un fil collé | Texte prêt à copier d'un toucher sur Telegram |
 | To-do | Crée les tâches tirées des mails, coche ce qui est fait |
@@ -16,12 +19,13 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Toute l'app sur demande | Quand Marc écrit, il a tous les outils de TTP Suite (factures, réglages, suppressions vers la Corbeille…) et fait ce qui est demandé ; ses points automatiques gardent les règles prudentes |
 | Contrats | Rédigés sur demande à partir des modèles de l'app et du protocole CONTRATS, envoyés en document sur Telegram |
 | Réflexion | Vérifie ses sources (app, mails, mémoire, web), croise, recalcule, cite d'où vient chaque info |
-| Valider un contenu | Marc transfère la preview d'un créateur : images de la vidéo (accroche de près) et transcription horodatée préparées sur le Mac, comparées au brief et aux mails ; verdict, points bloquants, améliorations, détails, et le message au créateur prêt à copier. Vidéos de 20 Mo au plus (limite des bots Telegram) |
+| Valider un contenu | Marc transfère la preview d'un créateur : images de la vidéo (accroche de près) et transcription horodatée préparées sur le Mac, comparées au brief et aux mails ; verdict, points bloquants, améliorations, détails, et le message au créateur prêt à copier. Une image par seconde (jusqu'à 90 s). Sur Telegram : 20 Mo au plus (limite des bots) ; au delà, un lien WeTransfer, SwissTransfer, Google Drive ou Dropbox (3 Go au plus) |
 | Descriptions de posts | « Léna me demande une description pour le reel Yade » : deux propositions prêtes à copier, à partir du brief, des mails et du style du créateur |
 | Planning et Meet | Dates de publication, de rendu, de tournage et events demandés par les marques ajoutés au Planning ; rendez vous avec lien Google Meet (`creer_meet`) sur accord de Marc, invitation Google envoyée seulement s'il le dit |
 | Roster à jour | Relit les créateurs actifs dans l'app à chaque fois, ne propose jamais quelqu'un qui est parti, annonce les arrivées et départs |
 | Rappels | « Rappelle moi jeudi 15 h… », et ses propres rappels de ce que Marc risque d'oublier |
 | Délégation | « Gère les relances jusqu'à vendredi, tu peux envoyer » : il agit dans ce périmètre et rend compte |
+| Mémoire commune avec Gianni | Tout ce qui compte va dans l'app (collabs, contacts, planning, tâches, mémoire des créateurs) et dans le journal des agents (`noter_journal`), repris par `point_du_jour` et `journal_agents` : l'assistant de Gianni voit la même chose que Marc |
 | Questions | Contrats, briefs, collabs, factures : il cherche dans TTP Suite et répond avec la source |
 
 **Rien ne part vers l'extérieur sans un « oui » de Marc**, sauf dans une délégation où Marc a écrit qu'Alfred pouvait envoyer. WhatsApp : toujours copié par Marc.

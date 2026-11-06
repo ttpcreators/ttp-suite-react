@@ -103,6 +103,20 @@ export function nextQuoteRef(refs: string[], year = new Date().getFullYear()): s
   return `${prefix}${String(max + 1).padStart(3, "0")}`;
 }
 
+/**
+ * Lien Spark (application mail de Marc) qui ouvre un message ou un brouillon précis :
+ * « A:<compte>;ID:<Message-ID sans chevrons>;gID:<id Gmail en décimal> » en base64.
+ * Format relevé sur un lien « Copier le lien » de Spark ; Spark l'ouvre sans le dernier champ.
+ */
+export function sparkLink(account: string, rfcMessageId: string, gmailMessageId: string): string {
+  const acc = account.trim().toLowerCase();
+  const rfc = rfcMessageId.trim().replace(/^<|>$/g, "");
+  if (!acc || !rfc || !/^[0-9a-f]{6,20}$/i.test(gmailMessageId)) return "";
+  const raw = `A:${acc};ID:${rfc};gID:${BigInt(`0x${gmailMessageId}`).toString()}`;
+  const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(raw)));
+  return `https://sparkmailapp.com/dpl/bl?token=${encodeURIComponent(b64)}`;
+}
+
 /** « 1 273,00 € » (espaces insécables), le format du montant enregistré. */
 export function euro2(n: number): string {
   return new Intl.NumberFormat("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true })

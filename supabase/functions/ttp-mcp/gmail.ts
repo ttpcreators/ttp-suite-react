@@ -47,7 +47,9 @@ export async function searchThreads(sb: SupabaseClient, box: string | undefined,
   for (const b of boxesFor(box)) {
     try {
       const token = await tokenFor(sb, b, "read");
-      const list = await gjson(token, `${GMAIL}/threads?maxResults=${max}${q ? `&q=${encodeURIComponent(q)}` : ""}`);
+      // « in:spam » ou « in:trash » : Gmail ne les cherche que si on le demande explicitement.
+      const spam = /\bin:(spam|trash)\b/i.test(q) ? "&includeSpamTrash=true" : "";
+      const list = await gjson(token, `${GMAIL}/threads?maxResults=${max}${spam}${q ? `&q=${encodeURIComponent(q)}` : ""}`);
       const ids = ((list.threads as { id: string }[] | undefined) ?? []).map((t) => t.id);
       const rows = await mapPool(ids, 6, async (id) => {
         try {
@@ -246,6 +248,70 @@ export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, 
     body: JSON.stringify({ message: msg }),
   });
   return { id: String(res.id ?? ""), replaced: false, removed: 0 };
+}
+
+/** Adresse de la boîte (pour les liens Spark). */
+export function boxAddress(box: MailBox): string {
+  return box === "talent" ? talentAddress() : "partnerships@ttpcreators.pro";
+}
+
+/** Références d'un brouillon : id Gmail du message, son Message-ID et son fil (liens Spark et app). */
+export async function draftRefs(sb: SupabaseClient, box: MailBox, draftId: string): Promise<{ messageId: string; rfcId: string; threadId: string }> {
+  const token = await tokenFor(sb, box, "read");
+  const d = (await gjson(token, `${GMAIL}/drafts/${encodeURIComponent(draftId)}?format=metadata&metadataHeaders=Message-ID`)) as DraftRes;
+  return { messageId: String(d.message?.id ?? ""), rfcId: header(d.message?.payload?.headers, "message-id"), threadId: String(d.message?.threadId ?? "") };
+}
+
+export type ClaudeDraft = { box: MailBox; id: string; to: string; subject: string; threadId: string; ts: number; answered: boolean; messageId: string; rfcId: string };
+
+/**
+ * Brouillons préparés par Claude (X-TTP-Source: claude), avec `answered` = quelqu'un de l'agence
+ * a déjà envoyé un message dans le fil APRÈS ce brouillon (Marc a répondu lui même : le
+ * brouillon fait doublon). Les brouillons écrits à la main ne sont jamais listés.
+ */
+export async function listClaudeDrafts(sb: SupabaseClient, box: string | undefined): Promise<{ drafts: ClaudeDraft[]; errors: string[] }> {
+  const drafts: ClaudeDraft[] = [];
+  const errors: string[] = [];
+  for (const b of boxesFor(box)) {
+    try {
+      const token = await tokenFor(sb, b, "read");
+      const list = await gjson(token, `${GMAIL}/drafts?maxResults=100`);
+      const ids = ((list.drafts as { id: string }[] | undefined) ?? []).map((d) => d.id);
+      const rows = await mapPool(ids, 6, async (id) => {
+        try {
+          const d = (await gjson(token, `${GMAIL}/drafts/${encodeURIComponent(id)}?format=metadata`)) as DraftRes;
+          const h = d.message?.payload?.headers;
+          if (header(h, "x-ttp-source").toLowerCase() !== "claude") return null;
+          const ts = Number(d.message?.internalDate ?? 0);
+          const threadId = String(d.message?.threadId ?? "");
+          let answered = false;
+          if (threadId) {
+            const t = await gjson(token, `${GMAIL}/threads/${encodeURIComponent(threadId)}?format=minimal`);
+            answered = ((t.messages as Msg[] | undefined) ?? []).some((m) =>
+              m.labelIds?.includes("SENT") && !m.labelIds?.includes("DRAFT") && Number(m.internalDate ?? 0) > ts);
+          }
+          return { box: b, id, to: header(h, "to"), subject: header(h, "subject") || "(sans objet)", threadId, ts, answered, messageId: String(d.message?.id ?? ""), rfcId: header(h, "message-id") } as ClaudeDraft;
+        } catch {
+          return null;
+        }
+      });
+      drafts.push(...rows.filter((r): r is ClaudeDraft => !!r));
+    } catch (e) {
+      errors.push(`${b}@ : ${(e as Error).message}`);
+    }
+  }
+  return { drafts: drafts.sort((a, z) => z.ts - a.ts), errors };
+}
+
+/** Supprime un brouillon préparé par Claude (jamais un brouillon écrit à la main). */
+export async function deleteClaudeDraft(sb: SupabaseClient, box: MailBox, draftId: string): Promise<{ to: string; subject: string }> {
+  const token = await tokenFor(sb, box, "modify");
+  const d = (await gjson(token, `${GMAIL}/drafts/${encodeURIComponent(draftId)}?format=metadata`)) as DraftRes;
+  const h = d.message?.payload?.headers;
+  if (header(h, "x-ttp-source").toLowerCase() !== "claude") throw new Error("not_claude");
+  const r = await gfetch(`${GMAIL}/drafts/${encodeURIComponent(draftId)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } }, { timeoutMs: 12_000 });
+  if (!r.ok && r.status !== 404) throw new Error(`gmail_${r.status}`);
+  return { to: header(h, "to"), subject: header(h, "subject") };
 }
 
 /**

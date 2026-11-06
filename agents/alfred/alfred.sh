@@ -44,10 +44,13 @@ garder etat/suivi.md 600
 # Rappels arrivés à l'heure : envoyés tels quels, sans réveiller Claude.
 [[ "$1" != "--reponse" ]] && node telegram.mjs rappels >> "$LOG" 2>&1
 
-# Messages de Marc en attente : la file passe dans etat/recu.txt pour ce passage.
+# Messages de Marc en attente : la file passe dans etat/recu.txt pour ce passage (et leurs
+# numéros dans etat/recu-ids.txt, pour que la réponse cite son dernier message).
 : > etat/recu.txt
+: > etat/recu-ids.txt
 if [ -s etat/file-recue.txt ]; then
   mv etat/file-recue.txt etat/recu.txt
+  [ -f etat/file-recue-ids.txt ] && mv etat/file-recue-ids.txt etat/recu-ids.txt
 fi
 recus=$(grep -c '^\[' etat/recu.txt)
 
@@ -84,12 +87,13 @@ done < etat/delegations.md
 # Quand Marc écrit : tous les outils de TTP Suite, pour faire ce qu'il demande. Envoyer un brouillon et retenir une leçon :
 # seulement quand Marc vient d'écrire, ou pendant une délégation avec envoi autorisé.
 ttp="mcp__claude_ai_TTP_Suite__"
-lire="lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
-agir="creer_brouillon_mail preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
+lire="brouillons_claude journal_agents lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
+agir="noter_journal creer_brouillon_mail supprimer_brouillon preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
 sur_oui="envoyer_brouillon noter_lecon"
 interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture ecarter_proposition proposer_action preparer_reponse_mail ajouter_au_scouting changer_statut_scouting resumer_brief"
-allowed=("Read" "Edit(./etat/**)" "WebFetch" "WebSearch")
-denied=("Bash" "mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram")
+# Seule commande permise : télécharger et découper une vidéo dont le lien est dans un mail.
+allowed=("Read" "Edit(./etat/**)" "WebFetch" "WebSearch" "Bash(node telegram.mjs telecharger:*)")
+denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram")
 if (( recus > 0 )); then
   # Marc vient d'écrire : Alfred gère toute l'app sur sa demande (choix de Marc le 2026-11-06).
   # Ses consignes gardent la règle : un mail ou un DM ne part que sur un « oui » explicite.
@@ -131,6 +135,7 @@ else
   # Passage raté (souvent la connexion de Claude) : les messages de Marc restent en file pour
   # le prochain passage, et Marc est prévenu.
   [ -s etat/recu.txt ] && { cat etat/recu.txt; [ -f etat/file-recue.txt ] && cat etat/file-recue.txt; } > etat/file-recue.tmp && mv etat/file-recue.tmp etat/file-recue.txt
+  [ -s etat/recu-ids.txt ] && { cat etat/recu-ids.txt; [ -f etat/file-recue-ids.txt ] && cat etat/file-recue-ids.txt; } > etat/file-recue-ids.tmp && mv etat/file-recue-ids.tmp etat/file-recue-ids.txt
   raison=$(tail -n 4 "$LOG" | grep -i -m1 "authenticate\|login\|error\|erreur")
   node telegram.mjs texte "Alfred n'a pas pu faire $mode. ${raison:+Raison : $raison. }Si c'est la connexion : ouvre le Terminal, tape claude puis /login." >> "$LOG" 2>&1
 fi

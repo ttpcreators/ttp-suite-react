@@ -15,9 +15,9 @@ import { meetEventBody, meetLinkOf, parseMeetRequest } from "../_shared/meetEven
 import { readAppState } from "../_shared/appState.ts";
 import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
 import type { Ctx } from "./oauth.ts";
-import { boxesFor, createDraft, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
+import { boxAddress, boxesFor, createDraft, deleteClaudeDraft, draftRefs, listClaudeDrafts, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
-import { mailHtml } from "../_shared/mcpAdmin.ts";
+import { mailHtml, sparkLink } from "../_shared/mcpAdmin.ts";
 import { guessEventKind } from "../_shared/eventKind.ts";
 import { comptaSummary, type ComptaInv } from "../_shared/compta.ts";
 import { activityText } from "../_shared/activityText.ts";
@@ -198,6 +198,9 @@ const pointDuJour: Tool = {
     ];
     if (ctx.founder) {
       out.push(`\n## Factures en retard`, lines(late.map((f) => `- ${f.ref} · ${f.party} · ${money(f.amount)} · échéance ${dueText(f.date)}`), "Aucune."));
+      // Ce que les agents (Alfred, Megan…) ont fait : Marc et Gianni sur la même longueur d'onde.
+      const j = await agentJournalSince(sb, 1, null).catch(() => [] as JournalLine[]);
+      out.push(`\n## Ce que les agents ont fait (24 h) · détail avec journal_agents`, lines(j.slice(0, 20).map((e) => `- ${e.quand} · ${e.agent} · ${e.action}${e.detail ? ` : ${e.detail.slice(0, 220)}` : ""}`), "Rien de noté."));
     }
     return ok(out.join("\n"));
   },
@@ -539,7 +542,7 @@ const verifierExclusivite: Tool = {
 const rechercherMails: Tool = {
   name: "rechercher_mails",
   title: "Rechercher dans les mails",
-  description: "Cherche dans les boîtes Gmail de l'agence (partnerships@ et talent@). La requête suit la syntaxe Gmail : « from:nike », « is:unread », « newer_than:7d », « subject:contrat », « in:sent », etc. Vide = derniers mails de la boîte de réception. Non lus comptés comme l'app et le point du jour : « in:inbox is:unread -category:promotions -category:social » avec max 25. Renvoie l'id du fil pour lire_mail.",
+  description: "Cherche dans les boîtes Gmail de l'agence (partnerships@ et talent@), spams compris avec « in:spam ». La requête suit la syntaxe Gmail : « from:nike », « is:unread », « newer_than:7d », « subject:contrat », « in:sent », etc. Vide = derniers mails de la boîte de réception. Non lus comptés comme l'app et le point du jour : « in:inbox is:unread -category:promotions -category:social » avec max 25. Renvoie l'id du fil pour lire_mail.",
   inputSchema: {
     type: "object",
     properties: {
@@ -1126,6 +1129,50 @@ const creerMeet: Tool = {
   },
 };
 
+// Brouillons préparés par Claude : la liste, avec ceux auxquels l'agence a déjà répondu
+// elle même (doublons à retirer), et leur suppression (jamais un brouillon écrit à la main).
+const brouillonsClaude: Tool = {
+  name: "brouillons_claude",
+  title: "Brouillons préparés par Claude",
+  description: "Liste les brouillons Gmail préparés par Claude (partnerships@ et talent@) : id, destinataire, objet, fil, date, et « DÉJÀ RÉPONDU » quand l'agence a envoyé un message dans le fil après ce brouillon (il fait doublon : à supprimer avec supprimer_brouillon).",
+  inputSchema: { type: "object", properties: { boite: { type: "string", enum: ["toutes", "partnerships", "talent"] } }, additionalProperties: false },
+  run: async (sb, _c, a) => {
+    const { drafts, errors } = await listClaudeDrafts(sb, str(a.boite) === "toutes" ? undefined : str(a.boite) || undefined);
+    const lines = drafts.map((d) => {
+      const spark = sparkLink(boxAddress(d.box), d.rfcId, d.messageId);
+      return `- ${d.answered ? "⚠ DÉJÀ RÉPONDU · " : ""}${d.box}@ · à ${d.to} · « ${d.subject} » · ${d.ts ? frDay(new Date(d.ts).toISOString().slice(0, 10)) : ""} · brouillon ${d.id}${d.threadId ? ` · fil ${d.threadId}` : ""}${spark ? ` · Spark : ${spark}` : ""}`;
+    });
+    return ok([`# Brouillons préparés par Claude · ${drafts.length}${drafts.some((d) => d.answered) ? ` (dont ${drafts.filter((d) => d.answered).length} déjà répondus)` : ""}`, ...(lines.length ? lines : ["Aucun."]), ...errors.map((e) => `⚠ ${e}`)].join("\n"));
+  },
+};
+
+const supprimerBrouillon: Tool = {
+  name: "supprimer_brouillon",
+  title: "Supprimer un brouillon de Claude",
+  description: "Supprime un brouillon Gmail préparé par Claude (id donné par brouillons_claude ou creer_brouillon_mail), par exemple parce que l'agence a déjà répondu elle même dans le fil. Un brouillon écrit à la main est refusé.",
+  write: true,
+  inputSchema: {
+    type: "object",
+    properties: { boite: { type: "string", enum: ["partnerships", "talent"] }, brouillon: { type: "string", description: "Id du brouillon" } },
+    required: ["boite", "brouillon"],
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const box = (str(a.boite) === "talent" ? "talent" : "partnerships") as MailBox;
+    const id = str(a.brouillon, 64);
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) return fail("Id de brouillon invalide.");
+    try {
+      const r = await deleteClaudeDraft(sb, box, id);
+      return ok(`✓ Brouillon supprimé (${box}@, à ${r.to}, « ${r.subject} »).`);
+    } catch (e) {
+      const m = (e as Error).message ?? "";
+      if (m === "not_claude") return fail("Ce brouillon n'a pas été préparé par Claude : il reste en place.");
+      if (/gmail_404/.test(m)) return ok("Ce brouillon n'existe plus (déjà envoyé ou supprimé).");
+      return fail(`Suppression impossible : ${m}`);
+    }
+  },
+};
+
 const brouillonMail: Tool = {
   name: "creer_brouillon_mail",
   title: "Préparer un brouillon de mail",
@@ -1162,7 +1209,15 @@ const brouillonMail: Tool = {
       const how = r.replaced
         ? `Brouillon MIS À JOUR dans ${box}@ (il remplace celui déjà préparé pour ${to}, aucun doublon${r.removed ? `, ${r.removed} ancien${r.removed > 1 ? "s" : ""} doublon${r.removed > 1 ? "s" : ""} supprimé${r.removed > 1 ? "s" : ""}` : ""})`
         : `Brouillon prêt dans ${box}@ pour ${to}`;
-      return ok(`${how} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail ou l'app (Mails, dossier Brouillons).${r.id ? ` Id du brouillon : ${r.id}.` : ""}`);
+      // Liens pour l'ouvrir tout de suite : dans Spark (l'app mail de Marc) et dans les Mails de l'app.
+      let liens = "";
+      if (r.id) {
+        const refs = await draftRefs(sb, box, r.id).catch(() => null);
+        const spark = refs ? sparkLink(boxAddress(box), refs.rfcId, refs.messageId) : "";
+        const thread = fil || refs?.threadId || "";
+        liens = `${spark ? `\nOuvrir dans Spark : ${spark}` : ""}${thread ? `\nOuvrir dans l'app : https://app.ttpcreators.pro/?open=mails&thread=${thread}&box=${box}` : ""}`;
+      }
+      return ok(`${how} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail, Spark ou l'app (Mails, dossier Brouillons).${r.id ? ` Id du brouillon : ${r.id}.` : ""}${liens}`);
     } catch (e) {
       return fail(`Brouillon non créé : ${(e as Error).message}`);
     }
@@ -1344,6 +1399,64 @@ async function findAgent(sb: SupabaseClient, key: string): Promise<AgentRow | nu
 }
 const agentJournal = (sb: SupabaseClient, agentId: string | null, action: string, detail: string) =>
   sb.schema("agent").from("journal").insert({ action, detail: detail.slice(0, 300), agent_id: agentId }).then(() => {}, () => {});
+
+type JournalLine = { quand: string; agent: string; action: string; detail: string };
+/** Journal des agents depuis `jours` jours (le plus récent d'abord), pour un agent ou tous. */
+async function agentJournalSince(sb: SupabaseClient, jours: number, agentKey: string | null): Promise<JournalLine[]> {
+  const db = sb.schema("agent");
+  const agents = ((await db.from("agents").select("id, nom")).data as { id: string; nom: string }[] | null) ?? [];
+  const names = new Map(agents.map((x) => [x.id, x.nom]));
+  let q = db.from("journal").select("action, detail, cree_le, agent_id").gte("cree_le", new Date(Date.now() - jours * 86400000).toISOString()).order("cree_le", { ascending: false }).limit(200);
+  if (agentKey) {
+    const ag = await findAgent(sb, agentKey);
+    if (!ag) return [];
+    q = q.eq("agent_id", ag.id);
+  }
+  const { data } = await q;
+  return ((data as Json[] | null) ?? []).map((r) => ({
+    quand: new Date(String(r.cree_le)).toLocaleString("fr-FR", { timeZone: "Europe/Paris", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
+    agent: names.get(String(r.agent_id)) ?? (String(r.action).startsWith("marc_") ? "Marc" : "Megan"),
+    action: String(r.action ?? ""), detail: String(r.detail ?? ""),
+  }));
+}
+
+const noterJournal: Tool = {
+  name: "noter_journal",
+  title: "Noter dans le journal d'un agent",
+  description: "Note dans le journal de la section Agents ce qu'un agent a fait, décidé ou appris (visible par Marc, Gianni et leurs assistants, et repris dans point_du_jour). Une entrée par chose importante, compréhensible sans contexte : qui, quoi, où, montant et date si utiles, source.",
+  write: true,
+  founder: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      agent: { type: "string", description: "Nom de l'agent (ex. Alfred)" },
+      action: { type: "string", description: "Titre court (ex. « Collab créée », « Point du matin »)" },
+      detail: { type: "string", description: "Le détail, compréhensible sans contexte" },
+    },
+    required: ["agent", "action"],
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const ag = await findAgent(sb, str(a.agent, 80));
+    if (!ag) return fail(`Agent inconnu « ${str(a.agent, 80)} » (voir mes_agents).`);
+    const { error } = await sb.schema("agent").from("journal").insert({ action: str(a.action, 120), detail: str(a.detail, 4000) || null, agent_id: ag.id });
+    if (error) return fail(`Journal non écrit : ${error.message}`);
+    return ok(`✓ Noté dans le journal de ${ag.nom} : ${str(a.action, 120)}.`);
+  },
+};
+
+const journalAgents: Tool = {
+  name: "journal_agents",
+  title: "Journal des agents",
+  description: "Ce que les agents de TTP (Alfred, Megan…) ont fait, décidé ou signalé, avec le détail, le plus récent d'abord (section Agents → Journal). Pour savoir où en est un dossier traité par un agent, ou ce qu'Alfred a fait pour Marc.",
+  founder: true,
+  inputSchema: { type: "object", properties: { jours: { type: "number", description: "Nombre de jours (défaut 2, 30 au plus)" }, agent: { type: "string", description: "Un seul agent (facultatif)" } }, additionalProperties: false },
+  run: async (sb, _c, a) => {
+    const jours = Math.min(30, Math.max(1, Math.round(Number(a.jours ?? 2)) || 2));
+    const rows = await agentJournalSince(sb, jours, str(a.agent, 80) || null);
+    return ok([`# Journal des agents · ${jours} jour(s) · ${rows.length} entrée(s)`, lines(rows.map((e) => `- ${e.quand} · ${e.agent} · ${e.action}${e.detail ? `\n  ${e.detail.replace(/\n/g, "\n  ")}` : ""}`), "Rien de noté.")].join("\n"));
+  },
+};
 
 const mesAgents: Tool = {
   name: "mes_agents",
@@ -1883,8 +1996,8 @@ const notifications: Tool = {
 
 export const TOOLS: Tool[] = [
   pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif, aValider, ecarterProposition,
-  creerTache, cocherTache, creerEvenement, creerMeet, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
-  mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur,
+  creerTache, cocherTache, creerEvenement, creerMeet, brouillonMail, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
+  mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief,
   compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, notifications,
   ...ADMIN_TOOLS,

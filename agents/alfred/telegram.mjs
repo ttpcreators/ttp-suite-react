@@ -11,6 +11,7 @@
 //   node telegram.mjs recevoir             range les nouveaux messages de Marc dans etat/file-recue.txt
 //                                          et affiche leur nombre (0 : rien de nouveau)
 //   node telegram.mjs ecoute               écoute en continu et lance alfred.sh --reponse dès que Marc écrit
+//   node telegram.mjs telecharger <lien>   télécharge et découpe une vidéo (WeTransfer, SwissTransfer, Drive, Dropbox)
 //   node telegram.mjs rappels              envoie les rappels arrivés à échéance (etat/rappels.md)
 //
 // Fichier « …-whatsapp.txt » ou « …-copier.txt » : 1re ligne = intitulé, la suite = texte à copier, mis dans un
@@ -20,7 +21,9 @@
 
 import { execFile, spawn } from "node:child_process";
 import { homedir, tmpdir } from "node:os";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, createWriteStream, openSync, readSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -96,7 +99,7 @@ export function marcMessages(updates, marcId, offset = 0) {
     const reply = cited
       ? `(en réponse à ${cited.from?.is_bot ? "ton message" : "son propre message"}${quoted ? ` : « ${quoted.length > 600 ? `${quoted.slice(0, 600)}…` : quoted} »` : ""})`
       : null;
-    kept.push({ at: new Date(Number(m.date) * 1000), text, ...(voice ? { voice } : {}), ...(media ? { media } : {}), ...(reply ? { reply } : {}) });
+    kept.push({ id: Number(m.message_id) || null, at: new Date(Number(m.date) * 1000), text, ...(voice ? { voice } : {}), ...(media ? { media } : {}), ...(reply ? { reply } : {}) });
   }
   return { kept, next };
 }
@@ -120,14 +123,18 @@ export function mediaOf(m) {
   return null;
 }
 
-/** Instants (en secondes) des images à extraire d'une vidéo : l'accroche de près, puis le reste. */
+/**
+ * Instants (en secondes) des images à extraire d'une vidéo, pour la voir quasiment en entier :
+ * l'accroche toutes les demi-secondes (3 premières secondes), puis une image par seconde
+ * jusqu'à 90 s ; au delà, environ 60 images réparties sur toute la durée.
+ */
 export function frameTimes(duration) {
   const d = Math.max(0, Number(duration) || 0);
-  const hook = [0, 0.5, 1, 1.5, 2.5].filter((t) => t < d);
-  const step = Math.max(2, Math.ceil(d / 16));
+  const hook = [0, 0.5, 1, 1.5, 2, 2.5].filter((t) => t < d);
+  const step = d <= 90 ? 1 : Math.ceil(d / 60);
   const rest = [];
-  for (let t = 4; t < d - 0.3; t += step) rest.push(t);
-  if (d > 4) rest.push(Math.max(0, d - 0.5));
+  for (let t = 3; t < d - 0.3; t += step) rest.push(t);
+  if (d > 3 && (rest.length === 0 || d - 0.5 - rest[rest.length - 1] > 0.4)) rest.push(Math.max(0, Math.round((d - 0.5) * 10) / 10));
   return [...hook, ...rest];
 }
 
@@ -246,17 +253,151 @@ export async function decouperVideo(src, dir, model) {
   return `vidéo prête dans ${dir} : ${duration ? `${Math.round(duration)} s` : "durée inconnue"}${size ? `, ${size[1]}×${size[2]}` : ""}, ${n} images dans images/ (nommées par leur instant, l'accroche de près), ${parole}`;
 }
 
+const VIDEO_EXT = /\.(mp4|mov|m4v|webm|avi|mkv)$/i;
+const LIEN_MAX = 3 * 1024 * 1024 * 1024; // 3 Go au plus par vidéo
+
+/** Premier lien de vidéo dans un texte : WeTransfer, SwissTransfer, Google Drive, Dropbox, ou lien direct vers un fichier vidéo. */
+export function trouverLien(text) {
+  for (const raw of String(text ?? "").match(/https?:\/\/[^\s<>"'»)]+/gi) ?? []) {
+    const url = raw.replace(/[.,;:!?]+$/, "");
+    let h = "";
+    try {
+      h = new URL(url).hostname.toLowerCase();
+    } catch {
+      continue;
+    }
+    if (/(^|\.)wetransfer\.com$|(^|\.)we\.tl$/.test(h)) return { kind: "wetransfer", url };
+    if (/(^|\.)swisstransfer\.com$/.test(h)) return { kind: "swisstransfer", url };
+    if (/^(drive|docs)\.google\.com$/.test(h)) return { kind: "drive", url };
+    if (/(^|\.)dropbox\.com$/.test(h)) return { kind: "dropbox", url };
+    if (VIDEO_EXT.test(new URL(url).pathname)) return { kind: "direct", url };
+  }
+  return null;
+}
+
+/** Lien Google Drive ou Dropbox → lien de téléchargement direct (sans appel réseau). */
+export function lienSimple(kind, url) {
+  if (kind === "drive") {
+    const id = /\/d\/([\w-]{10,})/.exec(url)?.[1] ?? new URL(url).searchParams.get("id");
+    return id ? `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t` : null;
+  }
+  if (kind === "dropbox") {
+    const u = new URL(url);
+    u.searchParams.delete("dl");
+    u.searchParams.set("dl", "1");
+    return u.toString();
+  }
+  return url;
+}
+
+const UA = { "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" };
+
+/** Lien WeTransfer (y compris we.tl) → lien de téléchargement direct. */
+async function lienWetransfer(url) {
+  let full = url;
+  if (/we\.tl$/i.test(new URL(url).hostname)) full = (await fetch(url, { headers: UA, redirect: "follow" })).url;
+  const parts = new URL(full).pathname.split("/").filter(Boolean); // downloads/<transfert>/[<destinataire>/]<hash>
+  const i = parts.indexOf("downloads");
+  const p = i >= 0 ? parts.slice(i + 1) : [];
+  if (p.length < 2) throw new Error("lien WeTransfer illisible");
+  const [transferId, recipientId, hash] = p.length >= 3 ? p : [p[0], null, p[1]];
+  // Session du site (cookies, et jeton anti-CSRF s'il y en a un).
+  const home = await fetch("https://wetransfer.com/", { headers: UA });
+  const cookies = (home.headers.getSetCookie?.() ?? []).map((c) => c.split(";")[0]).join("; ");
+  const csrf = /name="csrf-token" content="([^"]+)"/.exec(await home.text())?.[1];
+  const res = await fetch(`https://wetransfer.com/api/v4/transfers/${transferId}/download`, {
+    method: "POST",
+    headers: { ...UA, "content-type": "application/json", "x-requested-with": "XMLHttpRequest", ...(cookies ? { cookie: cookies } : {}), ...(csrf ? { "x-csrf-token": csrf } : {}) },
+    body: JSON.stringify({ intent: "entire_transfer", security_hash: hash, ...(recipientId ? { recipient_id: recipientId } : {}) }),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!j.direct_link) throw new Error(`WeTransfer refuse le téléchargement (${j.message ?? j.error ?? res.status} : lien expiré ou protégé ?)`);
+  return j.direct_link;
+}
+
+/** Lien SwissTransfer → lien direct de la plus grosse vidéo du transfert. */
+async function lienSwisstransfer(url) {
+  const linkId = /\/d\/([0-9a-f-]{20,})/i.exec(url)?.[1];
+  if (!linkId) throw new Error("lien SwissTransfer illisible");
+  const res = await fetch(`https://www.swisstransfer.com/api/links/${linkId}`, { headers: { ...UA, accept: "application/json" } });
+  const j = await res.json().catch(() => ({}));
+  const data = j.data ?? j;
+  const files = data?.container?.files ?? data?.files ?? [];
+  if (!files.length) throw new Error(`SwissTransfer ne donne pas les fichiers (${res.status} : lien expiré ou protégé par mot de passe ?)`);
+  const size = (f) => Number(f.fileSizeInBytes ?? f.receivedSizeInBytes ?? f.size ?? 0);
+  const videos = files.filter((f) => VIDEO_EXT.test(String(f.fileName ?? f.name ?? "")) || /^video\//.test(String(f.mimeType ?? "")));
+  const f = (videos.length ? videos : files).sort((a, b) => size(b) - size(a))[0];
+  const host = data.downloadHost ?? "dl.swisstransfer.com";
+  return `https://${host}/api/download/${linkId}/${f.UUID ?? f.uuid}`;
+}
+
+/** Télécharge un fichier en flux (gros fichiers sans tout garder en mémoire). Renvoie le chemin. */
+async function telechargerFlux(url, dir) {
+  const res = await fetch(url, { headers: UA, redirect: "follow" });
+  if (!res.ok || !res.body) throw new Error(`téléchargement refusé (${res.status})`);
+  const len = Number(res.headers.get("content-length") ?? 0);
+  if (len > LIEN_MAX) throw new Error(`fichier de ${Math.round(len / 1073741824)} Go, trop lourd`);
+  const cd = res.headers.get("content-disposition") ?? "";
+  const nom = decodeURIComponent(/filename\*=UTF-8''([^;]+)/i.exec(cd)?.[1] ?? /filename="?([^";]+)"?/i.exec(cd)?.[1] ?? new URL(res.url).pathname.split("/").pop() ?? "");
+  const ext = (/\.[a-z0-9]{2,4}$/i.exec(nom)?.[0] ?? (/zip/.test(res.headers.get("content-type") ?? "") ? ".zip" : ".mp4")).toLowerCase();
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, `source${ext}`);
+  await pipeline(Readable.fromWeb(res.body), createWriteStream(path));
+  return path;
+}
+
+/** Plus gros fichier vidéo d'un dossier (après un zip). */
+function plusGrosseVideo(dir) {
+  let best = null;
+  const walk = (d) => {
+    for (const n of readdirSync(d, { withFileTypes: true })) {
+      const p = join(d, n.name);
+      if (n.isDirectory()) walk(p);
+      else if (VIDEO_EXT.test(n.name) && !n.name.startsWith("._") && (!best || statSync(p).size > best.size)) best = { p, size: statSync(p).size };
+    }
+  };
+  walk(dir);
+  return best?.p ?? null;
+}
+
+/** Lien de vidéo (transfert, Drive, Dropbox, direct) → vidéo téléchargée et découpée dans `dir`. */
+export async function telechargerVideo(lien, dir, model) {
+  try {
+    const direct = lien.kind === "wetransfer" ? await lienWetransfer(lien.url) : lien.kind === "swisstransfer" ? await lienSwisstransfer(lien.url) : lienSimple(lien.kind, lien.url);
+    if (!direct) return `lien ${lien.kind} illisible`;
+    let src = await telechargerFlux(direct, dir);
+    // Un transfert de plusieurs fichiers arrive en zip : on prend la plus grosse vidéo.
+    const head = Buffer.alloc(2);
+    const fd = openSync(src, "r");
+    readSync(fd, head, 0, 2, 0);
+    closeSync(fd);
+    if (src.endsWith(".zip") || head.toString() === "PK") {
+      const out = join(dir, "zip");
+      mkdirSync(out, { recursive: true });
+      await promisify(execFile)("unzip", ["-o", "-q", src, "-d", out]);
+      const v = plusGrosseVideo(out);
+      if (!v) return `le transfert ne contient pas de vidéo (fichiers dans ${out})`;
+      src = v;
+    }
+    return await decouperVideo(src, dir, model);
+  } catch (e) {
+    return `lien ${lien.kind} impossible à ouvrir : ${e.message}`;
+  }
+}
+
 /** Envoie un fichier à Marc (contrat rédigé, document), 50 Mo au plus. */
-async function sendDocument(token, chatId, path, name) {
+async function sendDocument(token, chatId, path, name, replyTo = null) {
   const form = new FormData();
   form.append("chat_id", String(chatId));
+  if (replyTo) form.append("reply_parameters", JSON.stringify({ message_id: replyTo, allow_sending_without_reply: true }));
   form.append("document", new Blob([readFileSync(path)]), name);
   const res = await fetch(`https://api.telegram.org/bot${token}/sendDocument`, { method: "POST", body: form }).then((r) => r.json());
   if (!res.ok) throw new Error(`Telegram a refusé le document ${name} : ${res.description ?? "erreur inconnue"}`);
 }
 
-async function send(token, chatId, msg) {
-  const call = (body) => api(token, "sendMessage", { chat_id: chatId, disable_web_page_preview: true, ...body });
+async function send(token, chatId, msg, replyTo = null) {
+  const cite = replyTo ? { reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } } : {};
+  const call = (body) => api(token, "sendMessage", { chat_id: chatId, disable_web_page_preview: true, ...cite, ...body });
   let res = await call(msg.md ? { text: msg.text, parse_mode: "MarkdownV2" } : { text: msg.text });
   // Mise en forme refusée : on renvoie le même texte, sans mise en forme.
   if (!res.ok && msg.md) res = await call({ text: msg.plain });
@@ -299,6 +440,14 @@ async function main() {
       m.text = dit ? `(vocal) ${dit}${m.text ? `\n${m.text}` : ""}` : `(vocal que je n'ai pas réussi à transcrire)${m.text ? `\n${m.text}` : ""}`;
     }
     for (const [i, m] of kept.entries()) {
+      const lien = m.media ? null : trouverLien(m.text);
+      if (!lien) continue;
+      api(token, "sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
+      const id = new Date(m.at).toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-");
+      const prete = await telechargerVideo(lien, join(here, "etat", "previews", `${id}-lien${i}`), model);
+      m.text = `(lien vidéo ${lien.kind} : ${prete.replace(join(here, ""), "")})\n${m.text}`;
+    }
+    for (const [i, m] of kept.entries()) {
       if (!m.media) continue;
       api(token, "sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
       const id = new Date(m.at).toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-");
@@ -309,12 +458,24 @@ async function main() {
     for (const m of kept) {
       const full = m.reply ? `${m.reply}\n${m.text}` : m.text;
       appendFileSync(join(here, "etat/file-recue.txt"), `[${stamp(m.at)}] ${full}\n\n`);
+      // Pour qu'Alfred réponde en citant ce message (comme « Répondre » sur Telegram).
+      if (m.id) appendFileSync(join(here, "etat/file-recue-ids.txt"), `${m.id}\n`);
       appendFileSync(fil, `\n### ${stamp(m.at)} · Marc\n${full}\n`);
     }
     // L'offset n'avance qu'une fois les messages rangés : rien ne se perd si on s'arrête avant.
     if (next !== offset) writeFileSync(offsetFile, String(next));
     return kept.length;
   };
+
+  // Alfred lui même (lien de preview trouvé dans un mail) : node telegram.mjs telecharger <lien>
+  if (mode === "telecharger") {
+    const lien = trouverLien(arg ?? "");
+    if (!lien) return console.log("Lien non reconnu : WeTransfer, SwissTransfer, Google Drive, Dropbox ou lien direct vers une vidéo.");
+    const id = new Date().toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-");
+    const model = env.WHISPER_MODEL || join(homedir(), ".cache/whisper-cpp/ggml-large-v3-turbo-q5_0.bin");
+    console.log((await telechargerVideo(lien, join(here, "etat", "previews", `${id}-mail`), model)).replace(join(here, ""), ""));
+    return;
+  }
 
   if (mode === "recevoir") {
     console.log(await ranger(0));
@@ -358,13 +519,18 @@ async function main() {
       else messages.push({ file: join(dir, name), name });
     }
   } else throw new Error("Usage : node telegram.mjs dossier <chemin> | texte <message> | recevoir | rappels | ecoute");
+  // Réponse à Marc : le premier message cite son dernier message (comme « Répondre »).
+  const ids = mode === "dossier" && existsSync(join(here, "etat/recu-ids.txt")) ? readFileSync(join(here, "etat/recu-ids.txt"), "utf8").split("\n").map(Number).filter(Boolean) : [];
+  let replyTo = ids.length ? ids[ids.length - 1] : null;
   for (const m of messages) {
     if (m.file) {
-      await sendDocument(token, chatId, m.file, m.name);
+      await sendDocument(token, chatId, m.file, m.name, replyTo);
+      replyTo = null;
       appendFileSync(fil, `\n### ${stamp()} · Alfred\n(document envoyé : ${m.name})\n`);
       continue;
     }
-    await send(token, chatId, m);
+    await send(token, chatId, m, replyTo);
+    replyTo = null;
     appendFileSync(fil, `\n### ${stamp()} · Alfred\n${m.plain ?? m.text}\n`);
   }
   console.log(`${messages.length} message(s) envoyé(s) à Marc sur Telegram.`);
