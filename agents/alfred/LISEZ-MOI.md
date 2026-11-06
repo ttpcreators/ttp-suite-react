@@ -21,7 +21,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Réflexion | Vérifie ses sources (app, mails, mémoire, web), croise, recalcule, cite d'où vient chaque info |
 | Valider un contenu | Marc transfère la preview d'un créateur : images de la vidéo (accroche de près) et transcription horodatée préparées sur le Mac, comparées au brief et aux mails ; verdict, points bloquants, améliorations, détails, et le message au créateur prêt à copier. Une image par seconde (jusqu'à 90 s). Sur Telegram : 20 Mo au plus (limite des bots) ; au delà, un lien WeTransfer, SwissTransfer, Google Drive ou Dropbox (3 Go au plus) |
 | Descriptions de posts | « Léna me demande une description pour le reel Yade » : deux propositions prêtes à copier, à partir du brief, des mails et du style du créateur |
-| Planning et Meet | Dates de publication, de rendu, de tournage et events demandés par les marques ajoutés au Planning ; rendez vous avec lien Google Meet (`creer_meet`) sur accord de Marc, invitation Google envoyée seulement s'il le dit |
+| Planning et Meet | Dates des marques et rendez vous confirmés (mails, échanges, captures) ajoutés tout seuls au Planning, donc au Google Agenda de partnerships@, avec lien Google Meet pour une visio ; jamais de doublon (refusé par l'app même) ; invitation Google aux participants seulement quand Marc le demande |
 | Roster à jour | Relit les créateurs actifs dans l'app à chaque fois, ne propose jamais quelqu'un qui est parti, annonce les arrivées et départs |
 | Rappels | « Rappelle moi jeudi 15 h… », et ses propres rappels de ce que Marc risque d'oublier |
 | Délégation | « Gère les relances jusqu'à vendredi, tu peux envoyer » : il agit dans ce périmètre et rend compte |
