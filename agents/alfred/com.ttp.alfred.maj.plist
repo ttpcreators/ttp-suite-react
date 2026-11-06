@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Alfred : mise à jour automatique depuis GitHub, chaque nuit à 4 h et au démarrage.
+     Installé par installer.sh (HOME remplacé). -->
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.ttp.alfred.maj</string>
+  <key>ProgramArguments</key><array>
+    <string>/bin/zsh</string>
+    <string>__HOME__/Code/TTPAlfred/mise-a-jour.sh</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>4</integer><key>Minute</key><integer>0</integer></dict>
+</dict></plist>

@@ -48,6 +48,10 @@ Ses consignes de fond et les leçons apprises se règlent aussi dans l'app : Age
 3. Dans Telegram, ouvrir le bot d'Alfred et appuyer sur « Démarrer ».
 4. `./agents/alfred/installer.sh` : copie et programme l'écoute et les passages. À relancer après chaque changement de ces fichiers.
 
+## Mises à jour
+
+Alfred se met à jour tout seul (`mise-a-jour.sh`, launchd `com.ttp.alfred.maj`, chaque nuit à 4 h et au démarrage du Mac) : il regarde sur GitHub la dernière version du dossier `agents/alfred` de `main`, la contrôle, l'installe (sans toucher à `config.env`, `REDACTION.md` ni `etat/`) et prévient Marc sur Telegram. Une nouveauté d'Alfred arrive donc sur le Mac la nuit qui suit sa mise en ligne. Journal : `etat/mises-a-jour.log`. Pour l'appliquer tout de suite : `zsh ~/Code/TTPAlfred/mise-a-jour.sh`.
+
 ## Si Alfred ne répond plus
 
 - Le Mac doit être allumé et pas en veille. Messages et points ratés sont traités au réveil.
