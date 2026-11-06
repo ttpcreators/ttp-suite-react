@@ -15,7 +15,7 @@ import { meetEventBody, meetLinkOf, parseMeetRequest } from "../_shared/meetEven
 import { readAppState } from "../_shared/appState.ts";
 import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
 import type { Ctx } from "./oauth.ts";
-import { boxesFor, createDraft, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
+import { boxesFor, createDraft, deleteClaudeDraft, listClaudeDrafts, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
 import { mailHtml } from "../_shared/mcpAdmin.ts";
 import { guessEventKind } from "../_shared/eventKind.ts";
@@ -539,7 +539,7 @@ const verifierExclusivite: Tool = {
 const rechercherMails: Tool = {
   name: "rechercher_mails",
   title: "Rechercher dans les mails",
-  description: "Cherche dans les boîtes Gmail de l'agence (partnerships@ et talent@). La requête suit la syntaxe Gmail : « from:nike », « is:unread », « newer_than:7d », « subject:contrat », « in:sent », etc. Vide = derniers mails de la boîte de réception. Non lus comptés comme l'app et le point du jour : « in:inbox is:unread -category:promotions -category:social » avec max 25. Renvoie l'id du fil pour lire_mail.",
+  description: "Cherche dans les boîtes Gmail de l'agence (partnerships@ et talent@), spams compris avec « in:spam ». La requête suit la syntaxe Gmail : « from:nike », « is:unread », « newer_than:7d », « subject:contrat », « in:sent », etc. Vide = derniers mails de la boîte de réception. Non lus comptés comme l'app et le point du jour : « in:inbox is:unread -category:promotions -category:social » avec max 25. Renvoie l'id du fil pour lire_mail.",
   inputSchema: {
     type: "object",
     properties: {
@@ -1123,6 +1123,47 @@ const creerMeet: Tool = {
       meetUrl ? `Lien Google Meet : ${meetUrl}` : "Lien Meet pas encore prêt : il apparaîtra dans le Planning d'ici une minute.",
       r.invite ? `Invitation envoyée par Google à ${r.guests.join(", ")}.` : "Aucune invitation envoyée : donne le lien dans ta réponse.",
     ].join("\n"));
+  },
+};
+
+// Brouillons préparés par Claude : la liste, avec ceux auxquels l'agence a déjà répondu
+// elle même (doublons à retirer), et leur suppression (jamais un brouillon écrit à la main).
+const brouillonsClaude: Tool = {
+  name: "brouillons_claude",
+  title: "Brouillons préparés par Claude",
+  description: "Liste les brouillons Gmail préparés par Claude (partnerships@ et talent@) : id, destinataire, objet, fil, date, et « DÉJÀ RÉPONDU » quand l'agence a envoyé un message dans le fil après ce brouillon (il fait doublon : à supprimer avec supprimer_brouillon).",
+  inputSchema: { type: "object", properties: { boite: { type: "string", enum: ["toutes", "partnerships", "talent"] } }, additionalProperties: false },
+  run: async (sb, _c, a) => {
+    const { drafts, errors } = await listClaudeDrafts(sb, str(a.boite) === "toutes" ? undefined : str(a.boite) || undefined);
+    const lines = drafts.map((d) => `- ${d.answered ? "⚠ DÉJÀ RÉPONDU · " : ""}${d.box}@ · à ${d.to} · « ${d.subject} » · ${d.ts ? frDay(new Date(d.ts).toISOString().slice(0, 10)) : ""} · brouillon ${d.id}${d.threadId ? ` · fil ${d.threadId}` : ""}`);
+    return ok([`# Brouillons préparés par Claude · ${drafts.length}${drafts.some((d) => d.answered) ? ` (dont ${drafts.filter((d) => d.answered).length} déjà répondus)` : ""}`, ...(lines.length ? lines : ["Aucun."]), ...errors.map((e) => `⚠ ${e}`)].join("\n"));
+  },
+};
+
+const supprimerBrouillon: Tool = {
+  name: "supprimer_brouillon",
+  title: "Supprimer un brouillon de Claude",
+  description: "Supprime un brouillon Gmail préparé par Claude (id donné par brouillons_claude ou creer_brouillon_mail), par exemple parce que l'agence a déjà répondu elle même dans le fil. Un brouillon écrit à la main est refusé.",
+  write: true,
+  inputSchema: {
+    type: "object",
+    properties: { boite: { type: "string", enum: ["partnerships", "talent"] }, brouillon: { type: "string", description: "Id du brouillon" } },
+    required: ["boite", "brouillon"],
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const box = (str(a.boite) === "talent" ? "talent" : "partnerships") as MailBox;
+    const id = str(a.brouillon, 64);
+    if (!/^[A-Za-z0-9_-]+$/.test(id)) return fail("Id de brouillon invalide.");
+    try {
+      const r = await deleteClaudeDraft(sb, box, id);
+      return ok(`✓ Brouillon supprimé (${box}@, à ${r.to}, « ${r.subject} »).`);
+    } catch (e) {
+      const m = (e as Error).message ?? "";
+      if (m === "not_claude") return fail("Ce brouillon n'a pas été préparé par Claude : il reste en place.");
+      if (/gmail_404/.test(m)) return ok("Ce brouillon n'existe plus (déjà envoyé ou supprimé).");
+      return fail(`Suppression impossible : ${m}`);
+    }
   },
 };
 
@@ -1883,7 +1924,7 @@ const notifications: Tool = {
 
 export const TOOLS: Tool[] = [
   pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif, aValider, ecarterProposition,
-  creerTache, cocherTache, creerEvenement, creerMeet, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
+  creerTache, cocherTache, creerEvenement, creerMeet, brouillonMail, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur,
   lireBrief, resumerBrief,
   compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, notifications,
