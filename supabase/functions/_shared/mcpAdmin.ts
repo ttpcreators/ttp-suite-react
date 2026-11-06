@@ -126,9 +126,13 @@ export function pct(v: unknown): number | null {
 const escHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
 /** Texte → HTML (retours à la ligne, liens cliquables) + signature de l'agence (Réglages Mails). */
 export function mailHtml(text: string, signatureHtml = ""): string {
-  const body = escHtml(text.trim()).replace(/\b(?:https?:\/\/|www\.)[^\s<>"']+[^\s<>"'.,;:!?)]/gi, (u) => `<a href="${/^www\./i.test(u) ? "https://" + u : u}">${u}</a>`);
+  const body = escHtml(text.trim().replace(/\r\n?/g, "\n"))
+    .replace(/\b(?:https?:\/\/|www\.)[^\s<>"']+[^\s<>"'.,;:!?)]/gi, (u) => `<a href="${/^www\./i.test(u) ? "https://" + u : u}">${u}</a>`)
+    // Retours à la ligne en <br> (comme buildHtml de l'app) : Gmail et Spark ignorent
+    // « white-space:pre-line », le mail arrivait en un seul bloc.
+    .replace(/\n/g, "<br>");
   const sig = signatureHtml.trim() ? `<br><div class="ttp-signature">${signatureHtml}</div>` : "";
-  return `<div style="font-family:system-ui,Arial,sans-serif;font-size:14px;line-height:1.6;white-space:pre-line">${body}</div>${sig}`;
+  return `<div style="font-family:system-ui,Arial,sans-serif;font-size:14px;line-height:1.6">${body}</div>${sig}`;
 }
 
 /** Liste d'adresses (« a@b.fr, c@d.com ») ; null si l'une est invalide. */
