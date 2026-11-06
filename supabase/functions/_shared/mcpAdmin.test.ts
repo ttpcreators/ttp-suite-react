@@ -35,6 +35,10 @@ describe("accès complet de Claude", () => {
     expect(h).toContain("&lt;3");
     expect(h).toContain('<a href="https://ttpcreators.pro/mediakit/ana/">');
     expect(h).toContain('<div class="ttp-signature"><b>Marc</b></div>');
+    // Sauts de ligne en <br> (Gmail et Spark ignorent white-space:pre-line), lignes vides gardées.
+    const p = mailHtml("Hello Lorna,\r\n\r\nTop, merci !\nÀ très vite");
+    expect(p).toContain("Hello Lorna,<br><br>Top, merci !<br>À très vite");
+    expect(p).not.toContain("pre-line");
     expect(addressList("A@b.fr, c@d.com")).toEqual(["a@b.fr", "c@d.com"]);
     expect(addressList("pas une adresse")).toBeNull();
   });
