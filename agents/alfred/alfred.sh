@@ -75,14 +75,16 @@ while IFS= read -r ligne; do
 done < etat/delegations.md
 
 # Ce que l'agent a le droit de faire : lire TTP Suite et les media kits du site, préparer des
-# brouillons de mails et des devis, tenir la to-do, la mémoire des créateurs, lire ses fichiers
-# et écrire dans etat/ (Edit couvre aussi Write). Envoyer un brouillon et retenir une leçon :
+# brouillons de mails et des devis, tenir la to-do, les collabs (création, étapes, briefs,
+# contacts, échanges, rendez-vous ; choix de Marc le 2026-11-06 : il le fait et le dit), la
+# mémoire des créateurs, lire ses fichiers et écrire dans etat/ (Edit couvre aussi Write).
+# Jamais : supprimer, régler l'app, factures, envoyer un mail ou un DM sans « oui ». Envoyer un brouillon et retenir une leçon :
 # seulement quand Marc vient d'écrire, ou pendant une délégation avec envoi autorisé.
 ttp="mcp__claude_ai_TTP_Suite__"
 lire="lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
-agir="creer_brouillon_mail preparer_devis creer_tache cocher_tache"
+agir="creer_brouillon_mail preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
 sur_oui="envoyer_brouillon noter_lecon"
-interdits="envoyer_mail envoyer_dm creer_element modifier_element supprimer_element reglages_app preparer_facture avancer_collab ecarter_proposition proposer_action preparer_reponse_mail creer_evenement ajouter_contact noter_echange_contact ajouter_au_scouting changer_statut_scouting resumer_brief"
+interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture ecarter_proposition proposer_action preparer_reponse_mail ajouter_au_scouting changer_statut_scouting resumer_brief"
 allowed=("Read" "Edit(./etat/**)" "WebFetch(domain:ttpcreators.pro)")
 for t in ${=lire} ${=agir}; do allowed+=("$ttp$t"); done
 denied=("Bash" "WebSearch" "mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram")
