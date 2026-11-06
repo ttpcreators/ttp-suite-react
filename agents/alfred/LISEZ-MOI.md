@@ -7,7 +7,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Répond tout de suite quand Marc lui écrit | Écoute Telegram en continu, lance Claude dès qu'un message arrive ; sa réponse cite le message de Marc (comme « Répondre ») |
 | Comprend les vocaux de Marc | Transcrits sur le Mac (whisper.cpp et ffmpeg, gratuit, sans internet), puis traités comme un message écrit |
 | Le point à 9 h et 17 h en semaine | Mails des marques et DM, devis, factures en retard, créateurs, argent à aller chercher |
-| Réponses aux mails, relances | Brouillons Gmail montrés sur Telegram ; envoyés seulement sur « oui Marque » de Marc |
+| Réponses aux mails, relances | Brouillons Gmail montrés sur Telegram, avec un lien qui les ouvre dans Spark (Marc peut les envoyer lui même) ; envoyés par Alfred seulement sur « oui Marque » de Marc |
 | Brouillons en double | Quand Marc a répondu lui même dans un fil, Alfred supprime son brouillon devenu inutile (jamais un brouillon écrit par Marc) |
 | Spams | Fouille les spams à chaque point pour repêcher les vraies demandes de marques |
 | Captures d'écran | Marc envoie des captures d'une discussion (WhatsApp, Instagram, LinkedIn) : Alfred les lit, retrouve le contexte et prépare la réponse à copier |

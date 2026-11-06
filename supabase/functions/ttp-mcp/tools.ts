@@ -15,9 +15,9 @@ import { meetEventBody, meetLinkOf, parseMeetRequest } from "../_shared/meetEven
 import { readAppState } from "../_shared/appState.ts";
 import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
 import type { Ctx } from "./oauth.ts";
-import { boxesFor, createDraft, deleteClaudeDraft, listClaudeDrafts, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
+import { boxAddress, boxesFor, createDraft, deleteClaudeDraft, draftRefs, listClaudeDrafts, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
-import { mailHtml } from "../_shared/mcpAdmin.ts";
+import { mailHtml, sparkLink } from "../_shared/mcpAdmin.ts";
 import { guessEventKind } from "../_shared/eventKind.ts";
 import { comptaSummary, type ComptaInv } from "../_shared/compta.ts";
 import { activityText } from "../_shared/activityText.ts";
@@ -1135,7 +1135,10 @@ const brouillonsClaude: Tool = {
   inputSchema: { type: "object", properties: { boite: { type: "string", enum: ["toutes", "partnerships", "talent"] } }, additionalProperties: false },
   run: async (sb, _c, a) => {
     const { drafts, errors } = await listClaudeDrafts(sb, str(a.boite) === "toutes" ? undefined : str(a.boite) || undefined);
-    const lines = drafts.map((d) => `- ${d.answered ? "⚠ DÉJÀ RÉPONDU · " : ""}${d.box}@ · à ${d.to} · « ${d.subject} » · ${d.ts ? frDay(new Date(d.ts).toISOString().slice(0, 10)) : ""} · brouillon ${d.id}${d.threadId ? ` · fil ${d.threadId}` : ""}`);
+    const lines = drafts.map((d) => {
+      const spark = sparkLink(boxAddress(d.box), d.rfcId, d.messageId);
+      return `- ${d.answered ? "⚠ DÉJÀ RÉPONDU · " : ""}${d.box}@ · à ${d.to} · « ${d.subject} » · ${d.ts ? frDay(new Date(d.ts).toISOString().slice(0, 10)) : ""} · brouillon ${d.id}${d.threadId ? ` · fil ${d.threadId}` : ""}${spark ? ` · Spark : ${spark}` : ""}`;
+    });
     return ok([`# Brouillons préparés par Claude · ${drafts.length}${drafts.some((d) => d.answered) ? ` (dont ${drafts.filter((d) => d.answered).length} déjà répondus)` : ""}`, ...(lines.length ? lines : ["Aucun."]), ...errors.map((e) => `⚠ ${e}`)].join("\n"));
   },
 };
@@ -1203,7 +1206,15 @@ const brouillonMail: Tool = {
       const how = r.replaced
         ? `Brouillon MIS À JOUR dans ${box}@ (il remplace celui déjà préparé pour ${to}, aucun doublon${r.removed ? `, ${r.removed} ancien${r.removed > 1 ? "s" : ""} doublon${r.removed > 1 ? "s" : ""} supprimé${r.removed > 1 ? "s" : ""}` : ""})`
         : `Brouillon prêt dans ${box}@ pour ${to}`;
-      return ok(`${how} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail ou l'app (Mails, dossier Brouillons).${r.id ? ` Id du brouillon : ${r.id}.` : ""}`);
+      // Liens pour l'ouvrir tout de suite : dans Spark (l'app mail de Marc) et dans les Mails de l'app.
+      let liens = "";
+      if (r.id) {
+        const refs = await draftRefs(sb, box, r.id).catch(() => null);
+        const spark = refs ? sparkLink(boxAddress(box), refs.rfcId, refs.messageId) : "";
+        const thread = fil || refs?.threadId || "";
+        liens = `${spark ? `\nOuvrir dans Spark : ${spark}` : ""}${thread ? `\nOuvrir dans l'app : https://app.ttpcreators.pro/?open=mails&thread=${thread}&box=${box}` : ""}`;
+      }
+      return ok(`${how} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail, Spark ou l'app (Mails, dossier Brouillons).${r.id ? ` Id du brouillon : ${r.id}.` : ""}${liens}`);
     } catch (e) {
       return fail(`Brouillon non créé : ${(e as Error).message}`);
     }

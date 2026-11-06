@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressList, blockedSetting, euro2, invoiceParty, invoiceTotals, mailHtml, nextInvoiceRef, nextQuoteRef, pct, readableRow, writableFields } from "./mcpAdmin.ts";
+import { addressList, blockedSetting, euro2, invoiceParty, invoiceTotals, mailHtml, nextInvoiceRef, nextQuoteRef, pct, sparkLink, readableRow, writableFields } from "./mcpAdmin.ts";
 
 describe("accès complet de Claude", () => {
   it("champs modifiables : jamais l'id, la synchro Google ni un secret", () => {
@@ -39,6 +39,10 @@ describe("accès complet de Claude", () => {
     const p = mailHtml("Hello Lorna,\r\n\r\nTop, merci !\nÀ très vite");
     expect(p).toContain("Hello Lorna,<br><br>Top, merci !<br>À très vite");
     expect(p).not.toContain("pre-line");
+    // Lien Spark : même jeton que celui que Spark ouvre (vérifié sur un vrai brouillon).
+    expect(sparkLink("partnerships@ttpcreators.pro", "<CAJx0e2ZtGOFUs=ZjaN-gnguRAsHy9OyhsR+bRDh6xwLY02UJxg@mail.gmail.com>", "1a1ae2f80e638772"))
+      .toBe("https://sparkmailapp.com/dpl/bl?token=QTpwYXJ0bmVyc2hpcHNAdHRwY3JlYXRvcnMucHJvO0lEOkNBSngwZTJadEdPRlVzPVpqYU4tZ25ndVJBc0h5OU95aHNSK2JSRGg2eHdMWTAyVUp4Z0BtYWlsLmdtYWlsLmNvbTtnSUQ6MTg4MTA2NTM0OTQwMTc3MzkzOA%3D%3D");
+    expect(sparkLink("", "x@y", "1a1a")).toBe("");
     expect(addressList("A@b.fr, c@d.com")).toEqual(["a@b.fr", "c@d.com"]);
     expect(addressList("pas une adresse")).toBeNull();
   });

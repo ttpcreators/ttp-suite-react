@@ -250,7 +250,19 @@ export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, 
   return { id: String(res.id ?? ""), replaced: false, removed: 0 };
 }
 
-export type ClaudeDraft = { box: MailBox; id: string; to: string; subject: string; threadId: string; ts: number; answered: boolean };
+/** Adresse de la boîte (pour les liens Spark). */
+export function boxAddress(box: MailBox): string {
+  return box === "talent" ? talentAddress() : "partnerships@ttpcreators.pro";
+}
+
+/** Références d'un brouillon : id Gmail du message, son Message-ID et son fil (liens Spark et app). */
+export async function draftRefs(sb: SupabaseClient, box: MailBox, draftId: string): Promise<{ messageId: string; rfcId: string; threadId: string }> {
+  const token = await tokenFor(sb, box, "read");
+  const d = (await gjson(token, `${GMAIL}/drafts/${encodeURIComponent(draftId)}?format=metadata&metadataHeaders=Message-ID`)) as DraftRes;
+  return { messageId: String(d.message?.id ?? ""), rfcId: header(d.message?.payload?.headers, "message-id"), threadId: String(d.message?.threadId ?? "") };
+}
+
+export type ClaudeDraft = { box: MailBox; id: string; to: string; subject: string; threadId: string; ts: number; answered: boolean; messageId: string; rfcId: string };
 
 /**
  * Brouillons préparés par Claude (X-TTP-Source: claude), avec `answered` = quelqu'un de l'agence
@@ -278,7 +290,7 @@ export async function listClaudeDrafts(sb: SupabaseClient, box: string | undefin
             answered = ((t.messages as Msg[] | undefined) ?? []).some((m) =>
               m.labelIds?.includes("SENT") && !m.labelIds?.includes("DRAFT") && Number(m.internalDate ?? 0) > ts);
           }
-          return { box: b, id, to: header(h, "to"), subject: header(h, "subject") || "(sans objet)", threadId, ts, answered } as ClaudeDraft;
+          return { box: b, id, to: header(h, "to"), subject: header(h, "subject") || "(sans objet)", threadId, ts, answered, messageId: String(d.message?.id ?? ""), rfcId: header(h, "message-id") } as ClaudeDraft;
         } catch {
           return null;
         }
