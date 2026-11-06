@@ -1406,7 +1406,8 @@ async function agentJournalSince(sb: SupabaseClient, jours: number, agentKey: st
   const db = sb.schema("agent");
   const agents = ((await db.from("agents").select("id, nom")).data as { id: string; nom: string }[] | null) ?? [];
   const names = new Map(agents.map((x) => [x.id, x.nom]));
-  let q = db.from("journal").select("action, detail, cree_le, agent_id").gte("cree_le", new Date(Date.now() - jours * 86400000).toISOString()).order("cree_le", { ascending: false }).limit(200);
+  // « agent_session » (consignes relues à chaque démarrage d'un agent) : du bruit, masqué ici.
+  let q = db.from("journal").select("action, detail, cree_le, agent_id").neq("action", "agent_session").gte("cree_le", new Date(Date.now() - jours * 86400000).toISOString()).order("cree_le", { ascending: false }).limit(200);
   if (agentKey) {
     const ag = await findAgent(sb, agentKey);
     if (!ag) return [];
