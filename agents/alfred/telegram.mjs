@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 // Telegram d'Alfred : SON propre bot (pas celui de Megan), et seulement avec Marc.
+// Les vocaux de Marc sont transcrits sur le Mac (whisper.cpp, modèle WHISPER_MODEL de config.env,
+// sinon ~/.cache/whisper-cpp/ggml-large-v3-turbo-q5_0.bin).
 // Aucun secret ici : le jeton du bot (ALFRED_BOT_TOKEN) et l'identifiant de Marc
 // (TELEGRAM_CHAT_ID) sont dans config.env, sur le Mac seulement.
 //
@@ -14,9 +16,11 @@
 // bloc de code (un toucher le copie sur Telegram). Les autres partent en texte simple.
 // Tout ce qui part et tout ce qui arrive est ajouté à etat/conversation.md (le fil).
 
-import { spawn } from "node:child_process";
-import { appendFileSync, existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { execFile, spawn } from "node:child_process";
+import { homedir, tmpdir } from "node:os";
+import { appendFileSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { promisify } from "node:util";
 
 const LIMIT = 4000; // Telegram plafonne à 4096 caractères par message.
 
@@ -69,7 +73,8 @@ export function messagesFor(name, content) {
 }
 
 /**
- * Messages reçus à garder : seulement ceux de Marc (son identifiant), en privé, avec du texte.
+ * Messages reçus à garder : seulement ceux de Marc (son identifiant), en privé, avec du texte
+ * ou un vocal (`voice` : son identifiant de fichier Telegram, transcrit ensuite).
  * Renvoie aussi le prochain « offset » pour ne jamais relire deux fois les mêmes.
  */
 export function marcMessages(updates, marcId, offset = 0) {
@@ -79,9 +84,16 @@ export function marcMessages(updates, marcId, offset = 0) {
     next = Math.max(next, Number(u.update_id) + 1);
     const m = u.message ?? u.edited_message;
     if (!m || String(m.from?.id) !== String(marcId) || m.chat?.type !== "private") continue;
+    const voice = m.voice?.file_id ?? m.audio?.file_id ?? null;
     const text = String(m.text ?? m.caption ?? "").trim();
-    if (!text || text === "/start") continue;
-    kept.push({ at: new Date(Number(m.date) * 1000), text });
+    if ((!text && !voice) || text === "/start") continue;
+    // « Répondre » sur un message : on garde le passage cité (ou tout le message) pour le contexte.
+    const cited = m.reply_to_message;
+    const quoted = String(m.quote?.text ?? cited?.text ?? cited?.caption ?? "").replace(/\s+/g, " ").trim();
+    const reply = cited
+      ? `(en réponse à ${cited.from?.is_bot ? "ton message" : "son propre message"}${quoted ? ` : « ${quoted.length > 600 ? `${quoted.slice(0, 600)}…` : quoted} »` : ""})`
+      : null;
+    kept.push({ at: new Date(Number(m.date) * 1000), text, ...(voice ? { voice } : {}), ...(reply ? { reply } : {}) });
   }
   return { kept, next };
 }
@@ -115,6 +127,29 @@ function api(token, method, body) {
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
   }).then((r) => r.json());
+}
+
+/**
+ * Vocal de Marc → texte, sur le Mac (whisper.cpp, gratuit, sans internet) : téléchargé depuis
+ * Telegram, converti en WAV 16 kHz par ffmpeg, transcrit en français. null si ça échoue.
+ */
+async function transcrire(token, fileId, model) {
+  const run = promisify(execFile);
+  try {
+    const f = await api(token, "getFile", { file_id: fileId });
+    if (!f.ok) return null;
+    const res = await fetch(`https://api.telegram.org/file/bot${token}/${f.result.file_path}`);
+    if (!res.ok) return null;
+    const base = join(tmpdir(), `alfred-vocal-${Date.now()}`);
+    writeFileSync(`${base}.oga`, Buffer.from(await res.arrayBuffer()));
+    await run("ffmpeg", ["-y", "-loglevel", "error", "-i", `${base}.oga`, "-ar", "16000", "-ac", "1", `${base}.wav`]);
+    const { stdout } = await run("whisper-cli", ["-m", model, "-f", `${base}.wav`, "-l", "fr", "-nt", "-np"], { maxBuffer: 10 * 1024 * 1024 });
+    for (const ext of ["oga", "wav"]) rmSync(`${base}.${ext}`, { force: true });
+    const text = stdout.replace(/\s+/g, " ").trim();
+    return text || null;
+  } catch {
+    return null;
+  }
 }
 
 async function send(token, chatId, msg) {
@@ -154,9 +189,16 @@ async function main() {
     const res = await api(token, "getUpdates", { offset, timeout, allowed_updates: ["message", "edited_message"] });
     if (!res.ok) throw Object.assign(new Error(`Telegram : ${res.description ?? "lecture impossible"}`), { code: res.error_code });
     const { kept, next } = marcMessages(res.result, chatId, offset);
+    const model = env.WHISPER_MODEL || join(homedir(), ".cache/whisper-cpp/ggml-large-v3-turbo-q5_0.bin");
     for (const m of kept) {
-      appendFileSync(join(here, "etat/file-recue.txt"), `[${stamp(m.at)}] ${m.text}\n\n`);
-      appendFileSync(fil, `\n### ${stamp(m.at)} · Marc\n${m.text}\n`);
+      if (!m.voice) continue;
+      const dit = await transcrire(token, m.voice, model);
+      m.text = dit ? `(vocal) ${dit}${m.text ? `\n${m.text}` : ""}` : `(vocal que je n'ai pas réussi à transcrire)${m.text ? `\n${m.text}` : ""}`;
+    }
+    for (const m of kept) {
+      const full = m.reply ? `${m.reply}\n${m.text}` : m.text;
+      appendFileSync(join(here, "etat/file-recue.txt"), `[${stamp(m.at)}] ${full}\n\n`);
+      appendFileSync(fil, `\n### ${stamp(m.at)} · Marc\n${full}\n`);
     }
     // L'offset n'avance qu'une fois les messages rangés : rien ne se perd si on s'arrête avant.
     if (next !== offset) writeFileSync(offsetFile, String(next));
