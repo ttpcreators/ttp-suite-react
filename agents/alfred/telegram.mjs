@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Telegram d'Alfred : SON propre bot (pas celui de Megan), et seulement avec Marc.
 // Les vocaux de Marc sont transcrits sur le Mac (whisper.cpp, modèle WHISPER_MODEL de config.env,
-// sinon ~/.cache/whisper-cpp/ggml-large-v3-turbo-q5_0.bin).
+// sinon ~/.cache/whisper-cpp/ggml-large-v3-turbo-q5_0.bin). Une vidéo (preview d'un créateur),
+// une image ou un PDF est préparé dans etat/previews/ (images de la vidéo, transcription horodatée).
 // Aucun secret ici : le jeton du bot (ALFRED_BOT_TOKEN) et l'identifiant de Marc
 // (TELEGRAM_CHAT_ID) sont dans config.env, sur le Mac seulement.
 //
@@ -19,7 +20,7 @@
 
 import { execFile, spawn } from "node:child_process";
 import { homedir, tmpdir } from "node:os";
-import { appendFileSync, existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
@@ -86,17 +87,48 @@ export function marcMessages(updates, marcId, offset = 0) {
     const m = u.message ?? u.edited_message;
     if (!m || String(m.from?.id) !== String(marcId) || m.chat?.type !== "private") continue;
     const voice = m.voice?.file_id ?? m.audio?.file_id ?? null;
+    const media = mediaOf(m);
     const text = String(m.text ?? m.caption ?? "").trim();
-    if ((!text && !voice) || text === "/start") continue;
+    if ((!text && !voice && !media) || text === "/start") continue;
     // « Répondre » sur un message : on garde le passage cité (ou tout le message) pour le contexte.
     const cited = m.reply_to_message;
     const quoted = String(m.quote?.text ?? cited?.text ?? cited?.caption ?? "").replace(/\s+/g, " ").trim();
     const reply = cited
       ? `(en réponse à ${cited.from?.is_bot ? "ton message" : "son propre message"}${quoted ? ` : « ${quoted.length > 600 ? `${quoted.slice(0, 600)}…` : quoted} »` : ""})`
       : null;
-    kept.push({ at: new Date(Number(m.date) * 1000), text, ...(voice ? { voice } : {}), ...(reply ? { reply } : {}) });
+    kept.push({ at: new Date(Number(m.date) * 1000), text, ...(voice ? { voice } : {}), ...(media ? { media } : {}), ...(reply ? { reply } : {}) });
   }
   return { kept, next };
+}
+
+/**
+ * Pièce jointe à analyser (preview d'un créateur, capture, PDF) : vidéo, note vidéo, GIF,
+ * photo (la plus grande) ou document vidéo, image ou PDF. null sinon.
+ */
+export function mediaOf(m) {
+  const v = m.video ?? m.video_note ?? m.animation;
+  if (v?.file_id) return { fileId: v.file_id, kind: "video", name: v.file_name ?? "video.mp4", size: Number(v.file_size ?? 0) };
+  if (Array.isArray(m.photo) && m.photo.length) {
+    const p = m.photo[m.photo.length - 1];
+    return { fileId: p.file_id, kind: "image", name: "image.jpg", size: Number(p.file_size ?? 0) };
+  }
+  const d = m.document;
+  const mime = String(d?.mime_type ?? "");
+  if (d?.file_id && /^(video\/|image\/|application\/pdf)/.test(mime)) {
+    return { fileId: d.file_id, kind: mime.startsWith("video/") ? "video" : mime.startsWith("image/") ? "image" : "pdf", name: d.file_name ?? "fichier", size: Number(d.file_size ?? 0) };
+  }
+  return null;
+}
+
+/** Instants (en secondes) des images à extraire d'une vidéo : l'accroche de près, puis le reste. */
+export function frameTimes(duration) {
+  const d = Math.max(0, Number(duration) || 0);
+  const hook = [0, 0.5, 1, 1.5, 2.5].filter((t) => t < d);
+  const step = Math.max(2, Math.ceil(d / 16));
+  const rest = [];
+  for (let t = 4; t < d - 0.3; t += step) rest.push(t);
+  if (d > 4) rest.push(Math.max(0, d - 0.5));
+  return [...hook, ...rest];
 }
 
 /**
@@ -153,6 +185,67 @@ async function transcrire(token, fileId, model) {
   }
 }
 
+const TELEGRAM_MAX = 20 * 1024 * 1024; // un bot ne peut pas télécharger plus de 20 Mo
+const mmss = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}${t % 1 ? `.${Math.round((t % 1) * 10)}` : ""}`;
+
+/**
+ * Prépare une pièce jointe pour qu'Alfred l'analyse, dans `dir` (etat/previews/…) :
+ * vidéo → images (accroche de près puis toute la vidéo, nommées par leur instant) et
+ * transcription horodatée (whisper) ; image ou PDF → enregistré tel quel. Renvoie une
+ * ligne qui dit ce qui est prêt, ou ce qui a coincé.
+ */
+async function preparerMedia(token, media, dir, model) {
+  const run = promisify(execFile);
+  if (media.size > TELEGRAM_MAX) return `fichier de ${Math.round(media.size / 1048576)} Mo, trop lourd pour Telegram (20 Mo au plus) : demande un lien ou une version plus légère`;
+  try {
+    const f = await api(token, "getFile", { file_id: media.fileId });
+    if (!f.ok) return `fichier impossible à récupérer (${f.description ?? "Telegram"})`;
+    const res = await fetch(`https://api.telegram.org/file/bot${token}/${f.result.file_path}`);
+    if (!res.ok) return "fichier impossible à télécharger";
+    mkdirSync(dir, { recursive: true });
+    const ext = (String(f.result.file_path).match(/\.[a-z0-9]+$/i)?.[0] ?? (media.kind === "pdf" ? ".pdf" : media.kind === "image" ? ".jpg" : ".mp4")).toLowerCase();
+    const src = join(dir, `source${ext}`);
+    writeFileSync(src, Buffer.from(await res.arrayBuffer()));
+    if (media.kind !== "video") return `${media.kind === "pdf" ? "PDF" : "image"} enregistré : ${src}`;
+    return await decouperVideo(src, dir, model);
+  } catch (e) {
+    return `préparation impossible (${e.message})`;
+  }
+}
+
+/** Vidéo → images (accroche de près, puis toute la vidéo) et transcription horodatée, dans `dir`. */
+export async function decouperVideo(src, dir, model) {
+  const run = promisify(execFile);
+  // Durée et format lus dans la sortie d'ffmpeg (ffprobe n'est pas toujours installé).
+  const probe = await run("ffmpeg", ["-hide_banner", "-i", src]).catch((e) => e);
+  const info = String(probe.stderr ?? "");
+  const dm = /Duration: (\d+):(\d+):(\d+(?:\.\d+)?)/.exec(info);
+  const duration = dm ? Number(dm[1]) * 3600 + Number(dm[2]) * 60 + Number(dm[3]) : 0;
+  const size = /Video:.*?(\d{2,5})x(\d{2,5})/.exec(info);
+  const imgDir = join(dir, "images");
+  mkdirSync(imgDir, { recursive: true });
+  let n = 0;
+  for (const t of frameTimes(duration)) {
+    const out = join(imgDir, `t${mmss(t).replace(":", "m").replace(".", "s")}.jpg`);
+    await run("ffmpeg", ["-y", "-loglevel", "error", "-ss", String(t), "-i", src, "-frames:v", "1", "-vf", "scale=540:-2", "-q:v", "4", out]).then(() => n++, () => {});
+  }
+  // Ce qui est dit, horodaté.
+  let parole = "pas de transcription";
+  const wav = join(dir, "son.wav");
+  try {
+    await run("ffmpeg", ["-y", "-loglevel", "error", "-i", src, "-vn", "-ar", "16000", "-ac", "1", wav]);
+    const { stdout } = await run("whisper-cli", ["-m", model, "-f", wav, "-l", "auto", "-np"], { maxBuffer: 10 * 1024 * 1024 });
+    const txt = stdout.trim();
+    writeFileSync(join(dir, "transcription.txt"), txt ? `${txt}\n` : "(rien de parlé)\n");
+    parole = txt ? "transcription horodatée dans transcription.txt" : "rien de parlé";
+  } catch {
+    parole = "pas de son ou transcription impossible";
+  } finally {
+    rmSync(wav, { force: true });
+  }
+  return `vidéo prête dans ${dir} : ${duration ? `${Math.round(duration)} s` : "durée inconnue"}${size ? `, ${size[1]}×${size[2]}` : ""}, ${n} images dans images/ (nommées par leur instant, l'accroche de près), ${parole}`;
+}
+
 /** Envoie un fichier à Marc (contrat rédigé, document), 50 Mo au plus. */
 async function sendDocument(token, chatId, path, name) {
   const form = new FormData();
@@ -204,6 +297,14 @@ async function main() {
       if (!m.voice) continue;
       const dit = await transcrire(token, m.voice, model);
       m.text = dit ? `(vocal) ${dit}${m.text ? `\n${m.text}` : ""}` : `(vocal que je n'ai pas réussi à transcrire)${m.text ? `\n${m.text}` : ""}`;
+    }
+    for (const [i, m] of kept.entries()) {
+      if (!m.media) continue;
+      api(token, "sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
+      const id = new Date(m.at).toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-");
+      const dir = join("etat", "previews", `${id}-${i}`);
+      const prete = await preparerMedia(token, m.media, join(here, dir), model);
+      m.text = `(pièce jointe : ${m.media.name} · ${prete.replace(join(here, ""), "")})${m.text ? `\n${m.text}` : ""}`;
     }
     for (const m of kept) {
       const full = m.reply ? `${m.reply}\n${m.text}` : m.text;
