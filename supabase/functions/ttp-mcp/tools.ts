@@ -198,6 +198,9 @@ const pointDuJour: Tool = {
     ];
     if (ctx.founder) {
       out.push(`\n## Factures en retard`, lines(late.map((f) => `- ${f.ref} · ${f.party} · ${money(f.amount)} · échéance ${dueText(f.date)}`), "Aucune."));
+      // Ce que les agents (Alfred, Megan…) ont fait : Marc et Gianni sur la même longueur d'onde.
+      const j = await agentJournalSince(sb, 1, null).catch(() => [] as JournalLine[]);
+      out.push(`\n## Ce que les agents ont fait (24 h) · détail avec journal_agents`, lines(j.slice(0, 20).map((e) => `- ${e.quand} · ${e.agent} · ${e.action}${e.detail ? ` : ${e.detail.slice(0, 220)}` : ""}`), "Rien de noté."));
     }
     return ok(out.join("\n"));
   },
@@ -1397,6 +1400,64 @@ async function findAgent(sb: SupabaseClient, key: string): Promise<AgentRow | nu
 const agentJournal = (sb: SupabaseClient, agentId: string | null, action: string, detail: string) =>
   sb.schema("agent").from("journal").insert({ action, detail: detail.slice(0, 300), agent_id: agentId }).then(() => {}, () => {});
 
+type JournalLine = { quand: string; agent: string; action: string; detail: string };
+/** Journal des agents depuis `jours` jours (le plus récent d'abord), pour un agent ou tous. */
+async function agentJournalSince(sb: SupabaseClient, jours: number, agentKey: string | null): Promise<JournalLine[]> {
+  const db = sb.schema("agent");
+  const agents = ((await db.from("agents").select("id, nom")).data as { id: string; nom: string }[] | null) ?? [];
+  const names = new Map(agents.map((x) => [x.id, x.nom]));
+  let q = db.from("journal").select("action, detail, cree_le, agent_id").gte("cree_le", new Date(Date.now() - jours * 86400000).toISOString()).order("cree_le", { ascending: false }).limit(200);
+  if (agentKey) {
+    const ag = await findAgent(sb, agentKey);
+    if (!ag) return [];
+    q = q.eq("agent_id", ag.id);
+  }
+  const { data } = await q;
+  return ((data as Json[] | null) ?? []).map((r) => ({
+    quand: new Date(String(r.cree_le)).toLocaleString("fr-FR", { timeZone: "Europe/Paris", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
+    agent: names.get(String(r.agent_id)) ?? (String(r.action).startsWith("marc_") ? "Marc" : "Megan"),
+    action: String(r.action ?? ""), detail: String(r.detail ?? ""),
+  }));
+}
+
+const noterJournal: Tool = {
+  name: "noter_journal",
+  title: "Noter dans le journal d'un agent",
+  description: "Note dans le journal de la section Agents ce qu'un agent a fait, décidé ou appris (visible par Marc, Gianni et leurs assistants, et repris dans point_du_jour). Une entrée par chose importante, compréhensible sans contexte : qui, quoi, où, montant et date si utiles, source.",
+  write: true,
+  founder: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      agent: { type: "string", description: "Nom de l'agent (ex. Alfred)" },
+      action: { type: "string", description: "Titre court (ex. « Collab créée », « Point du matin »)" },
+      detail: { type: "string", description: "Le détail, compréhensible sans contexte" },
+    },
+    required: ["agent", "action"],
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const ag = await findAgent(sb, str(a.agent, 80));
+    if (!ag) return fail(`Agent inconnu « ${str(a.agent, 80)} » (voir mes_agents).`);
+    const { error } = await sb.schema("agent").from("journal").insert({ action: str(a.action, 120), detail: str(a.detail, 4000) || null, agent_id: ag.id });
+    if (error) return fail(`Journal non écrit : ${error.message}`);
+    return ok(`✓ Noté dans le journal de ${ag.nom} : ${str(a.action, 120)}.`);
+  },
+};
+
+const journalAgents: Tool = {
+  name: "journal_agents",
+  title: "Journal des agents",
+  description: "Ce que les agents de TTP (Alfred, Megan…) ont fait, décidé ou signalé, avec le détail, le plus récent d'abord (section Agents → Journal). Pour savoir où en est un dossier traité par un agent, ou ce qu'Alfred a fait pour Marc.",
+  founder: true,
+  inputSchema: { type: "object", properties: { jours: { type: "number", description: "Nombre de jours (défaut 2, 30 au plus)" }, agent: { type: "string", description: "Un seul agent (facultatif)" } }, additionalProperties: false },
+  run: async (sb, _c, a) => {
+    const jours = Math.min(30, Math.max(1, Math.round(Number(a.jours ?? 2)) || 2));
+    const rows = await agentJournalSince(sb, jours, str(a.agent, 80) || null);
+    return ok([`# Journal des agents · ${jours} jour(s) · ${rows.length} entrée(s)`, lines(rows.map((e) => `- ${e.quand} · ${e.agent} · ${e.action}${e.detail ? `\n  ${e.detail.replace(/\n/g, "\n  ")}` : ""}`), "Rien de noté.")].join("\n"));
+  },
+};
+
 const mesAgents: Tool = {
   name: "mes_agents",
   title: "Agents de TTP",
@@ -1936,7 +1997,7 @@ const notifications: Tool = {
 export const TOOLS: Tool[] = [
   pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif, aValider, ecarterProposition,
   creerTache, cocherTache, creerEvenement, creerMeet, brouillonMail, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
-  mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur,
+  mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief,
   compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, notifications,
   ...ADMIN_TOOLS,
