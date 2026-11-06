@@ -182,14 +182,15 @@ async function claudeTwins(token: string, to: string, subject: string, threadId?
 }
 
 /**
- * Prépare un brouillon Gmail (jamais envoyé). Si Claude a déjà préparé un brouillon pour
+ * Prépare un brouillon Gmail (jamais envoyé), en texte seul ou, avec `html`, en texte + HTML
+ * (signature de l'agence). Si Claude a déjà préparé un brouillon pour
  * la même personne et le même objet, il est MIS À JOUR au lieu d'en créer un nouveau, et
  * ses éventuels doublons plus anciens (copies du même brouillon) sont supprimés.
  */
-export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, subject: string, message: string, threadId?: string): Promise<{ id: string; replaced: boolean; removed: number }> {
+export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, subject: string, message: string, threadId?: string, html?: string): Promise<{ id: string; replaced: boolean; removed: number }> {
   const token = await tokenFor(sb, box, "modify");
   // X-TTP-Source : la page Mails de l'app affiche « par Claude » sur ce brouillon.
-  const headers: string[] = [`To: ${clean(to)}`, `Subject: ${encWord(clean(subject))}`, "X-TTP-Source: claude", "MIME-Version: 1.0", "Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64"];
+  const headers: string[] = [`To: ${clean(to)}`, `Subject: ${encWord(clean(subject))}`, "X-TTP-Source: claude", "MIME-Version: 1.0"];
   if (threadId) {
     // Réponse : rattachée au dernier message du fil (le fil reste groupé chez la marque).
     const t = await gjson(token, `${GMAIL}/threads/${encodeURIComponent(threadId)}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=References`);
@@ -199,7 +200,18 @@ export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, 
     const refs = header(last?.payload?.headers, "references");
     if (mid) headers.push(`In-Reply-To: ${clean(mid)}`, `References: ${clean(`${refs} ${mid}`).slice(0, 1900)}`);
   }
-  const raw = `${headers.join("\r\n")}\r\n\r\n${b64Utf8(message).replace(/.{76}/g, "$&\r\n")}`;
+  const b64 = (v: string) => b64Utf8(v).replace(/.{76}/g, "$&\r\n");
+  let raw: string;
+  if (html) {
+    // Texte + HTML (signature de l'agence avec son GIF, comme un mail envoyé depuis l'app).
+    const boundary = `ttp_${crypto.randomUUID().replace(/-/g, "")}`;
+    headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+    const part = (type: string, body: string) => `--${boundary}\r\nContent-Type: ${type}; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64(body)}`;
+    raw = `${headers.join("\r\n")}\r\n\r\n${part("text/plain", message)}\r\n${part("text/html", html)}\r\n--${boundary}--`;
+  } else {
+    headers.push("Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64");
+    raw = `${headers.join("\r\n")}\r\n\r\n${b64(message)}`;
+  }
   const msg = { raw: b64urlUtf8(raw), ...(threadId ? { threadId } : {}) };
 
   // Recherche des jumeaux : si elle échoue, on crée simplement le brouillon (comme avant).

@@ -16,6 +16,7 @@ import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExc
 import type { Ctx } from "./oauth.ts";
 import { boxesFor, createDraft, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
+import { mailHtml } from "../_shared/mcpAdmin.ts";
 import { guessEventKind } from "../_shared/eventKind.ts";
 import { comptaSummary, type ComptaInv } from "../_shared/compta.ts";
 import { activityText } from "../_shared/activityText.ts";
@@ -1053,7 +1054,7 @@ const creerEvenement: Tool = {
 const brouillonMail: Tool = {
   name: "creer_brouillon_mail",
   title: "Préparer un brouillon de mail",
-  description: "Prépare un BROUILLON dans Gmail (partnerships@ ou talent@), en nouveau mail ou en réponse dans un fil existant. Rien n'est envoyé : Marc relit et envoie depuis Gmail ou l'app. Un seul brouillon par destinataire et par objet : rappeler l'outil avec le même destinataire et le même objet MET À JOUR le brouillon existant (jamais de doublon).",
+  description: "Prépare un BROUILLON dans Gmail (partnerships@ ou talent@), en nouveau mail ou en réponse dans un fil existant, avec la signature de l'agence (Réglages Mails). Rien n'est envoyé : Marc relit et envoie depuis Gmail ou l'app. Un seul brouillon par destinataire et par objet : rappeler l'outil avec le même destinataire et le même objet MET À JOUR le brouillon existant (jamais de doublon).",
   write: true,
   inputSchema: {
     type: "object",
@@ -1061,8 +1062,9 @@ const brouillonMail: Tool = {
       boite: { type: "string", enum: ["partnerships", "talent"] },
       a: { type: "string", description: "Destinataire(s), séparés par des virgules" },
       objet: { type: "string" },
-      message: { type: "string", description: "Texte du mail (sans signature : Gmail ajoute la sienne)" },
+      message: { type: "string", description: "Texte du mail, sans signature : la signature des Réglages Mails (avec son GIF) est ajoutée" },
       fil: { type: "string", description: "Id du fil pour répondre (facultatif)" },
+      signature: { type: "boolean", description: "false pour ne pas ajouter la signature (par défaut : ajoutée)" },
     },
     required: ["boite", "a", "objet", "message"],
     additionalProperties: false,
@@ -1074,7 +1076,14 @@ const brouillonMail: Tool = {
     if (!/[^@\s]+@[^@\s]+\.[^@\s]+/.test(to)) return fail("Adresse du destinataire invalide.");
     const fil = str(a.fil, 40);
     try {
-      const r = await createDraft(sb, box, to, str(a.objet, 300), str(a.message, 20000), /^[A-Za-z0-9]+$/.test(fil) ? fil : undefined);
+      // Signature des Réglages Mails (même règle qu'envoyer_mail) : le brouillon part tel quel sur « oui ».
+      let html: string | undefined;
+      if (a.signature !== false) {
+        const ms = ((await appState(sb)).mailSettings as Json | undefined) ?? {};
+        const sig = ms.signatureOn !== false ? String(ms.signatureHtml ?? "") : "";
+        if (sig.trim()) html = mailHtml(str(a.message, 20000), sig);
+      }
+      const r = await createDraft(sb, box, to, str(a.objet, 300), str(a.message, 20000), /^[A-Za-z0-9]+$/.test(fil) ? fil : undefined, html);
       const how = r.replaced
         ? `Brouillon MIS À JOUR dans ${box}@ (il remplace celui déjà préparé pour ${to}, aucun doublon${r.removed ? `, ${r.removed} ancien${r.removed > 1 ? "s" : ""} doublon${r.removed > 1 ? "s" : ""} supprimé${r.removed > 1 ? "s" : ""}` : ""})`
         : `Brouillon prêt dans ${box}@ pour ${to}`;
