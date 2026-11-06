@@ -11,6 +11,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Devis | Brouillon dans Facturation › Devis ; Marc l'envoie depuis l'app |
 | Messages aux créateurs, DM, réponse à un fil collé | Texte prêt à copier d'un toucher sur Telegram |
 | To-do | Crée les tâches tirées des mails, coche ce qui est fait |
+| Contacts | Chaque personne intéressante qui écrit entre dans la page Contacts (signature lue : rôle, email, téléphone pro, Instagram), sans doublon, avec l'échange noté ; rattrapage d'une période sur demande |
 | Collabs | Pipeline, création de la collab quand c'est confirmé, brief, contact, échange, rendez vous, étapes ; il le fait puis le dit |
 | Toute l'app sur demande | Quand Marc écrit, il a tous les outils de TTP Suite (factures, réglages, suppressions vers la Corbeille…) et fait ce qui est demandé ; ses points automatiques gardent les règles prudentes |
 | Contrats | Rédigés sur demande à partir des modèles de l'app et du protocole CONTRATS, envoyés en document sur Telegram |
