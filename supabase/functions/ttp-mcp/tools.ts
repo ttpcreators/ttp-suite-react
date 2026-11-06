@@ -10,7 +10,8 @@
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { triggerSync } from "../_shared/google.ts";
+import { APP_TIMEZONE, CALENDAR_ID, gcalFetch, triggerSync } from "../_shared/google.ts";
+import { meetEventBody, meetLinkOf, parseMeetRequest } from "../_shared/meetEvent.ts";
 import { readAppState } from "../_shared/appState.ts";
 import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
 import type { Ctx } from "./oauth.ts";
@@ -1012,7 +1013,7 @@ const creerTache: Tool = {
 const creerEvenement: Tool = {
   name: "creer_evenement",
   title: "Ajouter au planning",
-  description: "Ajoute un rendez-vous au planning de l'agence (synchronisé avec Google Agenda).",
+  description: "Ajoute au planning de l'agence (synchronisé avec Google Agenda) un rendez-vous, un tournage, une date de publication ou une deadline (type deadline), un event. Pour un rendez-vous en visio avec lien Google Meet : creer_meet.",
   write: true,
   inputSchema: {
     type: "object",
@@ -1048,6 +1049,80 @@ const creerEvenement: Tool = {
       /* la synchro horaire le poussera vers Google */
     }
     return ok(`Ajouté au planning : « ${str(a.titre, 200)} » le ${frDay(date)}${time ? ` à ${time}` : ""}.`);
+  },
+};
+
+// Rendez-vous avec lien Google Meet, comme « Proposer un rendez-vous » de la page Mails
+// (fonction meet-invite, mêmes règles : _shared/meetEvent.ts). Sans `inviter`, aucun mail ne
+// part : le lien Meet est rendu pour être collé dans une réponse. Avec `inviter`, Google envoie
+// l'invitation aux invités (seulement sur accord explicite de l'utilisateur).
+const creerMeet: Tool = {
+  name: "creer_meet",
+  title: "Rendez-vous avec lien Google Meet",
+  description: "Crée un rendez-vous dans l'agenda de l'agence (Google Agenda, puis le Planning de l'app) avec un lien Google Meet, et renvoie le lien. Par défaut, AUCUNE invitation n'est envoyée : le lien sert à le donner dans une réponse. `inviter` = true : Google envoie l'invitation aux adresses de `invites` (seulement après un « oui » explicite de l'utilisateur).",
+  write: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      titre: { type: "string" },
+      date: { type: "string", description: "AAAA-MM-JJ" },
+      heure: { type: "string", description: "HH:MM (heure de Paris)" },
+      duree: { type: "number", description: "Minutes (défaut 30)" },
+      invites: { type: "array", items: { type: "string" }, description: "Adresses mail des invités" },
+      inviter: { type: "boolean", description: "true : Google envoie l'invitation (défaut : non)" },
+      note: { type: "string", description: "Description du rendez-vous" },
+      createur: { type: "string", description: "Créateur concerné (facultatif)" },
+    },
+    required: ["titre", "date", "heure"],
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    let who: string | null = null;
+    if (str(a.createur)) {
+      const found = await rosterName(sb, str(a.createur, 80));
+      if ("error" in found) return fail(found.error);
+      who = found.name;
+    }
+    const inviter = a.inviter === true;
+    const r = parseMeetRequest({
+      title: str(a.titre, 200), date: str(a.date), time: str(a.heure), duration: typeof a.duree === "number" ? a.duree : 30,
+      guests: inviter && Array.isArray(a.invites) ? a.invites : [], meet: true, invite: inviter, note: str(a.note, 3000), who,
+    });
+    if ("error" in r) return fail(`Rendez-vous non créé : ${r.error.replace(/_/g, " ")}.`);
+    if (inviter && !r.guests.length) return fail("Pour envoyer l'invitation, donne au moins une adresse dans `invites`.");
+    const cal = `/calendars/${encodeURIComponent(CALENDAR_ID)}/events`;
+    let res: Response;
+    try {
+      res = await gcalFetch(sb, `${cal}?conferenceDataVersion=1&sendUpdates=${r.invite ? "all" : "none"}`, {
+        method: "POST",
+        body: JSON.stringify(meetEventBody(r, APP_TIMEZONE, crypto.randomUUID())),
+      }, { maxRetries: 2 });
+    } catch (e) {
+      const m = String((e as Error)?.message ?? "");
+      return fail(m === "not_connected" || m === "invalid_grant" ? "Google Agenda n'est pas connecté à l'app (Planning → Google Agenda → Connecter)." : "Google Agenda ne répond pas, réessaie.");
+    }
+    const ev = await res.json().catch(() => ({})) as { id?: string; htmlLink?: string; hangoutLink?: string; conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] } };
+    if (!res.ok || !ev.id) return fail(res.status === 403 ? "Le droit d'écrire dans l'agenda manque (reconnecter Google dans l'app)." : `Rendez-vous non créé (Google ${res.status}).`);
+    let meetUrl = meetLinkOf(ev);
+    if (!meetUrl) {
+      await new Promise((ok) => setTimeout(ok, 1500));
+      const again = await gcalFetch(sb, `${cal}/${encodeURIComponent(ev.id)}`, {}, { maxRetries: 1 }).catch(() => null);
+      if (again?.ok) meetUrl = meetLinkOf(await again.json().catch(() => ({})));
+    }
+    if (meetUrl) {
+      const description = [r.note, `Lien Google Meet : ${meetUrl}`].filter(Boolean).join("\n\n");
+      await gcalFetch(sb, `${cal}/${encodeURIComponent(ev.id)}?sendUpdates=none`, { method: "PATCH", body: JSON.stringify({ description }) }, { maxRetries: 1 }).catch(() => null);
+    }
+    try {
+      triggerSync("webhook");
+    } catch {
+      /* la synchro horaire l'amènera dans le Planning */
+    }
+    return ok([
+      `✓ Rendez-vous « ${r.title} » le ${frDay(r.date)} à ${r.time} (${r.duration} min), dans le Planning.`,
+      meetUrl ? `Lien Google Meet : ${meetUrl}` : "Lien Meet pas encore prêt : il apparaîtra dans le Planning d'ici une minute.",
+      r.invite ? `Invitation envoyée par Google à ${r.guests.join(", ")}.` : "Aucune invitation envoyée : donne le lien dans ta réponse.",
+    ].join("\n"));
   },
 };
 
@@ -1808,7 +1883,7 @@ const notifications: Tool = {
 
 export const TOOLS: Tool[] = [
   pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif, aValider, ecarterProposition,
-  creerTache, cocherTache, creerEvenement, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
+  creerTache, cocherTache, creerEvenement, creerMeet, brouillonMail, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur,
   lireBrief, resumerBrief,
   compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, notifications,
