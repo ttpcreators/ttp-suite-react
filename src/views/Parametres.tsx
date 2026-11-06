@@ -772,7 +772,7 @@ const TOOL_LABELS: Record<string, string> = {
   point_du_jour: "Point du jour", rechercher: "Recherche", lister_createurs: "Roster", fiche_createur: "Fiche créateur",
   rechercher_mails: "Recherche de mails", lire_mail: "Lecture d'un mail", dm_instagram: "DM Instagram", scouting: "Scouting",
   contacts: "Contacts", pipeline: "Pipeline", collabs: "Collabs", planning: "Planning", taches: "Tâches", factures: "Factures", contrats: "Contrats", reversements: "Reversements", a_valider: "File À valider", ecarter_proposition: "Proposition écartée",
-  creer_tache: "Tâche créée", cocher_tache: "Tâche cochée", creer_evenement: "Rendez-vous ajouté", creer_brouillon_mail: "Brouillon de mail",
+  creer_tache: "Tâche créée", cocher_tache: "Tâche cochée", creer_evenement: "Rendez-vous ajouté", creer_meet: "Rendez-vous Meet", creer_brouillon_mail: "Brouillon de mail",
   ajouter_contact: "Contact ajouté", noter_echange_contact: "Échange noté", ajouter_au_scouting: "Ajout au scouting",
   changer_statut_scouting: "Statut de scouting", avancer_collab: "Étape de collab",
   lire_donnees: "Lecture des données", creer_element: "Élément créé", modifier_element: "Élément modifié",
