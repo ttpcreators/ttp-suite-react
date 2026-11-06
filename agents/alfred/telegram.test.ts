@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { chunks, dueReminders, escapeCode, escapeMd, frameTimes, marcMessages, mediaOf, messagesFor } from "./telegram.mjs";
+import { chunks, dueReminders, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, trouverLien } from "./telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -78,11 +78,24 @@ describe("Alfred : messages Telegram", () => {
     expect(kept[0].text).toBe("preview Léna Yade");
   });
 
-  it("choisit les images d'une vidéo : l'accroche de près, puis toute la durée", () => {
-    expect(frameTimes(11)).toEqual([0, 0.5, 1, 1.5, 2.5, 4, 6, 8, 10, 10.5]);
-    const long = frameTimes(60);
-    expect(long.slice(0, 5)).toEqual([0, 0.5, 1, 1.5, 2.5]);
-    expect(long.length).toBeLessThanOrEqual(25);
+  it("choisit les images d'une vidéo : l'accroche toutes les demi secondes, puis une par seconde", () => {
+    expect(frameTimes(11)).toEqual([0, 0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10, 10.5]);
+    const minute = frameTimes(60);
+    expect(minute.slice(0, 6)).toEqual([0, 0.5, 1, 1.5, 2, 2.5]);
+    expect(minute).toContain(59);
+    const long = frameTimes(300);
+    expect(long.length).toBeLessThanOrEqual(70);
     expect(frameTimes(0)).toEqual([]);
+  });
+
+  it("repère un lien de vidéo à télécharger", () => {
+    expect(trouverLien("preview Léna https://we.tl/t-AbC123 merci")).toEqual({ kind: "wetransfer", url: "https://we.tl/t-AbC123" });
+    expect(trouverLien("https://wetransfer.com/downloads/abc/def.")?.url).toBe("https://wetransfer.com/downloads/abc/def");
+    expect(trouverLien("https://www.swisstransfer.com/d/1b2c3d4e-0000-4000-8000-123456789abc")?.kind).toBe("swisstransfer");
+    expect(trouverLien("https://drive.google.com/file/d/1AbCdEfGhIjK/view?usp=sharing")?.kind).toBe("drive");
+    expect(trouverLien("https://exemple.fr/v/preview.MOV")?.kind).toBe("direct");
+    expect(trouverLien("le site https://ttpcreators.pro/")).toBeNull();
+    expect(lienSimple("drive", "https://drive.google.com/file/d/1AbCdEfGhIjK/view?usp=sharing")).toBe("https://drive.usercontent.google.com/download?id=1AbCdEfGhIjK&export=download&confirm=t");
+    expect(lienSimple("dropbox", "https://www.dropbox.com/scl/fi/xyz/preview.mp4?rlkey=k&dl=0")).toBe("https://www.dropbox.com/scl/fi/xyz/preview.mp4?rlkey=k&dl=1");
   });
 });
