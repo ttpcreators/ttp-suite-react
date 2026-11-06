@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { chunks, dueReminders, escapeCode, escapeMd, marcMessages, messagesFor } from "./telegram.mjs";
+import { chunks, dueReminders, escapeCode, escapeMd, frameTimes, marcMessages, mediaOf, messagesFor } from "./telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -66,5 +66,23 @@ describe("Alfred : messages Telegram", () => {
     const [m] = marcMessages(updates, "42", 0).kept;
     expect(m.text).toBe("oui");
     expect(m.reply).toBe("(en réponse à ton message : « Mail à Lorna (Seoni) · réponds « oui Seoni » pour l'envoyer »)");
+  });
+
+  it("repère la preview d'un créateur (vidéo, photo, document) et garde le message", () => {
+    expect(mediaOf({ video: { file_id: "V", file_size: 1000, file_name: "lena.mp4" } })).toEqual({ fileId: "V", kind: "video", name: "lena.mp4", size: 1000 });
+    expect(mediaOf({ photo: [{ file_id: "p1" }, { file_id: "p2", file_size: 50 }] })?.fileId).toBe("p2");
+    expect(mediaOf({ document: { file_id: "D", mime_type: "application/pdf", file_name: "brief.pdf" } })?.kind).toBe("pdf");
+    expect(mediaOf({ document: { file_id: "Z", mime_type: "application/zip" } })).toBeNull();
+    const { kept } = marcMessages([{ update_id: 40, message: { date: 1793919600, from: { id: 42 }, chat: { type: "private" }, video: { file_id: "V" }, caption: "preview Léna Yade" } }], "42", 0);
+    expect(kept[0].media?.kind).toBe("video");
+    expect(kept[0].text).toBe("preview Léna Yade");
+  });
+
+  it("choisit les images d'une vidéo : l'accroche de près, puis toute la durée", () => {
+    expect(frameTimes(11)).toEqual([0, 0.5, 1, 1.5, 2.5, 4, 6, 8, 10, 10.5]);
+    const long = frameTimes(60);
+    expect(long.slice(0, 5)).toEqual([0, 0.5, 1, 1.5, 2.5]);
+    expect(long.length).toBeLessThanOrEqual(25);
+    expect(frameTimes(0)).toEqual([]);
   });
 });

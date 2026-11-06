@@ -38,6 +38,8 @@ garder() { [ -f "$1" ] && (( $(wc -l < "$1") > $2 )) && { tail -n "$2" "$1" > "$
 garder "$LOG" 3000
 garder etat/conversation.md 400
 garder etat/suivi.md 600
+# Les previews analysées ne sont gardées que 14 jours.
+[ -d etat/previews ] && find etat/previews -mindepth 1 -maxdepth 1 -mtime +14 -exec rm -rf {} +
 
 # Rappels arrivés à l'heure : envoyés tels quels, sans réveiller Claude.
 [[ "$1" != "--reponse" ]] && node telegram.mjs rappels >> "$LOG" 2>&1
