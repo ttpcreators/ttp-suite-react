@@ -1018,7 +1018,11 @@ const creerTache: Tool = {
 async function verifierPlanning(sb: SupabaseClient, c: Candidat): Promise<{ doublon: string; chevauche: string }> {
   const { data } = await sb.from("events").select("id, date, time, title, who, description").eq("date", c.date).eq("deleted", false).limit(100);
   const r = doublonPlanning(((data as PlanEvent[] | null) ?? []), c);
-  const dire = (e: PlanEvent | null) => (e ? `« ${e.title ?? ""} » le ${frDay(e.date)}${e.time ? ` à ${timeOf(e.time)}` : ""}${e.who ? ` (${titleCase(String(e.who))})` : ""}` : "");
+  const dire = (e: PlanEvent | null) => {
+    if (!e) return "";
+    const h = timeOf(e.time);
+    return `« ${e.title ?? ""} » le ${frDay(e.date)}${h ? ` à ${h}` : " (toute la journée)"}${e.who ? ` (${titleCase(String(e.who))})` : ""}`;
+  };
   return { doublon: dire(r.doublon), chevauche: dire(r.chevauche) };
 }
 const FORCER = { type: "boolean", description: "true : créer même si un rendez-vous semblable existe déjà ce jour-là (seulement si c'en est vraiment un autre)" };
