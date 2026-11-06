@@ -12,6 +12,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { APP_TIMEZONE, CALENDAR_ID, gcalFetch, triggerSync } from "../_shared/google.ts";
 import { meetEventBody, meetLinkOf, parseMeetRequest } from "../_shared/meetEvent.ts";
+import { doublonPlanning, type Candidat, type PlanEvent } from "../_shared/planningDoublon.ts";
 import { readAppState } from "../_shared/appState.ts";
 import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
 import type { Ctx } from "./oauth.ts";
@@ -1013,6 +1014,15 @@ const creerTache: Tool = {
   },
 };
 
+/** Doublon ou chevauchement dans le Planning (même jour) avant d'y ajouter quelque chose. */
+async function verifierPlanning(sb: SupabaseClient, c: Candidat): Promise<{ doublon: string; chevauche: string }> {
+  const { data } = await sb.from("events").select("id, date, time, title, who, description").eq("date", c.date).eq("deleted", false).limit(100);
+  const r = doublonPlanning(((data as PlanEvent[] | null) ?? []), c);
+  const dire = (e: PlanEvent | null) => (e ? `« ${e.title ?? ""} » le ${frDay(e.date)}${e.time ? ` à ${timeOf(e.time)}` : ""}${e.who ? ` (${titleCase(String(e.who))})` : ""}` : "");
+  return { doublon: dire(r.doublon), chevauche: dire(r.chevauche) };
+}
+const FORCER = { type: "boolean", description: "true : créer même si un rendez-vous semblable existe déjà ce jour-là (seulement si c'en est vraiment un autre)" };
+
 const creerEvenement: Tool = {
   name: "creer_evenement",
   title: "Ajouter au planning",
@@ -1027,6 +1037,7 @@ const creerEvenement: Tool = {
       type: { type: "string", enum: ["call", "reunion", "collab", "shoot", "event", "voyage", "deadline"] },
       createur: { type: "string", description: "Créateur concerné (facultatif)" },
       details: { type: "string" },
+      forcer: FORCER,
     },
     required: ["titre", "date"],
     additionalProperties: false,
@@ -1041,6 +1052,8 @@ const creerEvenement: Tool = {
       if ("error" in found) return fail(found.error);
       who = found.name;
     }
+    const check = await verifierPlanning(sb, { date, time, title: str(a.titre, 200), who });
+    if (check.doublon && a.forcer !== true) return fail(`Déjà au planning : ${check.doublon}. Rien n'est ajouté. Si c'est bien un autre rendez-vous, rappelle avec forcer: true.`);
     const { error } = await sb.from("events").insert({
       date, time, title: str(a.titre, 200), type: ["call", "reunion", "collab", "shoot", "event", "voyage", "deadline"].includes(str(a.type)) ? str(a.type) : guessEventKind(str(a.titre, 200)),
       who, description: str(a.details, 2000) || null, source: "agency", sync_source: "agence",
@@ -1051,7 +1064,7 @@ const creerEvenement: Tool = {
     } catch {
       /* la synchro horaire le poussera vers Google */
     }
-    return ok(`Ajouté au planning : « ${str(a.titre, 200)} » le ${frDay(date)}${time ? ` à ${time}` : ""}.`);
+    return ok(`Ajouté au planning : « ${str(a.titre, 200)} » le ${frDay(date)}${time ? ` à ${time}` : ""}.${check.chevauche ? `\n⚠ Même créneau que ${check.chevauche}.` : ""}`);
   },
 };
 
@@ -1075,6 +1088,7 @@ const creerMeet: Tool = {
       inviter: { type: "boolean", description: "true : Google envoie l'invitation (défaut : non)" },
       note: { type: "string", description: "Description du rendez-vous" },
       createur: { type: "string", description: "Créateur concerné (facultatif)" },
+      forcer: FORCER,
     },
     required: ["titre", "date", "heure"],
     additionalProperties: false,
@@ -1089,10 +1103,14 @@ const creerMeet: Tool = {
     const inviter = a.inviter === true;
     const r = parseMeetRequest({
       title: str(a.titre, 200), date: str(a.date), time: str(a.heure), duration: typeof a.duree === "number" ? a.duree : 30,
-      guests: inviter && Array.isArray(a.invites) ? a.invites : [], meet: true, invite: inviter, note: str(a.note, 3000), who,
+      guests: inviter && Array.isArray(a.invites) ? a.invites : [], meet: true, invite: inviter,
+      note: [str(a.note, 3000), !inviter && Array.isArray(a.invites) && a.invites.length ? `Avec : ${a.invites.map((x) => String(x ?? "").trim()).filter(Boolean).join(", ")}` : ""].filter(Boolean).join("\n"), who,
     });
     if ("error" in r) return fail(`Rendez-vous non créé : ${r.error.replace(/_/g, " ")}.`);
     if (inviter && !r.guests.length) return fail("Pour envoyer l'invitation, donne au moins une adresse dans `invites`.");
+    const emails = Array.isArray(a.invites) ? a.invites.map((x) => String(x ?? "")) : [];
+    const check = await verifierPlanning(sb, { date: r.date, time: r.time, title: r.title, who, emails });
+    if (check.doublon && a.forcer !== true) return fail(`Déjà au planning : ${check.doublon}. Rien n'est créé (aucune invitation envoyée). Si c'est bien un autre rendez-vous, rappelle avec forcer: true.`);
     const cal = `/calendars/${encodeURIComponent(CALENDAR_ID)}/events`;
     let res: Response;
     try {
@@ -1125,6 +1143,7 @@ const creerMeet: Tool = {
       `✓ Rendez-vous « ${r.title} » le ${frDay(r.date)} à ${r.time} (${r.duration} min), dans le Planning.`,
       meetUrl ? `Lien Google Meet : ${meetUrl}` : "Lien Meet pas encore prêt : il apparaîtra dans le Planning d'ici une minute.",
       r.invite ? `Invitation envoyée par Google à ${r.guests.join(", ")}.` : "Aucune invitation envoyée : donne le lien dans ta réponse.",
+      ...(check.chevauche ? [`⚠ Même créneau que ${check.chevauche}.`] : []),
     ].join("\n"));
   },
 };
