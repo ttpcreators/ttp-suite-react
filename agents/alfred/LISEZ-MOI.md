@@ -7,6 +7,10 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Répond tout de suite quand Marc lui écrit | Écoute Telegram en continu, lance Claude dès qu'un message arrive ; sa réponse cite le message de Marc (comme « Répondre ») |
 | Comprend les vocaux de Marc | Transcrits sur le Mac (whisper.cpp et ffmpeg, gratuit, sans internet), puis traités comme un message écrit |
 | Le point à 9 h et 17 h en semaine | Mails des marques et DM, devis, factures en retard, créateurs, argent à aller chercher |
+| Bilans et renouvellements | 7 jours après une publication : stats relevées par l'app, bilan pour la marque et mail « on refait ça ? » avec une offre plus grosse |
+| Prospection du lundi | Lundi 11 h : deux ou trois marques par créateur actif (radar à marques de l'app, agences concurrentes, bilans, pipeline, web), avec Megan, premier mail prêt ; « oui tout » pour tout envoyer |
+| Tarifs du mois | Premier lundi du mois, 14 h : qui mérite une hausse, quels précédents sont trop bas |
+| Alerte si Alfred tombe | Chaque jour de semaine, l'app vérifie qu'Alfred a fait son point du matin ; sinon notification à Marc et Gianni |
 | Réponses aux mails, relances | Brouillons Gmail montrés sur Telegram, avec un lien qui les ouvre dans Spark (Marc peut les envoyer lui même) ; envoyés par Alfred seulement sur « oui Marque » de Marc |
 | Brouillons en double | Quand Marc a répondu lui même dans un fil, Alfred supprime son brouillon devenu inutile (jamais un brouillon écrit par Marc) |
 | Spams | Fouille les spams à chaque point pour repêcher les vraies demandes de marques |

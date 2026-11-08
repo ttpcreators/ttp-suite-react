@@ -5,7 +5,9 @@
 #   alfred.sh           : launchd, toutes les heures pile. Envoie les rappels arrivés à
 #                         l'heure ; du lundi au vendredi à 9 h et 17 h, fait le POINT (mails
 #                         des marques, DM, devis, relances, créateurs, argent à aller chercher).
-#   alfred.sh --point   : un point tout de suite (test).
+#                         Le lundi à 11 h : la prospection de la semaine ; le premier lundi
+#                         du mois à 14 h : la revue des tarifs.
+#   alfred.sh --point | --prospection | --tarifs : ce passage tout de suite (test).
 # Alfred lit TTP Suite par le connecteur « TTP Suite » du compte Claude de Marc, prépare des
 # brouillons, tient la to-do et dépose ses messages pour Marc dans etat/envoi/ ; ce script les
 # envoie ensuite par le bot Telegram d'Alfred, à Marc seul. Un mail ne part que sur un « oui »
@@ -56,8 +58,17 @@ recus=$(grep -c '^\[' etat/recu.txt)
 
 jour=$(date +%u)
 heure=$((10#$(date +%H)))
-if [[ "$1" == "--point" ]] || { [[ "$1" != "--reponse" ]] && (( jour <= 5 )) && (( heure == 9 || heure == 17 )); }; then
+quantieme=$((10#$(date +%d)))
+auto=0
+[[ "$1" != "--reponse" ]] && auto=1
+if [[ "$1" == "--point" ]] || (( auto && jour <= 5 && (heure == 9 || heure == 17) )); then
   (( heure < 13 )) && mode="le point du matin" || mode="le point du soir"
+# Le lundi à 11 h : la prospection de la semaine, créateur par créateur.
+elif [[ "$1" == "--prospection" ]] || (( auto && jour == 1 && heure == 11 )); then
+  mode="la prospection de la semaine"
+# Le premier lundi du mois à 14 h : la revue des tarifs.
+elif [[ "$1" == "--tarifs" ]] || (( auto && jour == 1 && quantieme <= 7 && heure == 14 )); then
+  mode="la revue des tarifs du mois"
 elif (( recus > 0 )); then
   mode="la réponse à Marc"
 else
@@ -87,7 +98,7 @@ done < etat/delegations.md
 # Quand Marc écrit : tous les outils de TTP Suite, pour faire ce qu'il demande. Envoyer un brouillon et retenir une leçon :
 # seulement quand Marc vient d'écrire, ou pendant une délégation avec envoi autorisé.
 ttp="mcp__claude_ai_TTP_Suite__"
-lire="brouillons_claude journal_agents lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
+lire="brouillons_claude journal_agents stats_collab lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
 agir="noter_journal creer_meet creer_brouillon_mail supprimer_brouillon preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
 sur_oui="envoyer_brouillon noter_lecon"
 interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture ecarter_proposition proposer_action preparer_reponse_mail ajouter_au_scouting changer_statut_scouting resumer_brief"
@@ -130,6 +141,8 @@ envois=(etat/envoi/*)
 if [ "$code" -eq 0 ] && (( ${#envois} > 0 )); then
   if node telegram.mjs dossier etat/envoi >> "$LOG" 2>&1; then
     [[ "$mode" == "le point"* ]] && echo "$now" > etat/dernier-passage
+    [[ "$mode" == "la prospection"* ]] && date +%Y-%m-%d > etat/derniere-prospection
+    [[ "$mode" == "la revue des tarifs"* ]] && date +%Y-%m-%d > etat/derniere-revue-tarifs
   fi
 else
   # Passage raté (souvent la connexion de Claude) : les messages de Marc restent en file pour
