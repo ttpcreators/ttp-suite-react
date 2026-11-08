@@ -6,8 +6,9 @@
 #                         l'heure ; du lundi au vendredi à 9 h et 17 h, fait le POINT (mails
 #                         des marques, DM, devis, relances, créateurs, argent à aller chercher).
 #                         Le lundi à 11 h : la prospection de la semaine ; le premier lundi
-#                         du mois à 14 h : la revue des tarifs.
-#   alfred.sh --point | --prospection | --tarifs : ce passage tout de suite (test).
+#                         du mois à 14 h : la revue des tarifs ; le mercredi à 11 h : le
+#                         recrutement. Et, une heure avant chaque rendez-vous du jour, sa fiche.
+#   alfred.sh --point | --prospection | --tarifs | --recrutement : ce passage tout de suite (test).
 # Alfred lit TTP Suite par le connecteur « TTP Suite » du compte Claude de Marc, prépare des
 # brouillons, tient la to-do et dépose ses messages pour Marc dans etat/envoi/ ; ce script les
 # envoie ensuite par le bot Telegram d'Alfred, à Marc seul. Un mail ne part que sur un « oui »
@@ -61,6 +62,22 @@ heure=$((10#$(date +%H)))
 quantieme=$((10#$(date +%d)))
 auto=0
 [[ "$1" != "--reponse" ]] && auto=1
+
+# Rendez-vous du jour (notés par Alfred dans etat/rdv-du-jour.txt, « AAAA-MM-JJ HH:MM · titre ») :
+# ceux qui commencent dans 45 à 105 minutes reçoivent leur fiche de préparation, une seule fois.
+touch etat/rdv-du-jour.txt etat/rdv-prepares.txt
+rdv_dus=()
+if (( auto )); then
+  maintenant=$(( 10#$(date +%H) * 60 + 10#$(date +%M) ))
+  aujourdhui_rdv=$(date +%Y-%m-%d)
+  while IFS= read -r ligne; do
+    [[ "$ligne" =~ "^([0-9]{4}-[0-9]{2}-[0-9]{2}) ([0-9]{1,2}):([0-9]{2})" ]] || continue
+    [[ "${match[1]}" == "$aujourdhui_rdv" ]] || continue
+    dans=$(( 10#${match[2]} * 60 + 10#${match[3]} - maintenant ))
+    (( dans >= 45 && dans < 105 )) || continue
+    grep -qxF -- "$ligne" etat/rdv-prepares.txt || rdv_dus+=("$ligne")
+  done < etat/rdv-du-jour.txt
+fi
 if [[ "$1" == "--point" ]] || (( auto && jour <= 5 && (heure == 9 || heure == 17) )); then
   (( heure < 13 )) && mode="le point du matin" || mode="le point du soir"
 # Le lundi à 11 h : la prospection de la semaine, créateur par créateur.
@@ -69,8 +86,13 @@ elif [[ "$1" == "--prospection" ]] || (( auto && jour == 1 && heure == 11 )); th
 # Le premier lundi du mois à 14 h : la revue des tarifs.
 elif [[ "$1" == "--tarifs" ]] || (( auto && jour == 1 && quantieme <= 7 && heure == 14 )); then
   mode="la revue des tarifs du mois"
+# Le mercredi à 11 h : le recrutement de la semaine (scouting).
+elif [[ "$1" == "--recrutement" ]] || (( auto && jour == 3 && heure == 11 )); then
+  mode="le recrutement de la semaine"
 elif (( recus > 0 )); then
   mode="la réponse à Marc"
+elif (( ${#rdv_dus} > 0 )); then
+  mode="la préparation des rendez-vous"
 else
   exit 0
 fi
@@ -82,11 +104,15 @@ last=$(cat etat/dernier-passage 2>/dev/null)
 after=$((last - 900))
 requete="after:$after -in:sent -category:promotions -category:social"
 
-# Délégation en cours où Marc a autorisé l'envoi (ligne « jusqu'au AAAA-MM-JJ · … · envoi autorisé »).
+# Délégation en cours où Marc a autorisé l'envoi (ligne « jusqu'au AAAA-MM-JJ · … · envoi autorisé »,
+# ou « permanent · … · envoi autorisé » pour une délégation sans fin, comme les relances automatiques).
 aujourdhui=$(date +%Y-%m-%d)
 delegue=0
 while IFS= read -r ligne; do
-  [[ "$ligne" == *"envoi autorisé"* && "$ligne" =~ "jusqu'au ([0-9]{4}-[0-9]{2}-[0-9]{2})" ]] || continue
+  [[ "$ligne" == *"envoi autorisé"* ]] || continue
+  # Délégation permanente (ex. relances automatiques activées par Marc) : sans date de fin.
+  if [[ "$ligne" == *"permanent"* ]]; then delegue=1; continue; fi
+  [[ "$ligne" =~ "jusqu'au ([0-9]{4}-[0-9]{2}-[0-9]{2})" ]] || continue
   [[ ! "${match[1]}" < "$aujourdhui" ]] && delegue=1
 done < etat/delegations.md
 
@@ -98,10 +124,10 @@ done < etat/delegations.md
 # Quand Marc écrit : tous les outils de TTP Suite, pour faire ce qu'il demande. Envoyer un brouillon et retenir une leçon :
 # seulement quand Marc vient d'écrire, ou pendant une délégation avec envoi autorisé.
 ttp="mcp__claude_ai_TTP_Suite__"
-lire="brouillons_claude journal_agents stats_collab lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
-agir="noter_journal creer_meet creer_brouillon_mail supprimer_brouillon preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
+lire="brouillons_claude journal_agents stats_collab compta lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
+agir="noter_journal creer_meet ajouter_au_scouting changer_statut_scouting creer_brouillon_mail supprimer_brouillon preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
 sur_oui="envoyer_brouillon noter_lecon"
-interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture ecarter_proposition proposer_action preparer_reponse_mail ajouter_au_scouting changer_statut_scouting resumer_brief"
+interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture ecarter_proposition proposer_action preparer_reponse_mail resumer_brief"
 # Seule commande permise : télécharger et découper une vidéo dont le lien est dans un mail.
 allowed=("Read" "Edit(./etat/**)" "WebFetch" "WebSearch" "Bash(node telegram.mjs telecharger:*)")
 denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram")
@@ -124,6 +150,7 @@ else
   messages="Marc ne t'a rien écrit depuis la dernière fois."
 fi
 (( delegue )) && messages="$messages Une délégation avec envoi autorisé est en cours (etat/delegations.md) : tu peux envoyer ce qu'elle couvre, et seulement ça."
+(( ${#rdv_dus} > 0 )) && messages="$messages Rendez-vous dans environ une heure, à préparer (voir « La fiche avant chaque rendez-vous ») : ${(j:; :)rdv_dus}."
 (( recus == 0 && ! delegue )) && messages="$messages Tu ne peux envoyer aucun mail pendant ce passage."
 
 rm -f etat/envoi/*
@@ -143,6 +170,8 @@ if [ "$code" -eq 0 ] && (( ${#envois} > 0 )); then
     [[ "$mode" == "le point"* ]] && echo "$now" > etat/dernier-passage
     [[ "$mode" == "la prospection"* ]] && date +%Y-%m-%d > etat/derniere-prospection
     [[ "$mode" == "la revue des tarifs"* ]] && date +%Y-%m-%d > etat/derniere-revue-tarifs
+    for r in "${rdv_dus[@]}"; do print -r -- "$r" >> etat/rdv-prepares.txt; done
+    garder etat/rdv-prepares.txt 200
   fi
 else
   # Passage raté (souvent la connexion de Claude) : les messages de Marc restent en file pour

@@ -5,11 +5,21 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Ce qu'il fait | Comment |
 |---|---|
 | Répond tout de suite quand Marc lui écrit | Écoute Telegram en continu, lance Claude dès qu'un message arrive ; sa réponse cite le message de Marc (comme « Répondre ») |
+| Va à l'essentiel | Messages à Marc très courts (une ligne par point, 6 lignes pour une réponse, 12 pour un point), le détail sur demande ; les textes à copier et documents restent complets |
 | Comprend les vocaux de Marc | Transcrits sur le Mac (whisper.cpp et ffmpeg, gratuit, sans internet), puis traités comme un message écrit |
 | Le point à 9 h et 17 h en semaine | Mails des marques et DM, devis, factures en retard, créateurs, argent à aller chercher |
 | Bilans et renouvellements | 7 jours après une publication : stats relevées par l'app, bilan pour la marque et mail « on refait ça ? » avec une offre plus grosse |
 | Prospection du lundi | Lundi 11 h : deux ou trois marques par créateur actif (radar à marques de l'app, agences concurrentes, bilans, pipeline, web), avec Megan, premier mail prêt ; « oui tout » pour tout envoyer |
 | Tarifs du mois | Premier lundi du mois, 14 h : qui mérite une hausse, quels précédents sont trop bas |
+| Facture prête | Collab publiée sans facture : facture préparée et montrée, créée dans Facturation sur « oui facture Marque » |
+| Reversements | Marque payée, créateur pas encore payé : rappel, tâche et message au créateur |
+| Contrats | Contrats pas signés relancés à J+3, signalés à J+7 ; collab avancée quand c'est signé |
+| Relances automatiques | Sur « active les relances automatiques » : relances de factures (J+1, J+8) et de marques (J+4, J+10) envoyées seules, avec compte rendu ; jamais la mise en demeure |
+| Fiche avant rendez vous | Une heure avant chaque rendez vous du jour : qui, historique, en cours, objectif, points à obtenir |
+| Rapport du lundi | Argent, deals, créateurs, ce qu'Alfred a fait, priorités ; envoyé à Marc et noté au journal pour Gianni |
+| Recrutement du mercredi | Mercredi 11 h : les trois meilleurs profils du scouting et leur premier DM |
+| Media kits | Dans la revue du mois : media kits dépassés signalés avec les nouveaux chiffres |
+| Nouveau créateur | Contrat de représentation, fiche, accès, media kit, bienvenue, mémoire, chacun en tâche |
 | Alerte si Alfred tombe | Chaque jour de semaine, l'app vérifie qu'Alfred a fait son point du matin ; sinon notification à Marc et Gianni |
 | Réponses aux mails, relances | Brouillons Gmail montrés sur Telegram, avec un lien qui les ouvre dans Spark (Marc peut les envoyer lui même) ; envoyés par Alfred seulement sur « oui Marque » de Marc |
 | Brouillons en double | Quand Marc a répondu lui même dans un fil, Alfred supprime son brouillon devenu inutile (jamais un brouillon écrit par Marc) |
