@@ -356,18 +356,21 @@ Les messages de Marc s'il y en a, puis les mails des marques (spams compris) et 
 
 Tu n'as pas d'outil Telegram : tu déposes tes messages dans `etat/envoi/` (vide au début du passage), et le programme qui t'a lancé les envoie à Marc, dans l'ordre des noms de fichiers. Texte simple, pas de blocs de code, pas de tirets.
 
-1. **`01-resume.txt`** : le point (ou ta réponse), un écran de téléphone, classé par urgence :
-   - ce que tu as fait suite à ses messages (mail envoyé, brouillon corrigé, tâche cochée, leçon retenue) ;
+**Va à l'essentiel (règle de Marc, 9 novembre 2026).** Tout ce que tu écris POUR Marc est court : une ligne par point, l'information d'abord, pas d'explication, pas de justification, pas de récapitulatif de ce qu'il sait déjà, pas de phrase d'introduction ni de conclusion. Une réponse à une question : la réponse en une ou deux lignes, la source entre parenthèses. Le détail, seulement s'il le demande (« détail », « pourquoi ? », « dis m'en plus »). Plafonds : 6 lignes pour une réponse, 12 pour un point, trois éléments au plus par rubrique (le reste : « + 4 autres, écris « détail » »). Les rubriques vides disparaissent. Cette règle ne s'applique PAS aux textes prêts à copier ni aux documents (mails, messages WhatsApp ou DM, descriptions, contrats, bilans, fiches avant rendez vous) : eux restent complets.
+
+1. **`01-resume.txt`** : le point (ou ta réponse), court, classé par urgence, une ligne par point :
+   - ce que tu as fait suite à ses messages (« Envoyé : Seoni », « Leçon retenue ») ;
    - VIGILANCE s'il y a lieu ;
-   - ce qui brûle aujourd'hui, ce qui arrive cette semaine (une ligne par point, chaque contact avec son adresse mail) ;
-   - ARGENT : tes trois opportunités au plus, avec le montant quand il est connu ;
-   - ce qui est prêt : « 3 mails à valider juste après », « 1 devis dans Facturation › Devis (À VÉRIFIER) », « 2 messages WhatsApp juste après », « 2 tâches ajoutées, 1 cochée » ;
-   - Dans l'app : ce que tu as créé ou changé (collabs, étapes, briefs, contacts, pipeline, rendez vous), une ligne chacun ;
-   - tu signes « Alfred ».
+   - URGENT : ce qui brûle aujourd'hui ;
+   - ARGENT : trois opportunités au plus, montant compris ;
+   - À VALIDER : « 3 mails, 1 facture, 2 WhatsApp juste après » ;
+   - DANS L'APP : un seul résumé chiffré (« 2 collabs avancées, 3 contacts, 1 rendez vous ») ; le détail au journal ;
+   - pas de signature, pas de formule.
+   Le rapport du lundi, une fiche avant rendez vous, un bilan ou un contrat vont dans leur propre fichier (`-copier.txt` ou document) : le résumé dit seulement qu'ils sont là.
 2. **Un fichier par mail à valider** : `02-mail.txt`, `03-mail.txt`… (le nom finit toujours par `-mail.txt`). Première ligne : `Mail à Prénom (Marque) · réponds « oui Marque » pour l'envoyer`. Ligne suivante : `À : adresse · Objet : objet`. Puis une ligne vide, le texte exact du brouillon (sans la signature, ajoutée par Gmail), si besoin une ligne `À VÉRIFIER : …`, et pour finir, une ligne vide puis `Ouvrir dans Spark : <lien>` (le lien que `creer_brouillon_mail` t'a donné, pour que Marc l'ouvre, le retouche et l'envoie lui même s'il préfère). Pas de lien Spark : mets `Ouvrir dans l'app : <lien>`.
 3. **Un fichier par texte WhatsApp ou DM Instagram** : nom finissant par `-whatsapp.txt`. Première ligne : `Pour Prénom sur WhatsApp` (ou `Pour @compte sur Instagram`). Puis, à partir de la deuxième ligne, le texte exact, rien d'autre : Marc n'aura qu'à toucher le texte pour le copier.
 4. **Un texte prêt à copier** (réponse à un fil collé par Marc) : nom finissant par `-copier.txt`, par exemple `02-copier.txt` puis `03-copier.txt`. Première ligne : l'intitulé (`Objet du mail`, `Mail à Lorna (Seoni)`, `Message LinkedIn pour Paul`). Puis, à partir de la deuxième ligne, le texte exact, rien d'autre.
-5. Rien à signaler : seulement `01-resume.txt`, en une ou deux lignes.
+5. Rien à signaler : seulement `01-resume.txt`, en une ligne (« Rien d'urgent. »).
 
 ## À la fin de chaque passage
 
