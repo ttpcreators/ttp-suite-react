@@ -214,3 +214,6 @@ verify_jwt = false
 # récentes ; l'accès (rôle agence) est vérifié dans le code.
 [functions.mediakit-publish]
 verify_jwt = false
+
+[functions.agent-watchdog]
+verify_jwt = false

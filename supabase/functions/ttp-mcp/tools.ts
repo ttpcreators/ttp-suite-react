@@ -1196,6 +1196,58 @@ const supprimerBrouillon: Tool = {
   },
 };
 
+// Stats des posts d'une collab, relevées toutes seules par les synchros Instagram (collabs.ig)
+// et TikTok (collabs.tt) : pour les bilans et les propositions de renouvellement.
+const METRIQUES: Record<string, string> = {
+  likes: "likes", comments: "commentaires", views: "vues", plays: "lectures", reach: "couverture", impressions: "impressions",
+  saved: "enregistrements", saves: "enregistrements", shares: "partages", total_interactions: "interactions", ig_reels_avg_watch_time: "temps moyen (ms)",
+};
+const statsCollab: Tool = {
+  name: "stats_collab",
+  title: "Stats d'une collab",
+  description: "Chiffres des posts publiés pour une collab, relevés tout seuls par l'app (Instagram et TikTok) : lien, date, format, likes, commentaires, et si le créateur a connecté son compte vues, couverture, enregistrements, partages ; avec les totaux. Pour faire un bilan de campagne ou une proposition de renouvellement. Donner l'id de la collab (outil collabs) ou la marque et le créateur.",
+  inputSchema: { type: "object", properties: { collab: { type: "string", description: "Id de la collab" }, marque: { type: "string" }, createur: { type: "string" } }, additionalProperties: false },
+  run: async (sb, _c, a) => {
+    let q = sb.from("collabs").select("id, brand, creator, step, status, created_at, ig, tt").order("created_at", { ascending: false }).limit(5);
+    if (str(a.collab)) q = q.eq("id", str(a.collab, 64));
+    else {
+      if (!str(a.marque)) return fail("Donne l'id de la collab, ou la marque (et le créateur).");
+      q = q.ilike("brand", like(str(a.marque, 80)));
+      if (str(a.createur)) q = q.ilike("creator", like(str(a.createur, 80)));
+    }
+    const { data, error } = await q;
+    if (error) return fail(`Lecture impossible : ${error.message}`);
+    const rows = (data as Json[] | null) ?? [];
+    if (!rows.length) return fail("Aucune collab trouvée.");
+    const out: string[] = [];
+    for (const c of rows.slice(0, 3)) {
+      out.push(`# ${c.brand} × ${titleCase(String(c.creator ?? ""))} · étape ${c.step} « ${COLLAB_STEPS[Number(c.step) - 1] ?? ""} » · collab ${c.id}`);
+      for (const [res, label] of [["ig", "Instagram"], ["tt", "TikTok"]] as const) {
+        const blob = (c[res] ?? null) as Json | null;
+        const posts = ((blob?.posts as Json[] | undefined) ?? []);
+        if (!blob) continue;
+        const releve = blob.at ? ` · relevé le ${frDay(String(blob.at).slice(0, 10))}` : "";
+        if (!posts.length) {
+          out.push(`## ${label}${releve} : aucun post trouvé${blob.why ? ` (${String(blob.why).replace(/_/g, " ")})` : ""}.`);
+          continue;
+        }
+        const tot: Record<string, number> = {};
+        out.push(`## ${label} · ${posts.length} post(s)${releve}`);
+        for (const p of posts) {
+          const m = Object.entries(p).filter(([k, v]) => typeof v === "number" && METRIQUES[k]);
+          for (const [k, v] of m) tot[k] = (tot[k] ?? 0) + (v as number);
+          const date = p.at ? frDay(String(p.at).slice(0, 10)) : "";
+          out.push(`- ${date}${p.type ? ` · ${String(p.type).toLowerCase()}` : ""}${p.url ? ` · ${p.url}` : ""}\n  ${m.map(([k, v]) => `${METRIQUES[k]} ${Number(v).toLocaleString("fr-FR")}`).join(" · ") || "pas de chiffres"}${p.caption ? `\n  « ${String(p.caption).slice(0, 100)} »` : ""}`);
+        }
+        const t = Object.entries(tot).filter(([k]) => k !== "ig_reels_avg_watch_time");
+        if (posts.length > 1 && t.length) out.push(`Total : ${t.map(([k, v]) => `${METRIQUES[k]} ${v.toLocaleString("fr-FR")}`).join(" · ")}`);
+      }
+      if (!c.ig && !c.tt) out.push("Aucune stat relevée pour l'instant (la synchro passe chaque jour à partir de l'étape 4 « Tournage »).");
+    }
+    return ok(out.join("\n"));
+  },
+};
+
 const brouillonMail: Tool = {
   name: "creer_brouillon_mail",
   title: "Préparer un brouillon de mail",
@@ -2020,7 +2072,7 @@ const notifications: Tool = {
 
 export const TOOLS: Tool[] = [
   pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif, aValider, ecarterProposition,
-  creerTache, cocherTache, creerEvenement, creerMeet, brouillonMail, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
+  creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, brouillonMail, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief,
   compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, notifications,
