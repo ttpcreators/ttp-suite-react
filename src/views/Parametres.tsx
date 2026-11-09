@@ -771,7 +771,7 @@ type McpLog = { id: number; tool: string; ok: boolean; at: string };
 const TOOL_LABELS: Record<string, string> = {
   point_du_jour: "Point du jour", rechercher: "Recherche", lister_createurs: "Roster", fiche_createur: "Fiche créateur",
   rechercher_mails: "Recherche de mails", lire_mail: "Lecture d'un mail", dm_instagram: "DM Instagram", scouting: "Scouting",
-  contacts: "Contacts", pipeline: "Pipeline", collabs: "Collabs", stats_collab: "Stats d'une collab", planning: "Planning", taches: "Tâches", factures: "Factures", contrats: "Contrats", reversements: "Reversements", a_valider: "File À valider", ecarter_proposition: "Proposition écartée",
+  contacts: "Contacts", pipeline: "Pipeline", collabs: "Collabs", stats_collab: "Stats d'une collab", droits_usage: "Droits d'utilisation", noter_droits: "Droits notés", posts_createur: "Posts des créateurs", planning: "Planning", taches: "Tâches", factures: "Factures", contrats: "Contrats", reversements: "Reversements", a_valider: "File À valider", ecarter_proposition: "Proposition écartée",
   creer_tache: "Tâche créée", noter_journal: "Journal d'agent", journal_agents: "Journal des agents", cocher_tache: "Tâche cochée", creer_evenement: "Rendez-vous ajouté", creer_meet: "Rendez-vous Meet", creer_brouillon_mail: "Brouillon de mail", brouillons_claude: "Brouillons de Claude", supprimer_brouillon: "Brouillon supprimé",
   ajouter_contact: "Contact ajouté", noter_echange_contact: "Échange noté", ajouter_au_scouting: "Ajout au scouting",
   changer_statut_scouting: "Statut de scouting", avancer_collab: "Étape de collab",

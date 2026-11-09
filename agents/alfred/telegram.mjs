@@ -105,9 +105,10 @@ export function marcMessages(updates, marcId, offset = 0) {
 }
 
 /**
- * Pièce jointe à analyser (preview d'un créateur, capture, PDF) : vidéo, note vidéo, GIF,
- * photo (la plus grande) ou document vidéo, image ou PDF. null sinon.
+ * Pièce jointe à analyser (preview d'un créateur, capture, contrat) : vidéo, note vidéo, GIF,
+ * photo (la plus grande) ou document vidéo, image, PDF ou Word. null sinon.
  */
+const WORD_EXT = /\.(docx?|odt|rtf)$/i;
 export function mediaOf(m) {
   const v = m.video ?? m.video_note ?? m.animation;
   if (v?.file_id) return { fileId: v.file_id, kind: "video", name: v.file_name ?? "video.mp4", size: Number(v.file_size ?? 0) };
@@ -119,6 +120,10 @@ export function mediaOf(m) {
   const mime = String(d?.mime_type ?? "");
   if (d?.file_id && /^(video\/|image\/|application\/pdf)/.test(mime)) {
     return { fileId: d.file_id, kind: mime.startsWith("video/") ? "video" : mime.startsWith("image/") ? "image" : "pdf", name: d.file_name ?? "fichier", size: Number(d.file_size ?? 0) };
+  }
+  // Contrat ou document Word (ou OpenDocument, RTF) : converti en texte sur le Mac (textutil).
+  if (d?.file_id && (/(msword|wordprocessingml|opendocument\.text|rtf)/.test(mime) || WORD_EXT.test(String(d.file_name ?? "")))) {
+    return { fileId: d.file_id, kind: "doc", name: d.file_name ?? "document.docx", size: Number(d.file_size ?? 0) };
   }
   return null;
 }
@@ -210,9 +215,14 @@ async function preparerMedia(token, media, dir, model) {
     const res = await fetch(`https://api.telegram.org/file/bot${token}/${f.result.file_path}`);
     if (!res.ok) return "fichier impossible à télécharger";
     mkdirSync(dir, { recursive: true });
-    const ext = (String(f.result.file_path).match(/\.[a-z0-9]+$/i)?.[0] ?? (media.kind === "pdf" ? ".pdf" : media.kind === "image" ? ".jpg" : ".mp4")).toLowerCase();
+    const ext = (String(f.result.file_path).match(/\.[a-z0-9]+$/i)?.[0] ?? String(media.name).match(/\.[a-z0-9]+$/i)?.[0] ?? (media.kind === "pdf" ? ".pdf" : media.kind === "image" ? ".jpg" : media.kind === "doc" ? ".docx" : ".mp4")).toLowerCase();
     const src = join(dir, `source${ext}`);
     writeFileSync(src, Buffer.from(await res.arrayBuffer()));
+    if (media.kind === "doc") {
+      const txt = join(dir, "texte.txt");
+      const conv = await run("textutil", ["-convert", "txt", "-output", txt, src]).then(() => true, () => false);
+      return conv ? `document Word « ${media.name} » enregistré : ${src}, son texte dans ${txt}` : `document Word « ${media.name} » enregistré (${src}) mais illisible : demande-le en PDF`;
+    }
     if (media.kind !== "video") return `${media.kind === "pdf" ? "PDF" : "image"} enregistré : ${src}`;
     return await decouperVideo(src, dir, model);
   } catch (e) {
@@ -385,6 +395,35 @@ export async function telechargerVideo(lien, dir, model) {
   }
 }
 
+const CHROME = [
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  join(homedir(), "Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+  "/Applications/Chromium.app/Contents/MacOS/Chromium",
+  "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+];
+/** Arguments d'impression PDF d'un navigateur Chromium (anciens et nouveaux drapeaux : un drapeau inconnu est ignoré). */
+export function pdfArgs(src, out) {
+  return ["--headless", "--disable-gpu", "--no-first-run", "--no-pdf-header-footer", "--print-to-pdf-no-header", "--virtual-time-budget=5000", `--print-to-pdf=${out}`, `file://${src}`];
+}
+/**
+ * Document HTML d'Alfred (proposition, bilan, contrat, fiche) → PDF, avec Chrome s'il est
+ * installé sur le Mac. Renvoie le chemin du PDF, ou null (le HTML part alors tel quel).
+ */
+async function enPdf(src) {
+  const nav = CHROME.find((c) => existsSync(c));
+  if (!nav) return null;
+  const out = src.replace(/\.html?$/i, ".pdf");
+  const dir = join(tmpdir(), `alfred-pdf-${process.pid}`);
+  try {
+    await promisify(execFile)(nav, [`--user-data-dir=${dir}`, ...pdfArgs(src, out)], { timeout: 90_000 });
+    return existsSync(out) && statSync(out).size > 1000 ? out : null;
+  } catch {
+    return null;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 /** Envoie un fichier à Marc (contrat rédigé, document), 50 Mo au plus. */
 async function sendDocument(token, chatId, path, name, replyTo = null) {
   const form = new FormData();
@@ -524,6 +563,12 @@ async function main() {
   let replyTo = ids.length ? ids[ids.length - 1] : null;
   for (const m of messages) {
     if (m.file) {
+      // Un document HTML part en PDF quand Chrome est là (plus simple à ouvrir et à transférer).
+      const pdf = /\.html?$/i.test(m.name) ? await enPdf(m.file) : null;
+      if (pdf) {
+        m.file = pdf;
+        m.name = m.name.replace(/\.html?$/i, ".pdf");
+      }
       await sendDocument(token, chatId, m.file, m.name, replyTo);
       replyTo = null;
       appendFileSync(fil, `\n### ${stamp()} · Alfred\n(document envoyé : ${m.name})\n`);

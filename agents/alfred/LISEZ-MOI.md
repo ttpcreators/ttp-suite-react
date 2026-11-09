@@ -20,6 +20,17 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Recrutement du mercredi | Mercredi 11 h : les trois meilleurs profils du scouting et leur premier DM |
 | Media kits | Dans la revue du mois : media kits dépassés signalés avec les nouveaux chiffres |
 | Nouveau créateur | Contrat de représentation, fiche, accès, media kit, bienvenue, mémoire, chacun en tâche |
+| Droits d'utilisation | Registre des droits vendus aux marques (`droits_usage`) : prolongation proposée 21 jours avant la fin ; droits expirés vérifiés dans la bibliothèque publicitaire de Meta, et facture de prolongation si la vidéo tourne encore |
+| Vidéos qui cartonnent | Chaque matin, les posts qui font au moins deux fois les chiffres habituels du créateur (`posts_createur`) : relances des marques qui hésitaient, avec le nouveau chiffre |
+| Temps forts | Noël, Black Friday, Saint Valentin, rentrée, grands événements sportifs : la prospection s'y prépare 6 à 10 semaines avant |
+| Proposition sur mesure | « Fais une proposition pour Marque » : trois créateurs adaptés, leurs chiffres, des idées et des formules chiffrées, en PDF |
+| Relecture des contrats | Contrat d'une marque envoyé en PDF ou Word : pièges repérés (droits, exclusivité, paiement, annulation, loi influence), clauses de remplacement et mail à la marque |
+| Contrôle de publication | Le lendemain d'une publication prévue : post en ligne, mention « Collaboration commerciale », @, code promo ; sinon le message au créateur |
+| Créateurs à risque | Revue du mois : le créateur qui a moins de deals, attend un paiement ou une réponse, et l'action pour le garder |
+| Compte rendu de rendez vous | Un vocal après le call : compte rendu, tâches, dates, et mail récapitulatif à la marque |
+| Mode vacances | « Je pars jusqu'au 20 » : seulement l'urgent, réponses d'attente aux marques (sur délégation), résumé au retour |
+| Trésorerie | Chaque lundi et sur demande : sur le compte, à encaisser, à reverser, à mettre de côté, fin de mois prévue |
+| Documents en PDF | Contrats, bilans et propositions partent en PDF quand Chrome est installé sur le Mac (sinon en HTML) |
 | Alerte si Alfred tombe | Chaque jour de semaine, l'app vérifie qu'Alfred a fait son point du matin ; sinon notification à Marc et Gianni |
 | Réponses aux mails, relances | Brouillons Gmail montrés sur Telegram, avec un lien qui les ouvre dans Spark (Marc peut les envoyer lui même) ; envoyés par Alfred seulement sur « oui Marque » de Marc |
 | Brouillons en double | Quand Marc a répondu lui même dans un fil, Alfred supprime son brouillon devenu inutile (jamais un brouillon écrit par Marc) |
