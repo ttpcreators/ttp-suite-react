@@ -31,6 +31,12 @@ fi
 
 cp "$SRC/CLAUDE.md" "$SRC/alfred.sh" "$SRC/ecoute.sh" "$SRC/telegram.mjs" "$SRC/mise-a-jour.sh" "$DEST/"
 chmod +x "$DEST/alfred.sh" "$DEST/ecoute.sh" "$DEST/mise-a-jour.sh"
+# Ses skills (skills/<nom>/SKILL.md) : chargées par Claude depuis .claude/skills du dossier d'Alfred.
+# Chaque skill du dépôt remplace sa copie ; une skill ajoutée à la main sur le Mac n'est pas touchée.
+if [ -d "$SRC/skills" ]; then
+  mkdir -p "$DEST/.claude/skills"
+  for d in "$SRC"/skills/*(/N); do rsync -a --delete "$d/" "$DEST/.claude/skills/${d:t}/"; done
+fi
 if ! grep -q '^ALFRED_BOT_TOKEN=' "$DEST/config.env" 2>/dev/null; then
   echo "Il manque le bot d'Alfred : ./installer.sh --bot <chat_id>" >&2
   exit 1
