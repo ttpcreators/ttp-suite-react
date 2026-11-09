@@ -25,6 +25,7 @@ import { activityText } from "../_shared/activityText.ts";
 import { upcomingBirthdays } from "../_shared/birthdays.ts";
 import { amountOf, contractList, invoiceTotals, owesMoney, pctOf, reversementRows, type Detail, type Payout } from "../_shared/reversements.ts";
 import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/audience.ts";
+import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCartonnent, type DroitUsage, type PostCourt } from "../_shared/alfredSuivi.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
 type Json = Record<string, unknown>;
@@ -1237,7 +1238,7 @@ const statsCollab: Tool = {
           const m = Object.entries(p).filter(([k, v]) => typeof v === "number" && METRIQUES[k]);
           for (const [k, v] of m) tot[k] = (tot[k] ?? 0) + (v as number);
           const date = p.at ? frDay(String(p.at).slice(0, 10)) : "";
-          out.push(`- ${date}${p.type ? ` · ${String(p.type).toLowerCase()}` : ""}${p.url ? ` · ${p.url}` : ""}\n  ${m.map(([k, v]) => `${METRIQUES[k]} ${Number(v).toLocaleString("fr-FR")}`).join(" · ") || "pas de chiffres"}${p.caption ? `\n  « ${String(p.caption).slice(0, 100)} »` : ""}`);
+          out.push(`- ${date}${p.type ? ` · ${String(p.type).toLowerCase()}` : ""}${p.url ? ` · ${p.url}` : ""}\n  ${m.map(([k, v]) => `${METRIQUES[k]} ${Number(v).toLocaleString("fr-FR")}`).join(" · ") || "pas de chiffres"}${p.caption ? `\n  « ${String(p.caption).slice(0, 160)} »` : ""}`);
         }
         const t = Object.entries(tot).filter(([k]) => k !== "ig_reels_avg_watch_time");
         if (posts.length > 1 && t.length) out.push(`Total : ${t.map(([k, v]) => `${METRIQUES[k]} ${v.toLocaleString("fr-FR")}`).join(" · ")}`);
@@ -1998,6 +1999,101 @@ const postsInstagram: Tool = {
   },
 };
 
+// ── Alfred : droits d'utilisation et posts qui cartonnent (_shared/alfredSuivi.ts) ──
+const droitsUsage: Tool = {
+  name: "droits_usage",
+  title: "Droits d'utilisation",
+  description: "Registre des droits d'utilisation vendus aux marques (repost organique, publicité, whitelisting) : marque, créateur, contenu, dates, prix. Les droits EXPIRÉS remontent en tête (la marque qui continue d'utiliser le contenu doit payer une prolongation), puis ceux qui finissent dans 21 jours (proposer la prolongation avant la fin).",
+  inputSchema: { type: "object", properties: { filtre: { type: "string", description: "Marque ou créateur" } }, additionalProperties: false },
+  run: async (sb, _c, a) => {
+    const st = await appState(sb);
+    return ok(droitsTexte(lireDroits(st.usageRights), isoDay(), str(a.filtre, 80)));
+  },
+};
+
+const noterDroits: Tool = {
+  name: "noter_droits",
+  title: "Noter des droits d'utilisation",
+  description: "Ajoute ou met à jour une ligne du registre des droits d'utilisation (droits_usage) : quand une collab, un devis accepté ou un contrat accorde des droits à une marque, ou quand une prolongation est vendue. Sans `id` : nouvelle ligne. Avec `id` : seuls les champs donnés changent. `clos` = true quand la prolongation est facturée ou refusée (la ligne ne remonte plus).",
+  inputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "string" }, marque: { type: "string" }, createur: { type: "string" },
+      type: { type: "string", description: "organique, publicite, whitelisting, organique + publicite…" },
+      debut: { type: "string", description: "AAAA-MM-JJ" }, fin: { type: "string", description: "AAAA-MM-JJ" },
+      contenu: { type: "string", description: "Lien du post ou description du contenu" },
+      collab_id: { type: "string" }, prix: { type: "string", description: "Prix des droits ou de la prolongation" },
+      note: { type: "string" }, clos: { type: "boolean" },
+    },
+    additionalProperties: false,
+  },
+  write: true,
+  run: async (sb, _c, a) => {
+    const st = await appState(sb);
+    const list = lireDroits(st.usageRights);
+    const prev = str(a.id) ? list.find((d) => d.id === str(a.id)) : undefined;
+    if (str(a.id) && !prev) return fail(`Droit introuvable (${str(a.id)}).`);
+    const date = (k: string) => {
+      const v = str(a[k], 10);
+      return v && !/^\d{4}-\d{2}-\d{2}$/.test(v) ? null : v;
+    };
+    if (date("debut") === null || date("fin") === null) return fail("Les dates s'écrivent AAAA-MM-JJ.");
+    const pick = (k: string, max = 300) => (k in a ? str(a[k], max) : String((prev as Record<string, unknown> | undefined)?.[k] ?? ""));
+    const d: DroitUsage = {
+      id: prev?.id ?? `du${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`,
+      marque: pick("marque", 120), createur: pick("createur", 120), type: pick("type", 80),
+      debut: pick("debut", 10), fin: pick("fin", 10), contenu: pick("contenu"), collab_id: pick("collab_id", 64),
+      prix: pick("prix", 120), note: pick("note", 500),
+      clos: typeof a.clos === "boolean" ? a.clos : !!prev?.clos,
+      maj: isoDay(),
+    };
+    if (!d.marque || !d.createur) return fail("Indique la marque et le créateur.");
+    if (!d.fin) return fail("Indique la date de fin des droits (AAAA-MM-JJ), ou demande-la à Marc.");
+    const { error } = await sb.rpc("app_state_list", { p_key: "usageRights", p_upsert: [d], p_remove: [], p_prepend: !prev });
+    if (error) return fail(`Enregistrement impossible : ${error.message}`);
+    const e = etatDroit(d, isoDay());
+    return ok(`${prev ? "Droit mis à jour" : "Droit noté"} : ${d.marque} × ${d.createur} · ${d.type || "droits"} jusqu'au ${d.fin}${e.etat === "expire" ? " (déjà expiré)" : ""} · id ${d.id}`);
+  },
+};
+
+const postsCreateur: Tool = {
+  name: "posts_createur",
+  title: "Posts des créateurs",
+  description: "Derniers posts Instagram et TikTok des créateurs, relevés chaque jour par l'app, comparés à leurs chiffres habituels (vues, sinon likes + commentaires). Sans créateur : seulement les posts récents qui font au moins deux fois l'habituel, sur tout le roster actif (le bon moment pour relancer les marques). Avec un créateur : tous ses derniers posts notés, avec le début de la légende (pour vérifier une publication : mention, @, code promo).",
+  inputSchema: { type: "object", properties: { createur: { type: "string" }, jours: { type: "number", description: "Fenêtre des posts récents (défaut 7)" } }, additionalProperties: false },
+  run: async (sb, _c, a) => {
+    let q = sb.from("creators").select("name, status, ig, tt").order("name");
+    if (str(a.createur)) q = q.ilike("name", like(str(a.createur, 80)));
+    const { data, error } = await q;
+    if (error) return fail(`Roster illisible : ${error.message}`);
+    const jours = int(a.jours, 7, 1, 60);
+    const now = new Date();
+    const one = !!str(a.createur);
+    const out: string[] = [];
+    for (const c of (data as Json[] | null) ?? []) {
+      if (!one && String(c.status ?? "actif").toLowerCase() === "inactif") continue;
+      const ig = (c.ig ?? null) as Json | null;
+      const tt = (c.tt ?? null) as Json | null;
+      const sources: [string, PostCourt[], string][] = [
+        ["Instagram", Array.isArray(ig?.feed) ? (ig.feed as PostCourt[]) : [], ig?.at ? String(ig.at).slice(0, 10) : ""],
+        ["TikTok", Array.isArray(tt?.recent) ? (tt.recent as PostCourt[]) : [], tt?.at ? String(tt.at).slice(0, 10) : ""],
+      ];
+      for (const [res, posts, at] of sources) {
+        if (!posts.length) continue;
+        const name = titleCase(String(c.name));
+        if (one) {
+          out.push(`## ${name} · ${res} · ${posts.length} posts${at ? ` · relevé le ${frDay(at)}` : ""}`);
+          for (const p of noterPosts(posts)) out.push(`- ${postLigne(p)}`);
+        } else {
+          for (const p of postsQuiCartonnent(posts, now, jours)) out.push(`- ${name} · ${res} · ${postLigne(p)}`);
+        }
+      }
+    }
+    if (one) return out.length ? ok(out.join("\n")) : fail("Aucun post relevé pour ce créateur (compte pas encore lu par l'app).");
+    return ok([`# Posts qui cartonnent (${jours} derniers jours, deux fois l'habituel ou plus) · ${out.length}`, ...out, out.length ? "" : "Aucun pour l'instant."].filter(Boolean).join("\n"));
+  },
+};
+
 const sourcing: Tool = {
   name: "sourcing",
   title: "Sourcing et radar à marques",
@@ -2076,6 +2172,7 @@ export const TOOLS: Tool[] = [
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief,
   compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, notifications,
+  droitsUsage, noterDroits, postsCreateur,
   ...ADMIN_TOOLS,
 ];
 

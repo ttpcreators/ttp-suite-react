@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { chunks, dueReminders, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, trouverLien } from "./telegram.mjs";
+import { chunks, dueReminders, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, pdfArgs, trouverLien } from "./telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -72,6 +72,10 @@ describe("Alfred : messages Telegram", () => {
   it("repère la preview d'un créateur (vidéo, photo, document) et garde le message", () => {
     expect(mediaOf({ video: { file_id: "V", file_size: 1000, file_name: "lena.mp4" } })).toEqual({ fileId: "V", kind: "video", name: "lena.mp4", size: 1000 });
     expect(mediaOf({ photo: [{ file_id: "p1" }, { file_id: "p2", file_size: 50 }] })?.fileId).toBe("p2");
+    // Un contrat Word d'une marque : lu après conversion en texte.
+    expect(mediaOf({ document: { file_id: "W", mime_type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document", file_name: "contrat.docx" } })?.kind).toBe("doc");
+    expect(mediaOf({ document: { file_id: "W2", mime_type: "application/octet-stream", file_name: "Contrat Marque.DOC" } })?.kind).toBe("doc");
+    expect(mediaOf({ document: { file_id: "Z", mime_type: "application/zip", file_name: "x.zip" } })).toBeNull();
     expect(mediaOf({ document: { file_id: "D", mime_type: "application/pdf", file_name: "brief.pdf" } })?.kind).toBe("pdf");
     expect(mediaOf({ document: { file_id: "Z", mime_type: "application/zip" } })).toBeNull();
     const { kept } = marcMessages([{ update_id: 40, message: { date: 1793919600, from: { id: 42 }, chat: { type: "private" }, video: { file_id: "V" }, caption: "preview Léna Yade" } }], "42", 0);
@@ -103,5 +107,14 @@ describe("Alfred : messages Telegram", () => {
   it("garde le numéro du message de Marc, pour y répondre en le citant", () => {
     const [m] = marcMessages([{ update_id: 50, message: { message_id: 321, date: 1793919600, from: { id: 42 }, chat: { type: "private" }, text: "où en est Fitaya ?" } }], "42", 0).kept;
     expect(m.id).toBe(321);
+  });
+});
+
+describe("Alfred : documents en PDF", () => {
+  it("imprime le HTML sans en-tête, vers le PDF demandé", () => {
+    const a = pdfArgs("/tmp/x/02-proposition.html", "/tmp/x/02-proposition.pdf");
+    expect(a).toContain("--headless");
+    expect(a).toContain("--print-to-pdf=/tmp/x/02-proposition.pdf");
+    expect(a[a.length - 1]).toBe("file:///tmp/x/02-proposition.html");
   });
 });

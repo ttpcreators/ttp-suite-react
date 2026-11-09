@@ -8,6 +8,7 @@
 #                         Le lundi à 11 h : la prospection de la semaine ; le premier lundi
 #                         du mois à 14 h : la revue des tarifs ; le mercredi à 11 h : le
 #                         recrutement. Et, une heure avant chaque rendez-vous du jour, sa fiche.
+#                         En mode vacances (etat/vacances.txt) : le point du matin seulement.
 #   alfred.sh --point | --prospection | --tarifs | --recrutement : ce passage tout de suite (test).
 # Alfred lit TTP Suite par le connecteur « TTP Suite » du compte Claude de Marc, prépare des
 # brouillons, tient la to-do et dépose ses messages pour Marc dans etat/envoi/ ; ce script les
@@ -20,7 +21,7 @@ export LC_TIME=fr_FR.UTF-8
 setopt null_glob
 cd "$HOME/Code/TTPAlfred" || exit 1
 mkdir -p etat/envoi
-touch etat/suivi.md etat/conversation.md etat/memoire.md etat/rappels.md etat/delegations.md
+touch etat/suivi.md etat/conversation.md etat/memoire.md etat/rappels.md etat/delegations.md etat/vacances.txt
 LOG=etat/passages.log
 
 if [ ! -f config.env ]; then
@@ -62,6 +63,18 @@ heure=$((10#$(date +%H)))
 quantieme=$((10#$(date +%d)))
 auto=0
 [[ "$1" != "--reponse" ]] && auto=1
+aujourdhui=$(date +%Y-%m-%d)
+
+# Mode vacances : etat/vacances.txt commence par « AAAA-MM-JJ », le dernier jour d'absence de
+# Marc (écrit par Alfred quand Marc dit « je pars jusqu'au … »). Pendant l'absence : le point du
+# matin seulement (l'urgent), pas de point du soir, de prospection, de revue ni de recrutement.
+# Le premier point après : le résumé du retour, puis le fichier est vidé.
+vacances=""
+retour=0
+fin_vacances=$(head -n 1 etat/vacances.txt | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}' | head -n 1)
+if [[ -n "$fin_vacances" ]]; then
+  if [[ "$aujourdhui" > "$fin_vacances" ]]; then retour=1; else vacances="$fin_vacances"; fi
+fi
 
 # Rendez-vous du jour (notés par Alfred dans etat/rdv-du-jour.txt, « AAAA-MM-JJ HH:MM · titre ») :
 # ceux qui commencent dans 45 à 105 minutes reçoivent leur fiche de préparation, une seule fois.
@@ -78,16 +91,16 @@ if (( auto )); then
     grep -qxF -- "$ligne" etat/rdv-prepares.txt || rdv_dus+=("$ligne")
   done < etat/rdv-du-jour.txt
 fi
-if [[ "$1" == "--point" ]] || (( auto && jour <= 5 && (heure == 9 || heure == 17) )); then
+if [[ "$1" == "--point" ]] || (( auto && jour <= 5 && heure == 9 )) || (( auto && jour <= 5 && heure == 17 && ! ${#vacances} )); then
   (( heure < 13 )) && mode="le point du matin" || mode="le point du soir"
 # Le lundi à 11 h : la prospection de la semaine, créateur par créateur.
-elif [[ "$1" == "--prospection" ]] || (( auto && jour == 1 && heure == 11 )); then
+elif [[ "$1" == "--prospection" ]] || (( auto && ! ${#vacances} && jour == 1 && heure == 11 )); then
   mode="la prospection de la semaine"
 # Le premier lundi du mois à 14 h : la revue des tarifs.
-elif [[ "$1" == "--tarifs" ]] || (( auto && jour == 1 && quantieme <= 7 && heure == 14 )); then
+elif [[ "$1" == "--tarifs" ]] || (( auto && ! ${#vacances} && jour == 1 && quantieme <= 7 && heure == 14 )); then
   mode="la revue des tarifs du mois"
 # Le mercredi à 11 h : le recrutement de la semaine (scouting).
-elif [[ "$1" == "--recrutement" ]] || (( auto && jour == 3 && heure == 11 )); then
+elif [[ "$1" == "--recrutement" ]] || (( auto && ! ${#vacances} && jour == 3 && heure == 11 )); then
   mode="le recrutement de la semaine"
 elif (( recus > 0 )); then
   mode="la réponse à Marc"
@@ -106,7 +119,6 @@ requete="after:$after -in:sent -category:promotions -category:social"
 
 # Délégation en cours où Marc a autorisé l'envoi (ligne « jusqu'au AAAA-MM-JJ · … · envoi autorisé »,
 # ou « permanent · … · envoi autorisé » pour une délégation sans fin, comme les relances automatiques).
-aujourdhui=$(date +%Y-%m-%d)
 delegue=0
 while IFS= read -r ligne; do
   [[ "$ligne" == *"envoi autorisé"* ]] || continue
@@ -124,8 +136,8 @@ done < etat/delegations.md
 # Quand Marc écrit : tous les outils de TTP Suite, pour faire ce qu'il demande. Envoyer un brouillon et retenir une leçon :
 # seulement quand Marc vient d'écrire, ou pendant une délégation avec envoi autorisé.
 ttp="mcp__claude_ai_TTP_Suite__"
-lire="brouillons_claude journal_agents stats_collab compta lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
-agir="noter_journal creer_meet ajouter_au_scouting changer_statut_scouting creer_brouillon_mail supprimer_brouillon preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
+lire="droits_usage posts_createur brouillons_claude journal_agents stats_collab compta lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
+agir="noter_droits noter_journal creer_meet ajouter_au_scouting changer_statut_scouting creer_brouillon_mail supprimer_brouillon preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
 sur_oui="envoyer_brouillon noter_lecon"
 interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture ecarter_proposition proposer_action preparer_reponse_mail resumer_brief"
 # Seule commande permise : télécharger et découper une vidéo dont le lien est dans un mail.
@@ -152,6 +164,8 @@ fi
 (( delegue )) && messages="$messages Une délégation avec envoi autorisé est en cours (etat/delegations.md) : tu peux envoyer ce qu'elle couvre, et seulement ça."
 (( ${#rdv_dus} > 0 )) && messages="$messages Rendez-vous dans environ une heure, à préparer (voir « La fiche avant chaque rendez-vous ») : ${(j:; :)rdv_dus}."
 (( recus == 0 && ! delegue )) && messages="$messages Tu ne peux envoyer aucun mail pendant ce passage."
+[[ -n "$vacances" ]] && messages="$messages MODE VACANCES : Marc est absent jusqu'au $vacances inclus (voir « Le mode vacances ») : seulement l'urgent, très court."
+[[ "$mode" == "le point du matin" ]] && (( retour )) && messages="$messages Marc rentre de vacances (absent jusqu'au $fin_vacances) : commence par le résumé de son absence (voir « Le mode vacances »)."
 
 rm -f etat/envoi/*
 {
@@ -170,6 +184,8 @@ if [ "$code" -eq 0 ] && (( ${#envois} > 0 )); then
     [[ "$mode" == "le point"* ]] && echo "$now" > etat/dernier-passage
     [[ "$mode" == "la prospection"* ]] && date +%Y-%m-%d > etat/derniere-prospection
     [[ "$mode" == "la revue des tarifs"* ]] && date +%Y-%m-%d > etat/derniere-revue-tarifs
+    # Retour de vacances fait : le mode vacances s'arrête.
+    [[ "$mode" == "le point du matin" ]] && (( retour )) && : > etat/vacances.txt
     for r in "${rdv_dus[@]}"; do print -r -- "$r" >> etat/rdv-prepares.txt; done
     garder etat/rdv-prepares.txt 200
   fi
