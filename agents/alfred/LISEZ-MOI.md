@@ -30,6 +30,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Compte rendu de rendez vous | Un vocal après le call : compte rendu, tâches, dates, et mail récapitulatif à la marque |
 | Mode vacances | « Je pars jusqu'au 20 » : seulement l'urgent, réponses d'attente aux marques (sur délégation), résumé au retour |
 | Trésorerie | Chaque lundi et sur demande : sur le compte, à encaisser, à reverser, à mettre de côté, fin de mois prévue |
+| Skills | Sept savoir faire chargés au bon moment (`skills/`) : influencer-marketing, cold-email, prospecting, sales-enablement, offers, comptable, copy-editing |
 | Documents en PDF | Contrats, bilans et propositions partent en PDF quand Chrome est installé sur le Mac (sinon en HTML) |
 | Alerte si Alfred tombe | Chaque jour de semaine, l'app vérifie qu'Alfred a fait son point du matin ; sinon notification à Marc et Gianni |
 | Réponses aux mails, relances | Brouillons Gmail montrés sur Telegram, avec un lien qui les ouvre dans Spark (Marc peut les envoyer lui même) ; envoyés par Alfred seulement sur « oui Marque » de Marc |
@@ -57,7 +58,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 
 ## Les fichiers
 
-Dans le dépôt (`agents/alfred/`, public, aucun secret) : `CLAUDE.md` (ses consignes), `alfred.sh` (un passage), `ecoute.sh` et `telegram.mjs` (Telegram), deux réglages launchd, `installer.sh`.
+Dans le dépôt (`agents/alfred/`, public, aucun secret) : `CLAUDE.md` (ses consignes), `skills/` (ses skills, sous licence libre, copiées dans `.claude/skills`), `alfred.sh` (un passage), `ecoute.sh` et `telegram.mjs` (Telegram), deux réglages launchd, `installer.sh`.
 
 Sur le Mac seulement (`~/Code/TTPAlfred/`) :
 - `config.env` : jeton du bot d'Alfred et identifiant Telegram de Marc ;

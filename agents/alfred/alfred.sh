@@ -141,7 +141,8 @@ agir="noter_droits noter_journal creer_meet ajouter_au_scouting changer_statut_s
 sur_oui="envoyer_brouillon noter_lecon"
 interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture ecarter_proposition proposer_action preparer_reponse_mail resumer_brief"
 # Seule commande permise : télécharger et découper une vidéo dont le lien est dans un mail.
-allowed=("Read" "Edit(./etat/**)" "WebFetch" "WebSearch" "Bash(node telegram.mjs telecharger:*)")
+# Skill : ses skills (.claude/skills, voir skills/LISEZ-MOI.md du dépôt), des consignes à lire.
+allowed=("Read" "Edit(./etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)")
 denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram")
 if (( recus > 0 )); then
   # Marc vient d'écrire : Alfred gère toute l'app sur sa demande (choix de Marc le 2026-11-06).
