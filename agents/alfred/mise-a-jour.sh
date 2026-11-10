@@ -31,7 +31,7 @@ neuf="$tmp/alfred"
 for f in installer.sh alfred.sh ecoute.sh telegram.mjs CLAUDE.md mise-a-jour.sh; do
   [ -s "$neuf/$f" ] || { note "version $sha incomplète ($f manquant), pas installée"; exit 0; }
 done
-zsh -n "$neuf/alfred.sh" && zsh -n "$neuf/installer.sh" && node --check "$neuf/telegram.mjs" || { note "version $sha illisible, pas installée"; exit 0; }
+zsh -n "$neuf/alfred.sh" && zsh -n "$neuf/installer.sh" && node --check "$neuf/telegram.mjs" && { [ ! -f "$neuf/whatsapp.mjs" ] || node --check "$neuf/whatsapp.mjs"; } || { note "version $sha illisible, pas installée"; exit 0; }
 
 # On attend qu'Alfred ait fini son passage en cours (30 minutes au plus).
 for i in {1..180}; do
@@ -40,7 +40,7 @@ for i in {1..180}; do
 done
 
 mkdir -p "$SRC"
-rsync -a --delete --exclude telegram.test.ts "$neuf/" "$SRC/"
+rsync -a --delete --exclude "*.test.ts" "$neuf/" "$SRC/"
 if ALFRED_MAJ=1 zsh "$SRC/installer.sh" >> "$LOG" 2>&1; then
   echo "$sha" > "$DEST/etat/version-programme"
   note "installé : $sha · $titre"

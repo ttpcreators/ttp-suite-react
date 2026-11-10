@@ -29,7 +29,7 @@ if [[ "$1" == "--bot" ]]; then
   exit 0
 fi
 
-cp "$SRC/CLAUDE.md" "$SRC/alfred.sh" "$SRC/ecoute.sh" "$SRC/telegram.mjs" "$SRC/mise-a-jour.sh" "$DEST/"
+cp "$SRC/CLAUDE.md" "$SRC/alfred.sh" "$SRC/ecoute.sh" "$SRC/telegram.mjs" "$SRC/whatsapp.mjs" "$SRC/mise-a-jour.sh" "$DEST/"
 chmod +x "$DEST/alfred.sh" "$DEST/ecoute.sh" "$DEST/mise-a-jour.sh"
 # Ses skills (skills/<nom>/SKILL.md) : chargées par Claude depuis .claude/skills du dossier d'Alfred.
 # Chaque skill du dépôt remplace sa copie ; une skill ajoutée à la main sur le Mac n'est pas touchée.

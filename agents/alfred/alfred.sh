@@ -142,10 +142,12 @@ sur_oui="envoyer_brouillon noter_lecon"
 interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture ecarter_proposition proposer_action preparer_reponse_mail resumer_brief"
 # Seule commande permise : télécharger et découper une vidéo dont le lien est dans un mail.
 # Skill : ses skills (.claude/skills, voir skills/LISEZ-MOI.md du dépôt), des consignes à lire.
-# Spark (choix de Marc le 2026-11-10) : lire les boîtes des créateurs gérées dans Spark Desktop
+# WhatsApp (choix de Marc le 2026-11-10) : lecture seule des discussions de etat/whatsapp-autorises.txt
+# (whatsapp.mjs refuse les autres). Spark (choix de Marc le 2026-11-10) : lire les boîtes des créateurs gérées dans Spark Desktop
 # et y préparer des brouillons. Jamais d'envoi (la commande n'en a pas), de suppression ni d'action.
 allowed=("Read" "Edit(./etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)"
-  "Bash(spark accounts)" "Bash(spark search:*)" "Bash(spark emails:*)" "Bash(spark thread:*)" "Bash(spark attachment:*)" "Bash(spark draft:*)")
+  "Bash(spark accounts)" "Bash(spark search:*)" "Bash(spark emails:*)" "Bash(spark thread:*)" "Bash(spark attachment:*)" "Bash(spark draft:*)"
+  "Bash(node whatsapp.mjs:*)")
 denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram"
   "Bash(spark draft --delete:*)" "Bash(spark action:*)" "Bash(spark contact-action:*)" "Bash(spark event:*)" "Bash(spark comment:*)")
 if (( recus > 0 )); then
