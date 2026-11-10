@@ -16,6 +16,8 @@
 //                                                 (vocaux transcrits : 10 par défaut, 30 pour « nouveaux » ;
 //                                                  transcriptions gardées dans etat/whatsapp-vocaux/)
 //   node whatsapp.mjs nouveaux --depuis "AAAA-MM-JJ HH:MM"
+//   node whatsapp.mjs en-attente [--heures 12] [--jours 14]
+//                                                 les discussions où l'autre attend une réponse de Marc
 //   node whatsapp.mjs numero <id ou nom>          son numéro, pour le bouton « Ouvrir dans WhatsApp »
 // ============================================================================
 
@@ -129,6 +131,26 @@ export function contenu(type, texte, titre, vocal = null) {
 export function ligne(m, auteur) {
   const c = contenu(m.type, m.texte, m.titre, m.vocal ?? null);
   return c === null ? null : `${heure(appleVersDate(m.date))} · ${auteur} : ${c.replace(/\s*\n\s*/g, " / ")}`;
+}
+
+/** « 5 h », « 1 j 4 h », « 6 j » : depuis combien de temps quelqu'un attend. */
+export function attente(heures) {
+  const h = Math.max(0, Math.floor(heures));
+  if (h < 24) return `${h} h`;
+  const j = Math.floor(h / 24);
+  return j >= 3 || h % 24 === 0 ? `${j} j` : `${j} j ${h % 24} h`;
+}
+
+/**
+ * La balle est dans le camp de Marc : le dernier vrai message de la discussion (hors évènements
+ * système) vient de l'autre, depuis `heures` heures au moins. null sinon.
+ */
+export function balleChezMarc(rows, now, heures = 12) {
+  const vrais = rows.filter((m) => contenu(m.type, m.texte, m.titre, m.vocal ?? null) !== null);
+  const dernier = vrais[vrais.length - 1];
+  if (!dernier || dernier.moi) return null;
+  const h = (now.getTime() - appleVersDate(dernier.date).getTime()) / 3_600_000;
+  return h >= heures ? { heures: h, dernier } : null;
 }
 
 // ── Accès à la copie WhatsApp ───────────────────────────────────────────────
@@ -271,6 +293,22 @@ function main() {
     console.log([`# WhatsApp avec ${entree.nom} · ${lignes.length} message(s)`, ...lignes].join("\n"));
     return;
   }
+  if (mode === "en-attente") {
+    const heures = Math.max(Number(option(args, "--heures", 12)) || 12, 1);
+    // Au delà de 14 jours, la discussion est retombée : on ne la remonte plus chaque matin.
+    const jours = Math.max(Number(option(args, "--jours", 14)) || 14, 1);
+    const compteur = { reste: 10 };
+    const maintenant = new Date();
+    const lignes = avecBase((q) =>
+      liste
+        .map((x) => ({ x, b: balleChezMarc(vocaux(messages(q, x.jid, null, 15), compteur), maintenant, heures) }))
+        .filter((r) => r.b && r.b.heures <= jours * 24)
+        .sort((a, b) => b.b.heures - a.b.heures)
+        .map((r) => `${r.x.nom} · attend depuis ${attente(r.b.heures)} · ${ligne(r.b.dernier, r.b.dernier.membre || r.x.nom)}`),
+    );
+    console.log(lignes.length ? lignes.join("\n") : `Personne n'attend de réponse de Marc sur WhatsApp depuis plus de ${heures} h.`);
+    return;
+  }
   if (mode === "numero") {
     const cle = args.join(" ");
     const entree = trouver(liste, cle);
@@ -296,7 +334,7 @@ function main() {
     console.log(blocs.length ? blocs.join("\n\n") : `Rien de nouveau sur WhatsApp depuis le ${heure(depuis)}.`);
     return;
   }
-  throw new Error("Commandes : chercher <mot>, liste, lire <créateur> [--depuis AAAA-MM-JJ] [--max N] [--vocaux N], nouveaux --depuis \"AAAA-MM-JJ HH:MM\", numero <créateur>.");
+  throw new Error("Commandes : chercher <mot>, liste, lire <créateur> [--depuis AAAA-MM-JJ] [--max N] [--vocaux N], nouveaux --depuis \"AAAA-MM-JJ HH:MM\", en-attente [--heures N], numero <créateur>.");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

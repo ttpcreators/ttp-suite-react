@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { appleVersDate, cleVocal, contenu, duree, correspond, dateVersApple, heure, ligne, lireDate, lireListe, numeroDe, trouver } from "./whatsapp.mjs";
+import { appleVersDate, attente, balleChezMarc, cleVocal, contenu, duree, correspond, dateVersApple, heure, ligne, lireDate, lireListe, numeroDe, trouver } from "./whatsapp.mjs";
 
 describe("Alfred : discussions WhatsApp", () => {
   it("convertit les dates WhatsApp (secondes depuis 2001) à l'heure de Paris", () => {
@@ -55,5 +55,19 @@ describe("Alfred : discussions WhatsApp", () => {
     expect(numeroDe("111@lid", [{ lid: "111", wa: null, tel: "+33 6 00 00 00 02" }])).toBe("33600000002");
     expect(numeroDe("222@lid", [{ lid: "111@lid", wa: "33600000001@s.whatsapp.net" }])).toBeNull();
     expect(numeroDe("120363000000@g.us")).toBeNull();
+  });
+
+  it("voit quand la balle est dans le camp de Marc", () => {
+    const now = new Date("2026-11-11T12:00:00Z");
+    const a = (iso: string, moi: number, type = 0) => ({ date: dateVersApple(new Date(iso)), moi, type, texte: "msg" });
+    expect(balleChezMarc([a("2026-11-10T08:00:00Z", 1), a("2026-11-10T09:00:00Z", 0)], now)?.heures).toBe(27);
+    // Marc a répondu en dernier : rien.
+    expect(balleChezMarc([a("2026-11-10T09:00:00Z", 0), a("2026-11-10T10:00:00Z", 1)], now)).toBeNull();
+    // Un évènement système après le message ne compte pas ; trop récent : rien.
+    expect(balleChezMarc([a("2026-11-10T09:00:00Z", 0), a("2026-11-10T10:00:00Z", 1, 6)], now)).not.toBeNull();
+    expect(balleChezMarc([a("2026-11-11T08:00:00Z", 0)], now)).toBeNull();
+    expect(attente(5)).toBe("5 h");
+    expect(attente(28)).toBe("1 j 4 h");
+    expect(attente(150)).toBe("6 j");
   });
 });
