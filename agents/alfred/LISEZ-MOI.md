@@ -36,6 +36,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Réponses aux mails, relances | Brouillons Gmail montrés sur Telegram, avec un lien qui les ouvre dans Spark (Marc peut les envoyer lui même) ; envoyés par Alfred seulement sur « oui Marque » de Marc |
 | Brouillons en double | Quand Marc a répondu lui même dans un fil, Alfred supprime son brouillon devenu inutile (jamais un brouillon écrit par Marc) |
 | Boîtes des créateurs | Les boîtes pro des créateurs gérées dans Spark (commande `spark` du Mac, Spark Desktop ouvert) : lues à chaque point, brouillons dans le fil quand l'accès « triage » est ouvert ; Marc envoie depuis Spark |
+| WhatsApp avec les créateurs | Lecture seule de la copie de WhatsApp Desktop sur l'iMac (`whatsapp.mjs`), seulement les discussions de `etat/whatsapp-autorises.txt` validées par Marc : rattrapage en fiche par créateur, nouveaux messages à chaque point. Rien n'est envoyé sur WhatsApp |
 | Spams | Fouille les spams à chaque point pour repêcher les vraies demandes de marques |
 | Captures d'écran | Marc envoie des captures d'une discussion (WhatsApp, Instagram, LinkedIn) : Alfred les lit, retrouve le contexte et prépare la réponse à copier |
 | Devis | Brouillon dans Facturation › Devis ; Marc l'envoie depuis l'app |
@@ -59,7 +60,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 
 ## Les fichiers
 
-Dans le dépôt (`agents/alfred/`, public, aucun secret) : `CLAUDE.md` (ses consignes), `skills/` (ses skills, sous licence libre, copiées dans `.claude/skills`), `alfred.sh` (un passage), `ecoute.sh` et `telegram.mjs` (Telegram), deux réglages launchd, `installer.sh`.
+Dans le dépôt (`agents/alfred/`, public, aucun secret) : `CLAUDE.md` (ses consignes), `skills/` (ses skills, sous licence libre, copiées dans `.claude/skills`), `alfred.sh` (un passage), `ecoute.sh` et `telegram.mjs` (Telegram), `whatsapp.mjs` (lecture de WhatsApp Desktop), deux réglages launchd, `installer.sh`.
 
 Sur le Mac seulement (`~/Code/TTPAlfred/`) :
 - `config.env` : jeton du bot d'Alfred et identifiant Telegram de Marc ;
