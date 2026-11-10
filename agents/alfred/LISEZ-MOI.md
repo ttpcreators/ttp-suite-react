@@ -51,6 +51,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Descriptions de posts | « Léna me demande une description pour le reel Yade » : deux propositions prêtes à copier, à partir du brief, des mails et du style du créateur |
 | Planning et Meet | Dates des marques et rendez vous confirmés (mails, échanges, captures) ajoutés tout seuls au Planning, donc au Google Agenda de partnerships@, avec lien Google Meet pour une visio ; jamais de doublon (refusé par l'app même) ; invitation Google aux participants seulement quand Marc le demande |
 | Roster à jour | Relit les créateurs actifs dans l'app à chaque fois, ne propose jamais quelqu'un qui est parti, annonce les arrivées et départs |
+| Second cerveau | Ses promesses (« je te reviens lundi » dans un mail ou sur WhatsApp) deviennent des tâches rappelées à temps, avec le texte pour les tenir ; « En attente de toi » chaque matin (mails, WhatsApp, DM sans réponse de Marc, `whatsapp.mjs en-attente`) ; « Demain » en 3 lignes à la fin du point du soir |
 | Rappels | « Rappelle moi jeudi 15 h… », et ses propres rappels de ce que Marc risque d'oublier |
 | Délégation | « Gère les relances jusqu'à vendredi, tu peux envoyer » : il agit dans ce périmètre et rend compte |
 | Mémoire commune avec Gianni | Tout ce qui compte va dans l'app (collabs, contacts, planning, tâches, mémoire des créateurs) et dans le journal des agents (`noter_journal`), repris par `point_du_jour` et `journal_agents` : l'assistant de Gianni voit la même chose que Marc |
