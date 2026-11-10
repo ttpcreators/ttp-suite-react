@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { chunks, dueReminders, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, pdfArgs, trouverLien } from "./telegram.mjs";
+import { chunks, clavier, dueReminders, extraireLiens, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, pdfArgs, trouverLien } from "./telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -18,7 +18,7 @@ describe("Alfred : messages Telegram", () => {
   it("met le résumé en forme légère et ignore un fichier vide", () => {
     expect(messagesFor("01-resume.txt", "Rien de neuf.\nAlfred")).toEqual([{ text: "Rien de neuf.\nAlfred", html: true, plain: "Rien de neuf.\nAlfred" }]);
     const [m] = messagesFor("01-resume.txt", "**Point du matin**\nURGENT : facture <Fitaya> & relance\n> citation\nOuvrir dans l'app : https://app.ttpcreators.pro/?open=mails");
-    expect(m.text).toBe("<b>Point du matin</b>\n<b>URGENT</b> : facture &lt;Fitaya&gt; &amp; relance\n<blockquote>citation</blockquote>");
+    expect(m.text).toBe("<b>Point du matin</b>\n\n<b>URGENT</b> : facture &lt;Fitaya&gt; &amp; relance\n<blockquote>citation</blockquote>");
     expect(m.boutons).toEqual([[{ text: "Ouvrir dans l'app", url: "https://app.ttpcreators.pro/?open=mails" }]]);
     expect(messagesFor("03-whatsapp.txt", "  \n")).toEqual([]);
   });
@@ -42,9 +42,42 @@ describe("Alfred : messages Telegram", () => {
     const { kept, next } = marcMessages([toucher(42, "oui Erwann")], 42, 0);
     expect(next).toBe(21);
     expect(kept).toHaveLength(1);
-    expect(kept[0]).toMatchObject({ id: 7, text: "oui Erwann (bouton Envoyer)", reply: "(en réponse à ton message : « Mail à Erwann »)" });
+    expect(kept[0]).toMatchObject({ id: 7, text: "oui Erwann (bouton « Envoyer »)", reply: "(en réponse à ton message : « Mail à Erwann »)" });
     expect(marcMessages([toucher(99, "oui Erwann")], 42, 0).kept).toEqual([]);
-    expect(marcMessages([toucher(42, "supprime tout")], 42, 0).kept).toEqual([]);
+    expect(marcMessages([{ update_id: 21, callback_query: { id: "x", from: { id: 42 }, data: "" } }], 42, 0).kept).toEqual([]);
+  });
+
+  it("fait des boutons d'action, et garde en texte un message trop long pour Telegram", () => {
+    const texte = `URGENT : reverser 280 € à Léna\nBouton : Fait (Reverser Léna) = fait tâche d57bddd4-7c30-4e72-a1ac-5139047bbc46\nBouton : Rappelle-moi demain = rappelle-moi demain : reversement Léna\nBouton : Trop long = ${"x".repeat(70)}`;
+    const { actions, texte: reste } = extraireLiens(texte);
+    expect(actions).toEqual([
+      { text: "Fait (Reverser Léna)", callback_data: "fait tâche d57bddd4-7c30-4e72-a1ac-5139047bbc46" },
+      { text: "Rappelle-moi demain", callback_data: "rappelle-moi demain : reversement Léna" },
+    ]);
+    expect(reste).toContain("Bouton : Trop long");
+    expect(clavier([{ text: "Ouvrir dans l'app", url: "https://app.ttpcreators.pro" }], [...actions, actions[0]]).boutons).toHaveLength(3);
+    expect(clavier([], [])).toEqual({});
+    // Un toucher sur une action arrive avec son libellé.
+    const u = { update_id: 30, callback_query: { id: "c", from: { id: 42 }, data: actions[0].callback_data, message: { message_id: 9, chat: { id: 42 }, text: "Point", reply_markup: { inline_keyboard: [actions] } } } };
+    expect(marcMessages([u], 42, 0).kept[0].text).toBe("fait tâche d57bddd4-7c30-4e72-a1ac-5139047bbc46 (bouton « Fait (Reverser Léna) »)");
+  });
+
+  it("ajoute un bouton Copier sous un texte WhatsApp court", () => {
+    const [m] = messagesFor("02-whatsapp.txt", "Pour Léa sur WhatsApp\nCoucou Léa !");
+    expect(m.boutons).toEqual([[{ text: "Copier", copy_text: { text: "Coucou Léa !" } }]]);
+    const [long] = messagesFor("03-whatsapp.txt", `Pour Léa sur WhatsApp\n${"a".repeat(300)}`);
+    expect(long.boutons).toBeUndefined();
+  });
+
+  it("ouvre la discussion WhatsApp avec le texte déjà écrit quand le numéro est donné", () => {
+    const [m] = messagesFor("02-whatsapp.txt", "Pour Léa sur WhatsApp · 33 6 00 00 00 00\nCoucou Léa & co !");
+    expect(m.text.startsWith("Pour Léa sur WhatsApp\n")).toBe(true);
+    expect(m.plain).not.toContain("33");
+    expect(m.boutons).toEqual([[{ text: "Ouvrir dans WhatsApp", url: "https://wa.me/33600000000?text=Coucou%20L%C3%A9a%20%26%20co%20!" }, { text: "Copier", copy_text: { text: "Coucou Léa & co !" } }]]);
+    const [long] = messagesFor("03-whatsapp.txt", `Pour Léa sur WhatsApp · 33600000000\n${"é".repeat(800)}`);
+    expect(long.boutons[0][0]).toEqual({ text: "Ouvrir dans WhatsApp", url: "https://wa.me/33600000000" });
+    const [groupe] = messagesFor("04-whatsapp.txt", "Pour le groupe Léna × TTP sur WhatsApp\nHello");
+    expect(groupe.boutons).toEqual([[{ text: "Copier", copy_text: { text: "Hello" } }]]);
   });
 
   it("coupe un message trop long sur les fins de ligne", () => {
