@@ -18,7 +18,7 @@ describe("Alfred : messages Telegram", () => {
   it("met le résumé en forme légère et ignore un fichier vide", () => {
     expect(messagesFor("01-resume.txt", "Rien de neuf.\nAlfred")).toEqual([{ text: "Rien de neuf.\nAlfred", html: true, plain: "Rien de neuf.\nAlfred" }]);
     const [m] = messagesFor("01-resume.txt", "**Point du matin**\nURGENT : facture <Fitaya> & relance\n> citation\nOuvrir dans l'app : https://app.ttpcreators.pro/?open=mails");
-    expect(m.text).toBe("<b>Point du matin</b>\n<b>URGENT</b> : facture &lt;Fitaya&gt; &amp; relance\n<blockquote>citation</blockquote>");
+    expect(m.text).toBe("<b>Point du matin</b>\n\n<b>URGENT</b> : facture &lt;Fitaya&gt; &amp; relance\n<blockquote>citation</blockquote>");
     expect(m.boutons).toEqual([[{ text: "Ouvrir dans l'app", url: "https://app.ttpcreators.pro/?open=mails" }]]);
     expect(messagesFor("03-whatsapp.txt", "  \n")).toEqual([]);
   });

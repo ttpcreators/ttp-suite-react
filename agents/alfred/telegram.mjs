@@ -108,7 +108,8 @@ export function clavier(premiere, actions = []) {
 
 /**
  * Mise en forme légère d'Alfred → HTML de Telegram : **gras**, rubriques en gras, lignes « > » en
- * citation (repliable au delà de 6 lignes), [texte](lien), et les longues adresses raccourcies.
+ * citation (repliable au delà de 6 lignes), [texte](lien), les longues adresses raccourcies, et une
+ * ligne vide avant chaque rubrique ou titre pour que le message respire.
  */
 export function enHtml(text) {
   const lignes = text.split("\n");
@@ -131,10 +132,13 @@ export function enHtml(text) {
       continue;
     }
     fermer();
+    // Aéré (demande de Marc) : une ligne vide avant chaque rubrique ou titre en gras.
+    const debut = RUBRIQUE.test(l) || /^\*\*[^*]+\*\*/.test(l);
+    if (debut && out.length && out[out.length - 1].trim()) out.push("");
     out.push(enLigne(l));
   }
   fermer();
-  return out.join("\n");
+  return out.join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
 const boutonsLiens = (liens) => liens.map((l) => ({ text: l.text, url: l.url }));
