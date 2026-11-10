@@ -69,6 +69,17 @@ describe("Alfred : messages Telegram", () => {
     expect(long.boutons).toBeUndefined();
   });
 
+  it("ouvre la discussion WhatsApp avec le texte déjà écrit quand le numéro est donné", () => {
+    const [m] = messagesFor("02-whatsapp.txt", "Pour Léa sur WhatsApp · 33 6 00 00 00 00\nCoucou Léa & co !");
+    expect(m.text.startsWith("Pour Léa sur WhatsApp\n")).toBe(true);
+    expect(m.plain).not.toContain("33");
+    expect(m.boutons).toEqual([[{ text: "Ouvrir dans WhatsApp", url: "https://wa.me/33600000000?text=Coucou%20L%C3%A9a%20%26%20co%20!" }, { text: "Copier", copy_text: { text: "Coucou Léa & co !" } }]]);
+    const [long] = messagesFor("03-whatsapp.txt", `Pour Léa sur WhatsApp · 33600000000\n${"é".repeat(800)}`);
+    expect(long.boutons[0][0]).toEqual({ text: "Ouvrir dans WhatsApp", url: "https://wa.me/33600000000" });
+    const [groupe] = messagesFor("04-whatsapp.txt", "Pour le groupe Léna × TTP sur WhatsApp\nHello");
+    expect(groupe.boutons).toEqual([[{ text: "Copier", copy_text: { text: "Hello" } }]]);
+  });
+
   it("coupe un message trop long sur les fins de ligne", () => {
     const parts = chunks(["a".repeat(30), "b".repeat(30), "c".repeat(30)].join("\n"), 65);
     expect(parts).toEqual([`${"a".repeat(30)}\n${"b".repeat(30)}`, "c".repeat(30)]);

@@ -166,17 +166,32 @@ export function messageMail(text) {
 }
 
 /** Bouton Copier de Telegram : 256 caractères au plus ; au delà, le bloc à toucher suffit. */
-export const boutonCopier = (texte) => (texte.length <= 256 ? { boutons: [[{ text: "Copier", copy_text: { text: texte } }]] } : {});
+export const boutonCopier = (texte) => (texte.length <= 256 ? [{ text: "Copier", copy_text: { text: texte } }] : []);
+
+/**
+ * « Pour Léna sur WhatsApp · 33612345678 » : l'intitulé sans le numéro, et le bouton qui ouvre la
+ * discussion WhatsApp avec le texte déjà écrit (wa.me, Marc relit et envoie). Texte trop long pour
+ * un lien : le bouton ouvre seulement la discussion.
+ */
+export function boutonWhatsApp(label, texte) {
+  const m = /^(.*?)\s*·\s*\+?(\d[\d ]{6,18}\d)\s*$/.exec(label);
+  const numero = m ? m[2].replace(/\D/g, "") : "";
+  if (!m || numero.length < 8 || numero.length > 15) return { label, bouton: [] };
+  const avecTexte = `https://wa.me/${numero}?text=${encodeURIComponent(texte)}`;
+  return { label: m[1].trim(), bouton: [{ text: "Ouvrir dans WhatsApp", url: avecTexte.length <= 2000 ? avecTexte : `https://wa.me/${numero}` }] };
+}
 
 /** Messages à envoyer pour un fichier déposé par Alfred. */
 export function messagesFor(name, content) {
   const text = content.replace(/\r\n/g, "\n").trim();
   if (!text) return [];
   if (name.endsWith("-whatsapp.txt") || name.endsWith("-copier.txt")) {
-    const [label, ...rest] = text.split("\n");
+    const [premiere, ...rest] = text.split("\n");
     const body = rest.join("\n").trim();
+    const { label, bouton } = boutonWhatsApp(premiere.trim(), body);
     if (body && body.length < LIMIT - 200) {
-      return [{ text: `${escapeMd(label.trim())}\n\`\`\`\n${escapeCode(body)}\n\`\`\``, md: true, plain: `${label.trim()}\n\n${body}`, ...boutonCopier(body) }];
+      const ligne = [...bouton, ...boutonCopier(body)];
+      return [{ text: `${escapeMd(label)}\n\`\`\`\n${escapeCode(body)}\n\`\`\``, md: true, plain: `${label}\n\n${body}`, ...(ligne.length ? { boutons: [ligne] } : {}) }];
     }
   }
   if (name.endsWith("-mail.txt") && text.length < LIMIT - 300) return [messageMail(text)];

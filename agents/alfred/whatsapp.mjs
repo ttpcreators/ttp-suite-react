@@ -16,6 +16,7 @@
 //                                                 (vocaux transcrits : 10 par défaut, 30 pour « nouveaux » ;
 //                                                  transcriptions gardées dans etat/whatsapp-vocaux/)
 //   node whatsapp.mjs nouveaux --depuis "AAAA-MM-JJ HH:MM"
+//   node whatsapp.mjs numero <id ou nom>          son numéro, pour le bouton « Ouvrir dans WhatsApp »
 // ============================================================================
 
 import { execFileSync } from "node:child_process";
@@ -25,6 +26,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const BASE = join(homedir(), "Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite");
+const CONTACTS = join(BASE, "..", "ContactsV2.sqlite");
 const LISTE = process.env.WA_LISTE || "etat/whatsapp-autorises.txt";
 /** Les dates WhatsApp comptent les secondes depuis le 1er janvier 2001. */
 const EPOQUE_APPLE = 978307200;
@@ -75,6 +77,23 @@ export function trouver(liste, cle) {
   return liste.find((x) => x.jid === cle.trim()) ?? liste.find((x) => normaliser(x.nom) === k) ?? liste.find((x) => normaliser(x.nom).includes(k)) ?? null;
 }
 
+/**
+ * Le numéro (chiffres avec l'indicatif, pour wa.me) d'une discussion à deux : écrit dans son
+ * identifiant (…@s.whatsapp.net), ou trouvé dans le carnet de WhatsApp pour un identifiant @lid.
+ * null pour un groupe ou un numéro introuvable.
+ */
+export function numeroDe(jid, carnet = []) {
+  const j = String(jid ?? "");
+  if (!j || j.endsWith("@g.us")) return null;
+  const chiffres = (s) => {
+    const d = String(s ?? "").split("@")[0].replace(/\D/g, "");
+    return d.length >= 8 && d.length <= 15 ? d : null;
+  };
+  if (j.endsWith("@s.whatsapp.net")) return chiffres(j);
+  const c = carnet.find((x) => String(x.lid ?? "").split("@")[0] === j.split("@")[0]);
+  return c ? chiffres(c.wa) ?? chiffres(c.tel) : null;
+}
+
 /** Vrai si le nom de la discussion contient un des mots (3 lettres au moins, pour ne jamais tout lister). */
 export function correspond(nomDiscussion, mots) {
   const n = normaliser(nomDiscussion);
@@ -114,11 +133,11 @@ export function ligne(m, auteur) {
 
 // ── Accès à la copie WhatsApp ───────────────────────────────────────────────
 
-function copier() {
-  if (!existsSync(BASE)) throw new Error("WhatsApp Desktop n'a pas de discussions sur ce Mac (fichier introuvable). Il faut l'ouvrir et le relier au téléphone.");
+function copier(base = BASE) {
+  if (!existsSync(base)) throw new Error("WhatsApp Desktop n'a pas de discussions sur ce Mac (fichier introuvable). Il faut l'ouvrir et le relier au téléphone.");
   const dir = mkdtempSync(join(tmpdir(), "alfred-wa-"));
   try {
-    for (const ext of ["", "-wal", "-shm"]) if (existsSync(BASE + ext)) copyFileSync(BASE + ext, join(dir, "c.sqlite" + ext));
+    for (const ext of ["", "-wal", "-shm"]) if (existsSync(base + ext)) copyFileSync(base + ext, join(dir, "c.sqlite" + ext));
   } catch (e) {
     rmSync(dir, { recursive: true, force: true });
     if (e.code === "EPERM" || e.code === "EACCES") throw new Error("macOS refuse l'accès aux discussions WhatsApp : donner l'« Accès complet au disque » à node (Réglages Système › Confidentialité et sécurité).");
@@ -132,8 +151,8 @@ function requete(dir, sql) {
   return out.trim() ? JSON.parse(out) : [];
 }
 
-function avecBase(fn) {
-  const dir = copier();
+function avecBase(fn, base = BASE) {
+  const dir = copier(base);
   try {
     return fn((sql) => requete(dir, sql));
   } finally {
@@ -252,6 +271,18 @@ function main() {
     console.log([`# WhatsApp avec ${entree.nom} · ${lignes.length} message(s)`, ...lignes].join("\n"));
     return;
   }
+  if (mode === "numero") {
+    const cle = args.join(" ");
+    const entree = trouver(liste, cle);
+    if (!entree) throw new Error(`« ${cle} » n'est pas dans les discussions autorisées. Je ne lis que celles-là.`);
+    if (entree.jid.endsWith("@g.us")) return console.log("Pas de numéro : c'est un groupe (pas de lien direct possible).");
+    const lid = entree.jid.split("@")[0];
+    const carnet = entree.jid.endsWith("@lid") && existsSync(CONTACTS)
+      ? avecBase((q) => q(`select ZLID as lid, ZWHATSAPPID as wa, ZPHONENUMBER as tel from ZWAADDRESSBOOKCONTACT where ZLID like '${lid}%'`), CONTACTS)
+      : [];
+    console.log(numeroDe(entree.jid, carnet) ?? "Numéro introuvable dans le carnet WhatsApp de ce Mac.");
+    return;
+  }
   if (mode === "nouveaux") {
     const depuis = lireDate(option(args, "--depuis", ""));
     if (!depuis) throw new Error("Donne --depuis \"AAAA-MM-JJ HH:MM\" (l'heure du dernier point).");
@@ -265,7 +296,7 @@ function main() {
     console.log(blocs.length ? blocs.join("\n\n") : `Rien de nouveau sur WhatsApp depuis le ${heure(depuis)}.`);
     return;
   }
-  throw new Error("Commandes : chercher <mot>, liste, lire <créateur> [--depuis AAAA-MM-JJ] [--max N] [--vocaux N], nouveaux --depuis \"AAAA-MM-JJ HH:MM\".");
+  throw new Error("Commandes : chercher <mot>, liste, lire <créateur> [--depuis AAAA-MM-JJ] [--max N] [--vocaux N], nouveaux --depuis \"AAAA-MM-JJ HH:MM\", numero <créateur>.");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

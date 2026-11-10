@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { appleVersDate, cleVocal, contenu, duree, correspond, dateVersApple, heure, ligne, lireDate, lireListe, trouver } from "./whatsapp.mjs";
+import { appleVersDate, cleVocal, contenu, duree, correspond, dateVersApple, heure, ligne, lireDate, lireListe, numeroDe, trouver } from "./whatsapp.mjs";
 
 describe("Alfred : discussions WhatsApp", () => {
   it("convertit les dates WhatsApp (secondes depuis 2001) à l'heure de Paris", () => {
@@ -47,5 +47,13 @@ describe("Alfred : discussions WhatsApp", () => {
     expect(contenu(3, null, null, { secondes: 900, raison: "trop long pour être transcrit" })).toBe("[vocal 15:00] (trop long pour être transcrit)");
     expect(contenu(3, null)).toBe("[vocal]");
     expect(cleVocal("Media/123@lid/8/0/abc.opus")).toBe("Media_123_lid_8_0_abc.opus.txt");
+  });
+
+  it("trouve le numéro d'une discussion à deux, jamais d'un groupe", () => {
+    expect(numeroDe("33600000000@s.whatsapp.net")).toBe("33600000000");
+    expect(numeroDe("111@lid", [{ lid: "111@lid", wa: "33600000001@s.whatsapp.net" }])).toBe("33600000001");
+    expect(numeroDe("111@lid", [{ lid: "111", wa: null, tel: "+33 6 00 00 00 02" }])).toBe("33600000002");
+    expect(numeroDe("222@lid", [{ lid: "111@lid", wa: "33600000001@s.whatsapp.net" }])).toBeNull();
+    expect(numeroDe("120363000000@g.us")).toBeNull();
   });
 });
