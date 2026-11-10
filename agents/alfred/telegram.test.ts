@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { chunks, clavier, dueReminders, extraireLiens, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, pdfArgs, trouverLien } from "./telegram.mjs";
+import { boutonsLiens, chunks, clavier, dueReminders, extraireLiens, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, pdfArgs, trouverLien } from "./telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -19,8 +19,16 @@ describe("Alfred : messages Telegram", () => {
     expect(messagesFor("01-resume.txt", "Rien de neuf.\nAlfred")).toEqual([{ text: "Rien de neuf.\nAlfred", html: true, plain: "Rien de neuf.\nAlfred" }]);
     const [m] = messagesFor("01-resume.txt", "**Point du matin**\nURGENT : facture <Fitaya> & relance\n> citation\nOuvrir dans l'app : https://app.ttpcreators.pro/?open=mails");
     expect(m.text).toBe("<b>Point du matin</b>\n\n<b>URGENT</b> : facture &lt;Fitaya&gt; &amp; relance\n<blockquote>citation</blockquote>");
-    expect(m.boutons).toEqual([[{ text: "Ouvrir dans l'app", url: "https://app.ttpcreators.pro/?open=mails" }]]);
+    expect(m.boutons).toEqual([[{ text: "Ouvrir dans l'app", web_app: { url: "https://app.ttpcreators.pro/?open=mails" } }]]);
     expect(messagesFor("03-whatsapp.txt", "  \n")).toEqual([]);
+  });
+
+  it("ouvre TTP Suite dans Telegram et les autres liens dans le navigateur", () => {
+    expect(boutonsLiens([{ text: "App", url: "https://app.ttpcreators.pro" }, { text: "Spark", url: "https://sparkmailapp.com/dpl/bl?token=x" }, { text: "Piège", url: "https://app.ttpcreators.pro.exemple.com/x" }])).toEqual([
+      { text: "App", web_app: { url: "https://app.ttpcreators.pro" } },
+      { text: "Spark", url: "https://sparkmailapp.com/dpl/bl?token=x" },
+      { text: "Piège", url: "https://app.ttpcreators.pro.exemple.com/x" },
+    ]);
   });
 
   it("présente un mail à valider avec ses boutons Envoyer et Spark", () => {
