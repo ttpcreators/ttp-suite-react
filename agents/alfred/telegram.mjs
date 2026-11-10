@@ -63,6 +63,91 @@ export function chunks(text, limit = LIMIT) {
   return out;
 }
 
+/** HTML de Telegram : seuls &, < et > s'échappent. */
+export const escapeHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+
+/** Un lien seul sur sa ligne (« Ouvrir dans Spark : https://… ») : devient un bouton. */
+const LIGNE_LIEN = /^\s*(Ouvrir dans [^:\n]{2,30}) : (https?:\/\/\S+)\s*$/;
+/** Rubriques mises en gras toutes seules en début de ligne. */
+const RUBRIQUE = /^(VIGILANCE|URGENT|ARGENT|À VALIDER|DANS L'APP|À VÉRIFIER|COUP D'AVANCE)\b/;
+/** callback_data de Telegram : 64 octets au plus. */
+const court = (s, max = 64) => {
+  let out = String(s);
+  while (Buffer.byteLength(out, "utf8") > max) out = out.slice(0, -1);
+  return out;
+};
+
+/** Sépare les lignes « Ouvrir dans … : lien » (boutons) du reste du texte. */
+export function extraireLiens(text) {
+  const liens = [];
+  const reste = [];
+  for (const l of text.split("\n")) {
+    const m = LIGNE_LIEN.exec(l);
+    if (m) liens.push({ text: m[1].trim(), url: m[2] });
+    else reste.push(l);
+  }
+  return { liens, texte: reste.join("\n").replace(/\n{3,}/g, "\n\n").trim() };
+}
+
+/**
+ * Mise en forme légère d'Alfred → HTML de Telegram : **gras**, rubriques en gras, lignes « > » en
+ * citation (repliable au delà de 6 lignes), [texte](lien), et les longues adresses raccourcies.
+ */
+export function enHtml(text) {
+  const lignes = text.split("\n");
+  const out = [];
+  let cite = [];
+  const fermer = () => {
+    if (!cite.length) return;
+    out.push(`<blockquote${cite.length > 6 ? " expandable" : ""}>${cite.join("\n")}</blockquote>`);
+    cite = [];
+  };
+  const enLigne = (l) =>
+    escapeHtml(l)
+      .replace(/\*\*([^*\n]+)\*\*/g, "<b>$1</b>")
+      .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, (_, t, u) => `<a href="${u.replace(/"/g, "%22")}">${t}</a>`)
+      .replace(/(^|[\s(])(https?:\/\/[^\s<]{50,})/g, (_, a, u) => `${a}<a href="${u.replace(/"/g, "%22")}">lien</a>`)
+      .replace(RUBRIQUE, "<b>$1</b>");
+  for (const l of lignes) {
+    if (/^>\s?/.test(l)) {
+      cite.push(enLigne(l.replace(/^>\s?/, "")));
+      continue;
+    }
+    fermer();
+    out.push(enLigne(l));
+  }
+  fermer();
+  return out.join("\n");
+}
+
+const boutonsLiens = (liens) => liens.map((l) => ({ text: l.text, url: l.url }));
+
+/**
+ * Un mail à valider (…-mail.txt) : titre en gras, le texte du mail en citation repliable,
+ * « À vérifier » en gras, et les boutons Envoyer (vaut « oui Marque ») et Ouvrir dans Spark.
+ * Pas de « oui Marque » sur la 1re ligne (brouillon dans la boîte d'un créateur) : pas de bouton Envoyer.
+ */
+export function messageMail(text) {
+  const { liens, texte } = extraireLiens(text);
+  const [premiere, ...suite] = texte.split("\n");
+  const oui = /«\s*(oui [^»]+?)\s*»/i.exec(premiere)?.[1];
+  const titre = premiere.split(" · ")[0].trim();
+  const meta = /^À\s*:/.test(suite[0] ?? "") ? suite.shift().trim() : "";
+  const corps = [];
+  const verifier = [];
+  for (const l of suite) (/^À VÉRIFIER/i.test(l.trim()) ? verifier : corps).push(l);
+  const mail = corps.join("\n").trim();
+  const html = [
+    `<b>${escapeHtml(titre)}</b>${meta ? `\n${escapeHtml(meta)}` : ""}`,
+    mail ? `<blockquote${mail.split("\n").length > 6 ? " expandable" : ""}>${escapeHtml(mail)}</blockquote>` : null,
+    ...verifier.map((v) => escapeHtml(v.trim()).replace(/^À VÉRIFIER/i, "<b>À vérifier</b>")),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+  const ligne = [...(oui ? [{ text: "Envoyer", callback_data: court(oui) }] : []), ...boutonsLiens(liens)];
+  return { text: html, html: true, plain: text, ...(ligne.length ? { boutons: [ligne] } : {}) };
+}
+
 /** Messages à envoyer pour un fichier déposé par Alfred. */
 export function messagesFor(name, content) {
   const text = content.replace(/\r\n/g, "\n").trim();
@@ -74,7 +159,30 @@ export function messagesFor(name, content) {
       return [{ text: `${escapeMd(label.trim())}\n\`\`\`\n${escapeCode(body)}\n\`\`\``, md: true, plain: `${label.trim()}\n\n${body}` }];
     }
   }
+  if (name.endsWith("-mail.txt") && text.length < LIMIT - 300) return [messageMail(text)];
+  // Le reste (résumé, alerte) : mise en forme légère quand il tient en un message, sinon texte simple.
+  if (text.length < LIMIT - 300) {
+    const { liens, texte } = extraireLiens(text);
+    return [{ text: enHtml(texte), html: true, plain: text, ...(liens.length ? { boutons: [boutonsLiens(liens)] } : {}) }];
+  }
   return chunks(text).map((t) => ({ text: t, md: false }));
+}
+
+/**
+ * Toucher sur un bouton « Envoyer » de Marc : devient un message « oui Marque » (le même effet que
+ * s'il l'avait tapé), avec le message du mail en contexte. null pour tout autre toucher.
+ */
+export function toucherDeMarc(u, marcId) {
+  const c = u?.callback_query;
+  if (!c || String(c.from?.id) !== String(marcId) || !/^oui /i.test(String(c.data ?? ""))) return null;
+  const vu = String(c.message?.text ?? "").replace(/\s+/g, " ").trim();
+  return {
+    id: Number(c.message?.message_id) || null,
+    at: new Date(),
+    text: `${c.data} (bouton Envoyer)`,
+    reply: vu ? `(en réponse à ton message : « ${vu.length > 600 ? `${vu.slice(0, 600)}…` : vu} »)` : null,
+    toucher: { id: c.id, chat: c.message?.chat?.id, message: c.message?.message_id, clavier: c.message?.reply_markup?.inline_keyboard ?? [] },
+  };
 }
 
 /**
@@ -87,6 +195,11 @@ export function marcMessages(updates, marcId, offset = 0) {
   const kept = [];
   for (const u of updates ?? []) {
     next = Math.max(next, Number(u.update_id) + 1);
+    const t = toucherDeMarc(u, marcId);
+    if (t) {
+      kept.push(t);
+      continue;
+    }
     const m = u.message ?? u.edited_message;
     if (!m || String(m.from?.id) !== String(marcId) || m.chat?.type !== "private") continue;
     const voice = m.voice?.file_id ?? m.audio?.file_id ?? null;
@@ -436,10 +549,12 @@ async function sendDocument(token, chatId, path, name, replyTo = null) {
 
 async function send(token, chatId, msg, replyTo = null) {
   const cite = replyTo ? { reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } } : {};
-  const call = (body) => api(token, "sendMessage", { chat_id: chatId, disable_web_page_preview: true, ...cite, ...body });
-  let res = await call(msg.md ? { text: msg.text, parse_mode: "MarkdownV2" } : { text: msg.text });
+  const clavier = msg.boutons ? { reply_markup: { inline_keyboard: msg.boutons } } : {};
+  const call = (body) => api(token, "sendMessage", { chat_id: chatId, disable_web_page_preview: true, ...cite, ...clavier, ...body });
+  const mode = msg.md ? "MarkdownV2" : msg.html ? "HTML" : null;
+  let res = await call(mode ? { text: msg.text, parse_mode: mode } : { text: msg.text });
   // Mise en forme refusée : on renvoie le même texte, sans mise en forme.
-  if (!res.ok && msg.md) res = await call({ text: msg.plain });
+  if (!res.ok && mode) res = await call({ text: msg.plain });
   if (!res.ok) throw new Error(`Telegram a refusé le message : ${res.description ?? "erreur inconnue"}`);
 }
 
@@ -469,9 +584,18 @@ async function main() {
   /** Range les nouveaux messages de Marc dans la file (etat/file-recue.txt) et le fil. */
   const ranger = async (timeout) => {
     const offset = Number(existsSync(offsetFile) ? readFileSync(offsetFile, "utf8") : 0) || 0;
-    const res = await api(token, "getUpdates", { offset, timeout, allowed_updates: ["message", "edited_message"] });
+    const res = await api(token, "getUpdates", { offset, timeout, allowed_updates: ["message", "edited_message", "callback_query"] });
     if (!res.ok) throw Object.assign(new Error(`Telegram : ${res.description ?? "lecture impossible"}`), { code: res.error_code });
     const { kept, next } = marcMessages(res.result, chatId, offset);
+    // Bouton Envoyer touché : on le confirme et on le retire (un seul toucher par mail), les liens restent.
+    for (const m of kept) {
+      if (!m.toucher) continue;
+      await api(token, "answerCallbackQuery", { callback_query_id: m.toucher.id, text: "C'est noté, Alfred s'en occupe." }).catch(() => {});
+      const restants = m.toucher.clavier.map((l) => l.filter((b) => !b.callback_data)).filter((l) => l.length);
+      if (m.toucher.chat && m.toucher.message) {
+        await api(token, "editMessageReplyMarkup", { chat_id: m.toucher.chat, message_id: m.toucher.message, reply_markup: { inline_keyboard: restants } }).catch(() => {});
+      }
+    }
     const model = env.WHISPER_MODEL || join(homedir(), ".cache/whisper-cpp/ggml-large-v3-turbo-q5_0.bin");
     for (const m of kept) {
       if (!m.voice) continue;

@@ -15,9 +15,36 @@ describe("Alfred : messages Telegram", () => {
     expect(m.plain).toBe("Pour Léa sur WhatsApp\n\nCoucou Léa !\nTon tournage est demain.");
   });
 
-  it("envoie le résumé en texte simple et ignore un fichier vide", () => {
-    expect(messagesFor("01-resume.txt", "Rien de neuf.\nAlfred")).toEqual([{ text: "Rien de neuf.\nAlfred", md: false }]);
+  it("met le résumé en forme légère et ignore un fichier vide", () => {
+    expect(messagesFor("01-resume.txt", "Rien de neuf.\nAlfred")).toEqual([{ text: "Rien de neuf.\nAlfred", html: true, plain: "Rien de neuf.\nAlfred" }]);
+    const [m] = messagesFor("01-resume.txt", "**Point du matin**\nURGENT : facture <Fitaya> & relance\n> citation\nOuvrir dans l'app : https://app.ttpcreators.pro/?open=mails");
+    expect(m.text).toBe("<b>Point du matin</b>\n<b>URGENT</b> : facture &lt;Fitaya&gt; &amp; relance\n<blockquote>citation</blockquote>");
+    expect(m.boutons).toEqual([[{ text: "Ouvrir dans l'app", url: "https://app.ttpcreators.pro/?open=mails" }]]);
     expect(messagesFor("03-whatsapp.txt", "  \n")).toEqual([]);
+  });
+
+  it("présente un mail à valider avec ses boutons Envoyer et Spark", () => {
+    const [m] = messagesFor(
+      "02-mail.txt",
+      "Mail à Erwann (Marque Test) · réponds « oui Erwann » pour l'envoyer\nÀ : erwann@exemple.fr · Objet : Rendez vous\n\nBonjour Erwann,\nLequel vous arrange ?\n\nÀ VÉRIFIER : les créneaux\n\nOuvrir dans Spark : https://sparkmailapp.com/dpl/bl?token=abc",
+    );
+    expect(m.text).toBe(
+      "<b>Mail à Erwann (Marque Test)</b>\nÀ : erwann@exemple.fr · Objet : Rendez vous\n\n<blockquote>Bonjour Erwann,\nLequel vous arrange ?</blockquote>\n\n<b>À vérifier</b> : les créneaux",
+    );
+    expect(m.boutons).toEqual([[{ text: "Envoyer", callback_data: "oui Erwann" }, { text: "Ouvrir dans Spark", url: "https://sparkmailapp.com/dpl/bl?token=abc" }]]);
+    // Brouillon dans la boîte d'un créateur : Alfred ne peut pas l'envoyer, pas de bouton Envoyer.
+    const [s] = messagesFor("03-mail.txt", "Mail à Lola (Marque) · à envoyer depuis Spark\n\nHello\n\nOuvrir dans Spark : https://sparkmailapp.com/dpl/bl?token=x");
+    expect(s.boutons).toEqual([[{ text: "Ouvrir dans Spark", url: "https://sparkmailapp.com/dpl/bl?token=x" }]]);
+  });
+
+  it("transforme le toucher de Marc sur Envoyer en « oui », et ignore les autres", () => {
+    const toucher = (from: number, data: string) => ({ update_id: 20, callback_query: { id: "cb1", from: { id: from }, data, message: { message_id: 7, chat: { id: 42 }, text: "Mail à Erwann", reply_markup: { inline_keyboard: [] } } } });
+    const { kept, next } = marcMessages([toucher(42, "oui Erwann")], 42, 0);
+    expect(next).toBe(21);
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toMatchObject({ id: 7, text: "oui Erwann (bouton Envoyer)", reply: "(en réponse à ton message : « Mail à Erwann »)" });
+    expect(marcMessages([toucher(99, "oui Erwann")], 42, 0).kept).toEqual([]);
+    expect(marcMessages([toucher(42, "supprime tout")], 42, 0).kept).toEqual([]);
   });
 
   it("coupe un message trop long sur les fins de ligne", () => {
