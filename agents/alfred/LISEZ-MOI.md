@@ -35,6 +35,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Alerte si Alfred tombe | Chaque jour de semaine, l'app vérifie qu'Alfred a fait son point du matin ; sinon notification à Marc et Gianni |
 | Réponses aux mails, relances | Brouillons Gmail montrés sur Telegram, avec un lien qui les ouvre dans Spark (Marc peut les envoyer lui même) ; envoyés par Alfred seulement sur « oui Marque » de Marc |
 | Brouillons en double | Quand Marc a répondu lui même dans un fil, Alfred supprime son brouillon devenu inutile (jamais un brouillon écrit par Marc) |
+| Boîtes des créateurs | Les boîtes pro des créateurs gérées dans Spark (commande `spark` du Mac, Spark Desktop ouvert) : lues à chaque point, brouillons dans le fil quand l'accès « triage » est ouvert ; Marc envoie depuis Spark |
 | Spams | Fouille les spams à chaque point pour repêcher les vraies demandes de marques |
 | Captures d'écran | Marc envoie des captures d'une discussion (WhatsApp, Instagram, LinkedIn) : Alfred les lit, retrouve le contexte et prépare la réponse à copier |
 | Devis | Brouillon dans Facturation › Devis ; Marc l'envoie depuis l'app |
