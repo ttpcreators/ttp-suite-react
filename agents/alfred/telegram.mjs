@@ -141,7 +141,9 @@ export function enHtml(text) {
   return out.join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
-const boutonsLiens = (liens) => liens.map((l) => ({ text: l.text, url: l.url }));
+/** Les liens vers TTP Suite s'ouvrent dans Telegram (Mini App, choix de Marc le 2026-11-11) ; les autres dans le navigateur. */
+export const estApp = (url) => /^https:\/\/app\.ttpcreators\.pro(\/|$|\?)/.test(String(url));
+export const boutonsLiens = (liens) => liens.map((l) => (estApp(l.url) ? { text: l.text, web_app: { url: l.url } } : { text: l.text, url: l.url }));
 
 /**
  * Un mail à valider (…-mail.txt) : titre en gras, le texte du mail en citation repliable,
