@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { appleVersDate, contenu, correspond, dateVersApple, heure, ligne, lireDate, lireListe, trouver } from "./whatsapp.mjs";
+import { appleVersDate, cleVocal, contenu, duree, correspond, dateVersApple, heure, ligne, lireDate, lireListe, trouver } from "./whatsapp.mjs";
 
 describe("Alfred : discussions WhatsApp", () => {
   it("convertit les dates WhatsApp (secondes depuis 2001) à l'heure de Paris", () => {
@@ -38,5 +38,14 @@ describe("Alfred : discussions WhatsApp", () => {
     const m = { date: dateVersApple(new Date("2026-11-10T14:48:00Z")), type: 0, texte: "ligne 1\nligne 2" };
     expect(ligne(m, "Créateur Test")).toBe("2026-11-10 15:48 · Créateur Test : ligne 1 / ligne 2");
     expect(ligne({ ...m, type: 6 }, "X")).toBeNull();
+  });
+
+  it("montre la transcription d'un vocal, ou pourquoi elle manque", () => {
+    expect(duree(42)).toBe("0:42");
+    expect(duree(725)).toBe("12:05");
+    expect(contenu(3, null, null, { secondes: 42, texte: "Je peux tourner jeudi" })).toBe("[vocal 0:42] « Je peux tourner jeudi »");
+    expect(contenu(3, null, null, { secondes: 900, raison: "trop long pour être transcrit" })).toBe("[vocal 15:00] (trop long pour être transcrit)");
+    expect(contenu(3, null)).toBe("[vocal]");
+    expect(cleVocal("Media/123@lid/8/0/abc.opus")).toBe("Media_123_lid_8_0_abc.opus.txt");
   });
 });

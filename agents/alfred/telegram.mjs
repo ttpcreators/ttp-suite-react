@@ -77,16 +77,33 @@ const court = (s, max = 64) => {
   return out;
 };
 
-/** Sépare les lignes « Ouvrir dans … : lien » (boutons) du reste du texte. */
+/** Un bouton d'action seul sur sa ligne : « Bouton : Fait (Reverser Léna) = fait tâche d57b… ». */
+const LIGNE_BOUTON = /^\s*Bouton\s*:\s*(.{1,40}?)\s*=\s*(.+?)\s*$/;
+
+/**
+ * Sépare du texte les lignes « Ouvrir dans … : lien » (boutons lien) et « Bouton : libellé = message »
+ * (boutons d'action : le toucher envoie le message à Alfred). Un message de plus de 64 octets
+ * (limite de Telegram) ne devient pas un bouton : la ligne reste dans le texte.
+ */
 export function extraireLiens(text) {
   const liens = [];
+  const actions = [];
   const reste = [];
   for (const l of text.split("\n")) {
     const m = LIGNE_LIEN.exec(l);
+    const b = m ? null : LIGNE_BOUTON.exec(l);
     if (m) liens.push({ text: m[1].trim(), url: m[2] });
+    else if (b && Buffer.byteLength(b[2], "utf8") <= 64) actions.push({ text: b[1], callback_data: b[2] });
     else reste.push(l);
   }
-  return { liens, texte: reste.join("\n").replace(/\n{3,}/g, "\n\n").trim() };
+  return { liens, actions, texte: reste.join("\n").replace(/\n{3,}/g, "\n\n").trim() };
+}
+
+/** Les rangées de boutons : la 1re (Envoyer, liens), puis les actions deux par deux. */
+export function clavier(premiere, actions = []) {
+  const rangees = premiere.length ? [premiere] : [];
+  for (let i = 0; i < actions.length; i += 2) rangees.push(actions.slice(i, i + 2));
+  return rangees.length ? { boutons: rangees } : {};
 }
 
 /**
@@ -128,7 +145,7 @@ const boutonsLiens = (liens) => liens.map((l) => ({ text: l.text, url: l.url }))
  * Pas de « oui Marque » sur la 1re ligne (brouillon dans la boîte d'un créateur) : pas de bouton Envoyer.
  */
 export function messageMail(text) {
-  const { liens, texte } = extraireLiens(text);
+  const { liens, actions, texte } = extraireLiens(text);
   const [premiere, ...suite] = texte.split("\n");
   const oui = /«\s*(oui [^»]+?)\s*»/i.exec(premiere)?.[1];
   const titre = premiere.split(" · ")[0].trim();
@@ -145,8 +162,11 @@ export function messageMail(text) {
     .filter(Boolean)
     .join("\n\n");
   const ligne = [...(oui ? [{ text: "Envoyer", callback_data: court(oui) }] : []), ...boutonsLiens(liens)];
-  return { text: html, html: true, plain: text, ...(ligne.length ? { boutons: [ligne] } : {}) };
+  return { text: html, html: true, plain: text, ...clavier(ligne, actions) };
 }
+
+/** Bouton Copier de Telegram : 256 caractères au plus ; au delà, le bloc à toucher suffit. */
+export const boutonCopier = (texte) => (texte.length <= 256 ? { boutons: [[{ text: "Copier", copy_text: { text: texte } }]] } : {});
 
 /** Messages à envoyer pour un fichier déposé par Alfred. */
 export function messagesFor(name, content) {
@@ -156,32 +176,35 @@ export function messagesFor(name, content) {
     const [label, ...rest] = text.split("\n");
     const body = rest.join("\n").trim();
     if (body && body.length < LIMIT - 200) {
-      return [{ text: `${escapeMd(label.trim())}\n\`\`\`\n${escapeCode(body)}\n\`\`\``, md: true, plain: `${label.trim()}\n\n${body}` }];
+      return [{ text: `${escapeMd(label.trim())}\n\`\`\`\n${escapeCode(body)}\n\`\`\``, md: true, plain: `${label.trim()}\n\n${body}`, ...boutonCopier(body) }];
     }
   }
   if (name.endsWith("-mail.txt") && text.length < LIMIT - 300) return [messageMail(text)];
   // Le reste (résumé, alerte) : mise en forme légère quand il tient en un message, sinon texte simple.
   if (text.length < LIMIT - 300) {
-    const { liens, texte } = extraireLiens(text);
-    return [{ text: enHtml(texte), html: true, plain: text, ...(liens.length ? { boutons: [boutonsLiens(liens)] } : {}) }];
+    const { liens, actions, texte } = extraireLiens(text);
+    return [{ text: enHtml(texte), html: true, plain: text, ...clavier(boutonsLiens(liens), actions) }];
   }
   return chunks(text).map((t) => ({ text: t, md: false }));
 }
 
 /**
- * Toucher sur un bouton « Envoyer » de Marc : devient un message « oui Marque » (le même effet que
- * s'il l'avait tapé), avec le message du mail en contexte. null pour tout autre toucher.
+ * Toucher de Marc sur un bouton d'action (Envoyer, Fait, Créer la facture, Rappelle-moi demain…) :
+ * devient le message que le bouton porte (« oui Erwann », « fait tâche … »), le même effet que s'il
+ * l'avait tapé, avec le message touché en contexte. Seuls les touchers de Marc comptent.
  */
 export function toucherDeMarc(u, marcId) {
   const c = u?.callback_query;
-  if (!c || String(c.from?.id) !== String(marcId) || !/^oui /i.test(String(c.data ?? ""))) return null;
+  const data = String(c?.data ?? "").trim();
+  if (!c || String(c.from?.id) !== String(marcId) || !data) return null;
   const vu = String(c.message?.text ?? "").replace(/\s+/g, " ").trim();
+  const libelle = (c.message?.reply_markup?.inline_keyboard ?? []).flat().find((b) => b.callback_data === c.data)?.text ?? "Envoyer";
   return {
     id: Number(c.message?.message_id) || null,
     at: new Date(),
-    text: `${c.data} (bouton Envoyer)`,
+    text: `${data} (bouton « ${libelle} »)`,
     reply: vu ? `(en réponse à ton message : « ${vu.length > 600 ? `${vu.slice(0, 600)}…` : vu} »)` : null,
-    toucher: { id: c.id, chat: c.message?.chat?.id, message: c.message?.message_id, clavier: c.message?.reply_markup?.inline_keyboard ?? [] },
+    toucher: { id: c.id, data: c.data, chat: c.message?.chat?.id, message: c.message?.message_id, clavier: c.message?.reply_markup?.inline_keyboard ?? [] },
   };
 }
 
@@ -587,11 +610,11 @@ async function main() {
     const res = await api(token, "getUpdates", { offset, timeout, allowed_updates: ["message", "edited_message", "callback_query"] });
     if (!res.ok) throw Object.assign(new Error(`Telegram : ${res.description ?? "lecture impossible"}`), { code: res.error_code });
     const { kept, next } = marcMessages(res.result, chatId, offset);
-    // Bouton Envoyer touché : on le confirme et on le retire (un seul toucher par mail), les liens restent.
+    // Bouton touché : on le confirme et on retire CE bouton (un seul toucher), les autres restent.
     for (const m of kept) {
       if (!m.toucher) continue;
       await api(token, "answerCallbackQuery", { callback_query_id: m.toucher.id, text: "C'est noté, Alfred s'en occupe." }).catch(() => {});
-      const restants = m.toucher.clavier.map((l) => l.filter((b) => !b.callback_data)).filter((l) => l.length);
+      const restants = m.toucher.clavier.map((l) => l.filter((b) => b.callback_data !== m.toucher.data)).filter((l) => l.length);
       if (m.toucher.chat && m.toucher.message) {
         await api(token, "editMessageReplyMarkup", { chat_id: m.toucher.chat, message_id: m.toucher.message, reply_markup: { inline_keyboard: restants } }).catch(() => {});
       }
