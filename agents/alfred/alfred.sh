@@ -142,8 +142,12 @@ sur_oui="envoyer_brouillon noter_lecon"
 interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture ecarter_proposition proposer_action preparer_reponse_mail resumer_brief"
 # Seule commande permise : télécharger et découper une vidéo dont le lien est dans un mail.
 # Skill : ses skills (.claude/skills, voir skills/LISEZ-MOI.md du dépôt), des consignes à lire.
-allowed=("Read" "Edit(./etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)")
-denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram")
+# Spark (choix de Marc le 2026-11-10) : lire les boîtes des créateurs gérées dans Spark Desktop
+# et y préparer des brouillons. Jamais d'envoi (la commande n'en a pas), de suppression ni d'action.
+allowed=("Read" "Edit(./etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)"
+  "Bash(spark accounts)" "Bash(spark search:*)" "Bash(spark emails:*)" "Bash(spark thread:*)" "Bash(spark attachment:*)" "Bash(spark draft:*)")
+denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram"
+  "Bash(spark draft --delete:*)" "Bash(spark action:*)" "Bash(spark contact-action:*)" "Bash(spark event:*)" "Bash(spark comment:*)")
 if (( recus > 0 )); then
   # Marc vient d'écrire : Alfred gère toute l'app sur sa demande (choix de Marc le 2026-11-06).
   # Ses consignes gardent la règle : un mail ou un DM ne part que sur un « oui » explicite.
