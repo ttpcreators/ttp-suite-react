@@ -554,7 +554,9 @@ const envoyerDm: AdminTool = {
     if (!text) return fail("Message vide ou trop long (1 000 caractères max).");
     const who = str(a.conversation, 120).replace(/^@/, "");
     const q = sb.from("ig_threads").select("id, igsid, username");
-    const { data } = await (/^[a-z0-9._]{1,30}$/i.test(who) && !/^\d{10,}$/.test(who) && who.length < 31 ? q.ilike("username", who) : q.eq("id", who)).limit(1);
+    const { data } = await (/^[a-z0-9._]{1,30}$/i.test(who) && !/^\d{10,}$/.test(who) && who.length < 31 ? q.ilike("username", who.replace(/[%_\\]/g, (x) => `\\${x}`)) : q.eq("id", who)).limit(2);
+    // « _ » était lu comme « n'importe quel caractère » : marie_dupont pouvait tomber sur marie.dupont.
+    if (((data as Json[] | null) ?? []).length > 1) return fail("Plusieurs conversations portent ce nom : donne l'id de la conversation (outil dm_instagram).");
     const th = ((data as Json[] | null) ?? [])[0];
     if (!th?.igsid) return fail("Conversation introuvable ou pas encore synchronisée (page DM Instagram → Actualiser).");
     const page = await pageAccess();

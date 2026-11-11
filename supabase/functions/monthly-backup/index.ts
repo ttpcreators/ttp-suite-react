@@ -194,7 +194,11 @@ Deno.serve(async (req: Request) => {
 
   // 6) Mail aux fondateurs
   const listed = Array.isArray(state.backupRecipients) ? (state.backupRecipients as unknown[]).map((x) => String(x).trim().toLowerCase()).filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)) : [];
-  const to = listed.length ? listed : await founderEmails(sb);
+  // Une sauvegarde contient tout l'argent de l'agence : elle ne part que chez des fondateurs.
+  // `backupRecipients` sert seulement à en choisir certains parmi eux.
+  const founders = (await founderEmails(sb)).map((x) => x.trim().toLowerCase());
+  const chosen = listed.filter((x) => founders.includes(x));
+  const to = chosen.length ? chosen : founders;
   if (!to.length) return json({ error: "aucun_destinataire" }, 409);
   const attach = zip.length <= ATTACH_MAX;
   const mb = (zip.length / 1024 / 1024).toFixed(1).replace(".", ",");

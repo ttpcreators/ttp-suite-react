@@ -47,7 +47,12 @@ Deno.serve(async (req: Request) => {
   const oneMinAgo = new Date(Date.now() - 60_000).toISOString();
   const { count: recentCount } = await sb.from("error_log")
     .select("id", { count: "exact", head: true }).gte("created_at", oneMinAgo);
-  const flooding = (recentCount ?? 0) > 60;
+  // Plafond par jour en plus (60/min tenait encore 86 000 lignes par jour) : au-delà, on
+  // n'enregistre plus et on ne notifie plus jusqu'au lendemain.
+  const oneDayAgo = new Date(Date.now() - 86400_000).toISOString();
+  const { count: dayCount } = await sb.from("error_log")
+    .select("id", { count: "exact", head: true }).gte("created_at", oneDayAgo);
+  const flooding = (recentCount ?? 0) > 60 || (dayCount ?? 0) > 2000;
 
   // 1) Journalise (service role → bypass RLS), sauf en cas de flood manifeste.
   if (!flooding) {

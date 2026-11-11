@@ -199,6 +199,8 @@ Deno.serve(async (req: Request) => {
   // Activité créateur : push immédiat quand un créateur ajoute une tâche/idée/évènement.
   // Seul mode ouvert aux JWT créateurs (le digest/test restent agence + cron).
   if (body?.event === "creator_activity") {
+    // Un compte sans fiche créateur (profil absent ou sans nom) n'a rien à annoncer à l'agence.
+    if (caller.role === "creator" && !caller.creatorName) return jsonRes({ error: "forbidden" }, 403);
     const prefs = await loadPrefs(sb);
     if (!prefOn(prefs, "pushCreatorActivity")) return jsonRes({ ok: true, skipped: "pref_off" });
     // Du nouveau sur une tâche / idée / brief existants (« -maj ») : réglage à part.

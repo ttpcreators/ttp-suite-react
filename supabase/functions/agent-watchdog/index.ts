@@ -12,7 +12,7 @@
 // Secrets : CRON_SECRET, VAPID_* (envoi des notifications).
 // ============================================================================
 
-import { getServiceClient } from "../_shared/google.ts";
+import { getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { makePayload, pushReady, sendTo } from "../_shared/push.ts";
 import { veilleAlfred } from "../_shared/watchdog.ts";
 
@@ -21,7 +21,7 @@ const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 Deno.serve(async (req: Request) => {
   const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { "Content-Type": "application/json" } });
   const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
-  if (!CRON_SECRET || bearer !== CRON_SECRET) return json({ error: "unauthorized" }, 401);
+  if (!CRON_SECRET || !timingSafeEqualStr(bearer, CRON_SECRET)) return json({ error: "unauthorized" }, 401);
 
   const sb = getServiceClient();
   const db = sb.schema("agent");

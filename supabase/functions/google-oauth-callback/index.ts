@@ -82,7 +82,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const state = url.searchParams.get("state");
   const oauthError = url.searchParams.get("error");
 
-  if (oauthError) return htmlError(`Autorisation Google refusée (${oauthError}).`, 400);
+  // Le code d'erreur vient de l'adresse : on n'en garde que des lettres, chiffres et « _ ».
+  if (oauthError) return htmlError(`Autorisation Google refusée (${oauthError.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 40)}).`, 400);
   if (!code || !state) return htmlError("Paramètres OAuth manquants (code ou state).", 400);
 
   // 1. Vérification du state (anti-CSRF, HMAC).
