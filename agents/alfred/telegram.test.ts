@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { boutonsLiens, chunks, clavier, dueReminders, extraireLiens, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, pdfArgs, trouverLien } from "./telegram.mjs";
+import { boutonsLiens, chunks, clavier, clavierConfirmation, etapeToucher, dueReminders, extraireLiens, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, pdfArgs, trouverLien } from "./telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -184,5 +184,14 @@ describe("Alfred : documents en PDF", () => {
     expect(a).toContain("--headless");
     expect(a).toContain("--print-to-pdf=/tmp/x/02-proposition.pdf");
     expect(a[a.length - 1]).toBe("file:///tmp/x/02-proposition.html");
+  });
+
+  it("demande une confirmation avant d'agir sur un bouton", () => {
+    const attente = { abc123: { data: "oui Erwann", libelle: "Envoyer", clavier: [], at: 1 } };
+    expect(etapeToucher("oui Erwann", attente)).toEqual({ action: "demander" });
+    expect(etapeToucher("ok:abc123", attente)).toMatchObject({ action: "valider", id: "abc123", entree: { data: "oui Erwann" } });
+    expect(etapeToucher("non:abc123", attente)).toMatchObject({ action: "annuler", id: "abc123" });
+    expect(etapeToucher("ok:zzz999", attente)).toEqual({ action: "perime" });
+    expect(clavierConfirmation("abc123", "Envoyer")).toEqual([[{ text: "Confirmer : Envoyer", callback_data: "ok:abc123" }, { text: "Annuler", callback_data: "non:abc123" }]]);
   });
 });
