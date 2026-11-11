@@ -952,9 +952,23 @@ export function Contacts() {
         toast("Aucune ligne exploitable dans ce CSV");
         return;
       }
+      // Pas de doublon : une adresse déjà dans le carnet (ou deux fois dans le fichier) est ignorée.
+      const known = new Set(currentRows.map((r) => (r.email ?? "").trim().toLowerCase()).filter(Boolean));
+      const fresh = parsed.filter((c) => {
+        const e = (c.email ?? "").trim().toLowerCase();
+        if (!e) return true;
+        if (known.has(e)) return false;
+        known.add(e);
+        return true;
+      });
+      const skipped = parsed.length - fresh.length;
+      if (fresh.length === 0) {
+        toast(`Rien à importer : ${skipped > 1 ? `ces ${skipped} contacts sont` : "ce contact est"} déjà dans le carnet`);
+        return;
+      }
       let order = nextOrder(currentRows);
       const validTags = new Set(TAG_OPTIONS.map((t) => t.value));
-      const payload = parsed.map((c) => {
+      const payload = fresh.map((c) => {
         const rawTag = (c.tag ?? "").trim();
         const first = (c.first_name ?? "").trim();
         const last = (c.last_name ?? "").trim();
@@ -986,7 +1000,7 @@ export function Contacts() {
       const merged = [...inserted, ...currentRows];
       setCache("contacts", merged);
       setRows(merged);
-      toast(`${inserted.length} contact${inserted.length > 1 ? "s" : ""} importé${inserted.length > 1 ? "s" : ""} ✓`);
+      toast(`${inserted.length} contact${inserted.length > 1 ? "s" : ""} importé${inserted.length > 1 ? "s" : ""} ✓${skipped ? ` · ${skipped} déjà dans le carnet` : ""}`);
     } catch {
       toast("Fichier illisible");
     } finally {

@@ -77,6 +77,7 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [sending, setSending] = useState(false);
+  const liveTarget = useRef<string | null>(null);
   const [box, setBox] = useState<MailBox>(defaultBox);
   const [cc, setCc] = useState("");
   const [bcc, setBcc] = useState("");
@@ -141,9 +142,14 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
     const html = buildHtml(body, { signature: withSig ? settings.signatureHtml : "" });
     const params = { to: contact.email, cc: copy.ok, bcc: hidden.ok, subject: subject.trim(), html, attachments: att.files, source: "prospection", contactName: contact.label, box };
     // Délai d'annulation : le mail part après N s (barre « Annuler » en bas de l'écran).
-    scheduleSend(`Mail à ${contact.label}`, settings.delaySec, async () => {
-      setSending(true);
-      const res = await sendGmail(params);
+    // La fenêtre reste ouverte tant que le mail n'est pas parti : annulé ou refusé par Gmail,
+    // le texte et les pièces jointes sont toujours là (avant : fermée tout de suite, mail perdu).
+    const label = `Mail à ${contact.label}`;
+    const target = contact.email;
+    liveTarget.current = target;
+    setSending(true);
+    scheduleSend(label, settings.delaySec, async () => {
+      const res = await sendGmail(params, { label });
       setSending(false);
       if (!res.ok) {
         toast(sendErrorText(res.error));
@@ -151,8 +157,9 @@ export function MailComposer({ open, contact, onClose, onSent, defaultBox = "par
       }
       toast("Mail envoyé ✓");
       onSent?.(res.id);
-    });
-    onClose();
+      // Ne ferme que SA fenêtre (pas un autre mail ouvert entre-temps).
+      if (liveTarget.current === target) onClose();
+    }, { onCancel: () => setSending(false) });
   };
 
   // Ouvre le mail pré-rempli dans l'app mail par défaut (Spark) via mailto:

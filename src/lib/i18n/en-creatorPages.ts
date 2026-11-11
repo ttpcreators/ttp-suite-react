@@ -83,6 +83,7 @@ export const EN_CREATORPAGES: Record<string, string> = {
   "envoyé": "sent",
   "{label} ✓ Ton manager est prévenu": "{label} ✓ Your manager has been notified",
   "Statut non enregistré, réessaie": "Status not saved, please try again",
+  "Statut enregistré, mais ton mot n'a pas été gardé. Renvoie-le.": "Status saved, but your note was not kept. Please send it again.",
   "Statut enregistré : {label} ✓": "Status saved: {label} ✓",
   "Remarque envoyée à ton manager ✓": "Note sent to your manager ✓",
   "Remarque non enregistrée, réessaie": "Note not saved, please try again",

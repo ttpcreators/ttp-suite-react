@@ -773,6 +773,11 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         const r = await sendDecision(threadId, choice, word);
         applyDecision(threadId, r);
         notifyAgency("mail", creator, `Avis : ${PUSH_VERB[choice]} ${what}${word ? ` · « ${word} »` : ""}`);
+        // Statut rangé mais mot d'explication non gardé : on le dit (le mot reste dans le champ).
+        if (word && r.logged === false) {
+          toast(t("Statut enregistré, mais ton mot n'a pas été gardé. Renvoie-le."));
+          return false;
+        }
         toast(t("{label} ✓ Ton manager est prévenu", { label: shownLabel }));
       } else {
         const now = new Date().toISOString();
@@ -793,9 +798,11 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         const { data: auth } = await supabase.auth.getSession();
         const uid = auth.session?.user.id;
         if (uid) {
-          await supabase.from("creator_mail_status_log").insert({
+          const { error: logErr } = await supabase.from("creator_mail_status_log").insert({
             creator, thread_id: threadId, status: choice, by_role: "agency", author_user_id: uid, comment: word || null,
           });
+          // Table d'historique en place mais écriture refusée : le mot serait perdu sans le dire.
+          if (logErr && word && !/creator_mail_status_log|does not exist|42P01|PGRST205/.test(`${logErr.code ?? ""} ${logErr.message}`)) toast("Statut enregistré, mais ton mot n'a pas été gardé");
         }
         applyDecision(threadId, choice === "encours"
           ? { status: autoOf.current.get(threadId) ?? (open ? autoStatusOf(open.messages) : "nouvelle"), decidedBy: null, decidedAt: null }
