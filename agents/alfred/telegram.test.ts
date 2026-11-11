@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { boutonsLiens, chunks, clavier, clavierConfirmation, etapeToucher, dueReminders, extraireLiens, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
+import { boutonsLiens, chunks, clavier, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -219,5 +219,29 @@ describe("Alfred : pièces jointes des mails", () => {
     expect(refusPiece({ ...ok, name: "page.html" })).toMatch(/non pris en charge/);
     expect(refusPiece({ ...ok, size: 60 * 1024 * 1024 })).toMatch(/50 Mo/);
     expect(refusPiece({})).toMatch(/introuvable/);
+  });
+});
+
+describe("Alfred : envoi au fil de l'eau", () => {
+  it("n'envoie que les fichiers finis depuis 3 secondes, dans l'ordre des noms", () => {
+    const t = 1_000_000;
+    const entrees = [
+      { name: "02-copier.txt", size: 120, mtimeMs: t - 3_500 },
+      { name: "01-resume.txt", size: 40, mtimeMs: t - 9_000 },
+      { name: "03-mail.txt", size: 300, mtimeMs: t - 1_000 },
+      { name: "04-vide.txt", size: 0, mtimeMs: t - 9_000 },
+      { name: ".deja-cite", size: 1, mtimeMs: t - 9_000 },
+    ];
+    expect(fichiersPrets(entrees, t)).toEqual(["01-resume.txt", "02-copier.txt"]);
+    expect(fichiersPrets(entrees, t + 3_000)).toEqual(["01-resume.txt", "02-copier.txt", "03-mail.txt"]);
+  });
+
+  it("n'écrit que dans les dossiers d'envoi et ne lit que les fichiers de messages d'Alfred", () => {
+    expect(dossierEnvoi("etat/envoi-reponse")).toBe("etat/envoi-reponse");
+    expect(dossierEnvoi("etat/envoi")).toBe("etat/envoi");
+    expect(dossierEnvoi("../../Desktop")).toBe("etat/envoi");
+    expect(dossierEnvoi(undefined)).toBe("etat/envoi");
+    expect(fichierRecuIds("etat/recu-reponse-ids.txt")).toBe("etat/recu-reponse-ids.txt");
+    expect(fichierRecuIds("/etc/passwd")).toBe("etat/recu-ids.txt");
   });
 });
