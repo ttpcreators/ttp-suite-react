@@ -230,6 +230,22 @@ export function toucherDeMarc(u, marcId) {
 }
 
 /**
+ * Confirmation des boutons d'action (demande de Marc, 11 novembre 2026 : éviter un toucher par
+ * erreur). 1er toucher : on demande « Confirmer : libellé » ou « Annuler » ; seul « Confirmer »
+ * envoie l'action à Alfred. `attente` : les demandes en cours, par identifiant court.
+ */
+export function etapeToucher(data, attente = {}) {
+  const m = /^(ok|non):([0-9a-z]{4,12})$/.exec(String(data ?? ""));
+  if (!m) return { action: "demander" };
+  const entree = attente[m[2]];
+  if (!entree) return { action: "perime" };
+  return { action: m[1] === "ok" ? "valider" : "annuler", id: m[2], entree };
+}
+
+/** Le clavier de confirmation qui remplace les boutons le temps de valider. */
+export const clavierConfirmation = (id, libelle) => [[{ text: `Confirmer : ${libelle}`.slice(0, 60), callback_data: `ok:${id}` }, { text: "Annuler", callback_data: `non:${id}` }]];
+
+/**
  * Messages reçus à garder : seulement ceux de Marc (son identifiant), en privé, avec du texte
  * ou un vocal (`voice` : son identifiant de fichier Telegram, transcrit ensuite).
  * Renvoie aussi le prochain « offset » pour ne jamais relire deux fois les mêmes.
@@ -630,16 +646,56 @@ async function main() {
     const offset = Number(existsSync(offsetFile) ? readFileSync(offsetFile, "utf8") : 0) || 0;
     const res = await api(token, "getUpdates", { offset, timeout, allowed_updates: ["message", "edited_message", "callback_query"] });
     if (!res.ok) throw Object.assign(new Error(`Telegram : ${res.description ?? "lecture impossible"}`), { code: res.error_code });
-    const { kept, next } = marcMessages(res.result, chatId, offset);
-    // Bouton touché : on le confirme et on retire CE bouton (un seul toucher), les autres restent.
-    for (const m of kept) {
-      if (!m.toucher) continue;
-      await api(token, "answerCallbackQuery", { callback_query_id: m.toucher.id, text: "C'est noté, Alfred s'en occupe." }).catch(() => {});
-      const restants = m.toucher.clavier.map((l) => l.filter((b) => b.callback_data !== m.toucher.data)).filter((l) => l.length);
-      if (m.toucher.chat && m.toucher.message) {
-        await api(token, "editMessageReplyMarkup", { chat_id: m.toucher.chat, message_id: m.toucher.message, reply_markup: { inline_keyboard: restants } }).catch(() => {});
+    const { kept: recus, next } = marcMessages(res.result, chatId, offset);
+    // Boutons d'action : 1er toucher = demande de confirmation ; seul « Confirmer » passe à Alfred.
+    const attenteFile = join(here, "etat/boutons-attente.json");
+    let attente = {};
+    try {
+      attente = existsSync(attenteFile) ? JSON.parse(readFileSync(attenteFile, "utf8")) : {};
+    } catch {
+      attente = {};
+    }
+    // Une demande vieille de plus de 2 jours n'est plus valable.
+    let change = false;
+    for (const [k, v] of Object.entries(attente)) {
+      if (Date.now() - Number(v.at ?? 0) > 2 * 86_400_000) {
+        delete attente[k];
+        change = true;
       }
     }
+    const clavierDe = (t, inline_keyboard) =>
+      t.chat && t.message ? api(token, "editMessageReplyMarkup", { chat_id: t.chat, message_id: t.message, reply_markup: { inline_keyboard } }).catch(() => {}) : null;
+    const repondre = (t, text) => api(token, "answerCallbackQuery", { callback_query_id: t.id, text }).catch(() => {});
+    const kept = [];
+    for (const m of recus) {
+      if (!m.toucher) {
+        kept.push(m);
+        continue;
+      }
+      const t = m.toucher;
+      change = true;
+      const etape = etapeToucher(t.data, attente);
+      if (etape.action === "demander") {
+        const id = Math.random().toString(36).slice(2, 10);
+        const libelle = /« (.+) »\)$/.exec(m.text)?.[1] ?? "Envoyer";
+        attente[id] = { data: t.data, libelle, clavier: t.clavier, at: Date.now() };
+        await clavierDe(t, clavierConfirmation(id, libelle));
+        await repondre(t, "Touche Confirmer pour valider.");
+      } else if (etape.action === "valider") {
+        const e = etape.entree;
+        delete attente[etape.id];
+        await clavierDe(t, e.clavier.map((l) => l.filter((b) => b.callback_data !== e.data)).filter((l) => l.length));
+        await repondre(t, "C'est noté, Alfred s'en occupe.");
+        kept.push({ ...m, text: `${e.data} (bouton « ${e.libelle} », confirmé)` });
+      } else if (etape.action === "annuler") {
+        delete attente[etape.id];
+        await clavierDe(t, etape.entree.clavier);
+        await repondre(t, "Annulé.");
+      } else {
+        await repondre(t, "Ce bouton a expiré : écris ta demande à Alfred.");
+      }
+    }
+    if (change) writeFileSync(attenteFile, JSON.stringify(attente));
     const model = env.WHISPER_MODEL || join(homedir(), ".cache/whisper-cpp/ggml-large-v3-turbo-q5_0.bin");
     for (const m of kept) {
       if (!m.voice) continue;

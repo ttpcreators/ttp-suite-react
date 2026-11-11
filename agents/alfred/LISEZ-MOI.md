@@ -31,7 +31,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Mode vacances | « Je pars jusqu'au 20 » : seulement l'urgent, réponses d'attente aux marques (sur délégation), résumé au retour |
 | Trésorerie | Chaque lundi et sur demande : sur le compte, à encaisser, à reverser, à mettre de côté, fin de mois prévue |
 | Skills | Sept savoir faire chargés au bon moment (`skills/`) : influencer-marketing, cold-email, prospecting, sales-enablement, offers, comptable, copy-editing |
-| Boutons sur Telegram | Envoyer, Fait, Créer la facture, Rappelle-moi demain, Ajouter au calendrier (ou avec Meet, puis Envoyer l'invitation), Copier, Ouvrir dans WhatsApp (message déjà écrit) ; « Ouvrir dans l'app » ouvre TTP Suite dans Telegram (connexion une seule fois) |
+| Boutons sur Telegram | Envoyer, Fait, Créer la facture, Rappelle-moi demain, Ajouter au calendrier (ou avec Meet, puis Envoyer l'invitation), Copier, Ouvrir dans WhatsApp (message déjà écrit) ; « Ouvrir dans l'app » ouvre TTP Suite dans Telegram (connexion une seule fois) ; chaque bouton d'action demande « Confirmer » ou « Annuler » avant d'agir |
 | Documents en PDF | Contrats, bilans et propositions partent en PDF quand Chrome est installé sur le Mac (sinon en HTML) |
 | Alerte si Alfred tombe | Chaque jour de semaine, l'app vérifie qu'Alfred a fait son point du matin ; sinon notification à Marc et Gianni |
 | Réponses aux mails, relances | Brouillons Gmail montrés sur Telegram, avec un lien qui les ouvre dans Spark (Marc peut les envoyer lui même) ; envoyés par Alfred seulement sur « oui Marque » de Marc |
