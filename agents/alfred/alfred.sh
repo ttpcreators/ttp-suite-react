@@ -145,7 +145,7 @@ interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_factu
 # WhatsApp (choix de Marc le 2026-11-10) : lecture seule des discussions de etat/whatsapp-autorises.txt
 # (whatsapp.mjs refuse les autres). Spark (choix de Marc le 2026-11-10) : lire les boîtes des créateurs gérées dans Spark Desktop
 # et y préparer des brouillons. Jamais d'envoi (la commande n'en a pas), de suppression ni d'action.
-allowed=("Read" "Edit(./etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)"
+allowed=("Read" "Edit(./etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)" "Bash(node telegram.mjs joindre:*)"
   "Bash(spark accounts)" "Bash(spark search:*)" "Bash(spark emails:*)" "Bash(spark thread:*)" "Bash(spark attachment:*)" "Bash(spark draft:*)"
   "Bash(node whatsapp.mjs:*)")
 denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram"
