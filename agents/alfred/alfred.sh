@@ -63,6 +63,8 @@ if [[ "$1" != "--reponse" ]]; then
 fi
 # Les previews analysées ne sont gardées que 14 jours.
 [ -d etat/previews ] && find etat/previews -mindepth 1 -maxdepth 1 -mtime +14 -exec rm -rf {} +
+# Les pièces jointes copiées depuis Spark (etat/pieces) aussi : 14 jours.
+[ -d etat/pieces ] && find etat/pieces -type f -mtime +14 -delete
 
 # Rappels arrivés à l'heure : envoyés tels quels, sans réveiller Claude.
 [[ "$1" != "--reponse" ]] && node telegram.mjs rappels >> "$LOG" 2>&1
@@ -174,13 +176,17 @@ interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_factu
 # Seule commande permise : télécharger et découper une vidéo dont le lien est dans un mail.
 # Skill : ses skills (.claude/skills, voir skills/LISEZ-MOI.md du dépôt), des consignes à lire.
 # WhatsApp (choix de Marc le 2026-11-10) : lecture seule des discussions de etat/whatsapp-autorises.txt
-# (whatsapp.mjs refuse les autres). Spark (choix de Marc le 2026-11-10) : lire les boîtes des créateurs gérées dans Spark Desktop
-# et y préparer des brouillons. Jamais d'envoi (la commande n'en a pas), de suppression ni d'action.
-allowed=("Read" "Edit(./etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)" "Bash(node telegram.mjs joindre:*)"
-  "Bash(spark accounts)" "Bash(spark search:*)" "Bash(spark emails:*)" "Bash(spark thread:*)" "Bash(spark attachment:*)" "Bash(spark draft:*)"
-  "Bash(node whatsapp.mjs:*)")
-denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram"
-  "Bash(spark draft --delete:*)" "Bash(spark action:*)" "Bash(spark contact-action:*)" "Bash(spark event:*)" "Bash(spark comment:*)")
+# (whatsapp.mjs refuse les autres ; Alfred ne peut pas modifier cette liste). Spark (choix de Marc le
+# 2026-11-10) : lire les boîtes des créateurs gérées dans Spark Desktop et y préparer des brouillons,
+# seulement par spark.mjs, qui refuse toute boîte hors de TTP Creators (ALFRED_SPARK_BOITES dans config.env).
+# Jamais d'envoi, de suppression ni d'action.
+# Cloisonnement (choix de Marc le 2026-11-11 : Alfred reste dans TTP, rien d'un autre projet) :
+# il ne lit que son dossier (Read(./**)), n'appelle jamais `spark` directement, et ne charge pas les
+# réglages, skills et consignes globaux du Mac (--setting-sources plus bas) : seulement les siens.
+allowed=("Read(./**)" "Edit(./etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)" "Bash(node telegram.mjs joindre:*)"
+  "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)")
+denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash(spark:*)"
+  "Edit(./etat/whatsapp-autorises.txt)")
 if (( recus > 0 )); then
   # Marc vient d'écrire : Alfred gère toute l'app sur sa demande (choix de Marc le 2026-11-06).
   # Ses consignes gardent la règle : un mail ou un DM ne part que sur un « oui » explicite.
@@ -211,6 +217,7 @@ rm -f "$ENVOI"/* "$ENVOI"/.deja-cite
 echo "===== $(date) · $mode ($recus message(s) de Marc, modèle $modele) =====" >> "$LOG"
 claude -p "Il est $(date '+%H:%M') ce $(date '+%A %d %B %Y'). C'est $mode. $messages Dernier point fait : $(date -r "$last" '+%A %d %B à %H:%M'). Requête Gmail pour les mails reçus depuis : « $requete ». Fais ce passage selon ton CLAUDE.md et tes fiches, puis dépose tes messages pour Marc dans $ENVOI/." \
   --model "$modele" \
+  --setting-sources project,local \
   --allowedTools "${allowed[@]}" \
   --disallowedTools "${denied[@]}" \
   --max-turns 150 < /dev/null >> "$LOG" 2>&1 &
