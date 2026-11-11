@@ -73,8 +73,9 @@ export function readableRow(row: Record<string, unknown>, max = 1500): Record<st
 }
 
 /** Clés du blob agence jamais lues ni écrites par Claude. */
+const BLOCKED_SETTINGS = new Set(["credVault", "trashBin", "invoiceBankAccounts", "invoiceIssuer", "backupRecipients"]);
 export function blockedSetting(key: string): boolean {
-  return key === "credVault" || key === "trashBin" || SECRET.test(key);
+  return BLOCKED_SETTINGS.has(key) || SECRET.test(key);
 }
 
 /** Statuts d'une facture (les mêmes que la page Facturation). */

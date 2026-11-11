@@ -67,3 +67,10 @@ describe("factures préparées par Claude (audit 2026-11-11)", () => {
     expect(INVOICE_STATUSES).toContain("annulee");
   });
 });
+
+describe("réglages jamais lus ni écrits par Claude (audit 2026-11-11)", () => {
+  it("comptes bancaires, émetteur des factures, destinataires de la sauvegarde", () => {
+    for (const k of ["invoiceBankAccounts", "invoiceIssuer", "backupRecipients", "credVault", "trashBin"]) expect(blockedSetting(k)).toBe(true);
+    expect(blockedSetting("pricingRates")).toBe(false);
+  });
+});
