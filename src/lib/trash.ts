@@ -16,7 +16,46 @@ export type TrashEntry = {
   sub?: string;
   data: Record<string, unknown>;
   deletedAt: string;
+  /** Collab : ce que la base efface ou détache avec elle, pour le reposer à la restauration. */
+  links?: CollabLinks;
 };
+
+/** Historique daté des étapes + ids des éléments reliés (factures, tâches, rendez-vous…). */
+export type CollabLinks = { steps: { step: number; reached_at: string }[]; refs: Record<string, string[]> };
+/** Tables qui portent un `collab_id` (détaché par la base quand la collab est supprimée). */
+export const COLLAB_LINKED_TABLES = ["invoices", "todos", "events", "briefs", "gifting", "prospects"];
+
+/** Ce qu'il faut garder d'une collab avant de la supprimer. Lecture au mieux : une table
+ *  illisible pour ce compte (factures pour un membre) est simplement absente. */
+async function readCollabLinks(id: string): Promise<CollabLinks> {
+  const links: CollabLinks = { steps: [], refs: {} };
+  const { data: steps } = await supabase.from("collab_steps").select("step, reached_at").eq("collab_id", id).order("reached_at");
+  links.steps = ((steps ?? []) as { step: number; reached_at: string }[]).map((s) => ({ step: s.step, reached_at: s.reached_at }));
+  await Promise.all(COLLAB_LINKED_TABLES.map(async (t) => {
+    const { data } = await supabase.from(t).select("id").eq("collab_id", id);
+    const ids = ((data ?? []) as { id: string }[]).map((r) => r.id);
+    if (ids.length) links.refs[t] = ids;
+  }));
+  return links;
+}
+
+/** Repose l'historique et les liens d'une collab restaurée. Renvoie false si un morceau a échoué. */
+async function restoreCollabLinks(id: string, links: CollabLinks): Promise<boolean> {
+  let ok = true;
+  if (links.steps.length) {
+    // L'insertion vient de créer UNE ligne d'étape datée d'aujourd'hui : on remet les vraies.
+    const del = await supabase.from("collab_steps").delete().eq("collab_id", id);
+    const ins = del.error ? del : await supabase.from("collab_steps").insert(links.steps.map((s) => ({ collab_id: id, step: s.step, reached_at: s.reached_at })));
+    if (ins.error) ok = false;
+  }
+  for (const [table, ids] of Object.entries(links.refs)) {
+    if (!COLLAB_LINKED_TABLES.includes(table) || !ids.length) continue;
+    // Seulement ce qui est resté sans collab : un élément relié ailleurs entre-temps n'est pas repris.
+    const { error } = await supabase.from(table).update({ collab_id: id }).in("id", ids).is("collab_id", null);
+    if (error) ok = false;
+  }
+  return ok;
+}
 
 export const TRASH_TTL_DAYS = 30;
 
@@ -88,6 +127,8 @@ export async function dbTrash(table: string, id: string, label: string, sub?: st
   //    on NE supprime PAS (sinon la ligne disparaît sans copie récupérable — perte
   //    silencieuse avec un faux « déplacé dans la corbeille ✓»).
   const entry: TrashEntry = { id: uid(), table, label, sub, data: row, deletedAt: new Date().toISOString() };
+  // Collab : la base efface son historique d'étapes et détache ce qui lui est relié.
+  if (table === "collabs") entry.links = await readCollabLinks(id).catch(() => undefined);
   const saved = await mutateBin({ add: [entry] });
   if (!saved) {
     console.warn(`[trash] écriture corbeille échouée (${table}) → suppression annulée`);
@@ -108,8 +149,9 @@ export async function dbTrash(table: string, id: string, label: string, sub?: st
 }
 
 /** Résultat d'une restauration : "partial" = ligne ré-insérée mais entrée
- *  toujours présente dans la corbeille (retrait du blob échoué). */
-export type RestoreResult = "ok" | "partial" | "failed";
+ *  toujours présente dans la corbeille (retrait du blob échoué) ; "unlinked" = collab
+ *  revenue, mais son historique ou une partie de ses liens n'a pas pu être reposé. */
+export type RestoreResult = "ok" | "partial" | "failed" | "unlinked";
 
 /** Restaure une entrée : ré-insère la ligne dans sa table + retire de la corbeille. */
 export async function restoreEntry(entry: TrashEntry): Promise<RestoreResult> {
@@ -118,14 +160,17 @@ export async function restoreEntry(entry: TrashEntry): Promise<RestoreResult> {
   // ligne restaurée reçoit un nouvel uuid et les données indexées par id (commentaires
   // `itemNotes` des idées/tâches) deviennent orphelines. On ne réinitialise que les
   // horodatages laissés à la base.
-  for (const k of ["created_at", "updated_at"]) delete data[k];
+  // Une collab garde sa date de création (son âge et ses délais en dépendent).
+  for (const k of entry.table === "collabs" ? ["updated_at"] : ["created_at", "updated_at"]) delete data[k];
   const { error } = await supabase.from(entry.table).insert(data);
   if (error) {
     console.warn(`[trash] restore ${entry.table}:`, error.message);
     return "failed";
   }
+  const linked = entry.table === "collabs" && entry.links ? await restoreCollabLinks(String(entry.data.id), entry.links).catch(() => false) : true;
   const removed = await mutateBin({ remove: [entry.id] }).catch(() => false);
-  return removed ? "ok" : "partial";
+  if (!removed) return "partial";
+  return linked ? "ok" : "unlinked";
 }
 
 /** Supprime définitivement une entrée de la corbeille. Renvoie true si OK. */

@@ -83,3 +83,15 @@ describe("registre des contrats", () => {
     expect(`${b.body}${r.body}${b.subject}`).not.toMatch(/[\u2013\u2014]/);
   });
 });
+
+describe("registre des contrats : rien de signé ne disparaît (audit 2026-11-11)", () => {
+  it("seuls les plus anciens « en attente » sortent, au-delà de la limite", async () => {
+    const { historyOverflow, PENDING_HISTORY_MAX } = await import("./contractRegistry");
+    const pending = Array.from({ length: PENDING_HISTORY_MAX + 2 }, (_, i) => ({ id: `p${i}`, status: "pending" }));
+    const signed = Array.from({ length: 150 }, (_, i) => ({ id: `s${i}`, status: "signed" }));
+    expect(historyOverflow(signed)).toEqual([]);
+    const out = historyOverflow([...pending, ...signed]);
+    expect(out).toEqual([`p${PENDING_HISTORY_MAX - 1}`, `p${PENDING_HISTORY_MAX}`, `p${PENDING_HISTORY_MAX + 1}`]);
+    expect(out.some((id) => id.startsWith("s"))).toBe(false);
+  });
+});

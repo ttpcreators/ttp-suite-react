@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { siteSlugify, siteSlugs, type MkRow } from "@/lib/mediakitSlug";
+import { siteSlugify, siteSlugFor, type MkRow } from "@/lib/mediakitSlug";
 import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon, Check, Sparkles, Euro, UserRound, Users, BarChart3, Share2, ListChecks, Store, Languages, type LucideIcon } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { ImageField } from "@/components/ui/image-field";
@@ -319,14 +319,10 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
       // media kit » et l'URL publique pointent bien sur la page de CETTE créatrice.
       let slug = desired;
       try {
-        const { data: others } = await supabase.from("creators").select("id, mediakit").neq("id", selId);
-        const used = new Set(
-          (others ?? [])
-            .map((o) => (o.mediakit as MediaKit | null)?.slug)
-            .filter((s): s is string => !!s),
-        );
-        let n = 2;
-        while (used.has(slug)) slug = `${desired}-${n++}`;
+        // Même liste et même ordre que le site (public_mediakit : roster hors inactifs).
+        const { data: all, error: allErr } = await supabase.from("creators").select("name, mediakit, status, sort_order").order("sort_order");
+        const rows = ((all ?? []) as (MkRow & { status?: string | null })[]).filter((c) => (c.status ?? "actif") !== "inactif");
+        if (!allErr && selected) slug = siteSlugFor(rows, selected.name, desired) ?? desired;
       } catch {
         /* si la vérif d'unicité échoue, on garde le slug désiré (le site dédupliquera au pire) */
       }
@@ -433,14 +429,16 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
 
   // Adresse publique : même calcul que le build du site (« Lien » sinon prénom, doublons
   // -2, -3 dans l'ordre du roster). Sans « Lien », le kit existe quand même sous le prénom.
-  const [siteMap, setSiteMap] = useState<Map<string, string> | null>(null);
+  const [siteRows, setSiteRows] = useState<MkRow[] | null>(null);
   useEffect(() => {
     let alive = true;
     supabase.from("public_mediakit").select("name, mediakit, sort_order").order("sort_order")
-      .then(({ data, error }) => { if (alive && !error && data) setSiteMap(siteSlugs(data as MkRow[])); });
+      .then(({ data, error }) => { if (alive && !error && data) setSiteRows(data as MkRow[]); });
     return () => { alive = false; };
   }, [selId]);
-  const siteSlug = mk.slug?.trim() ? siteSlugify(mk.slug) : selected ? siteMap?.get(selected.name) : undefined;
+  // Toujours l'adresse que le site donnera à CE créateur (doublons -2, -3 compris) ; hors
+  // de la liste publiée (créateur inactif), on montre seulement le lien saisi.
+  const siteSlug = selected && siteRows ? (siteSlugFor(siteRows, selected.name, mk.slug) ?? (mk.slug?.trim() ? siteSlugify(mk.slug) : undefined)) : mk.slug?.trim() ? siteSlugify(mk.slug) : undefined;
   const publicUrl = siteSlug ? `https://ttpcreators.pro/mediakit/${siteSlug}/` : null;
 
   return (

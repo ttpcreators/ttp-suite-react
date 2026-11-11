@@ -205,3 +205,17 @@ export function fmtDate(ts: number): string {
 }
 
 export const plural = (n: number, one: string, many: string) => `${n} ${n > 1 ? many : one}`;
+
+/** Brouillons de contrats (« En attente ») gardés au registre avant de retirer les plus anciens. */
+export const PENDING_HISTORY_MAX = 100;
+
+/**
+ * Ids à retirer du registre quand on y ajoute un contrat : seulement les plus anciens
+ * contrats encore « en attente », au-delà de PENDING_HISTORY_MAX. Un contrat envoyé,
+ * signé ou terminé n'est JAMAIS retiré tout seul (avant : le 101e contrat effaçait le
+ * plus ancien, quel que soit son statut). `list` = plus récents d'abord.
+ */
+export function historyOverflow(list: { id: string; status?: unknown }[]): string[] {
+  const pending = list.filter((h) => normStatus(h.status) === "pending");
+  return pending.slice(PENDING_HISTORY_MAX - 1).map((h) => h.id);
+}

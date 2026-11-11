@@ -14,7 +14,7 @@ import { contratsSubFromTab, contratsTabFromSub, type ContratsTab } from "@/lib/
 import { CasesBar, ContractDocument, FoldSection, HistoryPanel, PanelSection, SettingsPanel, SwitchRow, docIconBtn, docPrimaryBtn } from "@/components/contracts/contract-ui";
 import { RepresentationContract, type ContractHist } from "@/views/RepresentationContract";
 import { ContractsHome } from "@/components/contracts/contracts-home";
-import { TYPE_META as REG_TYPE_META, type ContractRow, type ContractStatus } from "@/lib/contractRegistry";
+import { TYPE_META as REG_TYPE_META, historyOverflow, type ContractRow, type ContractStatus } from "@/lib/contractRegistry";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
 import { useIsFounder } from "@/lib/useFounder";
 import { Echeances } from "@/views/Echeances";
@@ -718,7 +718,7 @@ function ContractGenerator({ initial }: { initial: EditRequest | null }) {
     }
   };
   /** Archive le contrat courant. Dédoublonne (même HTML que le dernier archivé) et
-   *  plafonne à 100 entrées pour borner la taille du blob. Renvoie true si l'archivage a réussi. */
+   *  borne la taille du blob sans jamais effacer un contrat signé ou envoyé (`historyOverflow`). Renvoie true si l'archivage a réussi. */
   const archiveContract = async (html: string): Promise<boolean> => {
     let entry: ContractHistoryEntry | null = null;
     const ok = await mutateHistory((fresh) => {
@@ -726,8 +726,7 @@ function ContractGenerator({ initial }: { initial: EditRequest | null }) {
       const form: BrandForm = { ctType, brand, value, commission, duration, deliverables, excl: exclScope !== "non", extra, collab, rights, rightsDuration, territory, payment, tva, exclScope, defraiement };
       const e: ContractHistoryEntry = { id: uid(), ts: Date.now(), ctType, ctName, brand, ref, title: meta.title, html, status: "pending", form };
       entry = e;
-      // Plafond de 100 : l'ajout en tête pousse dehors les plus anciennes.
-      return { upsert: [e], remove: fresh.slice(99).map((h) => h.id) };
+      return { upsert: [e], remove: historyOverflow(fresh) };
     });
     const added = entry as ContractHistoryEntry | null;
     // Réimpression d'un contrat déjà archivé : on ne touche pas à son échéance.

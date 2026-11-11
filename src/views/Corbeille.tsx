@@ -53,6 +53,8 @@ export function Corbeille() {
     if (res === "partial") {
       // Ligne ré-insérée mais toujours listée dans la corbeille : ne pas la restaurer 2 fois.
       toast("Élément restauré, mais son retrait de la corbeille a échoué. Ne le restaure pas une 2e fois.");
+    } else if (res === "unlinked") {
+      toast("Collab restaurée, mais une partie de ses liens ou de son historique n'est pas revenue.");
     } else {
       toast(`${TABLE_LABELS[e.table] ?? "Élément"} restauré ✓`);
     }

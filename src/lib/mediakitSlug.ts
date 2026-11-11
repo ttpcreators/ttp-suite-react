@@ -34,3 +34,13 @@ export function siteSlugs(rows: MkRow[]): Map<string, string> {
   }
   return out;
 }
+
+/** Adresse publique d'UN créateur telle que le site la publiera, avec le « Lien » en cours
+ *  de saisie à la place de celui enregistré. undefined s'il n'est pas dans la liste publiée.
+ *  Sert aussi à l'enregistrement : le « Lien » rangé est celui que le site donne vraiment
+ *  (un créateur sans lien occupe déjà son prénom ; sans ça deux « Lena » partageaient la
+ *  même adresse dans l'éditeur, et l'agence envoyait à la marque le media kit de l'autre). */
+export function siteSlugFor(rows: MkRow[], name: string, editedSlug: string | null | undefined): string | undefined {
+  if (!rows.some((r) => r.name === name)) return undefined;
+  return siteSlugs(rows.map((r) => (r.name === name ? { ...r, mediakit: { ...(r.mediakit ?? {}), slug: (editedSlug ?? "").trim() || null } } : r))).get(name);
+}
