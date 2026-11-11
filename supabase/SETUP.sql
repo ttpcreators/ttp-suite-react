@@ -905,6 +905,8 @@ drop policy if exists documents_obj_creator_read on storage.objects;
 create policy documents_obj_agency on storage.objects for all to authenticated
   using (bucket_id = 'documents' and public.is_agency())
   with check (bucket_id = 'documents' and public.is_agency());
+-- (audit 2026-11-11) sans ce drop, relancer SETUP.sql s'arrêtait ici : « policy already exists ».
+drop policy if exists documents_obj_creator_insert on storage.objects;
 create policy documents_obj_creator_insert on storage.objects for insert to authenticated
   with check (
     bucket_id = 'documents'

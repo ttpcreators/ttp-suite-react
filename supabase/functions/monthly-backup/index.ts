@@ -42,15 +42,17 @@ const TABLES = [
 
 type Sb = ReturnType<typeof getServiceClient>;
 
-async function allRows(sb: Sb, table: string): Promise<Record<string, unknown>[] | null> {
+/** Lignes d'une table. `partial` : la lecture s'est arrêtée sur une erreur (table absente,
+ *  illisible, ou coupée en route) : la sauvegarde le dit au lieu de passer pour complète. */
+async function allRows(sb: Sb, table: string): Promise<{ rows: Record<string, unknown>[]; partial: boolean }> {
   const out: Record<string, unknown>[] = [];
   for (let from = 0; from < 200_000; from += 1000) {
     const { data, error } = await sb.from(table).select("*").range(from, from + 999);
-    if (error) return out.length ? out : null; // table absente ou illisible : on la saute
+    if (error) return { rows: out, partial: true };
     out.push(...((data ?? []) as Record<string, unknown>[]));
     if (!data || data.length < 1000) break;
   }
-  return out;
+  return { rows: out, partial: false };
 }
 
 async function founderEmails(sb: Sb): Promise<string[]> {
@@ -90,11 +92,13 @@ Deno.serve(async (req: Request) => {
   const counts: { name: string; n: string }[] = [];
 
   // 1) Tables → CSV
+  const missing: string[] = []; // ce qui manque ou est incomplet dans cette sauvegarde
   for (const t of TABLES) {
-    const rows = await allRows(sb, t);
-    if (!rows) continue;
+    const { rows, partial } = await allRows(sb, t);
+    if (partial) missing.push(rows.length ? `${t} (incomplète)` : t);
+    if (partial && !rows.length) continue;
     files[`donnees/${t}.csv`] = strToU8(toCsv(rows));
-    counts.push({ name: t, n: `${rows.length} ligne${rows.length > 1 ? "s" : ""}` });
+    counts.push({ name: t, n: `${rows.length} ligne${rows.length > 1 ? "s" : ""}${partial ? " · incomplète" : ""}` });
   }
 
   // 2) Réglages de l'agence (sans le coffre)
@@ -103,6 +107,7 @@ Deno.serve(async (req: Request) => {
     state = await readAppState(sb); // ligne commune + ligne argent des fondateurs
   } catch {
     state = {};
+    missing.push("réglages de l'agence");
   }
   files["reglages-agence.json"] = strToU8(JSON.stringify(safeAppState(state), null, 2));
 
@@ -159,13 +164,14 @@ Deno.serve(async (req: Request) => {
     `<p>Bonjour,</p><p>Voici la sauvegarde mensuelle de TTP Suite (${month}).` +
     (attach ? " L'archive est jointe à ce mail." : ` L'archive fait ${mb} Mo : trop lourde pour être jointe, elle est à télécharger avec le lien ci-dessous.`) +
     `</p>` +
+    (missing.length ? `<p style="color:#b00020"><b>Sauvegarde incomplète.</b> Non lu ce jour-là : ${missing.join(", ")}. Relance « Envoyer maintenant » dans Paramètres.</p>` : "") +
     (link ? `<p><a href="${link}">Télécharger la sauvegarde (${mb} Mo)</a> · lien valable 30 jours.</p>` : "") +
     `<table style="border-collapse:collapse;font-size:13px">${counts.map((c) => `<tr><td style="padding:2px 12px 2px 0">${c.name}</td><td style="padding:2px 0;color:#555">${c.n}</td></tr>`).join("")}</table>` +
     `<p style="color:#777;font-size:12px">Le coffre des mots de passe n'est jamais inclus. Garde ce mail en lieu sûr.</p>`;
   const raw = mimeMessage({
     from: `TTP Suite <partnerships@${AGENCY_DOMAIN}>`,
     to,
-    subject: `Sauvegarde TTP Suite · ${month}`,
+    subject: `Sauvegarde TTP Suite · ${month}${missing.length ? " · incomplète" : ""}`,
     html,
     attachments: attach ? [{ filename: name, mimeType: "application/zip", bytes: zip }] : [],
   });
@@ -186,5 +192,5 @@ Deno.serve(async (req: Request) => {
     console.error("monthly-backup send", sent.status, (await sent.text()).slice(0, 300));
     return json({ error: "envoi_echoue", stored: !up.error }, 502);
   }
-  return json({ ok: true, month, files: Object.keys(files).length, bytes: zip.length, attached: attach, recipients: to.length });
+  return json({ ok: true, month, files: Object.keys(files).length, bytes: zip.length, attached: attach, recipients: to.length, missing });
 });
