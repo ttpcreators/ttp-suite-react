@@ -38,7 +38,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Alerte si Alfred tombe | Chaque jour de semaine, l'app vérifie qu'Alfred a fait son point du matin ; sinon notification à Marc et Gianni |
 | Réponses aux mails, relances | Brouillons Gmail montrés sur Telegram, avec un lien qui les ouvre dans Spark (Marc peut les envoyer lui même) ; envoyés par Alfred seulement sur « oui Marque » de Marc |
 | Brouillons en double | Quand Marc a répondu lui même dans un fil, Alfred supprime son brouillon devenu inutile (jamais un brouillon écrit par Marc) |
-| Boîtes des créateurs | Les boîtes pro des créateurs gérées dans Spark (commande `spark` du Mac, Spark Desktop ouvert) : lues à chaque point, brouillons dans le fil quand l'accès « triage » est ouvert ; Marc envoie depuis Spark |
+| Boîtes des créateurs | Les boîtes pro des créateurs gérées dans Spark (par `spark.mjs`, seulement les boîtes de TTP Creators ; Spark Desktop ouvert) : lues à chaque point, brouillons dans le fil quand l'accès « triage » est ouvert ; Marc envoie depuis Spark |
 | WhatsApp avec les créateurs | Lecture seule de la copie de WhatsApp Desktop sur l'iMac (`whatsapp.mjs`), seulement les discussions de `etat/whatsapp-autorises.txt` validées par Marc : rattrapage en fiche par créateur, nouveaux messages à chaque point. Rien n'est envoyé sur WhatsApp |
 | Spams | Fouille les spams à chaque point pour repêcher les vraies demandes de marques |
 | Captures d'écran | Marc envoie des captures d'une discussion (WhatsApp, Instagram, LinkedIn) : Alfred les lit, retrouve le contexte et prépare la réponse à copier |
@@ -66,14 +66,22 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Mémoire commune avec Gianni | Tout ce qui compte va dans l'app (collabs, contacts, planning, tâches, mémoire des créateurs) et dans le journal des agents (`noter_journal`), repris par `point_du_jour` et `journal_agents` : l'assistant de Gianni voit la même chose que Marc |
 | Questions | Contrats, briefs, collabs, factures : il cherche dans TTP Suite et répond avec la source |
 
+**Alfred reste dans TTP Creators** (choix de Marc, 11 novembre 2026). Sur l'iMac, il ne lit que son dossier `~/Code/TTPAlfred`, ne charge pas les réglages, skills et consignes globaux de Claude sur ce Mac (`--setting-sources project,local`), et ne touche Spark que par `spark.mjs`, qui refuse toute boîte hors de TTP Creators : les adresses en @ttpcreators.pro, plus celles listées dans `config.env` :
+
+```
+ALFRED_SPARK_BOITES="contact.lea@example.com nova.pro@example.com"
+```
+
+Alfred ne peut pas modifier `config.env` ni sa liste WhatsApp. Côté connecteurs, il n'a droit qu'à « TTP Suite ».
+
 **Rien ne part vers l'extérieur sans un « oui » de Marc**, sauf dans une délégation où Marc a écrit qu'Alfred pouvait envoyer. WhatsApp : toujours copié par Marc.
 
 ## Les fichiers
 
-Dans le dépôt (`agents/alfred/`, public, aucun secret) : `CLAUDE.md` (ses consignes), `skills/` (ses skills, sous licence libre, copiées dans `.claude/skills`), `alfred.sh` (un passage), `ecoute.sh` et `telegram.mjs` (Telegram), `whatsapp.mjs` (lecture de WhatsApp Desktop), deux réglages launchd, `installer.sh`.
+Dans le dépôt (`agents/alfred/`, public, aucun secret) : `CLAUDE.md` (ses consignes), `skills/` (ses skills, sous licence libre, copiées dans `.claude/skills`), `alfred.sh` (un passage), `ecoute.sh` et `telegram.mjs` (Telegram), `whatsapp.mjs` (lecture de WhatsApp Desktop), `spark.mjs` (sa seule porte vers Spark), deux réglages launchd, `installer.sh`.
 
 Sur le Mac seulement (`~/Code/TTPAlfred/`) :
-- `config.env` : jeton du bot d'Alfred et identifiant Telegram de Marc ;
+- `config.env` : jeton du bot d'Alfred, identifiant Telegram de Marc et `ALFRED_SPARK_BOITES` (les boîtes Spark des créateurs qu'Alfred peut lire) ;
 - `REDACTION.md` : les consignes de rédaction de Marc (son dossier « bras droit » sur Claude) ;
 - `etat/` : sa mémoire (`memoire.md`, 150 lignes au plus), son suivi, ses rappels, ses délégations, le fil des échanges et les journaux. Les fichiers qui grossissent sont raccourcis à chaque passage.
 

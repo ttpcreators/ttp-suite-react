@@ -14,7 +14,7 @@ Au point du matin, les promesses qui tombent aujourd'hui ou sont dépassées pas
 
 **2. Les balles dans son camp.** Au point du matin, une rubrique **En attente de toi** : les personnes qui attendent une réponse de Marc depuis plus de 12 heures, la plus ancienne d'abord, cinq au plus.
 - WhatsApp : `node whatsapp.mjs en-attente` ;
-- mails : les fils des deux boîtes et des boîtes des créateurs dont le dernier message vient d'une marque, d'une agence ou d'un créateur, sans réponse de Marc (`in:inbox newer_than:14d -in:sent`, puis `lire_mail` ou `spark thread` pour voir qui a écrit en dernier) ;
+- mails : les fils des deux boîtes et des boîtes des créateurs dont le dernier message vient d'une marque, d'une agence ou d'un créateur, sans réponse de Marc (`in:inbox newer_than:14d -in:sent`, puis `lire_mail` ou `node spark.mjs thread` pour voir qui a écrit en dernier) ;
 - DM Instagram : `dm_instagram`.
 Une ligne par personne : qui, depuis combien de temps, ce qu'elle attend, en gras ce qui compte. Si tu as déjà préparé la réponse, elle suit juste après avec ses boutons ; sinon tu la prépares. Les messages qui n'appellent pas de réponse (merci, emoji, « ok ») ne comptent pas.
 

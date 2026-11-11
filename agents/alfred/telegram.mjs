@@ -33,6 +33,7 @@ import { pipeline } from "node:stream/promises";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { pieceAutorisee } from "./spark.mjs";
 
 const LIMIT = 4000; // Telegram plafonne à 4096 caractères par message.
 
@@ -735,13 +736,12 @@ async function main() {
   // Pas besoin du bot ici : rien ne part tant que le dossier n'est pas envoyé.
   if (mode === "joindre") {
     if (!/^\d+$/.test(arg ?? "")) throw new Error("Usage : node telegram.mjs joindre <id de la pièce jointe dans Spark> [ordre]");
+    // Seulement une pièce jointe d'une boîte de TTP Creators (spark.mjs refuse les autres boîtes).
     let info;
     try {
-      const { stdout } = await promisify(execFile)("spark", ["attachment", "--json", arg], { maxBuffer: 1 << 20 });
-      info = JSON.parse(stdout);
+      ({ info } = await pieceAutorisee(arg));
     } catch (e) {
-      const detail = /"message"\s*:\s*"([^"]+)"/.exec(String(e.stdout ?? ""))?.[1] ?? String(e.stderr || e.message).trim().split("\n")[0];
-      throw new Error(`Spark n'a pas donné la pièce jointe ${arg} : ${detail}`);
+      throw new Error(`pièce jointe ${arg} refusée : ${e.message}`);
     }
     const refus = refusPiece(info);
     if (refus) throw new Error(refus);
