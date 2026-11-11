@@ -13,6 +13,8 @@
 //   node telegram.mjs ecoute               écoute en continu et lance alfred.sh --reponse dès que Marc écrit
 //   node telegram.mjs telecharger <lien>   télécharge et découpe une vidéo (WeTransfer, SwissTransfer, Drive, Dropbox)
 //   node telegram.mjs rappels              envoie les rappels arrivés à échéance (etat/rappels.md)
+//   node telegram.mjs joindre <id> [ordre] copie une pièce jointe d'un mail (Spark) dans etat/envoi :
+//                                          elle part à Marc avec le prochain envoi, sous son nom d'origine
 //
 // Fichier « …-whatsapp.txt » ou « …-copier.txt » : 1re ligne = intitulé, la suite = texte à copier, mis dans un
 // bloc de code (un toucher le copie sur Telegram). Les autres partent en texte simple.
@@ -21,10 +23,11 @@
 
 import { execFile, spawn } from "node:child_process";
 import { homedir, tmpdir } from "node:os";
-import { appendFileSync, closeSync, createWriteStream, openSync, readSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, copyFileSync, createWriteStream, openSync, readSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 
 const LIMIT = 4000; // Telegram plafonne à 4096 caractères par message.
@@ -597,6 +600,35 @@ async function enPdf(src) {
   }
 }
 
+const PIECE_MAX = 50 * 1024 * 1024; // limite d'envoi des bots Telegram
+// Ce qu'une marque envoie : script, brief, contrat, présentation, tableau, image, vidéo, archive.
+// Pas de .txt ni de .html : dans etat/envoi, ils deviendraient un message ou seraient convertis.
+const PIECE_EXT = /\.(pdf|docx?|odt|rtf|pages|key|pptx?|xlsx?|csv|png|jpe?g|heic|webp|gif|mp4|mov|zip)$/i;
+
+/** Nom du fichier déposé dans etat/envoi : « 04-Script Vaillant.pdf » (l'ordre, puis le nom d'origine nettoyé). */
+export function nomPieceJointe(nom, ordre = "05") {
+  const propre = String(nom ?? "")
+    .replace(/[\u0000-\u001f/\\:]/g, " ")
+    .replace(/\s+/g, " ")
+    .replace(/^[\s.]+/, "")
+    .trim();
+  const num = /^\d{1,3}$/.test(String(ordre ?? "")) ? String(ordre).padStart(2, "0") : "05";
+  return propre ? `${num}-${propre}` : null;
+}
+
+/** Le nom que Marc voit sur Telegram : sans le numéro d'ordre du dossier d'envoi. */
+export function nomAffiche(nom) {
+  return String(nom).replace(/^\d{1,3}-(?=.)/, "");
+}
+
+/** Vérifie une pièce jointe décrite par `spark attachment --json` : la raison du refus, ou null si elle peut partir. */
+export function refusPiece(info) {
+  if (!info?.path || !info?.name) return "pièce jointe introuvable dans Spark";
+  if (!PIECE_EXT.test(info.name)) return `type de fichier non pris en charge (${info.name}) : Marc doit la transférer lui même`;
+  if (Number(info.size) > PIECE_MAX) return `${info.name} dépasse 50 Mo, la limite de Telegram : Marc doit la transférer lui même`;
+  return null;
+}
+
 /** Envoie un fichier à Marc (contrat rédigé, document), 50 Mo au plus. */
 async function sendDocument(token, chatId, path, name, replyTo = null) {
   const form = new FormData();
@@ -620,7 +652,30 @@ async function send(token, chatId, msg, replyTo = null) {
 
 async function main() {
   const [mode, arg] = process.argv.slice(2);
-  const here = new URL(".", import.meta.url).pathname;
+  const here = fileURLToPath(new URL(".", import.meta.url));
+
+  // Pièce jointe d'un mail (Spark) : copiée dans etat/envoi, elle part avec le prochain envoi à Marc.
+  // Pas besoin du bot ici : rien ne part tant que le dossier n'est pas envoyé.
+  if (mode === "joindre") {
+    if (!/^\d+$/.test(arg ?? "")) throw new Error("Usage : node telegram.mjs joindre <id de la pièce jointe dans Spark> [ordre]");
+    let info;
+    try {
+      const { stdout } = await promisify(execFile)("spark", ["attachment", "--json", arg], { maxBuffer: 1 << 20 });
+      info = JSON.parse(stdout);
+    } catch (e) {
+      const detail = /"message"\s*:\s*"([^"]+)"/.exec(String(e.stdout ?? ""))?.[1] ?? String(e.stderr || e.message).trim().split("\n")[0];
+      throw new Error(`Spark n'a pas donné la pièce jointe ${arg} : ${detail}`);
+    }
+    const refus = refusPiece(info);
+    if (refus) throw new Error(refus);
+    const dir = join(here, "etat/envoi");
+    mkdirSync(dir, { recursive: true });
+    const nom = nomPieceJointe(info.name, process.argv[4]);
+    copyFileSync(info.path, join(dir, nom));
+    console.log(`Pièce jointe prête : etat/envoi/${nom} (${Math.ceil(Number(info.size) / 1024)} Ko). Elle part à Marc avec ton message.`);
+    return;
+  }
+
   const env = readEnv(join(here, "config.env"));
   const token = env.ALFRED_BOT_TOKEN;
   const chatId = env.TELEGRAM_CHAT_ID;
@@ -781,7 +836,7 @@ async function main() {
       if (name.endsWith(".txt")) messages.push(...messagesFor(name, readFileSync(join(dir, name), "utf8")));
       else messages.push({ file: join(dir, name), name });
     }
-  } else throw new Error("Usage : node telegram.mjs dossier <chemin> | texte <message> | recevoir | rappels | ecoute");
+  } else throw new Error("Usage : node telegram.mjs dossier <chemin> | texte <message> | recevoir | rappels | ecoute | joindre <id> [ordre]");
   // Réponse à Marc : le premier message cite son dernier message (comme « Répondre »).
   const ids = mode === "dossier" && existsSync(join(here, "etat/recu-ids.txt")) ? readFileSync(join(here, "etat/recu-ids.txt"), "utf8").split("\n").map(Number).filter(Boolean) : [];
   let replyTo = ids.length ? ids[ids.length - 1] : null;
@@ -793,9 +848,9 @@ async function main() {
         m.file = pdf;
         m.name = m.name.replace(/\.html?$/i, ".pdf");
       }
-      await sendDocument(token, chatId, m.file, m.name, replyTo);
+      await sendDocument(token, chatId, m.file, nomAffiche(m.name), replyTo);
       replyTo = null;
-      appendFileSync(fil, `\n### ${stamp()} · Alfred\n(document envoyé : ${m.name})\n`);
+      appendFileSync(fil, `\n### ${stamp()} · Alfred\n(document envoyé : ${nomAffiche(m.name)})\n`);
       continue;
     }
     await send(token, chatId, m, replyTo);
@@ -805,7 +860,8 @@ async function main() {
   console.log(`${messages.length} message(s) envoyé(s) à Marc sur Telegram.`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// pathToFileURL : marche aussi quand le chemin contient des espaces.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   main().catch((e) => {
     console.error(e.message);
     process.exit(1);

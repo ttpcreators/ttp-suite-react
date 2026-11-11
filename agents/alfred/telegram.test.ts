@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { boutonsLiens, chunks, clavier, clavierConfirmation, etapeToucher, dueReminders, extraireLiens, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, pdfArgs, trouverLien } from "./telegram.mjs";
+import { boutonsLiens, chunks, clavier, clavierConfirmation, etapeToucher, dueReminders, extraireLiens, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -193,5 +193,31 @@ describe("Alfred : documents en PDF", () => {
     expect(etapeToucher("non:abc123", attente)).toMatchObject({ action: "annuler", id: "abc123" });
     expect(etapeToucher("ok:zzz999", attente)).toEqual({ action: "perime" });
     expect(clavierConfirmation("abc123", "Envoyer")).toEqual([[{ text: "Confirmer : Envoyer", callback_data: "ok:abc123" }, { text: "Annuler", callback_data: "non:abc123" }]]);
+  });
+});
+
+describe("Alfred : pièces jointes des mails", () => {
+  it("range la pièce jointe dans l'ordre d'envoi, sous son nom d'origine nettoyé", () => {
+    expect(nomPieceJointe("Vaillant x Justine - Script Black Friday 2026.pdf", "3")).toBe("03-Vaillant x Justine - Script Black Friday 2026.pdf");
+    const piege = nomPieceJointe("../../config.env/brief.pdf");
+    expect(piege.startsWith("05-")).toBe(true);
+    expect(piege).not.toContain("/");
+    expect(nomPieceJointe("brief:final\nv2.pdf", "abc")).toBe("05-brief final v2.pdf");
+    expect(nomPieceJointe("")).toBeNull();
+  });
+
+  it("montre à Marc le nom sans le numéro d'ordre", () => {
+    expect(nomAffiche("03-Vaillant x Justine - Script.pdf")).toBe("Vaillant x Justine - Script.pdf");
+    expect(nomAffiche("contrat-seoni.pdf")).toBe("contrat-seoni.pdf");
+    expect(nomAffiche("2026-11-11.pdf")).toBe("2026-11-11.pdf");
+  });
+
+  it("refuse ce qui ne peut pas partir sur Telegram", () => {
+    const ok = { path: "/cache/x.pdf", name: "Script.pdf", size: 38_000 };
+    expect(refusPiece(ok)).toBeNull();
+    expect(refusPiece({ ...ok, name: "notes.txt" })).toMatch(/non pris en charge/);
+    expect(refusPiece({ ...ok, name: "page.html" })).toMatch(/non pris en charge/);
+    expect(refusPiece({ ...ok, size: 60 * 1024 * 1024 })).toMatch(/50 Mo/);
+    expect(refusPiece({})).toMatch(/introuvable/);
   });
 });

@@ -53,6 +53,12 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Planning et Meet | Dates des marques et rendez vous confirmés (mails, échanges, captures) ajoutés tout seuls au Planning, donc au Google Agenda de partnerships@, avec lien Google Meet pour une visio ; jamais de doublon (refusé par l'app même) ; invitation Google aux participants seulement quand Marc le demande |
 | Roster à jour | Relit les créateurs actifs dans l'app à chaque fois, ne propose jamais quelqu'un qui est parti, annonce les arrivées et départs |
 | Second cerveau | Ses promesses (« je te reviens lundi » dans un mail ou sur WhatsApp) deviennent des tâches rappelées à temps, avec le texte pour les tenir ; « En attente de toi » chaque matin (mails, WhatsApp, DM sans réponse de Marc, `whatsapp.mjs en-attente`) ; « Demain » en 3 lignes à la fin du point du soir |
+| Pièces jointes des marques | Script, brief ou contrat reçu par mail : le fichier arrive sur Telegram (`node telegram.mjs joindre`, depuis Spark), suivi du message au créateur ; Marc transfère en deux touches. Pour talent@ et partnerships@, la boîte doit être dans Spark sur l'iMac (accès « Lecture seule » suffit) |
+| Colis | Numéro de suivi repéré dans les mails ou WhatsApp : une tâche par colis, la page du transporteur lue chaque matin, puis « tu as bien reçu ? » prêt à envoyer au créateur ; alerte et mail à la marque si rien 3 jours après la date prévue |
+| Programme de la semaine | Le lundi : un message WhatsApp par créateur (tournages, rushes, publications, colis, contrats), prêt à envoyer |
+| Vérification d'une nouvelle marque | Avant un devis : annuaire officiel des entreprises et BODACC (gratuits), Pappers, avis ; verdict Fiable, À surveiller (acompte) ou Risquée (paiement d'avance) |
+| Idées de vidéo | Trois idées pour un créateur et une marque, tirées du brief et de ses vidéos qui ont le mieux marché, avec l'accroche exacte |
+| Refus et préférences des créateurs | Notés dans la mémoire du créateur (`REFUS :`, `PRÉFÉRENCE :`) et relus avant chaque proposition |
 | Rappels | « Rappelle moi jeudi 15 h… », et ses propres rappels de ce que Marc risque d'oublier |
 | Délégation | « Gère les relances jusqu'à vendredi, tu peux envoyer » : il agit dans ce périmètre et rend compte |
 | Mémoire commune avec Gianni | Tout ce qui compte va dans l'app (collabs, contacts, planning, tâches, mémoire des créateurs) et dans le journal des agents (`noter_journal`), repris par `point_du_jour` et `journal_agents` : l'assistant de Gianni voit la même chose que Marc |
