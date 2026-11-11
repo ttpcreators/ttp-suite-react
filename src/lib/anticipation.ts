@@ -77,7 +77,7 @@ export function contractEnd(start: string, months: number): string | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(start ?? "");
   if (!m) return null;
   const y = Number(m[1]);
-  const mo = Number(m[2]) - 1 + (months || 0);
+  const mo = Number(m[2]) - 1 + (Number(months) || 0);
   const lastDay = new Date(y, mo + 1, 0).getDate();
   return localISO(new Date(y, mo, Math.min(Number(m[3]), lastDay)));
 }

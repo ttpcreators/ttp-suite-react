@@ -104,10 +104,11 @@ export function WhatsappView() {
   // ailleurs (autre appareil, cron Gmail) ne sont pas écrasées.
   const saveTouches = async (row: Row, change: TouchChange) => {
     const prevVals = { touches: row.touches, last_contacted: row.last_contacted };
-    const local = applyTouchChange(parseTouches(row.touches), change);
+    const before = parseTouches(row.touches);
+    const local = applyTouchChange(before, change);
     const set = (vals: Partial<Row>) =>
       setRows((prev) => (prev ? prev.map((r) => (r.id === row.id ? ({ ...r, ...vals } as Row) : r)) : prev));
-    set({ touches: local, ...(buildTouchesPatch(local, row.last_contacted) as Partial<Row>) });
+    set({ touches: local, ...(buildTouchesPatch(local, row.last_contacted, before) as Partial<Row>) });
     const res = await updateTouches(row.id, change);
     if (res) set(res);
     else {

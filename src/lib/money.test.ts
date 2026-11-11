@@ -134,3 +134,18 @@ describe("formatEuro : arrondi et valeurs limites", () => {
     expect(f(Infinity)).toBe("— €");
   });
 });
+
+describe("taux de change et quantités (audit 2026-11-11)", () => {
+  it("le point ou la virgule est toujours la décimale, sans arrondi", async () => {
+    const { parseDecimal, parseFxRate } = await import("./money");
+    expect(parseFxRate("1.075")).toBe(1.075);
+    expect(parseFxRate("1,075")).toBe(1.075);
+    expect(parseFxRate("0,9217")).toBe(0.9217);
+    expect(parseFxRate(" 0.925 ")).toBe(0.925);
+    expect(parseDecimal("0,125")).toBe(0.125);
+  });
+  it("refuse un taux vide, nul, illisible ou hors plage", async () => {
+    const { parseFxRate } = await import("./money");
+    for (const bad of ["", "0", "abc", "1 075", "1075", "1,0,7", "-1"]) expect(parseFxRate(bad)).toBeNull();
+  });
+});

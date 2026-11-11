@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { waLink, igHandle, typeHandle } from "./touches";
+import { waLink, igHandle, typeHandle, type Touch } from "./touches";
 import { applyTouchChange } from "./touchesDb";
 
 describe("waLink", () => {
@@ -51,5 +51,21 @@ describe("typeHandle (champ @)", () => {
     expect(typeHandle("lamarque")).toBe("lamarque");
     expect(typeHandle("@https://www.instagram.com/la.marque/?hl=fr")).toBe("@la.marque");
     expect(typeHandle("https://www.tiktok.com/@lamarque")).toBe("@lamarque");
+  });
+});
+
+describe("touche supprimée (audit 2026-11-11)", () => {
+  const t = (id: string, date: string): Touch => ({ id, date, canal: "whatsapp", kind: "contact" });
+  it("« dernier contact » redescend quand il venait de la touche retirée", async () => {
+    const { buildTouchesPatch } = await import("./touches");
+    const a = t("a", "2026-11-11T09:00:00.000Z");
+    const b = t("b", "2026-10-01T09:00:00.000Z");
+    expect(buildTouchesPatch([], a.date, [a]).last_contacted).toBeNull();
+    expect(buildTouchesPatch([b], a.date, [a, b]).last_contacted).toBe(b.date);
+  });
+  it("une date venue d'ailleurs (mail plus récent) ne bouge pas", async () => {
+    const { buildTouchesPatch } = await import("./touches");
+    const a = t("a", "2026-11-01T09:00:00.000Z");
+    expect("last_contacted" in buildTouchesPatch([], "2026-11-10T08:00:00.000Z", [a])).toBe(false);
   });
 });

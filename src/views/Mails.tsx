@@ -43,6 +43,7 @@ import { MailReactions } from "@/components/mail-reactions";
 import { canReact, reactionErrorText, reactionRecipients, splitReactions, type ReactionPill } from "@/lib/mailReactions";
 import { myDisplayName } from "@/lib/team";
 import { useIntent } from "@/lib/openIntent";
+import { addrOf, addrsOf, replyPlan } from "@/lib/mailReply";
 
 // Espace mails d'un créateur (statuts, remarques, suivi), chargé seulement à la demande.
 const CreatorMailsAgency = lazy(lazyImport(() => import("@/views/CreatorMails").then((m) => ({ default: m.CreatorMailsAgency }))));
@@ -171,29 +172,6 @@ function decodeEntities(s: string): string {
   entityCache.set(s, t.value);
   return t.value;
 }
-const ADDR_RE = /[^\s<>"',;]+@[^\s<>"',;]+/g;
-const addrsOf = (v?: string | null) => (v?.match(ADDR_RE) ?? []).map((a) => a.toLowerCase());
-const addrOf = (v?: string | null) => addrsOf(v)[0] ?? "";
-const isAgencyAddr = (a: string) => a.endsWith(AGENCY_DOMAIN);
-
-/**
- * Réponse à un fil : destinataire = Reply-To du dernier message reçu, sinon son
- * expéditeur ; « Répondre à tous » = ses To + Cc, sans les adresses de l'agence ni
- * le destinataire ; In-Reply-To / References = dernier message du fil.
- */
-function replyPlan(msgs: ThreadMsg[], fallback: string): { to: string; cc: string[]; inReplyTo?: string; references?: string } {
-  const lastIn = [...msgs].reverse().find((m) => !isAgencyAddr(addrOf(m.from)));
-  const base = lastIn ?? msgs[msgs.length - 1];
-  let to = lastIn ? addrOf(lastIn.replyTo) || addrOf(lastIn.from) : "";
-  if (!to) to = fallback || addrsOf(base?.to).find((a) => !isAgencyAddr(a)) || "";
-  const others = base ? [...addrsOf(base.from), ...addrsOf(base.to), ...addrsOf(base.cc)] : [];
-  const cc = [...new Set(others.filter((a) => a !== to && !isAgencyAddr(a)))];
-  const last = msgs[msgs.length - 1];
-  const id = last?.messageIdHeader?.trim();
-  const references = [last?.references?.trim(), id].filter(Boolean).join(" ").slice(-1900) || undefined;
-  return { to, cc, inReplyTo: id || undefined, references: id ? references : undefined };
-}
-
 const needsReconnect = (code?: string | null) => code === "google_non_connecte" || code === "gmail_scope_manquant";
 /** Texte d'une erreur de chargement (liste, fil, historique). */
 function loadErrText(code: string | null | undefined, fallback: string): string {
@@ -1637,7 +1615,7 @@ export function Mails() {
       })),
     [split],
   );
-  const plan = useMemo(() => replyPlan(split.shown, thread?.contact ?? ""), [split, thread]);
+  const plan = useMemo(() => replyPlan(split.shown, thread?.contact ?? "", AGENCY_DOMAIN), [split, thread]);
   const replyName = thread
     ? plan.to === thread.contact
       ? titleCase(prettyName(selected?.person || thread.name || displayName(thread.contact))) || plan.to

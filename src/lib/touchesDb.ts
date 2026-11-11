@@ -25,8 +25,9 @@ export async function updateTouches(contactId: string, change: TouchChange): Pro
   const { data, error } = await supabase.from("contacts").select("touches,last_contacted").eq("id", contactId).maybeSingle();
   if (error || !data) return null;
   const cur = data as { touches?: unknown; last_contacted?: string | null };
-  const next = applyTouchChange(parseTouches(cur.touches), change);
-  const patch = buildTouchesPatch(next, cur.last_contacted ?? null);
+  const before = parseTouches(cur.touches);
+  const next = applyTouchChange(before, change);
+  const patch = buildTouchesPatch(next, cur.last_contacted ?? null, before);
   if (!(await dbUpdate("contacts", contactId, patch))) return null;
-  return { touches: next, last_contacted: (patch.last_contacted as string | undefined) ?? cur.last_contacted ?? null };
+  return { touches: next, last_contacted: "last_contacted" in patch ? ((patch.last_contacted as string | null) ?? null) : (cur.last_contacted ?? null) };
 }

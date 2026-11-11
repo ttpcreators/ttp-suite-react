@@ -80,6 +80,28 @@ export function parseAmount(x: unknown): number {
   return readNumber(String(x ?? "").replace(/\s/g, ""));
 }
 
+/**
+ * Nombre décimal saisi tel quel (taux de change, quantité) : la virgule ou le point est
+ * TOUJOURS la décimale, jamais un séparateur de milliers, et rien n'est arrondi.
+ * « 1.075 » = 1,075 (et pas 1075), « 0,9217 » = 0,9217. null si vide ou illisible.
+ */
+export function parseDecimal(x: unknown): number | null {
+  if (typeof x === "number") return Number.isFinite(x) ? x : null;
+  const s = String(x ?? "").replace(/[\s\u00a0\u202f]/g, "").replace(",", ".");
+  if (!/^(\d+(\.\d*)?|\.\d+)$/.test(s)) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** Taux plausibles « 1 unité de devise = N euros » : au-delà, c'est une faute de frappe. */
+export const FX_RATE_MAX = 100;
+
+/** Taux de change vers l'euro, ou null s'il est vide, illisible ou hors plage. */
+export function parseFxRate(x: unknown): number | null {
+  const n = parseDecimal(x);
+  return n !== null && n > 0 && n <= FX_RATE_MAX ? n : null;
+}
+
 /** Formate un nombre en "3 000 €" (normalise l'espace insécable des milliers). */
 export function formatEuro(n: number): string {
   if (!Number.isFinite(n)) return "— €";

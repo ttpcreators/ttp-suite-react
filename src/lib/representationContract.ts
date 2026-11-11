@@ -161,12 +161,19 @@ function frLong(iso: string): string {
   const d = Number(m[3]);
   return `${d === 1 ? "1er" : d} ${MONTHS[Number(m[2]) - 1]} ${m[1]}`;
 }
-function addMonthsMinusDay(iso: string, months: number): string {
+/**
+ * Dernier jour du contrat : début + N mois, moins un jour (15 mars + 12 mois = 14 mars).
+ * Quand le mois d'arrivée n'a pas ce jour (31 août + 6 mois : pas de 31 février), le
+ * contrat finit le dernier jour de ce mois (28 février), jamais en mars.
+ */
+export function addMonthsMinusDay(iso: string, months: number): string {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec((iso ?? "").trim());
   if (!m) return "";
-  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
-  d.setMonth(d.getMonth() + months);
-  d.setDate(d.getDate() - 1);
+  const y = Number(m[1]);
+  const mo = Number(m[2]) - 1 + (Number(months) || 0);
+  const day = Number(m[3]);
+  const lastDay = new Date(y, mo + 1, 0).getDate();
+  const d = day > lastDay ? new Date(y, mo, lastDay) : new Date(y, mo, day - 1);
   const p = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }

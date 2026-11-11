@@ -10,3 +10,11 @@ describe("guessEventKind", () => {
     expect(guessEventKind("Ivana")).toBe("call");
   });
 });
+
+describe("mots accentués en début de titre (audit 2026-11-11)", () => {
+  it("« Événement » est bien un évènement, pas un appel", () => {
+    expect(guessEventKind("Événement Nike")).toBe("event");
+    expect(guessEventKind("événement presse")).toBe("event");
+    expect(guessEventKind("Soirée Adidas")).toBe("event");
+  });
+});

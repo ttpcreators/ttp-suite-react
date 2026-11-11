@@ -9,7 +9,7 @@ export type EventKind = "call" | "reunion" | "collab" | "shoot" | "event" | "voy
 const RULES: [EventKind, RegExp][] = [
   ["deadline", /\b(post(er)?|publi(er|cation)|deadline|livr(er|aison)|rendre|envoyer|mise en ligne|date limite|story|reel)\b/i],
   ["shoot", /\b(shoot(ing)?|tournage|tourner|photo)\b/i],
-  ["event", /\b(event|[ée]v[ée]nement|soir[ée]e|lancement|salon|vernissage|inauguration|festival)\b/i],
+  ["event", /(?<![\p{L}\p{N}])(event|[ée]v[ée]nement|soir[ée]e|lancement|salon|vernissage|inauguration|festival)(?![\p{L}\p{N}])/iu],
   ["voyage", /\b(voyage|vol|train|d[ée]placement|trip)\b/i],
   ["reunion", /\b(r[ée]union|point|rdv|rendez-vous|d[ée]jeuner|d[îi]ner)\b/i],
   ["call", /\b(call|appel|visio|meet|zoom|t[ée]l[ée]phone)\b/i],

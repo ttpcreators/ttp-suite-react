@@ -100,6 +100,8 @@ export type NetGains = {
 export function netGains(invoices: GainInvoice[], ratePct: number, now: Date = new Date()): NetGains {
   const g: NetGains = { coming: 0, paid: 0, late: 0, last: null };
   for (const inv of invoices) {
+    // Facture annulée : plus rien à attendre pour le créateur.
+    if (inv.status === "annulee") continue;
     const net = netShare(parseAmount(inv.amount), ratePct);
     const { key } = payoutStatus(inv);
     if (key === "verse") {
@@ -156,6 +158,8 @@ export function realGains(
   let late = 0;
   const lines: GainLine[] = [];
   for (const inv of invoices) {
+    // Facture annulée : ni « à venir » ni « en cours » (elle ne sera jamais payée).
+    if (inv.status === "annulee") continue;
     const net = invoiceNet(inv, details, ratePct);
     if (inv.status === "payee") {
       due += net;

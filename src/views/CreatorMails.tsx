@@ -423,6 +423,31 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   const [sending, setSending] = useState(false);
   // Champ du bas (créateur) : écrire à son agence, ou répondre lui-même à la marque.
   const [noteTarget, setNoteTarget] = useState<"agency" | "brand">("agency");
+  // Le texte en cours appartient à UN échange : en changer range le brouillon sous son
+  // échange, rend celui du nouvel échange et remet la cible sur l'agence. Sans ça, un texte
+  // écrit pour la marque A partait chez la marque B.
+  const noteDrafts = useRef(new Map<string, string>());
+  const noteLive = useRef("");
+  const openLive = useRef<string | null>(null);
+  useEffect(() => {
+    noteLive.current = note;
+  }, [note]);
+  useEffect(() => {
+    const id = openId;
+    openLive.current = id;
+    setNote(id ? (noteDrafts.current.get(id) ?? "") : "");
+    setNoteTarget("agency");
+    return () => {
+      if (!id) return;
+      if (noteLive.current.trim()) noteDrafts.current.set(id, noteLive.current);
+      else noteDrafts.current.delete(id);
+    };
+  }, [openId]);
+  /** Rend un texte non parti à SON échange (jamais à celui qui est ouvert entre-temps). */
+  const giveNoteBack = (id: string, body: string) => {
+    if (openLive.current === id) setNote((cur) => cur || body);
+    else if (!noteDrafts.current.get(id)) noteDrafts.current.set(id, body);
+  };
   const [reloadKey, setReloadKey] = useState(0); // relit l'échange ouvert dans Gmail
   const [dbKey, setDbKey] = useState(0); // relit son suivi en base
   const [deciding, setDeciding] = useState(false);
@@ -813,12 +838,12 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         setReloadKey((n) => n + 1);
         setDbKey((n) => n + 1);
       } catch (e) {
-        setNote((cur) => cur || body);
+        giveNoteBack(id, body);
         if (!handleGone(e)) toast(t(errText(e)));
       } finally {
         setSending(false);
       }
-    }, { onCancel: () => setNote((cur) => cur || body) });
+    }, { onCancel: () => giveNoteBack(id, body) });
   };
 
   const submitNote = async () => {
@@ -852,7 +877,9 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
         if (creatorSees) notifyCreator("mail", creator, `Nouvelle remarque de ton agence · ${what} : ${body}`);
         toast(creatorSees ? t("Remarque envoyée à {name} ✓", { name: creatorName }) : t("Remarque enregistrée ✓"));
       }
-      setNote("");
+      // Seulement si on est resté sur le même échange (sinon on viderait le texte d'un autre).
+      if (openLive.current === thread.id) setNote("");
+      else noteDrafts.current.delete(thread.id);
     } catch (e) {
       if (!handleGone(e)) toast(t(errText(e)));
     } finally {

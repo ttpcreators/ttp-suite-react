@@ -130,6 +130,8 @@ describe("contrats à renouveler", () => {
   it("fin = début + durée, bornée à la fin du mois", () => {
     expect(contractEnd("2026-01-31", 1)).toBe("2026-02-28");
     expect(contractEnd("2025-11-15", 12)).toBe("2026-11-15");
+    // Durée rangée en texte (ancienne saisie) : lue comme un nombre, pas collée (« 11 » + « 12 »).
+    expect(contractEnd("2025-12-01", "12" as unknown as number)).toBe("2026-12-01");
     expect(contractEnd("pas une date", 12)).toBeNull();
   });
 

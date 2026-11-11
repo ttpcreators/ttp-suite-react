@@ -30,6 +30,7 @@ import { StatsBento } from "@/components/ui/stats-bento";
 import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { cn, titleCase } from "@/lib/utils";
+import { parseDecimal, parseFxRate } from "@/lib/money";
 import { parseAmount, formatEuro, useAppState, saveAppStateKey, mergeAppStateKey, listAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import type { AnimatedBadgeStatus } from "@/components/ui/be-ui-animated-badge";
@@ -221,6 +222,10 @@ function uid(): string {
  *  (« 1.500 » = 1500, « 1 250,50 » = 1250,5), cf. `parseAmount`. */
 function num(s: unknown): number {
   return parseAmount(s);
+}
+/** Quantité : « 0,125 » reste 0,125 (une virgule = décimale, sans arrondi au centime). */
+function qtyNum(s: unknown): number {
+  return /^\s*\d+,\d+\s*$/.test(String(s ?? "")) ? (parseDecimal(s) ?? 0) : num(s);
 }
 /** Prochain numéro de facture à partir des réfs existantes (« AAAA-NNN »). */
 function nextRefFrom(refs: string[]): string {
@@ -1472,7 +1477,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
                       />
                       <input
                         value={draft.raw?.[`${it.id}:qty`] ?? fmtQty(it.qty)}
-                        onChange={(e) => setItem(it.id, { qty: num(e.target.value) }, { [`${it.id}:qty`]: e.target.value })}
+                        onChange={(e) => setItem(it.id, { qty: qtyNum(e.target.value) }, { [`${it.id}:qty`]: e.target.value })}
                         inputMode="decimal"
                         placeholder="Qté"
                         aria-label={`Quantité, ligne ${i + 1}`}
@@ -1545,7 +1550,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
                   <Field label={`Valeur d'1 ${draft.currency} en euros`}>
                     <input
                       value={draft.raw?.fx ?? (draft.fxRate ? fmtRate(draft.fxRate) : "")}
-                      onChange={(e) => setDraft({ ...draft, raw: { ...draft.raw, fx: e.target.value }, fxRate: num(e.target.value) || undefined })}
+                      onChange={(e) => setDraft({ ...draft, raw: { ...draft.raw, fx: e.target.value }, fxRate: parseFxRate(e.target.value) ?? undefined })}
                       inputMode="decimal"
                       placeholder="ex. 0,92"
                       aria-label="Taux de conversion"

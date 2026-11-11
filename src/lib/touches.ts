@@ -100,12 +100,20 @@ export function nextKind(list: Touch[], lastContacted?: string | null): TouchKin
  * `last_contacted` synchronisé si la nouvelle activité est plus récente.
  * Partagé entre la page Contacts et la page WhatsApp (une seule logique).
  */
-export function buildTouchesPatch(next: Touch[], currentLastContacted?: string | null): Record<string, unknown> {
-  const acts = next.map((t) => new Date(t.date).getTime()).filter((n) => Number.isFinite(n));
-  const lastIso = acts.length ? new Date(Math.max(...acts)).toISOString() : null;
+export function buildTouchesPatch(next: Touch[], currentLastContacted?: string | null, prev?: Touch[]): Record<string, unknown> {
+  const maxOf = (l: Touch[]) => {
+    const acts = l.map((t) => new Date(t.date).getTime()).filter((n) => Number.isFinite(n));
+    return acts.length ? Math.max(...acts) : null;
+  };
+  const nextMax = maxOf(next);
+  const lastIso = nextMax != null ? new Date(nextMax).toISOString() : null;
   const patch: Record<string, unknown> = { touches: next };
-  if (lastIso && (!currentLastContacted || new Date(lastIso).getTime() > new Date(currentLastContacted).getTime()))
-    patch.last_contacted = lastIso;
+  const curMs = currentLastContacted ? new Date(currentLastContacted).getTime() : null;
+  if (lastIso && (curMs == null || nextMax! > curMs)) patch.last_contacted = lastIso;
+  // Touche retirée : si « dernier contact » venait d'elle (même instant), il redescend à la
+  // touche restante la plus récente, ou se vide. Une date venue d'ailleurs (mail) ne bouge pas.
+  const prevMax = prev ? maxOf(prev) : null;
+  if (prevMax != null && curMs != null && Math.abs(curMs - prevMax) < 1000 && (nextMax ?? -Infinity) < prevMax) patch.last_contacted = lastIso;
   return patch;
 }
 

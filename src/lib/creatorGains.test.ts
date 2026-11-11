@@ -102,3 +102,18 @@ describe("marque seule d'une facture", () => {
     expect(partyBrand(null, "lea")).toBe("");
   });
 });
+
+describe("facture annulée (audit 2026-11-11)", () => {
+  const NOW = new Date(2026, 10, 11);
+  it("ne compte ni dans « à venir » ni dans les lignes de versements", async () => {
+    const { netGains } = await import("./creatorGains");
+    const invs = [
+      { id: "a", ref: "2026-190", party: "Nike", amount: "1 000,00 €", date: "2026-12-01", status: "annulee" },
+      { id: "b", ref: "2026-191", party: "Hoka", amount: "500", date: "2026-12-05", status: "attente" },
+    ];
+    const g = realGains(invs, {}, [], 20, NOW);
+    expect(g.coming).toBe(400);
+    expect(g.lines.map((l) => l.key)).toEqual(["inv:b"]);
+    expect(netGains(invs, 20, NOW).coming).toBe(400);
+  });
+});
