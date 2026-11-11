@@ -226,7 +226,9 @@ Plusieurs audits adversariaux menés (identité et privilège, OWASP). Détail d
     (`mcp_log`).
   - Outils dans `tools.ts`. Un outil qui écrit porte `write: true`, ce qui fait demander
     l'accord de l'utilisateur à Claude avant chaque appel.
-  - Les mails ne sont jamais envoyés : brouillon seulement. Les outils `founder: true` sont
+  - Pour un membre, un mail n'est jamais envoyé : brouillon seulement. Les fondateurs ont
+    en plus des outils qui envoient vraiment (`envoyer_mail`, `envoyer_brouillon`,
+    `envoyer_dm`, depuis le 2026-10-28, `ttp-mcp/admin.ts`). Les outils `founder: true` sont
     cachés aux membres.
 - **« Rédiger avec Claude » / « Résumer avec Claude »** : aucune clé API, on passe par
   l'abonnement Claude et le connecteur.

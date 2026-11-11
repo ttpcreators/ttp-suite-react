@@ -16,8 +16,9 @@ import { readAppState } from "../_shared/appState.ts";
 import { pageAccess, postGraph } from "../_shared/instagram.ts";
 import { cleanDm, sendWhy } from "../_shared/igSend.ts";
 import {
-  TABLES, addressList, blockedSetting, euro2, invoiceParty, invoiceTotals, mailHtml, nextInvoiceRef, nextQuoteRef, pct, readableRow, writableFields, type InvoiceLine,
+  INVOICE_STATUSES, TABLES, addressList, blockedSetting, defaultFranchise, euro2, invoiceParty, lockedInvoiceChange, invoiceTotals, mailHtml, nextInvoiceRef, nextQuoteRef, pct, readableRow, writableFields, type InvoiceLine,
 } from "../_shared/mcpAdmin.ts";
+import { eurRateOf } from "../_shared/reversements.ts";
 import { sendDraft, sendMail, type MailBox } from "./gmail.ts";
 import type { Ctx } from "./oauth.ts";
 
@@ -259,7 +260,7 @@ const preparerFacture: AdminTool = {
   name: "preparer_facture",
   title: "Préparer une facture",
   description:
-    "Crée ou met à jour une facture dans Facturation (fondateurs), avec les mêmes règles que l'app : lignes HT, TVA (20 % par défaut, ou franchise), commission du créateur (fiche roster, sinon dernière facture, sinon 20 %), numéro « AAAA-NNN » automatique, libellé « Marque × Prénom ». Sans `id`/`ref` : nouvelle facture en brouillon. Avec `id` ou `ref` : modifie cette facture (seuls les champs donnés changent ; `lignes` remplace toutes les lignes). Rappelle à l'utilisateur de vérifier puis d'envoyer depuis Facturation (le PDF est fait par l'app). Demande l'accord avant.",
+    "Crée ou met à jour une facture dans Facturation (fondateurs), avec les mêmes règles que l'app : lignes HT, TVA selon le régime réglé dans Compta (franchise par défaut ; avec TVA seulement si `tva` ou `franchise: false` est donné), commission du créateur (fiche roster, sinon dernière facture, sinon 20 %), numéro « AAAA-NNN » automatique, libellé « Marque × Prénom ». Sans `id`/`ref` : nouvelle facture en brouillon. Avec `id` ou `ref` : modifie cette facture (seuls les champs donnés changent ; `lignes` remplace toutes les lignes). Rappelle à l'utilisateur de vérifier puis d'envoyer depuis Facturation (le PDF est fait par l'app). Demande l'accord avant.",
   inputSchema: {
     type: "object",
     properties: {
@@ -285,6 +286,8 @@ const preparerFacture: AdminTool = {
       row = (data as Json | null) ?? null;
       if (!row) return fail(`Facture introuvable (${str(a.id) || str(a.ref)}).`);
     }
+    if (str(a.statut) && !INVOICE_STATUSES.includes(str(a.statut))) return fail(`Statut inconnu (« ${str(a.statut)} »). Choisis parmi : ${INVOICE_STATUSES.join(", ")}.`);
+    if (row && lockedInvoiceChange(row.status, a)) return fail(`La facture ${row.ref} est déjà émise (${row.status}) : ses lignes, sa TVA et sa commission se modifient dans l'app, pas ici. Tu peux encore changer son statut, son échéance ou ses notes.`);
     const st = await readAppState(sb);
     const allDetails = (st.invoiceDetails as Record<string, Json> | undefined) ?? {};
     const prev = row ? allDetails[String(row.id)] ?? {} : {};
@@ -306,6 +309,9 @@ const preparerFacture: AdminTool = {
     if (!items.length) return fail("Ajoute au moins une ligne (libellé et prix HT).");
     const banks = (st.invoiceBankAccounts as { id?: string }[] | undefined) ?? [];
     const detail = {
+      // On repart du détail existant : devise, taux de change, facture « au nom du créateur »
+      // et type « commission » ne sont pas gérés ici et ne doivent jamais être perdus.
+      ...prev,
       clientName: str(client.nom, 200) || String(prev.clientName ?? ""),
       clientEmail: str(client.email, 200) || String(prev.clientEmail ?? ""),
       clientAddress: str(client.adresse, 500) || String(prev.clientAddress ?? ""),
@@ -315,7 +321,7 @@ const preparerFacture: AdminTool = {
       issueDate: str(a.date_emission, 10) || String(prev.issueDate ?? "") || todayIso(),
       dueDate: str(a.echeance, 10) || String(prev.dueDate ?? "") || todayIso(),
       items,
-      franchise: typeof a.franchise === "boolean" ? a.franchise : !!prev.franchise,
+      franchise: defaultFranchise(a.franchise, a.tva, prev.franchise, st.comptaSettings),
       vatRate: typeof a.tva === "number" ? a.tva : typeof prev.vatRate === "number" ? prev.vatRate : 20,
       commissionRate: commission,
       bankId: String(prev.bankId ?? "") || banks[0]?.id || "",
@@ -323,7 +329,8 @@ const preparerFacture: AdminTool = {
     };
     const tot = invoiceTotals(items, detail.franchise, detail.vatRate, commission);
     const summary: Json = {
-      party: invoiceParty(brand, creator), amount: euro2(tot.ttc), date: detail.dueDate || "—",
+      // Montant enregistré = TTC en euros (facture en devise : au taux de la facture, comme l'app).
+      party: invoiceParty(brand, creator), amount: euro2(tot.ttc * (eurRateOf(detail) ?? 1)), date: detail.dueDate || "—",
       status: str(a.statut) || String(row?.status ?? "brouillon"), creator: creator || null,
       ...(str(a.collab_id) ? { collab_id: str(a.collab_id) } : {}),
     };
@@ -369,7 +376,7 @@ const preparerDevis: AdminTool = {
   name: "preparer_devis",
   title: "Préparer un devis",
   description:
-    "Crée ou met à jour un DEVIS en brouillon dans Facturation → Devis (fondateurs), mêmes règles que l'app : lignes HT, TVA (20 % par défaut, ou franchise), commission du créateur (fiche roster, sinon 20 %), numéro « D-AAAA-NNN » automatique, valable 30 jours. Rien n'est envoyé : Marc vérifie le devis, en fait le PDF et l'envoie depuis l'app. Sans `ref` : nouveau devis. Avec `ref` : modifie ce devis (seuls les champs donnés changent ; `lignes` remplace toutes les lignes). Prix : toujours la méthode de l'agence (methode_tarif) et le flag « À vérifier ».",
+    "Crée ou met à jour un DEVIS en brouillon dans Facturation → Devis (fondateurs), mêmes règles que l'app : lignes HT, TVA selon le régime réglé dans Compta (franchise par défaut ; avec TVA seulement si `tva` ou `franchise: false` est donné), commission du créateur (fiche roster, sinon 20 %), numéro « D-AAAA-NNN » automatique, valable 30 jours. Rien n'est envoyé : Marc vérifie le devis, en fait le PDF et l'envoie depuis l'app. Sans `ref` : nouveau devis. Avec `ref` : modifie ce devis (seuls les champs donnés changent ; `lignes` remplace toutes les lignes). Prix : toujours la méthode de l'agence (methode_tarif) et le flag « À vérifier ».",
   inputSchema: {
     type: "object",
     properties: {
@@ -409,6 +416,7 @@ const preparerDevis: AdminTool = {
     const banks = (st.invoiceBankAccounts as { id?: string }[] | undefined) ?? [];
     const issueDate = String(prev?.issueDate ?? "") || todayIso();
     const quote: Json = {
+      ...(prev ?? {}), // devise et taux d'un devis existant : jamais perdus
       clientName: str(client.nom, 200) || String(prev?.clientName ?? ""),
       clientEmail: str(client.email, 200) || String(prev?.clientEmail ?? ""),
       clientAddress: str(client.adresse, 500) || String(prev?.clientAddress ?? ""),
@@ -418,7 +426,7 @@ const preparerDevis: AdminTool = {
       issueDate,
       dueDate: str(a.valable_jusqu_au, 10) || String(prev?.dueDate ?? "") || addDays(todayIso(), QUOTE_VALIDITY_DAYS),
       items,
-      franchise: typeof a.franchise === "boolean" ? a.franchise : !!prev?.franchise,
+      franchise: defaultFranchise(a.franchise, a.tva, prev?.franchise, st.comptaSettings),
       vatRate: typeof a.tva === "number" ? a.tva : typeof prev?.vatRate === "number" ? prev.vatRate : 20,
       commissionRate: commission,
       bankId: String(prev?.bankId ?? "") || banks[0]?.id || "",

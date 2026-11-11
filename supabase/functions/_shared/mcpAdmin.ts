@@ -77,6 +77,27 @@ export function blockedSetting(key: string): boolean {
   return key === "credVault" || key === "trashBin" || SECRET.test(key);
 }
 
+/** Statuts d'une facture (les mêmes que la page Facturation). */
+export const INVOICE_STATUSES = ["brouillon", "attente", "retard", "payee", "annulee"];
+
+/**
+ * Franchise de TVA d'une facture ou d'un devis préparé par Claude : ce qui est demandé,
+ * sinon ce que le document avait déjà, sinon le régime réglé dans Compta (franchise par
+ * défaut), comme la page Facturation. Un taux de TVA donné sans autre précision = avec TVA.
+ */
+export function defaultFranchise(given: unknown, givenVat: unknown, prev: unknown, comptaSettings: unknown): boolean {
+  if (typeof given === "boolean") return given;
+  if (typeof givenVat === "number" && givenVat > 0) return false;
+  if (typeof prev === "boolean") return prev;
+  return (comptaSettings as { vatRegime?: string } | null | undefined)?.vatRegime !== "assujetti";
+}
+
+/** Une facture émise (tout sauf brouillon) : Claude ne touche plus à ses lignes ni à ses taux. */
+export function lockedInvoiceChange(status: unknown, a: Record<string, unknown>): boolean {
+  if (String(status ?? "brouillon") === "brouillon") return false;
+  return Array.isArray(a.lignes) || typeof a.tva === "number" || typeof a.franchise === "boolean" || typeof a.commission === "number";
+}
+
 // ── Factures (mêmes règles que la page Facturation et src/lib/invoice.ts) ─────
 export type InvoiceLine = { id: string; label: string; qty: number; unit: number };
 export const cents = (n: number): number => (Number.isFinite(n) ? Math.round(n * 100) / 100 || 0 : 0);

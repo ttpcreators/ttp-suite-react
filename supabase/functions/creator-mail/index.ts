@@ -641,7 +641,9 @@ Deno.serve(async (req: Request) => {
         method: "POST",
         headers: { Authorization: `Bearer ${sendToken}`, "Content-Type": "application/json" },
         body: JSON.stringify({ raw, threadId }),
-      }, { timeoutMs: 30_000 }).catch(() => null);
+        // Un envoi ne se retente pas sur délai dépassé ou erreur serveur : Gmail a pu l'envoyer
+        // quand même, et la marque recevrait le mail plusieurs fois (mêmes réglages que gmail-send).
+      }, { timeoutMs: 30_000, retries: 2, retryStatuses: [429], retryNetwork: false }).catch(() => null);
       if (!r?.ok) {
         console.error("creator-mail reply", r?.status, r ? (await r.text()).slice(0, 300) : "réseau");
         return res({ error: r?.status === 403 ? "gmail_scope_manquant" : "envoi_echoue" }, 502);

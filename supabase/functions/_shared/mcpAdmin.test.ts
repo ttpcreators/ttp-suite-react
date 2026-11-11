@@ -47,3 +47,23 @@ describe("accès complet de Claude", () => {
     expect(addressList("pas une adresse")).toBeNull();
   });
 });
+
+describe("factures préparées par Claude (audit 2026-11-11)", () => {
+  it("TVA : suit le régime réglé dans Compta, franchise par défaut", async () => {
+    const { defaultFranchise } = await import("./mcpAdmin.ts");
+    expect(defaultFranchise(undefined, undefined, undefined, undefined)).toBe(true);
+    expect(defaultFranchise(undefined, undefined, undefined, { vatRegime: "franchise" })).toBe(true);
+    expect(defaultFranchise(undefined, undefined, undefined, { vatRegime: "assujetti" })).toBe(false);
+    expect(defaultFranchise(undefined, undefined, false, { vatRegime: "franchise" })).toBe(false); // facture existante
+    expect(defaultFranchise(undefined, 20, undefined, { vatRegime: "franchise" })).toBe(false); // taux demandé
+    expect(defaultFranchise(true, 20, false, { vatRegime: "assujetti" })).toBe(true); // demandé noir sur blanc
+  });
+  it("facture émise : lignes, TVA et commission ne se modifient plus ici", async () => {
+    const { lockedInvoiceChange, INVOICE_STATUSES } = await import("./mcpAdmin.ts");
+    expect(lockedInvoiceChange("brouillon", { lignes: [] })).toBe(false);
+    expect(lockedInvoiceChange("payee", { statut: "payee", notes: "ok" })).toBe(false);
+    expect(lockedInvoiceChange("attente", { lignes: [] })).toBe(true);
+    expect(lockedInvoiceChange("payee", { commission: 10 })).toBe(true);
+    expect(INVOICE_STATUSES).toContain("annulee");
+  });
+});
