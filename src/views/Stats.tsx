@@ -217,6 +217,12 @@ function CompareCard({ label, current, previous, delta, curLbl, prevLbl }: { lab
   );
 }
 
+/** Mois courant « aaaa-mm » à l'heure de l'ordinateur (pas en UTC : entre 0 h et 2 h le 1er, c'était le mois d'avant). */
+const localMonthKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+};
+
 export function Stats() {
   const [data, setData] = useState<StatsData | null>(() => getCache<StatsData>("statsData"));
   const [error, setError] = useState(false);
@@ -275,7 +281,7 @@ export function Stats() {
   useEffect(() => {
     if (!data || snapWrote.current) return;
     snapWrote.current = true;
-    const ym = new Date().toISOString().slice(0, 7); // "aaaa-mm"
+    const ym = localMonthKey(); // "aaaa-mm"
     const cur: Snap = {
       activeCreators: data.creators.filter((c) => (c.status ?? "actif").toLowerCase() !== "inactif").length,
       totalFollowers: data.creators.filter((c) => (c.status ?? "actif").toLowerCase() !== "inactif").reduce((s, c) => s + (cumFollowers[c.name.trim().toLowerCase()] || parseCompact(c.followers)), 0),
@@ -311,7 +317,7 @@ export function Stats() {
   const avgEr = erVals.length ? erVals.reduce((s, v) => s + v, 0) / erVals.length : 0;
 
   // Variation MoM depuis l'instantané du mois PRÉCÉDENT (le plus récent < mois courant).
-  const curYM = new Date().toISOString().slice(0, 7);
+  const curYM = localMonthKey();
   // Seuls les mois calculés avec la méthode actuelle servent de comparaison.
   const prevKey = Object.keys(snaps ?? {}).filter((k) => k < curYM && ((snaps as Record<string, Snap>)[k]?.v ?? 1) >= SNAP_VERSION).sort().pop();
   const prevSnap = prevKey ? (snaps as Record<string, Snap>)[prevKey] : undefined;

@@ -110,3 +110,14 @@ describe("compta : réglages, seuils, collabs", () => {
     expect(invoiceLine(inv("o", "1 000 €"), { issueDate: "2026-10-05", onBehalf: false }, 20, "agence", S, "mandat").agencyCA).toBe(1000);
   });
 });
+
+describe("jour de paiement à l'heure de Paris (audit 2026-11-11)", () => {
+  it("payée le 1er janvier à 0 h 30 (Paris) : comptée en janvier", async () => {
+    const { parisDay } = await import("./compta");
+    expect(parisDay("2026-12-31T23:30:00+00:00")).toBe("2027-01-01");
+    expect(parisDay("2026-06-30T22:30:00Z")).toBe("2026-07-01"); // heure d'été
+    expect(parisDay("2026-11-11T10:00:00Z")).toBe("2026-11-11");
+    expect(parisDay("2026-11-11")).toBe("2026-11-11");
+    expect(parisDay(null)).toBeNull();
+  });
+});

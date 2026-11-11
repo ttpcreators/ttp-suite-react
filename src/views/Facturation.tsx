@@ -50,7 +50,7 @@ import { commissionMap, rateFor } from "@/lib/commission";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { CURRENCIES, eurRateOf, invoiceHT, invoiceTotals, totalsOf, type LineItem, type Totals } from "@/lib/invoice";
-import { readSettings } from "@/lib/compta";
+import { parisDay, readSettings } from "@/lib/compta";
 import { printHtml } from "@/lib/printPdf";
 import { docHead, pdfFileTitle, ttpLogoImg } from "@/lib/pdfDoc";
 import { notifyCreator } from "@/lib/push";
@@ -846,7 +846,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
   const periodName = periodRange ? rangeLabel(periodRange) : "";
   // Mois de l'encaissement : jour du passage en « Payée » (paid_at) ; anciennes factures sans
   // cette date : l'échéance, et si elle est illisible (« 01/10 » sans année) la date d'émission.
-  const ymPaid = (r: Row) => (r.paid_at ? ymOf(r.paid_at.slice(0, 10)) : null) ?? ymOf(r.date) ?? ymOf(details[r.id]?.issueDate ?? "");
+  const ymPaid = (r: Row) => (r.paid_at ? ymOf(parisDay(r.paid_at) ?? "") : null) ?? ymOf(r.date) ?? ymOf(details[r.id]?.issueDate ?? "");
   const paidScope = scope.filter((r) => r.status === "payee" && (period ? true : ymPaid(r)?.y === nowY));
   // Chiffre d'affaires en HORS TAXES (choix de Marc, 2026-10-25) : la TVA est due à l'État.
   const htOf = (r: Row) => invoiceHT(parseAmount(r.amount), details[r.id]);

@@ -30,6 +30,15 @@ export function readSettings(raw: unknown): ComptaSettings {
 }
 export const socialRate = (s: ComptaSettings) => s.urssafRate + s.cfpRate + (s.vl ? s.vlRate : 0);
 
+/** Jour d'un horodatage (« 2026-12-31T23:30:00Z ») à l'heure de Paris : une facture payée le
+ *  1er janvier à 0 h 30 compte en janvier, pas sur l'année d'avant. Date seule : inchangée. */
+export const parisDay = (v: unknown): string | null => {
+  const s = String(v ?? "");
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(s)) return isoDay(s);
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return isoDay(s);
+  return new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+};
 const isoDay = (v: unknown): string | null => {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v ?? ""));
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
@@ -44,7 +53,7 @@ function lineOf(inv: ComptaInv, d: (Detail & { issueDate?: string; dueDate?: str
   const commissionKind = d?.kind === "commission";
   const t = invoiceTotals(amountOf(inv.amount), d, commissionKind ? 0 : rate);
   const paid = inv.status === "payee";
-  const day = (paid ? isoDay(inv.paid_at) : null) ?? isoDay(d?.issueDate) ?? isoDay(inv.date) ?? isoDay(d?.dueDate);
+  const day = (paid ? parisDay(inv.paid_at) : null) ?? isoDay(d?.issueDate) ?? isoDay(inv.date) ?? isoDay(d?.dueDate);
   let cashIn = 0, agencyCA = 0, vatDue = 0, owedCreator = 0;
   if (commissionKind) {
     if (paid) { cashIn = t.ttc; agencyCA = t.ht; vatDue = t.tva; }

@@ -211,7 +211,11 @@ export function Briefs() {
     setStatus("attente");
   };
 
+  // Le brief tel qu'il était à l'ouverture du formulaire : sert à n'écrire que ce que
+  // l'agence a vraiment changé (résumé de Claude ou script du créateur arrivés entre-temps).
+  const editBase = useRef<Row | null>(null);
   const startEdit = (row: Row) => {
+    editBase.current = row;
     setEditId(row.id);
     setEditBrand(row.brand);
     setEditDeliverables(row.deliverables === "—" ? "" : row.deliverables);
@@ -234,7 +238,9 @@ export function Briefs() {
       : oldDue && oldDue !== "—" && !toISODate(oldDue)
         ? oldDue
         : "—";
-    const before = (rows ?? []).find((r) => r.id === id)?.resume ?? null;
+    const base = editBase.current?.id === id ? editBase.current : null;
+    const before = (base ?? (rows ?? []).find((r) => r.id === id))?.resume ?? null;
+    const scriptTouched = !base || editScript.trim() !== (base.consignes ?? "").trim();
     const lists = { faire: textToList(editResume.faire), eviter: textToList(editResume.eviter), livrables: textToList(editResume.livrables), mentions: textToList(editResume.mentions) };
     const same = RESUME_BLOCKS.every((b) => lists[b.key].join("\n") === (before?.[b.key] ?? []).join("\n"));
     const nextResume: BriefResume | null = RESUME_BLOCKS.some((b) => lists[b.key].length) ? { ...lists, maj_le: new Date().toISOString(), par: "agence" } : null;
@@ -245,7 +251,8 @@ export function Briefs() {
       deliverables: editDeliverables.trim() || "—",
       due: dueVal,
       objectif: editObjectif.trim() || "—",
-      consignes: editScript.trim(),
+      // Script non retouché : on n'y écrit pas (le créateur a pu le modifier pendant ce temps).
+      ...(scriptTouched ? { consignes: editScript.trim() } : {}),
       budget: editBudget.trim() || "—",
       creator: editCreator || "",
       who: editCreator || "",
@@ -256,10 +263,16 @@ export function Briefs() {
     }
     const old = (rows ?? []).find((r) => r.id === id);
     setRows((rows ?? []).map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    // Brief passé à un autre créateur : son PDF joint le suit (sinon l'ancien créateur le
+    // gardait dans ses Documents et le nouveau ne le voyait pas).
+    if (old?.pdf?.docId && (old.creator ?? "") !== patch.creator) {
+      const docName = `Brief · ${patch.brand}${patch.creator ? ` · ${titleCase(patch.creator)}` : ""}`;
+      if (!(await dbUpdate("documents", old.pdf.docId, { creator: patch.creator || null, name: docName }))) toast("Le PDF joint n'a pas suivi le changement de créateur, rejoins-le");
+    }
     toast("Brief mis à jour ✓");
     setEditId(null);
     // Ce que le créateur lit a changé (consignes, livrables, échéance, résumé) : il est prévenu.
-    const seen = !same || (old && (old.consignes ?? "") !== patch.consignes) || old?.deliverables !== patch.deliverables || old?.due !== patch.due;
+    const seen = !same || (old && scriptTouched && (old.consignes ?? "") !== patch.consignes) || old?.deliverables !== patch.deliverables || old?.due !== patch.due;
     if (seen && patch.creator) notifyCreatorsChange("brief", [patch.creator], "update", patch.brand, id);
   };
   const changeStatus = async (id: string, next: string) => {

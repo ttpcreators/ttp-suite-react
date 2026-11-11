@@ -1,6 +1,6 @@
 import { CollabField, ObjectCollabLink } from "@/components/collab-links";
 import { useStickyState } from "@/lib/useStickyState";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { ChevronLeft, ChevronRight, X, Trash2 } from "@/components/icons";
 import { AddButton, Field, TextField, TextAreaField, SelectField } from "@/components/ui/form";
 import { CreatorPicker } from "@/components/ui/creator-picker";
@@ -233,6 +233,14 @@ export function EventCalendar({
   });
   // Téléphone : l'agenda en liste se lit mieux qu'une grille de mois.
   const [view, setView] = useStickyState<View>("agenda:vue", ["month", "week", "list"], () => (isPhoneNow() ? "list" : "month"));
+  // Vue « Semaine » mémorisée : la page rouvre sur la semaine d'aujourd'hui, pas sur celle du
+  // 1er du mois (les rendez-vous du jour étaient invisibles tant qu'on ne cliquait pas « Aujourd'hui »).
+  useEffect(() => {
+    if (view !== "week") return;
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    setCursor(startOfWeek(d));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false); // enregistrement / suppression en cours
   // Filtres de catégorie (événements / briefs / to-do) — actifs par défaut.
@@ -380,7 +388,8 @@ export function EventCalendar({
           value={view}
           onValueChange={(next) => {
             const v = next as View;
-            if (v === "week") setCursor((c) => startOfWeek(c));
+            // Mois en cours affiché : la semaine d'aujourd'hui, sinon celle du 1er du mois affiché.
+            if (v === "week") setCursor((c) => { const now = new Date(); now.setHours(0, 0, 0, 0); return startOfWeek(c.getFullYear() === now.getFullYear() && c.getMonth() === now.getMonth() ? now : c); });
             // Mois : recale au 1er du mois du curseur (cohérent + pas d'overflow).
             if (v === "month") setCursor((c) => new Date(c.getFullYear(), c.getMonth(), 1));
             setView(v);

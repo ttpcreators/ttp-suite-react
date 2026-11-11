@@ -1,5 +1,5 @@
 import { fmtDay } from "@/lib/dates";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Pencil, CalendarClock, RefreshCw } from "@/components/icons";
 import { useAppState, listAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { titleCase } from "@/lib/utils";
@@ -81,6 +81,10 @@ export function Echeances() {
   const { data: stored } = useAppState<Deadline[]>((s: AppState) => (s["contractDeadlines"] as Deadline[]) ?? []);
   const [local, setLocal] = useState<Deadline[] | null>(null);
   const list = local ?? stored ?? [];
+  // Nouvelles données (un collègue a ajouté ou retiré un contrat) : on abandonne la copie locale.
+  useEffect(() => {
+    setLocal(null);
+  }, [stored]);
   const creators = useCreators();
 
   const [formOpen, setFormOpen] = useState(false);

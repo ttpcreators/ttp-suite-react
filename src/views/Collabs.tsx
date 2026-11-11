@@ -17,7 +17,7 @@ import { billingFor, cashModeFor, commissionInvoiceLabel, mandatesFrom, readSett
 import { collabRateFor, commissionMap, contractRatesFrom, dealOriginOf } from "@/lib/commission";
 import { totalsOf } from "@/lib/invoice";
 import { StatusPill } from "@/components/ui/status-pill";
-import { useEffect, useState, type ReactElement } from "react";
+import { useEffect, useRef, useState, type ReactElement } from "react";
 import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
@@ -502,12 +502,18 @@ export function Collabs() {
   };
 
   // Faire avancer / positionner l'étape (le trigger côté base date le changement).
+  const stepBusy = useRef(new Set<string>());
   const setStep = async (row: Row, next: number) => {
     const clamped = Math.min(STEP_COUNT, Math.max(1, next));
     if (clamped === row.step) return;
+    // Un changement d'étape à la fois par collab : un double clic sautait deux étapes.
+    if (stepBusy.current.has(row.id)) return;
+    stepBusy.current.add(row.id);
     const prev = row.step;
     setRows((rs) => (rs ?? []).map((r) => (r.id === row.id ? { ...r, step: clamped } : r)));
-    if (!(await dbUpdate("collabs", row.id, { step: clamped }))) {
+    const saved = await dbUpdate("collabs", row.id, { step: clamped });
+    stepBusy.current.delete(row.id);
+    if (!saved) {
       setRows((rs) => (rs ?? []).map((r) => (r.id === row.id ? { ...r, step: prev } : r)));
       return toast("Erreur, réessaie");
     }

@@ -121,6 +121,15 @@ export type InvoiceLine = {
 };
 
 const ISO = /^(\d{4})-(\d{2})-(\d{2})/;
+/** Jour d'un horodatage (« 2026-12-31T23:30:00Z ») à l'heure de Paris : une facture payée le
+ *  1er janvier à 0 h 30 compte en janvier, pas sur l'année d'avant. Date seule : inchangée. */
+export const parisDay = (v: unknown): string | null => {
+  const s = String(v ?? "");
+  if (!/^\d{4}-\d{2}-\d{2}T/.test(s)) return isoDay(s);
+  const d = new Date(s);
+  if (Number.isNaN(d.getTime())) return isoDay(s);
+  return new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
+};
 const isoDay = (v: unknown): string | null => {
   const m = ISO.exec(String(v ?? ""));
   return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
@@ -134,7 +143,7 @@ export function invoiceLine(inv: ComptaInvoice, detail: ComptaDetail | null | un
   const paid = inv.status === "payee";
   // Jour de l'encaissement : la date de paiement (`paid_at`, posée au passage en « Payée »),
   // sinon l'émission, sinon l'échéance.
-  const day = (paid ? isoDay(inv.paid_at) : null) ?? isoDay(detail?.issueDate) ?? isoDay(inv.date) ?? isoDay(detail?.dueDate);
+  const day = (paid ? parisDay(inv.paid_at) : null) ?? isoDay(detail?.issueDate) ?? isoDay(inv.date) ?? isoDay(detail?.dueDate);
   let cashIn = 0;
   let agencyCA = 0;
   let vatDue = 0;

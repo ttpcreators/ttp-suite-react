@@ -186,6 +186,13 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
       toast("Renseigne sa commission (%), celle de son contrat");
       return;
     }
+    // Tout est relié par le NOM du créateur : deux fiches au même nom partageraient leurs
+    // collabs, tâches et factures.
+    const sameName = (a: string) => a.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().toLowerCase();
+    if ((rows ?? []).some((r) => sameName(r.name) === sameName(name))) {
+      toast("Un créateur porte déjà ce nom : ajoute une initiale ou un nom de famille");
+      return;
+    }
     const row = {
       name: name.trim(),
       handle: handle.trim() || null,

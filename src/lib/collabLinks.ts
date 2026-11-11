@@ -59,7 +59,6 @@ export function collabChoices(collabs: readonly CollabLite[], creator: string | 
 
 // ── Tâches créées à chaque étape franchie ──────────────────────────────────
 
-const DAY = 86400000;
 const iso = (t: number) => {
   const d = new Date(t);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -83,7 +82,10 @@ export function autoTaskFor(step: number, c: Pick<CollabLite, "brand" | "creator
   if (!m) return null;
   const prenom = firstNameOf(c.creator) || "le créateur";
   const text = m.text.replace("{prenom}", prenom).replace("{marque}", c.brand.trim() || "la marque");
-  return { text, due: iso(now + m.days * DAY) };
+  // Jours calendaires (pas des tranches de 24 h : la nuit du changement d'heure décalait d'un jour).
+  const d = new Date(now);
+  d.setDate(d.getDate() + m.days);
+  return { text, due: iso(d.getTime()) };
 }
 
 /**
