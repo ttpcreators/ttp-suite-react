@@ -7,13 +7,17 @@
 // (TELEGRAM_CHAT_ID) sont dans config.env, sur le Mac seulement.
 //
 //   node telegram.mjs dossier etat/envoi   envoie chaque fichier à Marc, dans l'ordre des noms
+//   node telegram.mjs suivre <dossier> <pid>  pendant une réponse rapide : envoie chaque fichier
+//                                          dès qu'il est écrit (3 s sans changement), tant que Claude
+//                                          (le processus <pid>) travaille ; le reste part avec « dossier »
 //   node telegram.mjs texte "…"            envoie un seul message simple (alerte du lanceur)
 //   node telegram.mjs recevoir             range les nouveaux messages de Marc dans etat/file-recue.txt
 //                                          et affiche leur nombre (0 : rien de nouveau)
 //   node telegram.mjs ecoute               écoute en continu et lance alfred.sh --reponse dès que Marc écrit
 //   node telegram.mjs telecharger <lien>   télécharge et découpe une vidéo (WeTransfer, SwissTransfer, Drive, Dropbox)
 //   node telegram.mjs rappels              envoie les rappels arrivés à échéance (etat/rappels.md)
-//   node telegram.mjs joindre <id> [ordre] copie une pièce jointe d'un mail (Spark) dans etat/envoi :
+//   node telegram.mjs joindre <id> [ordre] copie une pièce jointe d'un mail (Spark) dans le dossier
+//                                          d'envoi du passage (ALFRED_ENVOI, sinon etat/envoi) :
 //                                          elle part à Marc avec le prochain envoi, sous son nom d'origine
 //
 // Fichier « …-whatsapp.txt » ou « …-copier.txt » : 1re ligne = intitulé, la suite = texte à copier, mis dans un
@@ -629,6 +633,79 @@ export function refusPiece(info) {
   return null;
 }
 
+/** Le dossier d'envoi du passage : etat/envoi ou etat/envoi-reponse (rien d'autre, pour ne rien écrire ailleurs). */
+export function dossierEnvoi(valeur) {
+  return /^etat\/envoi(-reponse)?$/.test(String(valeur ?? "")) ? valeur : "etat/envoi";
+}
+
+/** Les numéros des messages de Marc du passage : etat/recu-ids.txt, ou etat/recu-reponse-ids.txt pour une réponse rapide. */
+export function fichierRecuIds(valeur) {
+  return /^etat\/recu(-reponse)?-ids\.txt$/.test(String(valeur ?? "")) ? valeur : "etat/recu-ids.txt";
+}
+
+/** Les fichiers prêts à partir pendant une réponse rapide : ni cachés ni vides, pas modifiés depuis `calme` ms, dans l'ordre des noms. */
+export function fichiersPrets(entrees, maintenant, calme = 3000) {
+  return entrees
+    .filter((e) => !e.name.startsWith(".") && e.size > 0 && maintenant - e.mtimeMs >= calme)
+    .map((e) => e.name)
+    .sort();
+}
+
+/** Les fichiers d'un dossier, avec leur taille et leur heure de modification. */
+function lireDossier(dir) {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .map((name) => ({ name, st: statSync(join(dir, name)) }))
+    .filter((e) => e.st.isFile())
+    .map((e) => ({ name: e.name, size: e.st.size, mtimeMs: e.st.mtimeMs }));
+}
+
+/** Le processus <pid> tourne encore ? */
+function vivant(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (e) {
+    return e.code === "EPERM";
+  }
+}
+
+/** Envoie ces fichiers du dossier à Marc, dans l'ordre. Le tout premier message du passage cite le
+ * dernier message de Marc ; le fichier caché `.deja-cite` du dossier retient que c'est fait.
+ * `supprimer` : chaque fichier envoyé est retiré du dossier (envoi au fil de l'eau). */
+async function envoyerFichiers({ token, chatId, here, dir, names, fil, supprimer = false }) {
+  const marque = join(dir, ".deja-cite");
+  const fichierIds = join(here, fichierRecuIds(process.env.ALFRED_RECU_IDS));
+  const ids = existsSync(fichierIds) ? readFileSync(fichierIds, "utf8").split("\n").map(Number).filter(Boolean) : [];
+  let replyTo = !existsSync(marque) && ids.length ? ids[ids.length - 1] : null;
+  let n = 0;
+  for (const name of names) {
+    const chemin = join(dir, name);
+    // Un .txt = un message ; tout autre fichier (contrat .html, document) part en pièce jointe.
+    const messages = name.endsWith(".txt") ? messagesFor(name, readFileSync(chemin, "utf8")) : [{ file: chemin, name }];
+    for (const m of messages) {
+      if (m.file) {
+        // Un document HTML part en PDF quand Chrome est là (plus simple à ouvrir et à transférer).
+        const pdf = /\.html?$/i.test(m.name) ? await enPdf(m.file) : null;
+        if (pdf) {
+          m.file = pdf;
+          m.name = m.name.replace(/\.html?$/i, ".pdf");
+        }
+        await sendDocument(token, chatId, m.file, nomAffiche(m.name), replyTo);
+        appendFileSync(fil, `\n### ${stamp()} · Alfred\n(document envoyé : ${nomAffiche(m.name)})\n`);
+      } else {
+        await send(token, chatId, m, replyTo);
+        appendFileSync(fil, `\n### ${stamp()} · Alfred\n${m.plain ?? m.text}\n`);
+      }
+      if (replyTo) writeFileSync(marque, "");
+      replyTo = null;
+      n++;
+    }
+    if (supprimer) rmSync(chemin, { force: true });
+  }
+  return n;
+}
+
 /** Envoie un fichier à Marc (contrat rédigé, document), 50 Mo au plus. */
 async function sendDocument(token, chatId, path, name, replyTo = null) {
   const form = new FormData();
@@ -668,11 +745,12 @@ async function main() {
     }
     const refus = refusPiece(info);
     if (refus) throw new Error(refus);
-    const dir = join(here, "etat/envoi");
+    const envoi = dossierEnvoi(process.env.ALFRED_ENVOI);
+    const dir = join(here, envoi);
     mkdirSync(dir, { recursive: true });
     const nom = nomPieceJointe(info.name, process.argv[4]);
     copyFileSync(info.path, join(dir, nom));
-    console.log(`Pièce jointe prête : etat/envoi/${nom} (${Math.ceil(Number(info.size) / 1024)} Ko). Elle part à Marc avec ton message.`);
+    console.log(`Pièce jointe prête : ${envoi}/${nom} (${Math.ceil(Number(info.size) / 1024)} Ko). Elle part à Marc avec ton message.`);
     return;
   }
 
@@ -827,37 +905,43 @@ async function main() {
   }
 
 
-  let messages = [];
-  if (mode === "texte") messages = messagesFor("alerte.txt", arg ?? "");
-  else if (mode === "dossier") {
-    const dir = arg ?? "etat/envoi";
-    for (const name of readdirSync(dir).filter((n) => !n.startsWith(".")).sort()) {
-      // Un .txt = un message ; tout autre fichier (contrat .html, document) part en pièce jointe.
-      if (name.endsWith(".txt")) messages.push(...messagesFor(name, readFileSync(join(dir, name), "utf8")));
-      else messages.push({ file: join(dir, name), name });
-    }
-  } else throw new Error("Usage : node telegram.mjs dossier <chemin> | texte <message> | recevoir | rappels | ecoute | joindre <id> [ordre]");
-  // Réponse à Marc : le premier message cite son dernier message (comme « Répondre »).
-  const ids = mode === "dossier" && existsSync(join(here, "etat/recu-ids.txt")) ? readFileSync(join(here, "etat/recu-ids.txt"), "utf8").split("\n").map(Number).filter(Boolean) : [];
-  let replyTo = ids.length ? ids[ids.length - 1] : null;
-  for (const m of messages) {
-    if (m.file) {
-      // Un document HTML part en PDF quand Chrome est là (plus simple à ouvrir et à transférer).
-      const pdf = /\.html?$/i.test(m.name) ? await enPdf(m.file) : null;
-      if (pdf) {
-        m.file = pdf;
-        m.name = m.name.replace(/\.html?$/i, ".pdf");
+  // Réponse rapide : chaque fichier part dès qu'il est écrit, tant que Claude travaille.
+  if (mode === "suivre") {
+    const dir = arg ?? "etat/envoi-reponse";
+    const pid = Number(process.argv[4]);
+    if (!pid) throw new Error("Usage : node telegram.mjs suivre <dossier> <pid de Claude>");
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    let total = 0;
+    for (;;) {
+      const encore = vivant(pid);
+      const names = fichiersPrets(lireDossier(dir), Date.now());
+      if (names.length) {
+        try {
+          total += await envoyerFichiers({ token, chatId, here, dir, names, fil, supprimer: true });
+        } catch (e) {
+          console.error(`${new Date().toISOString()} envoi au fil de l'eau : ${e.message}`);
+        }
       }
-      await sendDocument(token, chatId, m.file, nomAffiche(m.name), replyTo);
-      replyTo = null;
-      appendFileSync(fil, `\n### ${stamp()} · Alfred\n(document envoyé : ${nomAffiche(m.name)})\n`);
-      continue;
+      // Claude a fini : ce qui reste (écrit dans les dernières secondes) part avec « dossier ».
+      if (!encore) break;
+      await sleep(1000);
     }
-    await send(token, chatId, m, replyTo);
-    replyTo = null;
-    appendFileSync(fil, `\n### ${stamp()} · Alfred\n${m.plain ?? m.text}\n`);
+    console.log(`${total} message(s) envoyé(s) au fil de l'eau.`);
+    return;
   }
-  console.log(`${messages.length} message(s) envoyé(s) à Marc sur Telegram.`);
+
+  if (mode === "texte") {
+    for (const m of messagesFor("alerte.txt", arg ?? "")) {
+      await send(token, chatId, m);
+      appendFileSync(fil, `\n### ${stamp()} · Alfred\n${m.plain ?? m.text}\n`);
+    }
+    return console.log("Message envoyé à Marc sur Telegram.");
+  }
+  if (mode !== "dossier") throw new Error("Usage : node telegram.mjs dossier <chemin> | texte <message> | recevoir | rappels | ecoute | joindre <id> [ordre] | suivre <dossier> <pid>");
+  const dir = arg ?? "etat/envoi";
+  const names = lireDossier(dir).filter((e) => !e.name.startsWith(".")).map((e) => e.name).sort();
+  const n = await envoyerFichiers({ token, chatId, here, dir, names, fil });
+  console.log(`${n} message(s) envoyé(s) à Marc sur Telegram.`);
 }
 
 // pathToFileURL : marche aussi quand le chemin contient des espaces.

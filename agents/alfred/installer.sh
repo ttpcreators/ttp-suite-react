@@ -31,6 +31,8 @@ fi
 
 cp "$SRC/CLAUDE.md" "$SRC/alfred.sh" "$SRC/ecoute.sh" "$SRC/telegram.mjs" "$SRC/whatsapp.mjs" "$SRC/mise-a-jour.sh" "$DEST/"
 chmod +x "$DEST/alfred.sh" "$DEST/ecoute.sh" "$DEST/mise-a-jour.sh"
+# Ses fiches (consignes détaillées par sujet, lues à la demande) : toujours la version du dépôt.
+[ -d "$SRC/fiches" ] && rsync -a --delete "$SRC/fiches/" "$DEST/fiches/"
 # Ses skills (skills/<nom>/SKILL.md) : chargées par Claude depuis .claude/skills du dossier d'Alfred.
 # Chaque skill du dépôt remplace sa copie ; une skill ajoutée à la main sur le Mac n'est pas touchée.
 if [ -d "$SRC/skills" ]; then

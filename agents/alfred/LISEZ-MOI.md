@@ -5,6 +5,8 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Ce qu'il fait | Comment |
 |---|---|
 | Répond tout de suite quand Marc lui écrit | Écoute Telegram en continu, lance Claude dès qu'un message arrive ; sa réponse cite le message de Marc (comme « Répondre ») |
+| Réponse rapide | Quand Marc écrit : seulement sa demande, avec un modèle rapide (Sonnet ; Opus pour les points, la prospection et les revues ; réglables dans config.env avec `ALFRED_MODELE_REPONSE` et `ALFRED_MODELE_POINT`). Chaque message part dès qu'il est écrit (`telegram.mjs suivre`), et la réponse n'attend pas la fin d'un point en cours (verrou et dossier `etat/envoi-reponse` à part) |
+| Consignes en fiches | `CLAUDE.md` est un tronc court lu à chaque fois ; le détail par sujet est dans `fiches/` (points, mails, WhatsApp, app, créateurs, marques, argent, semaine, organisation), lu seulement quand le sujet arrive |
 | Va à l'essentiel | Messages à Marc très courts (une ligne par point, 6 lignes pour une réponse, 12 pour un point), le détail sur demande ; les textes à copier et documents restent complets |
 | Comprend les vocaux de Marc | Transcrits sur le Mac (whisper.cpp et ffmpeg, gratuit, sans internet), puis traités comme un message écrit |
 | Le point à 9 h et 17 h en semaine | Mails des marques et DM, devis, factures en retard, créateurs, argent à aller chercher |

@@ -1,7 +1,9 @@
 #!/bin/zsh
 # Alfred, le bras droit et talent manager de Marc. Deux façons de le lancer :
 #   alfred.sh --reponse : lancé par l'écoute Telegram (telegram.mjs ecoute) dès que Marc écrit,
-#                         Alfred lui répond tout de suite.
+#                         Alfred lui répond tout de suite (réponse rapide : modèle rapide, son propre
+#                         verrou et son dossier etat/envoi-reponse, pour ne pas attendre la fin d'un
+#                         point, et chaque message part dès qu'il est écrit).
 #   alfred.sh           : launchd, toutes les heures pile. Envoie les rappels arrivés à
 #                         l'heure ; du lundi au vendredi à 9 h et 17 h, fait le POINT (mails
 #                         des marques, DM, devis, relances, créateurs, argent à aller chercher).
@@ -20,7 +22,21 @@ export LC_TIME=fr_FR.UTF-8
 # Un motif sans fichier (etat/envoi/ vide) donne une liste vide, pas une erreur.
 setopt null_glob
 cd "$HOME/Code/TTPAlfred" || exit 1
-mkdir -p etat/envoi
+# Une réponse à Marc a son propre verrou et son propre dossier d'envoi : elle n'attend pas la fin
+# d'un point (qui peut durer un quart d'heure). Les deux peuvent tourner en même temps.
+if [[ "$1" == "--reponse" ]]; then
+  ENVOI=etat/envoi-reponse
+  VERROU=etat/verrou-reponse
+  RECU=etat/recu-reponse.txt
+  RECU_IDS=etat/recu-reponse-ids.txt
+else
+  ENVOI=etat/envoi
+  VERROU=etat/verrou
+  RECU=etat/recu.txt
+  RECU_IDS=etat/recu-ids.txt
+fi
+export ALFRED_ENVOI=$ENVOI ALFRED_RECU_IDS=$RECU_IDS
+mkdir -p etat/envoi etat/envoi-reponse
 touch etat/suivi.md etat/conversation.md etat/memoire.md etat/rappels.md etat/delegations.md etat/vacances.txt
 LOG=etat/passages.log
 
@@ -29,34 +45,38 @@ if [ ! -f config.env ]; then
   exit 0
 fi
 
-# Un seul Alfred à la fois : on attend la fin du passage en cours (20 minutes au plus).
+# Un seul passage de chaque sorte à la fois : on attend la fin du précédent (20 minutes au plus).
 for i in {1..120}; do
-  mkdir etat/verrou 2>/dev/null && break
+  mkdir "$VERROU" 2>/dev/null && break
   (( i == 120 )) && { echo "$(date) : verrou toujours pris, passage sauté" >> "$LOG"; exit 0; }
   sleep 10
 done
-trap 'rmdir etat/verrou 2>/dev/null' EXIT
+trap 'rmdir "$VERROU" 2>/dev/null' EXIT
 
 # Les fichiers restent légers : on ne garde que la fin.
 garder() { [ -f "$1" ] && (( $(wc -l < "$1") > $2 )) && { tail -n "$2" "$1" > "$1.tmp" && mv "$1.tmp" "$1"; } }
-garder "$LOG" 3000
-garder etat/conversation.md 400
-garder etat/suivi.md 600
+# (pas pendant une réponse rapide : un point peut tourner en même temps et écrire dans ces fichiers)
+if [[ "$1" != "--reponse" ]]; then
+  garder "$LOG" 3000
+  garder etat/conversation.md 400
+  garder etat/suivi.md 600
+fi
 # Les previews analysées ne sont gardées que 14 jours.
 [ -d etat/previews ] && find etat/previews -mindepth 1 -maxdepth 1 -mtime +14 -exec rm -rf {} +
 
 # Rappels arrivés à l'heure : envoyés tels quels, sans réveiller Claude.
 [[ "$1" != "--reponse" ]] && node telegram.mjs rappels >> "$LOG" 2>&1
 
-# Messages de Marc en attente : la file passe dans etat/recu.txt pour ce passage (et leurs
-# numéros dans etat/recu-ids.txt, pour que la réponse cite son dernier message).
-: > etat/recu.txt
-: > etat/recu-ids.txt
+# Messages de Marc en attente : la file passe dans $RECU pour ce passage (et leurs numéros dans
+# $RECU_IDS, pour que la réponse cite son dernier message). Une réponse rapide et un point ont
+# chacun leurs fichiers : le premier lancé prend la file.
+: > "$RECU"
+: > "$RECU_IDS"
 if [ -s etat/file-recue.txt ]; then
-  mv etat/file-recue.txt etat/recu.txt
-  [ -f etat/file-recue-ids.txt ] && mv etat/file-recue-ids.txt etat/recu-ids.txt
+  mv etat/file-recue.txt "$RECU"
+  [ -f etat/file-recue-ids.txt ] && mv etat/file-recue-ids.txt "$RECU_IDS"
 fi
-recus=$(grep -c '^\[' etat/recu.txt)
+recus=$(grep -c '^\[' "$RECU")
 
 jour=$(date +%u)
 heure=$((10#$(date +%H)))
@@ -108,6 +128,17 @@ elif (( ${#rdv_dus} > 0 )); then
   mode="la préparation des rendez-vous"
 else
   exit 0
+fi
+
+# Le modèle : rapide pour répondre à Marc, le plus fort pour les points, la prospection, les
+# revues et les rendez-vous. Réglables dans config.env (ALFRED_MODELE_REPONSE, ALFRED_MODELE_POINT).
+reglage() { grep -m1 "^$1=" config.env | cut -d= -f2- | tr -d "\"' " }
+if [[ "$mode" == "la réponse à Marc" ]]; then
+  modele=$(reglage ALFRED_MODELE_REPONSE)
+  modele=${modele:-sonnet}
+else
+  modele=$(reglage ALFRED_MODELE_POINT)
+  modele=${modele:-opus}
 fi
 
 now=$(date +%s)
@@ -163,8 +194,10 @@ else
     for t in ${=sur_oui}; do denied+=("$ttp$t"); done
   fi
 fi
-if (( recus > 0 )); then
-  messages="Marc t'a écrit $recus message(s) sur Telegram : ils sont dans etat/recu.txt (le fil complet est dans etat/conversation.md). Réponds-lui en premier."
+if [[ "$mode" == "la réponse à Marc" ]]; then
+  messages="RÉPONSE RAPIDE (voir « La réponse rapide ») : Marc t'a écrit $recus message(s) sur Telegram, ils sont dans $RECU (le fil complet est dans etat/conversation.md). Réponds-lui seulement à ça, vite : chaque fichier de $ENVOI/ lui part dès que tu l'as écrit."
+elif (( recus > 0 )); then
+  messages="Marc t'a écrit $recus message(s) sur Telegram : ils sont dans $RECU (le fil complet est dans etat/conversation.md). Réponds-lui en premier."
 else
   messages="Marc ne t'a rien écrit depuis la dernière fois."
 fi
@@ -174,20 +207,31 @@ fi
 [[ -n "$vacances" ]] && messages="$messages MODE VACANCES : Marc est absent jusqu'au $vacances inclus (voir « Le mode vacances ») : seulement l'urgent, très court."
 [[ "$mode" == "le point du matin" ]] && (( retour )) && messages="$messages Marc rentre de vacances (absent jusqu'au $fin_vacances) : commence par le résumé de son absence (voir « Le mode vacances »)."
 
-rm -f etat/envoi/*
-{
-  echo "===== $(date) · $mode ($recus message(s) de Marc) ====="
-  claude -p "Il est $(date '+%H:%M') ce $(date '+%A %d %B %Y'). C'est $mode. $messages Dernier point fait : $(date -r "$last" '+%A %d %B à %H:%M'). Requête Gmail pour les mails reçus depuis : « $requete ». Fais ce passage selon ton CLAUDE.md, puis dépose tes messages pour Marc dans etat/envoi/." \
-    --allowedTools "${allowed[@]}" \
-    --disallowedTools "${denied[@]}" \
-    --max-turns 150
-  code=$?
-  echo "===== fin $(date) · code $code ====="
-} >> "$LOG" 2>&1
+rm -f "$ENVOI"/* "$ENVOI"/.deja-cite
+echo "===== $(date) · $mode ($recus message(s) de Marc, modèle $modele) =====" >> "$LOG"
+claude -p "Il est $(date '+%H:%M') ce $(date '+%A %d %B %Y'). C'est $mode. $messages Dernier point fait : $(date -r "$last" '+%A %d %B à %H:%M'). Requête Gmail pour les mails reçus depuis : « $requete ». Fais ce passage selon ton CLAUDE.md et tes fiches, puis dépose tes messages pour Marc dans $ENVOI/." \
+  --model "$modele" \
+  --allowedTools "${allowed[@]}" \
+  --disallowedTools "${denied[@]}" \
+  --max-turns 150 < /dev/null >> "$LOG" 2>&1 &
+cpid=$!
+# Réponse rapide : chaque message part dès qu'il est écrit, pendant que Claude travaille encore.
+spid=""
+if [[ "$mode" == "la réponse à Marc" ]]; then
+  node telegram.mjs suivre "$ENVOI" "$cpid" >> "$LOG" 2>&1 &
+  spid=$!
+fi
+wait "$cpid"
+code=$?
+[[ -n "$spid" ]] && wait "$spid"
+echo "===== fin $(date) · code $code =====" >> "$LOG"
 
-envois=(etat/envoi/*)
-if [ "$code" -eq 0 ] && (( ${#envois} > 0 )); then
-  if node telegram.mjs dossier etat/envoi >> "$LOG" 2>&1; then
+envois=("$ENVOI"/*)
+# Déjà envoyé au fil de l'eau : Marc a eu sa réponse (au moins en partie).
+deja=0
+[ -f "$ENVOI/.deja-cite" ] && deja=1
+if [ "$code" -eq 0 ] && (( ${#envois} > 0 || deja )); then
+  if (( ${#envois} == 0 )) || node telegram.mjs dossier "$ENVOI" >> "$LOG" 2>&1; then
     [[ "$mode" == "le point"* ]] && echo "$now" > etat/dernier-passage
     [[ "$mode" == "la prospection"* ]] && date +%Y-%m-%d > etat/derniere-prospection
     [[ "$mode" == "la revue des tarifs"* ]] && date +%Y-%m-%d > etat/derniere-revue-tarifs
@@ -196,11 +240,16 @@ if [ "$code" -eq 0 ] && (( ${#envois} > 0 )); then
     for r in "${rdv_dus[@]}"; do print -r -- "$r" >> etat/rdv-prepares.txt; done
     garder etat/rdv-prepares.txt 200
   fi
+elif (( deja )); then
+  # Claude s'est arrêté après avoir déjà répondu en partie : on envoie ce qui reste, sans remettre
+  # les messages de Marc en file (il aurait sa réponse deux fois), et on le prévient.
+  (( ${#envois} > 0 )) && node telegram.mjs dossier "$ENVOI" >> "$LOG" 2>&1
+  node telegram.mjs texte "Je me suis arrêté avant la fin de ma réponse. Redemande-moi ce qui manque." >> "$LOG" 2>&1
 else
   # Passage raté (souvent la connexion de Claude) : les messages de Marc restent en file pour
   # le prochain passage, et Marc est prévenu.
-  [ -s etat/recu.txt ] && { cat etat/recu.txt; [ -f etat/file-recue.txt ] && cat etat/file-recue.txt; } > etat/file-recue.tmp && mv etat/file-recue.tmp etat/file-recue.txt
-  [ -s etat/recu-ids.txt ] && { cat etat/recu-ids.txt; [ -f etat/file-recue-ids.txt ] && cat etat/file-recue-ids.txt; } > etat/file-recue-ids.tmp && mv etat/file-recue-ids.tmp etat/file-recue-ids.txt
+  [ -s "$RECU" ] && { cat "$RECU"; [ -f etat/file-recue.txt ] && cat etat/file-recue.txt; } > etat/file-recue.tmp && mv etat/file-recue.tmp etat/file-recue.txt
+  [ -s "$RECU_IDS" ] && { cat "$RECU_IDS"; [ -f etat/file-recue-ids.txt ] && cat etat/file-recue-ids.txt; } > etat/file-recue-ids.tmp && mv etat/file-recue-ids.tmp etat/file-recue-ids.txt
   raison=$(tail -n 4 "$LOG" | grep -i -m1 "authenticate\|login\|error\|erreur")
   node telegram.mjs texte "Alfred n'a pas pu faire $mode. ${raison:+Raison : $raison. }Si c'est la connexion : ouvre le Terminal, tape claude puis /login." >> "$LOG" 2>&1
 fi
