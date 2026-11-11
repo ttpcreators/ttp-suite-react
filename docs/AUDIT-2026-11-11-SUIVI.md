@@ -16,7 +16,7 @@ leurs types passent.
 | B2 | Une facture annulée n'est plus « à venir » chez le créateur | app |
 | B3 | Outil facture de Claude : devise, taux et mandat gardés ; TVA selon Compta ; facture émise protégée ; statut contrôlé | fonction `ttp-mcp` |
 | B4 | Taux de change lu comme un nombre décimal, refusé au-dessus de 100 | app |
-| B5 | Contrat de représentation : la fin ne déborde plus sur le mois suivant (règle à confirmer, voir plus bas) | app |
+| B5 | Contrat de représentation : la fin ne déborde plus sur le mois suivant (31 août + 6 mois = 28 février, règle validée par Marc) | app |
 | B6 | Media kit : l'éditeur affiche et enregistre l'adresse que le site donne vraiment | app |
 | B7 | Collab restaurée : historique des étapes, date de création et liens reviennent | app |
 | B8 | Registre des contrats : un contrat signé ne sort plus jamais tout seul | app |
@@ -38,24 +38,20 @@ leurs types passent.
 | B32 | Double clic sur « étape suivante » : une seule étape | app |
 | B33 | Agenda en vue « Semaine » : rouvre sur la semaine d'aujourd'hui | app |
 | B34 | Fins de contrat : l'écran suit de nouveau les collègues | app |
-| B35 (4 sur 5) | « Événement » reconnu ; tâche d'étape en jours calendaires ; mois des Stats à l'heure locale ; durée de contrat en texte lue comme un nombre | app + fonction `google-sync` |
+| B35 | « Événement » reconnu ; tâche d'étape en jours calendaires ; mois des Stats à l'heure locale ; durée de contrat en texte lue comme un nombre ; Fins de contrat, Planning, Aujourd'hui, fiche créateur et résumé du matin annoncent la même fin que le contrat (un jour plus tôt qu'avant) | app + fonctions `google-sync`, `daily-digest`, `ttp-mcp` |
 | B36 | Avis : si le mot d'explication n'est pas gardé, l'app le dit | app |
 | B39 | `CLAUDE.md` : la phrase sur l'envoi des mails est juste | doc |
 | B40 (en partie) | `SETUP.sql` ne s'arrête plus à la ligne 908 quand on le relance | SQL (rien à lancer) |
 
 Fonctions à redéployer par Marc pour que les lignes « fonction » soient actives :
 `ttp-mcp` (avec `--no-verify-jwt`), `creator-mail`, `creator-report`, `send-email`,
-`monthly-backup`, `google-sync`. Tant que ce n'est pas fait, l'app marche comme avant sur
+`monthly-backup`, `google-sync`, `daily-digest`. Tant que ce n'est pas fait, l'app marche comme avant sur
 ces points (elle tolère l'ancienne version).
 
 ## Pas corrigé, et pourquoi
 
 **Attend une décision de Marc**
 
-- **B5, la règle** : pour un début le 29, 30 ou 31, la fin tombe le dernier jour du mois
-  d'arrivée (31 août + 6 mois = 28 février). À confirmer, c'est un document signé.
-  Le cinquième écart de B35 en dépend (la page Fins de contrat annonce la fin un jour après
-  le contrat).
 - **B27, arrondi au centime** : le corriger change d'un centime des montants de factures
   déjà émises quand on les rouvre (taux de 5,5 %, 10 %, 15 %, 25 % ; jamais à 20 %).
 - **B31, tâche partagée entre créateurs** : cochée par l'un, faite pour tous. Voulu ou non ?

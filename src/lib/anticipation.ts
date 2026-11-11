@@ -72,14 +72,20 @@ export function inDays(n: number): string {
 }
 
 // ── Contrats (même calcul que la page Échéances) ─────────────────────────────
-/** Fin de contrat : début + durée, jour borné à la fin du mois cible (31 janv. + 1 mois = 28 févr.). */
+/**
+ * Dernier jour du contrat : début + durée, moins un jour (15 mars + 12 mois = 14 mars), comme le
+ * contrat imprimé. Mois d'arrivée sans ce jour (31 août + 6 mois) : son dernier jour (28 févr.).
+ * Règle validée par Marc le 2026-11-11.
+ */
 export function contractEnd(start: string, months: number): string | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(start ?? "");
   if (!m) return null;
   const y = Number(m[1]);
   const mo = Number(m[2]) - 1 + (Number(months) || 0);
   const lastDay = new Date(y, mo + 1, 0).getDate();
-  return localISO(new Date(y, mo, Math.min(Number(m[3]), lastDay)));
+  const day = Number(m[3]);
+  if (!(Number(months) > 0)) return localISO(new Date(y, mo, day)); // durée vide : le jour de début
+  return localISO(day > lastDay ? new Date(y, mo, lastDay) : new Date(y, mo, day - 1));
 }
 
 const CONTRACT_TYPE: Record<string, string> = { "représentation": "Représentation", representation: "Représentation", marque: "Marque", ugc: "UGC" };

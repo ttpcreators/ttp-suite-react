@@ -49,9 +49,12 @@ function endDate(start: string, months: number): Date | null {
   if (!m) return null;
   const y = Number(m[1]);
   const mo = Number(m[2]) - 1 + (Number(months) || 0);
-  // Jour borné à la fin du mois cible (31 janv. + 1 mois = fin février, pas 3 mars)
+  // Même règle que le contrat imprimé et que contractEnd (src/lib/anticipation.ts) : début +
+  // durée moins un jour ; mois d'arrivée sans ce jour (31 août + 6 mois) : son dernier jour.
   const lastDay = new Date(y, mo + 1, 0).getDate();
-  return new Date(y, mo, Math.min(Number(m[3]), lastDay));
+  const day = Number(m[3]);
+  if (!(Number(months) > 0)) return new Date(y, mo, day);
+  return day > lastDay ? new Date(y, mo, lastDay) : new Date(y, mo, day - 1);
 }
 function daysLeft(d: Date): number {
   const t = new Date();

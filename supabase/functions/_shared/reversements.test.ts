@@ -33,7 +33,7 @@ describe("reversements (serveur, mêmes règles que l'app)", () => {
       { creator: "Zoé", type: "representation", start: "2025-01-03", months: 12 },
       { creator: "Zoé", type: "representation", start: "2026-01-03", months: 12 },
     ]);
-    expect(list.map((d) => [d.end, d.renewed])).toEqual([["2026-01-03", true], ["2027-01-03", false]]);
+    expect(list.map((d) => [d.end, d.renewed])).toEqual([["2026-01-02", true], ["2027-01-02", false]]);
   });
 });
 

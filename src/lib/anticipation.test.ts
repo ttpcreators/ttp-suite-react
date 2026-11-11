@@ -129,9 +129,11 @@ describe("factures qui arrivent à échéance", () => {
 describe("contrats à renouveler", () => {
   it("fin = début + durée, bornée à la fin du mois", () => {
     expect(contractEnd("2026-01-31", 1)).toBe("2026-02-28");
-    expect(contractEnd("2025-11-15", 12)).toBe("2026-11-15");
+    expect(contractEnd("2025-11-15", 12)).toBe("2026-11-14"); // moins un jour, comme le contrat
+    expect(contractEnd("2026-08-31", 6)).toBe("2027-02-28");
+    expect(contractEnd("2026-03-01", 1)).toBe("2026-03-31");
     // Durée rangée en texte (ancienne saisie) : lue comme un nombre, pas collée (« 11 » + « 12 »).
-    expect(contractEnd("2025-12-01", "12" as unknown as number)).toBe("2026-12-01");
+    expect(contractEnd("2025-12-01", "12" as unknown as number)).toBe("2026-11-30");
     expect(contractEnd("pas une date", 12)).toBeNull();
   });
 
@@ -148,9 +150,9 @@ describe("contrats à renouveler", () => {
       "2026-10-21",
     );
     expect(list.map((c) => [c.id, c.left])).toEqual([
-      ["c", -10],
-      ["b", 5],
-      ["a", 25],
+      ["c", -11],
+      ["b", 4],
+      ["a", 24],
     ]);
   });
 
@@ -163,8 +165,8 @@ describe("contrats à renouveler", () => {
       ],
     });
     expect(items.map((i) => [i.id, i.section, i.metaSub])).toEqual([
-      ["ct:c", "week", "expiré depuis 10 j"],
-      ["ct:a", "later", "expire dans 25 j"],
+      ["ct:c", "week", "expiré depuis 11 j"],
+      ["ct:a", "later", "expire dans 24 j"],
     ]);
     expect(items[0].title).toBe("Contrat à renouveler");
     expect(items[0].sub).toBe("Sarah Benali · UGC");

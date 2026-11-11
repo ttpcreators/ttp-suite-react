@@ -35,7 +35,14 @@ function toISO(s: unknown): string {
 function contractEnd(start: string, months: number): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(start);
   if (!m) return null;
-  return new Date(Number(m[1]), Number(m[2]) - 1 + (months || 0), Number(m[3]));
+  // Même règle que l'app (src/lib/anticipation.ts) : début + durée moins un jour ; mois
+  // d'arrivée sans ce jour (31 août + 6 mois) : son dernier jour, jamais le mois d'après.
+  const y = Number(m[1]);
+  const mo = Number(m[2]) - 1 + (Number(months) || 0);
+  const day = Number(m[3]);
+  const lastDay = new Date(y, mo + 1, 0).getDate();
+  if (!(Number(months) > 0)) return new Date(y, mo, day);
+  return day > lastDay ? new Date(y, mo, lastDay) : new Date(y, mo, day - 1);
 }
 function daysUntil(end: Date, todayStr: string): number {
   const [y, mo, d] = todayStr.split("-").map(Number);

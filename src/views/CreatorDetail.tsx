@@ -1,4 +1,5 @@
 import { useStickyState } from "@/lib/useStickyState";
+import { contractEnd as contractEndIso } from "@/lib/anticipation";
 import { lazyImport } from "@/lib/appUpdate";
 import { fmtCompact } from "@/lib/timeSeries";
 import { useEffect, useRef, useState, lazy, Suspense, type ReactNode } from "react";
@@ -24,9 +25,9 @@ import { useIsFounder } from "@/lib/useFounder";
 
 type CtDeadline = { id?: string; creator: string; start: string; months: number; type?: string; note?: string };
 function ctEndDate(start: string, months: number): Date | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(start);
-  if (!m) return null;
-  return new Date(Number(m[1]), Number(m[2]) - 1 + (months || 0), Number(m[3]));
+  // Même date que la page Fins de contrat et que le contrat imprimé (une seule règle).
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(contractEndIso(start, months) ?? "");
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : null;
 }
 function daysUntil(d: Date): number {
   const t = new Date();

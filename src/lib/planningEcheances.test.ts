@@ -3,9 +3,9 @@ import { birthdayEcheances, contractEcheances, excluEcheances } from "./planning
 import type { Exclusivite } from "../../supabase/functions/_shared/exclusivites.ts";
 
 describe("contractEcheances", () => {
-  it("pose la fin du contrat (début + durée)", () => {
+  it("pose la fin du contrat (début + durée, moins un jour comme le contrat)", () => {
     const [e] = contractEcheances([{ id: "a", creator: "LÉNA PASQUALE", type: "représentation", start: "2026-11-02", months: 12 }]);
-    expect(e).toMatchObject({ date: "2027-11-02", kind: "contrat", who: "LÉNA PASQUALE" });
+    expect(e).toMatchObject({ date: "2027-11-01", kind: "contrat", who: "LÉNA PASQUALE" });
     expect(e.title).toBe("Léna Pasquale · Représentation");
   });
   it("garde seulement la dernière fin d'un contrat renouvelé", () => {
@@ -14,11 +14,11 @@ describe("contractEcheances", () => {
       { id: "b", creator: "ivana", type: "Représentation", start: "2026-11-01", months: 12 },
       { id: "c", creator: "Ivana", type: "ugc", start: "2026-01-01", months: 6 },
     ]);
-    expect(out.map((e) => e.date).sort()).toEqual(["2026-07-01", "2027-11-01"]);
+    expect(out.map((e) => e.date).sort()).toEqual(["2026-06-30", "2027-10-31"]);
   });
   it("lit une durée enregistrée en texte", () => {
     const [e] = contractEcheances([{ creator: "A", type: "marque", start: "2026-01-15", months: "6" as unknown as number }]);
-    expect(e.date).toBe("2026-07-15");
+    expect(e.date).toBe("2026-07-14");
   });
   it("ignore un contrat sans date ou sans créateur", () => {
     expect(contractEcheances([{ creator: "", type: "marque", start: "2026-01-01", months: 3 }, { creator: "A", type: "marque", start: "", months: 3 }])).toEqual([]);
