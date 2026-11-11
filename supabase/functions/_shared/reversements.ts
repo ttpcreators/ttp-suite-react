@@ -57,9 +57,10 @@ export function invoiceTotals(amount: number, detail: Detail | null | undefined,
   const rate = items && detail!.commissionRate != null && Number.isFinite(Number(detail!.commissionRate)) ? Number(detail!.commissionRate) : rosterRate;
   const ht = cents((items ?? [{ qty: 1, unit: amount }]).reduce((s, it) => s + finite(it?.qty) * finite(it?.unit), 0));
   const tva = items && !detail!.franchise ? cents(ht * (finite(detail!.vatRate) / 100)) : 0;
-  const commission = ht < COMMISSION_FLOOR_EUR ? 0 : cents(ht * (finite(rate) / 100));
-  // Devise étrangère : totaux rendus en euros (même règle que l'app).
+  // Devise étrangère : totaux rendus en euros (même règle que l'app), et le seuil « pas de
+  // commission sous 100 € » se juge sur le HT en euros.
   const fx = items ? eurRateOf(detail) ?? 1 : 1;
+  const commission = (fx === 1 ? ht : cents(ht * fx)) < COMMISSION_FLOOR_EUR ? 0 : cents(ht * (finite(rate) / 100));
   const eur = (n: number) => (fx === 1 ? n : cents(n * fx));
   return { ht: eur(ht), tva: eur(tva), ttc: eur(cents(ht + tva)), commission: eur(commission), reversal: eur(cents(ht - commission)), rate };
 }

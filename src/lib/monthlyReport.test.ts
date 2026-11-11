@@ -98,3 +98,16 @@ describe("rapport mensuel créateur", () => {
     expect(en.agency.join(" ")).not.toMatch(/collab décrochée|abonnés|pour toi/);
   });
 });
+
+describe("rapport mensuel : facture en devise (audit 2026-11-11)", () => {
+  it("1 000 $ à 0,90 comptent 900 € facturés et 720 € de part", () => {
+    const usd: ReportData = {
+      ...data,
+      invoices: [{ id: "u", ref: "TTP-9", party: "Nike", amount: "900,00 €", date: "2026-10-20", status: "attente" }],
+      details: { u: { items: [{ id: "1", label: "Reel", qty: 1, unit: 1000 }], franchise: true, commissionRate: 20, issueDate: "2026-10-05", currency: "USD", fxRate: 0.9 } },
+    };
+    const r = buildMonthlyReport(usd, "2026-10", new Date("2026-10-31T12:00:00Z"));
+    expect(r.earnings.billed).toBe(900);
+    expect(r.earnings.share).toBe(720);
+  });
+});

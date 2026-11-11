@@ -5,6 +5,7 @@ import { getCache, setCache } from "./viewCache";
 import { getAppState, invalidateAppState, mergeAppStateKey } from "./appState";
 import { todayISO } from "./dates";
 import type { RelanceInvoice, Reminder, Reminders } from "./relance";
+import { foreignAmountLabel, type InvoiceDetailLike } from "./invoice";
 
 /**
  * Factures lues pour les relances (page Relances, « Aujourd'hui », palette ⌘K) :
@@ -23,13 +24,20 @@ export function useRelanceInvoices(enabled = true): { invoices: RelanceInvoice[]
     supabase
       .from("invoices")
       .select("id,ref,party,amount,date,status,creator")
-      .then(({ data, error }) => {
+      .then(async ({ data, error }) => {
         if (!alive) return;
         if (error) {
           setError(true);
           return;
         }
-        const next = (data as RelanceInvoice[]) ?? [];
+        const rows = (data as RelanceInvoice[]) ?? [];
+        // Factures en devise : le montant de la relance est celui de la facture, dans sa devise.
+        const details = await getAppState().then((s) => (s.invoiceDetails ?? {}) as Record<string, InvoiceDetailLike>).catch(() => ({}) as Record<string, InvoiceDetailLike>);
+        if (!alive) return;
+        const next = rows.map((r) => {
+          const label = foreignAmountLabel(details[r.id]);
+          return label ? { ...r, amountLabel: label } : r;
+        });
         setCache("relanceInvoices", next);
         setInvoices(next);
         setError(false); // un chargement réussi efface l'erreur précédente

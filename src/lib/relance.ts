@@ -9,7 +9,11 @@ import { formatEuro, parseAmount } from "./money";
  *   - le suivi des relances vit dans le blob agence `invoiceReminders`.
  */
 
-export type RelanceInvoice = { id: string; ref: string; party: string; amount: string; date: string | null; status: string; creator: string | null };
+export type RelanceInvoice = {
+  id: string; ref: string; party: string; amount: string; date: string | null; status: string; creator: string | null;
+  /** Facture en devise : son montant tel qu'écrit sur la facture (« 1 000,00 $US »), posé par useRelanceInvoices. */
+  amountLabel?: string;
+};
 export type Reminder = { last: string; count: number };
 export type Reminders = Record<string, Reminder>;
 
@@ -55,8 +59,9 @@ export function overdueInvoices<T extends RelanceInvoice>(invoices: T[], now: Da
 }
 
 /** Email de relance, ton qui s'adapte au nombre de relances déjà envoyées. */
-export function relanceEmail(inv: Pick<RelanceInvoice, "ref" | "party" | "amount">, count: number): { subject: string; body: string } {
-  const montant = formatEuro(parseAmount(inv.amount));
+export function relanceEmail(inv: Pick<RelanceInvoice, "ref" | "party" | "amount" | "amountLabel">, count: number): { subject: string; body: string } {
+  // La marque doit lire le montant de SA facture, pas sa conversion en euros.
+  const montant = inv.amountLabel || formatEuro(parseAmount(inv.amount));
   const subject = `Relance : facture ${inv.ref} · ${montant}`;
   const opener =
     count <= 0

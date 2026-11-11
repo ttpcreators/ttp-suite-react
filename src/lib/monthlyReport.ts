@@ -5,7 +5,7 @@
  * en fonctions pures testées. Mêmes règles d'argent que Facturation et Reversements
  * (totalsOf : commission sur le HT, rien sous le seuil).
  */
-import { totalsOf, type LineItem } from "./invoice";
+import { invoiceTotals, type LineItem } from "./invoice";
 import { parseAmount, parseAmountStrict, formatEuro } from "./money";
 import { toISODate } from "./dates";
 import { DEFAULT_COMMISSION, parseCommissionPct } from "./commission";
@@ -24,7 +24,7 @@ export type ReportData = {
     yt?: { history?: Hist } | null;
   };
   invoices: { id: string; ref?: string | null; party?: string | null; amount?: string | null; date?: string | null; status?: string | null; created_at?: string | null }[];
-  details: Record<string, { items?: LineItem[]; franchise?: boolean; vatRate?: number; commissionRate?: number; issueDate?: string }>;
+  details: Record<string, { items?: LineItem[]; franchise?: boolean; vatRate?: number; commissionRate?: number; issueDate?: string; currency?: string | null; fxRate?: number | null; onBehalf?: boolean | null }>;
   payouts: { id?: string; date: string; amount: number; note?: string }[];
   collabs: { id: string; brand: string; deliverables?: string | null; cachet?: string | null; step: number; status?: string | null; created_at: string }[];
   steps: { collab_id: string; step: number; reached_at: string }[];
@@ -103,9 +103,8 @@ export function buildMonthlyReport(data: ReportData, month: string, now = new Da
     const det = data.details[inv.id];
     const m = invoiceMonth(inv, det);
     if (!m) continue;
-    const t = det && Array.isArray(det.items)
-      ? totalsOf(det.items, det.franchise ?? true, det.vatRate ?? 0, det.commissionRate ?? rosterRate)
-      : totalsOf([{ id: "x", label: "", qty: 1, unit: parseAmount(inv.amount) }], true, 0, rosterRate);
+    // Même calcul que Facturation et Reversements : facture en devise comptée en euros.
+    const t = invoiceTotals(parseAmount(inv.amount), det, rosterRate);
     if (m.slice(0, 4) === year && m <= month) earnings.yearShare += t.reversal;
     if (m !== month) continue;
     earnings.billed += t.ht;

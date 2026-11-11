@@ -83,3 +83,20 @@ describe("factures en devise", () => {
     expect(invoiceTotals(0, { items: [{ id: "a", label: "", qty: 1, unit: 550 }], franchise: true, vatRate: 0, commissionRate: 25 }, 20).ht).toBe(550);
   });
 });
+
+describe("factures en devise (audit 2026-11-11)", () => {
+  it("le seuil « pas de commission sous 100 € » se juge en euros", () => {
+    // 105 USD à 0,90 = 94,50 € : sous le seuil, pas de commission.
+    const low = invoiceTotals(0, { items: [item(105)], franchise: true, commissionRate: 20, currency: "USD", fxRate: 0.9 }, 20);
+    expect(low).toMatchObject({ ht: 94.5, commission: 0, reversal: 94.5 });
+    // 95 GBP à 1,17 = 111,15 € : au-dessus, commission due.
+    const high = invoiceTotals(0, { items: [item(95)], franchise: true, commissionRate: 20, currency: "GBP", fxRate: 1.17 }, 20);
+    expect(high).toMatchObject({ ht: 111.15, commission: 22.23 });
+  });
+  it("montant dans la devise de la facture, pour ce qui part chez la marque", async () => {
+    const { foreignAmountLabel } = await import("./invoice");
+    expect(foreignAmountLabel({ items: [item(1000)], franchise: true, currency: "USD", fxRate: 0.9 })?.replace(/\s/g, " ")).toBe("1 000,00 $US");
+    expect(foreignAmountLabel({ items: [item(1000)], franchise: true })).toBeNull();
+    expect(foreignAmountLabel(null)).toBeNull();
+  });
+});

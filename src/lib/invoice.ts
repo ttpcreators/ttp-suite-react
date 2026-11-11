@@ -79,7 +79,14 @@ function inEuros<T extends Totals>(t: T, rate: number | null): T {
 export function invoiceTotals(amount: number, detail: InvoiceDetailLike | null | undefined, rosterRate: number): Totals & { rate: number } {
   if (detail && Array.isArray(detail.items) && detail.items.length > 0) {
     const rate = detail.commissionRate != null && Number.isFinite(Number(detail.commissionRate)) ? Number(detail.commissionRate) : rosterRate;
-    return { ...inEuros(totalsOf(detail.items, !!detail.franchise, finite(detail.vatRate), rate), eurRateOf(detail)), rate };
+    const fx = eurRateOf(detail);
+    let t = totalsOf(detail.items, !!detail.franchise, finite(detail.vatRate), rate);
+    // Devise étrangère : le seuil « pas de commission sous 100 € » se juge sur le HT EN EUROS.
+    if (fx != null && fx !== 1) {
+      const commission = cents(t.ht * fx) < COMMISSION_FLOOR_EUR ? 0 : cents(t.ht * (finite(rate) / 100));
+      t = { ...t, commission, reversal: cents(t.ht - commission) };
+    }
+    return { ...inEuros(t, fx), rate };
   }
   return { ...totalsOf([{ id: "x", label: "", qty: 1, unit: finite(amount) }], true, 0, rosterRate), rate: rosterRate };
 }
@@ -88,4 +95,20 @@ export function invoiceTotals(amount: number, detail: InvoiceDetailLike | null |
  *  détaillée, sinon le montant enregistré (ancienne facture, supposée HT sans TVA). */
 export function invoiceHT(amount: number, detail?: InvoiceDetailLike | null): number {
   return invoiceTotals(amount, detail, 0).ht;
+}
+
+/**
+ * Montant TTC d'une facture en devise étrangère, dans SA devise (« 1 000,00 $US »), tel
+ * qu'il est écrit sur la facture envoyée à la marque. null pour une facture en euros ou
+ * sans lignes : le montant enregistré (en euros) fait alors foi.
+ */
+export function foreignAmountLabel(detail: InvoiceDetailLike | null | undefined): string | null {
+  const cur = String(detail?.currency ?? "EUR").toUpperCase();
+  if (cur === "EUR" || !detail || !Array.isArray(detail.items) || !detail.items.length) return null;
+  const ttc = totalsOf(detail.items, !!detail.franchise, finite(detail.vatRate), 0).ttc;
+  try {
+    return new Intl.NumberFormat("fr-FR", { style: "currency", currency: cur, minimumFractionDigits: 2 }).format(ttc).replace(/[\u202f]/g, "\u00a0");
+  } catch {
+    return `${ttc} ${cur}`;
+  }
 }

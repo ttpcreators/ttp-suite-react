@@ -36,3 +36,12 @@ describe("reversements (serveur, mêmes règles que l'app)", () => {
     expect(list.map((d) => [d.end, d.renewed])).toEqual([["2026-01-03", true], ["2027-01-03", false]]);
   });
 });
+
+describe("seuil de commission en devise (audit 2026-11-11, même règle que src/lib/invoice.ts)", () => {
+  it("jugé sur le HT en euros", async () => {
+    const { invoiceTotals } = await import("./reversements.ts");
+    const it1 = [{ qty: 1, unit: 105 }];
+    expect(invoiceTotals(0, { items: it1, franchise: true, commissionRate: 20, currency: "USD", fxRate: 0.9 }, 20)).toMatchObject({ ht: 94.5, commission: 0 });
+    expect(invoiceTotals(0, { items: [{ qty: 1, unit: 95 }], franchise: true, commissionRate: 20, currency: "GBP", fxRate: 1.17 }, 20)).toMatchObject({ ht: 111.15, commission: 22.23 });
+  });
+});

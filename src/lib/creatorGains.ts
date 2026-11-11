@@ -128,13 +128,19 @@ export function netGains(invoices: GainInvoice[], ratePct: number, now: Date = n
  */
 
 export type ReportInvoice = GainInvoice & { id: string };
-export type ReportDetail = { items?: { id: string; label: string; qty: number; unit: number }[]; franchise?: boolean; vatRate?: number; commissionRate?: number };
+export type ReportDetail = {
+  items?: { id: string; label: string; qty: number; unit: number }[]; franchise?: boolean; vatRate?: number; commissionRate?: number;
+  /** Renvoyés par `creator-report` depuis le 2026-11-11 (absents avec une ancienne version). */
+  onBehalf?: boolean | null; currency?: string | null; fxRate?: number | null;
+};
 export type RealPayout = { id?: string; date: string; amount: number; note?: string };
 
 /** Part nette d'une facture : détail exact s'il existe, sinon le taux de sa fiche. */
 export function invoiceNet(inv: ReportInvoice, details: Record<string, ReportDetail>, ratePct: number): number {
   // Même calcul que Facturation et Reversements (src/lib/invoice.ts), au centime.
-  return invoiceTotals(parseAmount(inv.amount), details?.[inv.id], ratePct).reversal;
+  // Facture au nom du créateur (mandat) : la TVA facturée est la sienne, elle lui revient aussi.
+  const t = invoiceTotals(parseAmount(inv.amount), details?.[inv.id], ratePct);
+  return details?.[inv.id]?.onBehalf ? cents(t.reversal + t.tva) : t.reversal;
 }
 
 export type GainLine = { key: string; label: string; amount: number; status: PayoutKey; date: string | null };

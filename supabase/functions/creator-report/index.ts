@@ -81,7 +81,7 @@ Deno.serve(async (req: Request) => {
   const details: Record<string, Json> = {};
   for (const i of invoices) {
     const d = allDetails[i.id];
-    if (d) details[i.id] = { items: d.items, franchise: d.franchise, vatRate: d.vatRate, commissionRate: d.commissionRate, issueDate: d.issueDate };
+    if (d) details[i.id] = { items: d.items, franchise: d.franchise, vatRate: d.vatRate, commissionRate: d.commissionRate, issueDate: d.issueDate, currency: d.currency, fxRate: d.fxRate, onBehalf: d.onBehalf };
   }
   const payMap = (state.creatorPayouts ?? {}) as Record<string, unknown[]>;
   const payouts = !money ? [] : Object.entries(payMap).filter(([k]) => lc(k) === lc(name)).flatMap(([, v]) => (Array.isArray(v) ? v : []));

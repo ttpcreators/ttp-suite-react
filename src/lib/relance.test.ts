@@ -38,6 +38,12 @@ describe("relances", () => {
     const { subject } = relanceEmail({ ref: "2026-190", party: "Marque", amount: "1 200,50 €" }, 0);
     expect(subject.replace(/\s/g, " ")).toBe("Relance : facture 2026-190 · 1 200,50 €");
   });
+
+  it("facture en devise : le montant de la facture, pas sa conversion en euros", () => {
+    const { subject, body } = relanceEmail({ ref: "2026-195", party: "Marque", amount: "900,00 €", amountLabel: "1 000,00 $US" }, 0);
+    expect(subject).toContain("1 000,00 $US");
+    expect(body).not.toContain("900");
+  });
 });
 
 // Heure de Paris : les changements d'heure (fin mars, fin octobre) donnent des jours de 23 h et 25 h.

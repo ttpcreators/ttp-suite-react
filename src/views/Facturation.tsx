@@ -1039,6 +1039,8 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
       franchise: q.franchise,
       ...(q.onBehalf !== undefined ? { onBehalf: q.onBehalf } : {}),
       ...(q.collabId ? { collabId: q.collabId } : {}),
+      // Devis en devise : la facture s'ouvre dans la même devise (taux du jour à saisir).
+      ...(q.currency && q.currency !== "EUR" ? { currency: q.currency } : {}),
       fromQuote: q.id,
       details: {
         clientName: q.clientName,

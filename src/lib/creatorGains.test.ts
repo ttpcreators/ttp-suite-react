@@ -117,3 +117,16 @@ describe("facture annulée (audit 2026-11-11)", () => {
     expect(netGains(invs, 20, NOW).coming).toBe(400);
   });
 });
+
+describe("mêmes montants que la page Reversements (audit 2026-11-11)", () => {
+  const line = [{ id: "x", label: "", qty: 1, unit: 1000 }];
+  it("facture en dollars : part du créateur en euros, au taux de la facture", () => {
+    const inv = { id: "u", ref: "1", party: "Nike", amount: "900,00 €", date: "2026-10-30", status: "payee" };
+    expect(invoiceNet(inv, { u: { items: line, franchise: true, commissionRate: 20, currency: "USD", fxRate: 0.9 } }, 20)).toBe(720);
+  });
+  it("facture au nom du créateur (mandat) : la TVA lui revient aussi", () => {
+    const inv = { id: "m", ref: "2", party: "Hoka", amount: "1 200,00 €", date: "2026-10-30", status: "payee" };
+    expect(invoiceNet(inv, { m: { items: line, franchise: false, vatRate: 20, commissionRate: 20, onBehalf: true } }, 20)).toBe(1000);
+    expect(invoiceNet(inv, { m: { items: line, franchise: false, vatRate: 20, commissionRate: 20 } }, 20)).toBe(800);
+  });
+});
