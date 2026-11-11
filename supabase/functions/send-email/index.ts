@@ -65,6 +65,7 @@ Deno.serve(async (req: Request) => {
 
   let sent = 0;
   const errors: string[] = [];
+  const failedTo: string[] = []; // adresses non servies : l'app ne les note pas « contactées »
   for (const to of recipients) {
     const payload: Record<string, unknown> = { from: RESEND_FROM, to: [to], subject, html };
     if (replyTo) payload.reply_to = replyTo;
@@ -89,12 +90,14 @@ Deno.serve(async (req: Request) => {
         });
         if (logError) console.error("send-email journal", logError.message);
       } else {
+        failedTo.push(to);
         const data = await r.json().catch(() => ({}));
         errors.push(`${to}: ${String((data as { message?: string })?.message ?? r.status).slice(0, 160)}`);
       }
     } catch (e) {
+      failedTo.push(to);
       errors.push(`${to}: ${(e as Error)?.message ?? "réseau"}`.slice(0, 160));
     }
   }
-  return jsonRes({ ok: sent > 0, sent, total: recipients.length, failed: recipients.length - sent, detail: errors[0] ?? null });
+  return jsonRes({ ok: sent > 0, sent, total: recipients.length, failed: recipients.length - sent, failedTo, detail: errors[0] ?? null });
 });

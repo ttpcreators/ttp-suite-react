@@ -589,6 +589,8 @@ export function Aujourdhui() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const lastIndex = useRef(0);
   const selected = flat.find((i) => i.id === selectedId) ?? null;
+  // Vrai dès que l'utilisateur a choisi une ligne lui-même (clic, J/K).
+  const pickedByUser = useRef(false);
   useEffect(() => {
     const i = flat.findIndex((x) => x.id === selectedId);
     if (i >= 0) {
@@ -598,7 +600,10 @@ export function Aujourdhui() {
     // La ligne traitée disparaît : on passe à la suivante (comme une boîte mail).
     if (selectedId) setSelectedId(flat.length ? flat[Math.min(lastIndex.current, flat.length - 1)].id : null);
     // Ordinateur : la fiche montre d'emblée la première action (pas de panneau vide).
-    else if (isLg && flat.length) setSelectedId(flat[0].id);
+    else if (isLg && flat.length) {
+      pickedByUser.current = false; // sélection d'office : les raccourcis E et R ne s'y appliquent pas
+      setSelectedId(flat[0].id);
+    }
   }, [flat, selectedId, isLg]);
   useEffect(() => {
     if (!selected) setSheetOpen(false);
@@ -608,6 +613,7 @@ export function Aujourdhui() {
   const rootRef = useRef<HTMLDivElement>(null);
   const select = useCallback(
     (id: string, openSheet: boolean) => {
+      pickedByUser.current = true;
       setSelectedId(id);
       if (openSheet && !isLg) setSheetOpen(true);
       // Garde la ligne visible pendant la navigation au clavier.
@@ -714,6 +720,10 @@ export function Aujourdhui() {
         const i = cur ? list.findIndex((x) => x.id === cur.id) : -1;
         const next = k === "j" ? Math.min(list.length - 1, i + 1) : Math.max(0, i < 0 ? 0 : i - 1);
         select(list[next].id, false);
+      } else if ((k === "e" || k === "r") && !pickedByUser.current) {
+        // Rien choisi par l'utilisateur (ligne sélectionnée d'office) : une touche tapée par
+        // erreur ne termine pas une tâche et ne compte pas une relance.
+        return;
       } else if (k === "e" && cur) {
         e.preventDefault();
         run(cur);

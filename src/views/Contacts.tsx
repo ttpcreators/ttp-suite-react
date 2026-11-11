@@ -830,12 +830,27 @@ export function Contacts() {
         const { data, error } = await supabase.functions.invoke("send-email", {
           body: { to: recipients, subject, html, attachments: attachments.map((a) => ({ filename: a.filename, contentBase64: a.contentBase64 })) },
         });
-        const res = (await jsonOf(error, data)) as { ok?: boolean; sent?: number; total?: number; detail?: string } | null;
+        const res = (await jsonOf(error, data)) as { ok?: boolean; sent?: number; total?: number; failed?: number; failedTo?: string[]; detail?: string } | null;
         if (!res?.ok) {
           const d = (res?.detail ?? "").toLowerCase();
           if (d.includes("domain") || d.includes("verif") || d.includes("testing"))
             toast("L'envoi automatique TTP n'est pas encore prêt (domaine à vérifier). Envoie via Gmail en attendant.");
           else toast(res?.detail ? `Échec : ${res.detail}` : "Envoi échoué, réessaie");
+          return;
+        }
+        // Envoi partiel : seuls les mails vraiment partis comptent comme « contactés », et le
+        // composeur reste ouvert avec les adresses en échec (comme l'envoi par Gmail).
+        const partial = (res.failed ?? 0) > 0 || (res.sent ?? recipients.length) < recipients.length;
+        if (partial) {
+          const bad = Array.isArray(res.failedTo) ? res.failedTo.map((a) => String(a).toLowerCase()) : null;
+          if (!bad) {
+            // Ancienne version de la fonction : on ne sait pas lesquels ont échoué, on ne note personne.
+            toast(`${res.sent}/${res.total} envoyés. Vérifie lesquels sont partis avant de renvoyer.`);
+            return;
+          }
+          await markContacted(recipients.filter((a) => !bad.includes(a)));
+          setMailRecipients(recipients.filter((a) => bad.includes(a)));
+          toast(`${res.sent} envoyé${(res.sent ?? 0) > 1 ? "s" : ""}, ${bad.length} en échec`);
           return;
         }
         toast(`Email envoyé ✓ (${res.sent}/${res.total} destinataire${(res.total ?? 0) > 1 ? "s" : ""})`);

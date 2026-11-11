@@ -328,7 +328,11 @@ export function Todo() {
     const t = pointInput.trim();
     if (!t) return;
     // Point daté (« 21/10/2026 · … ») ajouté à la suite des précédents.
-    if (await saveNote(row.id, appendPoint(noteOf(row.id), t, new Date(), "Agence"))) {
+    // On part de l'avancement RELU en base : le créateur a pu ajouter un point entre-temps.
+    const { data: live } = await supabase.from("todos").select("progress").eq("id", row.id).maybeSingle();
+    const liveNote = (live as { progress?: string | null } | null)?.progress;
+    const base = typeof liveNote === "string" && liveNote.trim() ? liveNote : noteOf(row.id);
+    if (await saveNote(row.id, appendPoint(base, t, new Date(), "Agence"))) {
       setPointInput("");
       toast("Point d'avancement ajouté ✓");
       notifyCreatorsChange("todo", todoCreators(row), "progress", row.text, row.id);
@@ -388,17 +392,27 @@ export function Todo() {
     return p;
   };
   // Sous-tâches (checklist)
+  // Chaque changement part de la liste RELUE en base (le créateur coche aussi ses
+  // sous-tâches) : écrire depuis la copie de l'écran effaçait sa coche.
+  type Sub = Subtask;
+  const changeSubtasks = async (id: string, change: (list: Sub[]) => Sub[]) => {
+    const { data, error } = await supabase.from("todos").select("subtasks").eq("id", id).maybeSingle();
+    const fresh = !error && data && Array.isArray((data as { subtasks?: unknown }).subtasks) ? ((data as { subtasks: Sub[] }).subtasks) : null;
+    return patchTodo(id, (r) => ({ subtasks: change(fresh ?? r.subtasks ?? []) }));
+  };
   const addSubtask = (todo: Row) => {
     const t = subInput.trim();
     if (!t) return;
     setSubInput("");
-    patchTodo(todo.id, (r) => ({ subtasks: [...(r.subtasks ?? []), { id: stid(), text: t, done: false }] }));
+    void changeSubtasks(todo.id, (list) => [...list, { id: stid(), text: t, done: false }]);
     notifyCreatorsChange("todo", todoCreators(todo), "subtask", todo.text, todo.id);
   };
-  const toggleSubtask = (todo: Row, sid: string) =>
-    patchTodo(todo.id, (r) => ({ subtasks: (r.subtasks ?? []).map((s) => (s.id === sid ? { ...s, done: !s.done } : s)) }));
-  const delSubtask = (todo: Row, sid: string) =>
-    patchTodo(todo.id, (r) => ({ subtasks: (r.subtasks ?? []).filter((s) => s.id !== sid) }));
+  const toggleSubtask = (todo: Row, sid: string) => {
+    // Le sens voulu est celui vu à l'écran (pas l'inverse de ce qu'un autre vient d'écrire).
+    const want = !(todo.subtasks ?? []).find((s) => s.id === sid)?.done;
+    return changeSubtasks(todo.id, (list) => list.map((s) => (s.id === sid ? { ...s, done: want } : s)));
+  };
+  const delSubtask = (todo: Row, sid: string) => changeSubtasks(todo.id, (list) => list.filter((s) => s.id !== sid));
   // Pièces jointes (bucket `documents`, chemin todo-attachments/<id>/…)
   const uploadAttachments = async (todo: Row, files: FileList | null) => {
     const list = Array.from(files ?? []);
@@ -794,7 +808,10 @@ export function Todo() {
   const showInspector = isDesktop && viewMode === "liste" && rows !== null && rows.length > 0;
   const asideRef = useRef<HTMLElement>(null);
   useFitViewport(asideRef, showInspector);
-  const inspected = ordered.find((r) => r.id === selId) ?? ordered[0] ?? null;
+  // La tâche choisie reste affichée tant qu'elle existe, même si un filtre mémorisé la cache
+  // ou qu'un collègue vient de la terminer : sinon la fiche basculait sur la première de la
+  // liste (mauvaise tâche ouverte depuis une notification, point d'avancement ajouté ailleurs).
+  const inspected = ordered.find((r) => r.id === selId) ?? (selId ? (rows ?? []).find((r) => r.id === selId) : undefined) ?? ordered[0] ?? null;
   const sheetRow = sheetOpen && (!isDesktop || viewMode === "colonnes") ? (rows ?? []).find((r) => r.id === selId) ?? null : null;
   const pick = (id: string) => {
     if (id !== selId) {
