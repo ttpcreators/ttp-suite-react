@@ -188,12 +188,16 @@ interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_factu
 # seulement par spark.mjs, qui refuse toute boîte hors de TTP Creators (ALFRED_SPARK_BOITES dans config.env).
 # Jamais d'envoi, de suppression ni d'action.
 # Cloisonnement (choix de Marc le 2026-11-11 : Alfred reste dans TTP, rien d'un autre projet) :
-# il ne lit que son dossier (Read(./**)), n'appelle jamais `spark` directement, et ne charge pas les
-# réglages, skills et consignes globaux du Mac (--setting-sources plus bas) : seulement les siens.
-allowed=("Read(./**)" "Edit(./etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)" "Bash(node telegram.mjs joindre:*)"
+# il ne lit que son dossier (Read sur son dossier), n'appelle jamais `spark` directement, et ne
+# charge pas les réglages, skills et consignes globaux du Mac (--setting-sources plus bas).
+# Chemins complets (« //… ») : une règle en « ./ » se lit depuis le dossier courant, et après un
+# « cd etat » d'Alfred elle visait etat/etat, d'où « écriture refusée » et des réponses perdues
+# (trouvé le 2026-11-12). En plus, chaque commande Bash le ramène dans son dossier (plus bas).
+ici="/$PWD"
+allowed=("Read($ici/**)" "Edit($ici/etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)" "Bash(node telegram.mjs joindre:*)"
   "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)")
 denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash(spark:*)"
-  "Edit(./etat/whatsapp-autorises.txt)")
+  "Edit($ici/etat/whatsapp-autorises.txt)")
 if (( recus > 0 )); then
   # Marc vient d'écrire : Alfred gère toute l'app sur sa demande (choix de Marc le 2026-11-06).
   # Ses consignes gardent la règle : un mail ou un DM ne part que sur un « oui » explicite.
@@ -230,9 +234,11 @@ if (( $? == 3 )); then
   exit 0
 fi
 
+# Après chaque commande Bash, Alfred revient dans son dossier : un « cd » ne change rien pour la suite.
+export CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR=1
 # Si le modèle choisi est surchargé ou indisponible, Claude passe tout seul à l'autre.
 [[ "$modele" == *opus* ]] && secours=sonnet || secours=opus
-consigne="Il est $(date '+%H:%M') ce $(date '+%A %d %B %Y'). C'est $mode. $messages Dernier point fait : $(date -r "$last" '+%A %d %B à %H:%M'). Requête Gmail pour les mails reçus depuis : « $requete ». Fais ce passage selon ton CLAUDE.md et tes fiches, puis dépose tes messages pour Marc dans $ENVOI/."
+consigne="Il est $(date '+%H:%M') ce $(date '+%A %d %B %Y'). C'est $mode. $messages Dernier point fait : $(date -r "$last" '+%A %d %B à %H:%M'). Requête Gmail pour les mails reçus depuis : « $requete ». Fais ce passage selon ton CLAUDE.md et tes fiches, puis dépose tes messages pour Marc dans $ENVOI/ avec l'outil Write (jamais Bash pour écrire un fichier : echo, printf, cat et mkdir te sont refusés, et le dossier existe déjà). Si un outil t'est refusé, prends l'outil prévu sans demander d'autorisation : personne ne peut t'en donner pendant le passage."
 # La sortie de Claude (JSON : réussi ou raté, et pourquoi) : etat/sortie.json, ou etat/sortie-reponse.json.
 SORTIE="etat/sortie${ENVOI#etat/envoi}.json"
 lancer() {
