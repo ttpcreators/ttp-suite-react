@@ -30,7 +30,7 @@ import { homedir, tmpdir } from "node:os";
 import { appendFileSync, closeSync, copyFileSync, createWriteStream, openSync, readSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { pieceAutorisee } from "./spark.mjs";
@@ -583,9 +583,11 @@ const CHROME = [
   "/Applications/Chromium.app/Contents/MacOS/Chromium",
   "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
 ];
-/** Arguments d'impression PDF d'un navigateur Chromium (anciens et nouveaux drapeaux : un drapeau inconnu est ignoré). */
+/** Arguments d'impression PDF d'un navigateur Chromium (anciens et nouveaux drapeaux : un drapeau inconnu est ignoré).
+ * Chemins rendus complets : un chemin relatif (etat/envoi-reponse/…) donnait « file://etat/… »,
+ * une adresse invalide, et Chrome imprimait sa page d'erreur dans le PDF. */
 export function pdfArgs(src, out) {
-  return ["--headless", "--disable-gpu", "--no-first-run", "--no-pdf-header-footer", "--print-to-pdf-no-header", "--virtual-time-budget=5000", `--print-to-pdf=${out}`, `file://${src}`];
+  return ["--headless", "--disable-gpu", "--no-first-run", "--no-pdf-header-footer", "--print-to-pdf-no-header", "--virtual-time-budget=5000", `--print-to-pdf=${resolve(out)}`, pathToFileURL(resolve(src)).href];
 }
 /**
  * Document HTML d'Alfred (proposition, bilan, contrat, fiche) → PDF, avec Chrome s'il est
