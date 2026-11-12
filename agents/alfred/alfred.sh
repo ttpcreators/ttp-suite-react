@@ -3,7 +3,9 @@
 #   alfred.sh --reponse : lancé par l'écoute Telegram (telegram.mjs ecoute) dès que Marc écrit,
 #                         Alfred lui répond tout de suite (réponse rapide : modèle rapide, son propre
 #                         verrou et son dossier etat/envoi-reponse, pour ne pas attendre la fin d'un
-#                         point, et chaque message part dès qu'il est écrit).
+#                         point, et chaque message part dès qu'il est écrit). « --reponse reprise » :
+#                         l'écoute relance une réponse remise à plus tard (limite de l'abonnement
+#                         Claude, Claude surchargé), à l'heure prévue par passage.mjs.
 #   alfred.sh           : launchd, toutes les heures pile. Envoie les rappels arrivés à
 #                         l'heure ; du lundi au vendredi à 9 h et 17 h, fait le POINT (mails
 #                         des marques, DM, devis, relances, créateurs, argent à aller chercher).
@@ -35,7 +37,12 @@ else
   RECU=etat/recu.txt
   RECU_IDS=etat/recu-ids.txt
 fi
-export ALFRED_ENVOI=$ENVOI ALFRED_RECU_IDS=$RECU_IDS
+export ALFRED_ENVOI=$ENVOI ALFRED_RECU=$RECU ALFRED_RECU_IDS=$RECU_IDS
+# D'où vient ce passage : Marc vient d'écrire (marc), launchd toutes les heures (auto), ou l'écoute
+# qui relance une réponse remise à plus tard (reprise). Sert à ne pas redire à Marc ce qu'il sait.
+origine=auto
+[[ "$1" == "--reponse" ]] && origine=marc
+[[ "$2" == "reprise" ]] && origine=reprise
 mkdir -p etat/envoi etat/envoi-reponse
 touch etat/suivi.md etat/conversation.md etat/memoire.md etat/rappels.md etat/delegations.md etat/vacances.txt
 LOG=etat/passages.log
@@ -213,31 +220,70 @@ fi
 [[ -n "$vacances" ]] && messages="$messages MODE VACANCES : Marc est absent jusqu'au $vacances inclus (voir « Le mode vacances ») : seulement l'urgent, très court."
 [[ "$mode" == "le point du matin" ]] && (( retour )) && messages="$messages Marc rentre de vacances (absent jusqu'au $fin_vacances) : commence par le résumé de son absence (voir « Le mode vacances »)."
 
-rm -f "$ENVOI"/* "$ENVOI"/.deja-cite
-echo "===== $(date) · $mode ($recus message(s) de Marc, modèle $modele) =====" >> "$LOG"
-claude -p "Il est $(date '+%H:%M') ce $(date '+%A %d %B %Y'). C'est $mode. $messages Dernier point fait : $(date -r "$last" '+%A %d %B à %H:%M'). Requête Gmail pour les mails reçus depuis : « $requete ». Fais ce passage selon ton CLAUDE.md et tes fiches, puis dépose tes messages pour Marc dans $ENVOI/." \
-  --model "$modele" \
-  --setting-sources project,local \
-  --allowedTools "${allowed[@]}" \
-  --disallowedTools "${denied[@]}" \
-  --max-turns 150 < /dev/null >> "$LOG" 2>&1 &
-cpid=$!
-# Réponse rapide : chaque message part dès qu'il est écrit, pendant que Claude travaille encore.
-spid=""
-if [[ "$mode" == "la réponse à Marc" ]]; then
-  node telegram.mjs suivre "$ENVOI" "$cpid" >> "$LOG" 2>&1 &
-  spid=$!
+# Limite de l'abonnement Claude atteinte (notée dans etat/reprise.json au passage raté) : pas de
+# passage avant qu'elle reparte. Les messages de Marc restent en file, il est prévenu, et l'écoute
+# lui répond toute seule à l'heure dite (passage.mjs).
+attente=$(node passage.mjs attente "$mode" "$origine" 2>> "$LOG")
+if (( $? == 3 )); then
+  [[ -n "$attente" ]] && node telegram.mjs texte "$attente" >> "$LOG" 2>&1
+  echo "$(date) : $mode reporté, limite de l'abonnement Claude" >> "$LOG"
+  exit 0
 fi
-wait "$cpid"
-code=$?
-[[ -n "$spid" ]] && wait "$spid"
-echo "===== fin $(date) · code $code =====" >> "$LOG"
 
-envois=("$ENVOI"/*)
-# Déjà envoyé au fil de l'eau : Marc a eu sa réponse (au moins en partie).
-deja=0
-[ -f "$ENVOI/.deja-cite" ] && deja=1
-if [ "$code" -eq 0 ] && (( ${#envois} > 0 || deja )); then
+# Si le modèle choisi est surchargé ou indisponible, Claude passe tout seul à l'autre.
+[[ "$modele" == *opus* ]] && secours=sonnet || secours=opus
+consigne="Il est $(date '+%H:%M') ce $(date '+%A %d %B %Y'). C'est $mode. $messages Dernier point fait : $(date -r "$last" '+%A %d %B à %H:%M'). Requête Gmail pour les mails reçus depuis : « $requete ». Fais ce passage selon ton CLAUDE.md et tes fiches, puis dépose tes messages pour Marc dans $ENVOI/."
+# La sortie de Claude (JSON : réussi ou raté, et pourquoi) : etat/sortie.json, ou etat/sortie-reponse.json.
+SORTIE="etat/sortie${ENVOI#etat/envoi}.json"
+lancer() {
+  rm -f "$SORTIE"
+  echo "===== $(date) · $mode ($recus message(s) de Marc, modèle $modele) =====" >> "$LOG"
+  claude -p "$consigne" \
+    --model "$modele" \
+    --fallback-model "$secours" \
+    --setting-sources project,local \
+    --allowedTools "${allowed[@]}" \
+    --disallowedTools "${denied[@]}" \
+    --max-turns 150 \
+    --output-format json < /dev/null > "$SORTIE" 2>> "$LOG" &
+  cpid=$!
+  # Réponse rapide : chaque message part dès qu'il est écrit, pendant que Claude travaille encore.
+  spid=""
+  if [[ "$mode" == "la réponse à Marc" ]]; then
+    node telegram.mjs suivre "$ENVOI" "$cpid" >> "$LOG" 2>&1 &
+    spid=$!
+  fi
+  wait "$cpid"
+  code=$?
+  [[ -n "$spid" ]] && wait "$spid"
+  # Le bilan : « ok », ou le type d'échec (limite, connexion, surcharge, tours, autre) et sa raison.
+  bilan=$(node passage.mjs bilan "$SORTIE" "$code" 2>> "$LOG")
+  etat=${bilan%%$'\t'*}
+  echo "===== fin $(date) · code $code · ${bilan//$'\t'/ · } =====" >> "$LOG"
+  envois=("$ENVOI"/*)
+  # Déjà envoyé au fil de l'eau : Marc a eu sa réponse (au moins en partie).
+  deja=0
+  [ -f "$ENVOI/.deja-cite" ] && deja=1
+}
+
+rm -f "$ENVOI"/* "$ENVOI"/.deja-cite
+lancer
+# Raté sans avoir rien envoyé, pour une raison passagère (Claude surchargé, coupure) : un nouvel
+# essai 20 secondes plus tard, sans déranger Marc.
+if [[ "$etat" == (surcharge|autre) ]] && (( ${#envois} == 0 && ! deja )); then
+  echo "$(date) : nouvel essai dans 20 s" >> "$LOG"
+  sleep 20
+  lancer
+fi
+# Claude a répondu sans déposer de fichier : sa réponse part quand même, telle quelle.
+if [[ "$etat" == ok ]] && (( ${#envois} == 0 && ! deja )); then
+  node passage.mjs texte "$SORTIE" > "$ENVOI/01-resume.txt" 2>> "$LOG"
+  [ -s "$ENVOI/01-resume.txt" ] || rm -f "$ENVOI/01-resume.txt"
+  envois=("$ENVOI"/*)
+fi
+
+if [[ "$etat" == ok ]] && (( ${#envois} > 0 || deja )); then
+  node passage.mjs reussi 2>> "$LOG"
   if (( ${#envois} == 0 )) || node telegram.mjs dossier "$ENVOI" >> "$LOG" 2>&1; then
     [[ "$mode" == "le point"* ]] && echo "$now" > etat/dernier-passage
     [[ "$mode" == "la prospection"* ]] && date +%Y-%m-%d > etat/derniere-prospection
@@ -249,14 +295,20 @@ if [ "$code" -eq 0 ] && (( ${#envois} > 0 || deja )); then
   fi
 elif (( deja )); then
   # Claude s'est arrêté après avoir déjà répondu en partie : on envoie ce qui reste, sans remettre
-  # les messages de Marc en file (il aurait sa réponse deux fois), et on le prévient.
+  # les messages de Marc en file (il aurait sa réponse deux fois), et on lui dit pourquoi.
   (( ${#envois} > 0 )) && node telegram.mjs dossier "$ENVOI" >> "$LOG" 2>&1
-  node telegram.mjs texte "Je me suis arrêté avant la fin de ma réponse. Redemande-moi ce qui manque." >> "$LOG" 2>&1
+  message=$(node passage.mjs echec "$SORTIE" "$mode" "$origine" "$code" partiel 2>> "$LOG")
+  node telegram.mjs texte "${message:-Je me suis arrêté avant la fin de ma réponse. Redemande-moi ce qui manque.}" >> "$LOG" 2>&1
 else
-  # Passage raté (souvent la connexion de Claude) : les messages de Marc restent en file pour
-  # le prochain passage, et Marc est prévenu.
-  [ -s "$RECU" ] && { cat "$RECU"; [ -f etat/file-recue.txt ] && cat etat/file-recue.txt; } > etat/file-recue.tmp && mv etat/file-recue.tmp etat/file-recue.txt
-  [ -s "$RECU_IDS" ] && { cat "$RECU_IDS"; [ -f etat/file-recue-ids.txt ] && cat etat/file-recue-ids.txt; } > etat/file-recue-ids.tmp && mv etat/file-recue-ids.tmp etat/file-recue-ids.txt
-  raison=$(tail -n 4 "$LOG" | grep -i -m1 "authenticate\|login\|error\|erreur")
-  node telegram.mjs texte "Alfred n'a pas pu faire $mode. ${raison:+Raison : $raison. }Si c'est la connexion : ouvre le Terminal, tape claude puis /login." >> "$LOG" 2>&1
+  # Passage raté : passage.mjs remet les messages de Marc en file (sauf une demande trop longue),
+  # prévoit la reprise (fin de la limite, ou nouvel essai dans 10 minutes) et dit à Marc la vraie
+  # raison, une seule fois tant que c'est la même.
+  message=$(node passage.mjs echec "$SORTIE" "$mode" "$origine" "$code" 2>> "$LOG")
+  if (( $? != 0 )); then
+    # passage.mjs illisible : on garde au moins les messages de Marc et on le prévient.
+    [ -s "$RECU" ] && { cat "$RECU"; [ -f etat/file-recue.txt ] && cat etat/file-recue.txt; } > etat/file-recue.tmp && mv etat/file-recue.tmp etat/file-recue.txt
+    [ -s "$RECU_IDS" ] && { cat "$RECU_IDS"; [ -f etat/file-recue-ids.txt ] && cat etat/file-recue-ids.txt; } > etat/file-recue-ids.tmp && mv etat/file-recue-ids.tmp etat/file-recue-ids.txt
+    message="Je n'ai pas pu faire $mode (${bilan//$'\t'/ : }). Ton message est gardé."
+  fi
+  [[ -n "$message" ]] && node telegram.mjs texte "$message" >> "$LOG" 2>&1
 fi

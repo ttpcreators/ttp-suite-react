@@ -29,7 +29,7 @@ if [[ "$1" == "--bot" ]]; then
   exit 0
 fi
 
-cp "$SRC/CLAUDE.md" "$SRC/alfred.sh" "$SRC/ecoute.sh" "$SRC/telegram.mjs" "$SRC/whatsapp.mjs" "$SRC/spark.mjs" "$SRC/mise-a-jour.sh" "$DEST/"
+cp "$SRC/CLAUDE.md" "$SRC/alfred.sh" "$SRC/ecoute.sh" "$SRC/telegram.mjs" "$SRC/whatsapp.mjs" "$SRC/spark.mjs" "$SRC/passage.mjs" "$SRC/mise-a-jour.sh" "$DEST/"
 chmod +x "$DEST/alfred.sh" "$DEST/ecoute.sh" "$DEST/mise-a-jour.sh"
 # Ses fiches (consignes détaillées par sujet, lues à la demande) : toujours la version du dépôt.
 [ -d "$SRC/fiches" ] && rsync -a --delete "$SRC/fiches/" "$DEST/fiches/"
