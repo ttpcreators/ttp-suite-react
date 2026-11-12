@@ -30,7 +30,7 @@ import { homedir, tmpdir } from "node:os";
 import { appendFileSync, closeSync, copyFileSync, createWriteStream, openSync, readSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { pieceAutorisee } from "./spark.mjs";
@@ -608,6 +608,30 @@ async function enPdf(src) {
   }
 }
 
+/** Nom du document d'un contrat : « 02-contrat-Nova-Lea.contrat.json » → « 02-contrat-Nova-Lea.html ». */
+export function nomContrat(nom) {
+  return String(nom).replace(/\.contrat\.json$/i, ".html");
+}
+
+/**
+ * Contrat demandé par Alfred (les mêmes entrées que l'outil preparer_contrat, dans un
+ * fichier .contrat.json) → le HTML du moteur de l'app (contrats.mjs), à côté, prêt à partir en
+ * PDF. Si le contrat ne peut pas être fabriqué : un message qui dit pourquoi.
+ */
+export async function contratDepuisJson(chemin, name) {
+  try {
+    const { renderContract } = await import("./contrats.mjs");
+    const r = renderContract(JSON.parse(readFileSync(chemin, "utf8")));
+    if (r.erreur) throw new Error(r.erreur);
+    const html = join(dirname(chemin), nomContrat(name));
+    writeFileSync(html, r.html);
+    return [{ file: html, name: nomContrat(name), temporaire: html }];
+  } catch (e) {
+    const texte = `Je n'ai pas pu fabriquer le contrat (${nomAffiche(name)}) : ${e.message}`;
+    return [{ text: escapeHtml(texte), html: true, plain: texte }];
+  }
+}
+
 const PIECE_MAX = 50 * 1024 * 1024; // limite d'envoi des bots Telegram
 // Ce qu'une marque envoie : script, brief, contrat, présentation, tableau, image, vidéo, archive.
 // Pas de .txt ni de .html : dans etat/envoi, ils deviendraient un message ou seraient convertis.
@@ -685,8 +709,13 @@ async function envoyerFichiers({ token, chatId, here, dir, names, fil, supprimer
   let n = 0;
   for (const name of names) {
     const chemin = join(dir, name);
-    // Un .txt = un message ; tout autre fichier (contrat .html, document) part en pièce jointe.
-    const messages = name.endsWith(".txt") ? messagesFor(name, readFileSync(chemin, "utf8")) : [{ file: chemin, name }];
+    // Un .txt = un message ; un .contrat.json = un contrat fabriqué par le moteur de l'app ;
+    // tout autre fichier (document .html, PDF) part en pièce jointe.
+    const messages = name.endsWith(".txt")
+      ? messagesFor(name, readFileSync(chemin, "utf8"))
+      : name.endsWith(".contrat.json")
+        ? await contratDepuisJson(chemin, name)
+        : [{ file: chemin, name }];
     for (const m of messages) {
       if (m.file) {
         // Un document HTML part en PDF quand Chrome est là (plus simple à ouvrir et à transférer).
@@ -697,6 +726,8 @@ async function envoyerFichiers({ token, chatId, here, dir, names, fil, supprimer
         }
         await sendDocument(token, chatId, m.file, nomAffiche(m.name), replyTo);
         appendFileSync(fil, `\n### ${stamp()} · Alfred\n(document envoyé : ${nomAffiche(m.name)})\n`);
+        // Contrat fabriqué ici : son HTML et son PDF ne restent pas dans le dossier d'envoi.
+        if (m.temporaire) for (const f of [m.temporaire, m.file]) rmSync(f, { force: true });
       } else {
         await send(token, chatId, m, replyTo);
         appendFileSync(fil, `\n### ${stamp()} · Alfred\n${m.plain ?? m.text}\n`);

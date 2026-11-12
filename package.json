@@ -8,7 +8,8 @@
     "build": "oxlint && vitest run && tsc -b && vite build",
     "lint": "oxlint",
     "test": "vitest run",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "alfred:contrats": "node scripts/alfred-contrats.mjs"
   },
   "dependencies": {
     "@number-flow/react": "^0.6.1",

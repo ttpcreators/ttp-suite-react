@@ -39,6 +39,9 @@ import {
 } from "@/lib/contractRegistry";
 import { deleteContractRow, setContractStatus } from "@/lib/contractRegistryDb";
 
+/** Titre d'un brouillon : « Nova × Léa », ou « Représentation · Léa ». */
+const draftTitle = (d: ContractDraft) => (d.ctType === "repr" ? `Représentation · ${titleCase(d.ctName)}` : `${d.brand} × ${titleCase(d.ctName)}`);
+
 /*
  * Page d'arrivée « Contrats » : tous les contrats enregistrés (Marque × Créateur, UGC,
  * Représentation), leur statut de signature, les catégories (= types de contrat) et
@@ -229,8 +232,8 @@ export function ContractsHome({
               <li key={d.id} className="flex items-center gap-3 py-2.5">
                 <CreatorAvatar name={d.ctName} photoUrl={photoOf(d.ctName)} className="h-8 w-8 shrink-0 rounded-full text-[10px]" />
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[14px] font-medium text-foreground">{`${d.brand} × ${titleCase(d.ctName)}`}</div>
-                  <div className="truncate text-[12px] text-muted-foreground">{[`Préparé par ${d.by}`, fmtDay(d.ts), d.form.value].filter(Boolean).join(" · ")}</div>
+                  <div className="truncate text-[14px] font-medium text-foreground">{draftTitle(d)}</div>
+                  <div className="truncate text-[12px] text-muted-foreground">{[`Préparé par ${d.by}`, fmtDay(d.ts), d.form?.value].filter(Boolean).join(" · ")}</div>
                   {d.note && <p className="mt-0.5 line-clamp-2 text-[12.5px] text-muted-foreground">{d.note}</p>}
                 </div>
                 {onOpenDraft && (
@@ -238,7 +241,7 @@ export function ContractsHome({
                     Ouvrir
                   </button>
                 )}
-                <button type="button" onClick={() => void removeDraft(d)} aria-label={`Supprimer le brouillon ${d.brand} × ${titleCase(d.ctName)}`} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                <button type="button" onClick={() => void removeDraft(d)} aria-label={`Supprimer le brouillon ${draftTitle(d)}`} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </li>

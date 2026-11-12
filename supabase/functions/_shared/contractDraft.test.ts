@@ -1,7 +1,8 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { DRAFT_OPTS, choisirCreateur, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "./contractDraft.ts";
+import { DRAFT_OPTS, REPR_KEYS, choisirCreateur, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "./contractDraft.ts";
+import { RC_FIELDS } from "../../../src/lib/representationContract";
 
 const base = { id: "cdtest", ts: 1_800_000_000_000, ctName: "Léa", by: "Alfred" };
 
@@ -50,9 +51,26 @@ describe("Brouillons de contrat préparés par Claude", () => {
   });
 
   it("propose seulement des valeurs qui existent dans les menus du générateur de contrats", () => {
-    const page = readFileSync(join(__dirname, "../../../src/views/Contrats.tsx"), "utf8");
+    const moteur = readFileSync(join(__dirname, "../../../src/lib/brandContract.ts"), "utf8");
     for (const valeurs of Object.values(DRAFT_OPTS)) {
-      for (const v of valeurs) expect(page, `valeur « ${v} » absente de Contrats.tsx`).toContain(`{ v: "${v}"`);
+      for (const v of valeurs) expect(moteur, `valeur « ${v} » absente de brandContract.ts`).toContain(`{ v: "${v}"`);
     }
+  });
+
+  it("prépare un contrat de représentation avec les seuls réglages connus du générateur", () => {
+    for (const k of REPR_KEYS) expect(RC_FIELDS.map((f) => f.key), `réglage « ${k} » absent de RC_FIELDS`).toContain(k);
+    const r = normaliserBrouillon(
+      { type: "representation", representation: { variante: "nonexclusif", dureeMois: 6, gestionMail: true, talentEmailPro: "lea@example.com" }, note: "Adresse à confirmer" },
+      { ...base, externe: true },
+    );
+    if ("erreur" in r) throw new Error(r.erreur);
+    expect(r.brouillon).toMatchObject({ ctType: "repr", ctName: "Léa", brand: "", externe: true, note: "Adresse à confirmer" });
+    expect(r.brouillon.config).toEqual({ variante: "nonexclusif", dureeMois: "6", gestionMail: "true", talentEmailPro: "lea@example.com", talentNom: "Léa" });
+    expect(r.brouillon.form).toBeUndefined();
+    expect(resumeBrouillon(r.brouillon)).toContain("représentation de Léa (non exclusif), pas encore dans le roster");
+    expect(lireBrouillons([r.brouillon])).toHaveLength(1);
+    expect(normaliserBrouillon({ type: "representation", representation: { iban: "x" } }, base)).toEqual({ erreur: expect.stringMatching(/Réglage inconnu.*iban/) });
+    const defaut = normaliserBrouillon({ type: "repr" }, base);
+    expect("brouillon" in defaut && defaut.brouillon.config).toEqual({ variante: "exclusif", talentNom: "Léa" });
   });
 });

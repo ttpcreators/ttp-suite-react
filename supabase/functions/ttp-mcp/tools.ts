@@ -26,7 +26,7 @@ import { upcomingBirthdays } from "../_shared/birthdays.ts";
 import { amountOf, contractList, invoiceTotals, owesMoney, pctOf, reversementRows, type Detail, type Payout } from "../_shared/reversements.ts";
 import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/audience.ts";
 import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCartonnent, type DroitUsage, type PostCourt } from "../_shared/alfredSuivi.ts";
-import { CONTRACT_DRAFTS_KEY, DRAFT_OPTS, choisirCreateur, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "../_shared/contractDraft.ts";
+import { CONTRACT_DRAFTS_KEY, DRAFT_OPTS, choisirCreateur, estRepresentation, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "../_shared/contractDraft.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
 type Json = Record<string, unknown>;
@@ -2171,14 +2171,20 @@ const preparerContrat: Tool = {
   name: "preparer_contrat",
   title: "Préparer un contrat dans l'app",
   description:
-    "Dépose un BROUILLON de contrat Marque × Créateur (ou UGC) dans la page Contrats de l'app, prérempli : Marc l'ouvre (« Brouillons à relire »), vérifie et génère le PDF lui même. Rien n'est envoyé ni signé. À utiliser quand Marc demande un contrat, avec les conditions convenues dans les mails (montant HT, livrables, droits et leur durée, paiement). Ce qui reste incertain va dans `note`. Avec `id` : remplace ce brouillon.",
+    "Dépose un BROUILLON de contrat dans la page Contrats de l'app, prérempli : Marque × Créateur, UGC, ou représentation (contrat d'agent entre TTP et un talent). Marc l'ouvre (« Brouillons à relire »), vérifie et génère le PDF lui même. Rien n'est envoyé ni signé. À utiliser quand Marc demande un contrat, avec les conditions convenues (mails, messages) : montant HT, livrables, droits et leur durée, paiement ; pour une représentation, `type` « representation » et les réglages dans `representation` (variante exclusif ou nonexclusif, dates, commissions, durée…), seulement ceux qui changent des réglages par défaut. Ce qui reste incertain va dans `note`. Avec `id` : remplace ce brouillon (pour une modification demandée par Marc).",
   inputSchema: {
     type: "object",
     properties: {
       id: { type: "string", description: "Pour remplacer un brouillon déjà préparé" },
-      type: { type: "string", enum: ["marque", "ugc"], description: "marque (défaut) ou ugc" },
-      createur: { type: "string", description: "Nom du créateur dans le roster" },
-      marque: { type: "string" },
+      type: { type: "string", enum: ["marque", "ugc", "representation"], description: "marque (défaut), ugc, ou representation (contrat d'agent TTP × talent)" },
+      createur: { type: "string", description: "Nom du créateur dans le roster (représentation : son nom complet, même s'il n'est pas encore dans le roster)" },
+      marque: { type: "string", description: "Obligatoire sauf pour une représentation" },
+      representation: {
+        type: "object",
+        description:
+          "Représentation seulement : les réglages du générateur de l'app, en texte (« true » / « false » pour oui / non, dates AAAA-MM-JJ). variante : exclusif ou nonexclusif. Ex. talentNom, talentDateNaissance, talentAdresse, talentSiret, talentEmailPro, dateSignature, dateDebut, dureeMois, modeDuree (determinee ou reconductible), modeCommission (parOrigine ou uniforme), commApportee, commInitiee, commUniforme, gestionMail, contratTest.",
+        additionalProperties: { type: ["string", "number", "boolean"] },
+      },
       montant: { type: "string", description: "Ex. « 400 € HT »" },
       livrables: { type: "string", description: "Ex. « 1 Reel + whitelisting 30 jours »" },
       duree: { type: "string", description: "Durée du contrat, ex. « 3 mois » (sert aux fins de contrat)" },
@@ -2199,22 +2205,25 @@ const preparerContrat: Tool = {
       note: { type: "string", description: "Ce que Marc doit vérifier avant de générer, avec la source (mail du …)" },
       auteur: { type: "string", description: "Qui prépare : Alfred, Claude…" },
     },
-    required: ["createur", "marque"],
+    required: ["createur"],
     additionalProperties: false,
   },
   write: true,
   run: async (sb, _c, a) => {
     const saisie = str(a.createur, 80);
+    const repr = estRepresentation(a);
     // Tout le roster (quelques dizaines de noms) : la comparaison se fait sans accents ni majuscules.
     const { data, error } = await sb.from("creators").select("name");
     if (error) return fail(`Roster illisible : ${error.message}`);
     const noms = ((data as Json[] | null) ?? []).map((c) => String(c.name ?? "")).filter(Boolean);
-    const ctName = choisirCreateur(noms, saisie);
-    if (!ctName) return fail(`Créateur « ${saisie} » introuvable ou ambigu dans le roster : écris son nom tel qu'il est dans l'app.`);
+    const trouve = choisirCreateur(noms, saisie);
+    // Un talent qu'on s'apprête à signer n'est pas toujours dans le roster : la représentation l'accepte tel qu'écrit.
+    if (!trouve && !(repr && saisie)) return fail(`Créateur « ${saisie} » introuvable ou ambigu dans le roster : écris son nom tel qu'il est dans l'app.`);
+    const ctName = trouve ?? saisie;
     const prev = str(a.id, 64) ? lireBrouillons((await appState(sb))[CONTRACT_DRAFTS_KEY]).find((d) => d.id === str(a.id, 64)) : undefined;
     if (str(a.id) && !prev) return fail(`Brouillon introuvable (${str(a.id, 64)}).`);
     const id = prev?.id ?? `cd${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
-    const r = normaliserBrouillon(a, { id, ts: Date.now(), ctName, by: str(a.auteur, 40) || "Claude" });
+    const r = normaliserBrouillon(a, { id, ts: Date.now(), ctName, by: str(a.auteur, 40) || "Claude", externe: !trouve });
     if ("erreur" in r) return fail(r.erreur);
     const { error: e2 } = await sb.rpc("app_state_list", { p_key: CONTRACT_DRAFTS_KEY, p_upsert: [r.brouillon], p_remove: [], p_prepend: !prev });
     if (e2) return fail(`Brouillon non enregistré : ${e2.message}`);
