@@ -2,8 +2,10 @@ import { useStickyState } from "@/lib/useStickyState";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Check, ChevronDown, Eye, FileDown, FileText, ListFilter, PenLine, Search, Send, Trash2, X } from "@/components/icons";
-import { cn } from "@/lib/utils";
-import { useAppState, type AppState } from "@/lib/appState";
+import { cn, titleCase } from "@/lib/utils";
+import { fmtDay } from "@/lib/dates";
+import { listAppStateKey, useAppState, type AppState } from "@/lib/appState";
+import { CONTRACT_DRAFTS_KEY, lireBrouillons, type ContractDraft } from "../../../supabase/functions/_shared/contractDraft.ts";
 import { useCreators } from "@/lib/useCreators";
 import { printHtml } from "@/lib/printPdf";
 import { myDisplayName } from "@/lib/team";
@@ -64,6 +66,7 @@ export function ContractsHome({
   active = true,
   onNew,
   onEdit,
+  onOpenDraft,
   resume,
   onCount,
 }: {
@@ -71,6 +74,8 @@ export function ContractsHome({
   active?: boolean;
   onNew: (type: CtType) => void;
   onEdit: (row: ContractRow, raw: Raw) => void;
+  /** « Ouvrir » sur un brouillon préparé par Claude (Alfred) : le générateur se charge avec. */
+  onOpenDraft?: (d: ContractDraft) => void;
   /** Un générateur a été ouvert pendant la session : on peut y revenir sans perdre la saisie. */
   resume?: { label: string; onClick: () => void } | null;
   /** Nombre de contrats enregistrés (compteur de l'onglet « Tous » de la page Contrats). */
@@ -78,6 +83,18 @@ export function ContractsHome({
 }) {
   const creators = useCreators();
   const { data, loading } = useAppState<Hist>((s: AppState) => ({ brand: s["brandContractHistory"], repr: s["contractHistory"] }));
+  // Brouillons préparés par Claude (outil `preparer_contrat` du connecteur), à relire avant de générer.
+  const { data: draftsRaw } = useAppState<unknown>((s: AppState) => s[CONTRACT_DRAFTS_KEY]);
+  const [draftsGone, setDraftsGone] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    setDraftsGone(new Set());
+  }, [draftsRaw]);
+  const drafts = useMemo(() => lireBrouillons(draftsRaw).filter((d) => !draftsGone.has(d.id)), [draftsRaw, draftsGone]);
+  const removeDraft = async (d: ContractDraft) => {
+    if (!(await listAppStateKey(CONTRACT_DRAFTS_KEY, [], [d.id]))) return toast("Erreur, réessaie");
+    setDraftsGone((s) => new Set(s).add(d.id));
+    toast("Brouillon supprimé");
+  };
   // Écritures réussies appliquées tout de suite ; le blob live redevient la source dès qu'il change.
   const [statusOver, setStatusOver] = useState<Record<string, ContractStatus>>({});
   const [removed, setRemoved] = useState<Set<string>>(() => new Set());
@@ -201,6 +218,33 @@ export function ContractsHome({
         <button type="button" onClick={resume.onClick} className="mb-3 flex items-center gap-1.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:text-foreground">
           <PenLine className="h-3.5 w-3.5" /> Reprendre le contrat en cours ({resume.label})
         </button>
+      )}
+
+      {/* Brouillons préparés par Claude : à ouvrir, vérifier, puis générer */}
+      {drafts.length > 0 && (
+        <section className="mb-5 rounded-2xl border border-border bg-surface px-4 py-2 sm:px-5" aria-label="Brouillons à relire">
+          <h2 className="pt-1.5 text-[14px] font-semibold text-foreground">Brouillons à relire</h2>
+          <ul className="divide-y divide-border">
+            {drafts.map((d) => (
+              <li key={d.id} className="flex items-center gap-3 py-2.5">
+                <CreatorAvatar name={d.ctName} photoUrl={photoOf(d.ctName)} className="h-8 w-8 shrink-0 rounded-full text-[10px]" />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[14px] font-medium text-foreground">{`${d.brand} × ${titleCase(d.ctName)}`}</div>
+                  <div className="truncate text-[12px] text-muted-foreground">{[`Préparé par ${d.by}`, fmtDay(d.ts), d.form.value].filter(Boolean).join(" · ")}</div>
+                  {d.note && <p className="mt-0.5 line-clamp-2 text-[12.5px] text-muted-foreground">{d.note}</p>}
+                </div>
+                {onOpenDraft && (
+                  <button type="button" onClick={() => onOpenDraft(d)} className={primaryBtn}>
+                    Ouvrir
+                  </button>
+                )}
+                <button type="button" onClick={() => void removeDraft(d)} aria-label={`Supprimer le brouillon ${d.brand} × ${titleCase(d.ctName)}`} className="grid h-9 w-9 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {/* Bandeau d'accueil : ce qui attend une signature */}
