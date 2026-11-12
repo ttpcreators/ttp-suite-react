@@ -78,7 +78,7 @@ Alfred ne peut pas modifier `config.env` ni sa liste WhatsApp. Côté connecteur
 
 ## Les fichiers
 
-Dans le dépôt (`agents/alfred/`, public, aucun secret) : `CLAUDE.md` (ses consignes), `skills/` (ses skills, sous licence libre, copiées dans `.claude/skills`), `alfred.sh` (un passage), `ecoute.sh` et `telegram.mjs` (Telegram), `whatsapp.mjs` (lecture de WhatsApp Desktop), `spark.mjs` (sa seule porte vers Spark), deux réglages launchd, `installer.sh`.
+Dans le dépôt (`agents/alfred/`, public, aucun secret) : `CLAUDE.md` (ses consignes), `skills/` (ses skills, sous licence libre, copiées dans `.claude/skills`), `alfred.sh` (un passage), `ecoute.sh` et `telegram.mjs` (Telegram), `whatsapp.mjs` (lecture de WhatsApp Desktop), `spark.mjs` (sa seule porte vers Spark), `passage.mjs` (le bilan de chaque passage : nouvel essai, limite de l'abonnement, raison d'un échec), deux réglages launchd, `installer.sh`.
 
 Sur le Mac seulement (`~/Code/TTPAlfred/`) :
 - `config.env` : jeton du bot d'Alfred, identifiant Telegram de Marc et `ALFRED_SPARK_BOITES` (les boîtes Spark des créateurs qu'Alfred peut lire) ;
@@ -101,7 +101,11 @@ Alfred se met à jour tout seul (`mise-a-jour.sh`, launchd `com.ttp.alfred.maj`,
 ## Si Alfred ne répond plus
 
 - Le Mac doit être allumé et pas en veille. Messages et points ratés sont traités au réveil.
-- La connexion de Claude a pu expirer : Terminal, `claude`, puis `/login`. Alfred prévient sur Telegram quand un passage échoue.
+- Quand un passage échoue, Alfred le dit sur Telegram avec la vraie raison (`passage.mjs`, qui lit le bilan de Claude) :
+  - Claude surchargé ou coupure : il réessaie tout seul 20 secondes plus tard, puis deux fois à 10 minutes d'écart, sans déranger Marc ;
+  - limite de l'abonnement Claude (partagée avec les autres sessions Claude du compte) : il dit jusqu'à quand, garde le message et répond tout seul quand elle repart (`etat/reprise.json`) ;
+  - connexion expirée : Terminal, `claude`, puis `/login` ;
+  - demande trop longue : Marc la redit en plus court.
 - Journaux : `~/Code/TTPAlfred/etat/passages.log` et `etat/ecoute.log`.
 - Un point à la main : `zsh ~/Code/TTPAlfred/alfred.sh --point`.
 - Tout arrêter : `launchctl bootout gui/$(id -u)/com.ttp.alfred.ecoute` puis `launchctl bootout gui/$(id -u)/com.ttp.alfred`.

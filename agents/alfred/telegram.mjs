@@ -34,6 +34,7 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { pieceAutorisee } from "./spark.mjs";
+import { oublierRepriseSi, repriseDue } from "./passage.mjs";
 
 const LIMIT = 4000; // Telegram plafonne à 4096 caractères par message.
 
@@ -698,7 +699,8 @@ async function envoyerFichiers({ token, chatId, here, dir, names, fil, supprimer
         await send(token, chatId, m, replyTo);
         appendFileSync(fil, `\n### ${stamp()} · Alfred\n${m.plain ?? m.text}\n`);
       }
-      if (replyTo) writeFileSync(marque, "");
+      // Le marqueur dit aussi à alfred.sh que Marc a déjà reçu quelque chose (même sans message à citer).
+      if (!existsSync(marque)) writeFileSync(marque, "");
       replyTo = null;
       n++;
     }
@@ -890,17 +892,22 @@ async function main() {
         await sleep(e.code === 409 ? 30_000 : 5_000);
         continue;
       }
-      if (!n) continue;
+      // Une réponse remise à plus tard (limite de l'abonnement Claude, Claude surchargé) : relancée
+      // toute seule à l'heure prévue, tant que des messages de Marc attendent (passage.mjs).
+      const reprise = n ? null : repriseDue(here);
+      if (!n && !reprise) continue;
       // « Alfred est en train d'écrire… » pendant tout le passage.
       const typing = () => api(token, "sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
       typing();
       const tick = setInterval(typing, 4_000);
       await new Promise((resolve) => {
-        const p = spawn("/bin/zsh", [join(here, "alfred.sh"), "--reponse"], { stdio: "ignore" });
+        const p = spawn("/bin/zsh", [join(here, "alfred.sh"), "--reponse", ...(reprise ? ["reprise"] : [])], { stdio: "ignore" });
         p.on("exit", resolve);
         p.on("error", resolve);
       });
       clearInterval(tick);
+      // Le passage relancé n'a pas pu se faire (il n'a pas touché à la reprise) : on l'oublie, pour ne pas boucler.
+      if (reprise) oublierRepriseSi(here, reprise);
     }
   }
 
