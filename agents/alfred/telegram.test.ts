@@ -186,6 +186,16 @@ describe("Alfred : documents en PDF", () => {
     expect(a[a.length - 1]).toBe("file:///tmp/x/02-proposition.html");
   });
 
+  it("donne à Chrome une adresse complète, même pour un chemin relatif ou avec des espaces", () => {
+    const a = pdfArgs("etat/envoi-reponse/02-contrat-Léa.html", "etat/envoi-reponse/02-contrat-Léa.pdf");
+    const url = a[a.length - 1];
+    expect(url.startsWith("file:///")).toBe(true);
+    expect(url).not.toContain("file://etat");
+    expect(decodeURIComponent(url)).toContain("/etat/envoi-reponse/02-contrat-Léa.html");
+    expect(a).toContain(`--print-to-pdf=${process.cwd()}/etat/envoi-reponse/02-contrat-Léa.pdf`);
+    expect(pdfArgs("/tmp/Mon dossier/x.html", "/tmp/Mon dossier/x.pdf").at(-1)).toBe("file:///tmp/Mon%20dossier/x.html");
+  });
+
   it("demande une confirmation avant d'agir sur un bouton", () => {
     const attente = { abc123: { data: "oui Erwann", libelle: "Envoyer", clavier: [], at: 1 } };
     expect(etapeToucher("oui Erwann", attente)).toEqual({ action: "demander" });
