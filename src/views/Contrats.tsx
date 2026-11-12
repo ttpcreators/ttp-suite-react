@@ -24,6 +24,7 @@ import { nbspFr } from "@/lib/representationContract";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { durationToMonths } from "@/lib/contractDuration";
 import { sigImgHtml } from "@/lib/agencySignature";
+import { CONTRACT_DRAFTS_KEY, type ContractDraft } from "../../supabase/functions/_shared/contractDraft.ts";
 
 type CtType = "marque" | "repr" | "ugc";
 
@@ -346,7 +347,7 @@ type BrandForm = Omit<ContractCase, "id" | "name">;
 
 /** « Modifier » depuis la page d'arrivée : ce qu'il faut recharger dans un générateur. */
 type EditRequest =
-  | { kind: "brand"; ctType: CtType; ctName: string | null; brand: string; form?: BrandForm }
+  | { kind: "brand"; ctType: CtType; ctName: string | null; brand: string; form?: BrandForm; draftId?: string }
   | { kind: "repr"; entry: ContractHist };
 
 /**
@@ -418,6 +419,11 @@ export function Contrats() {
             setNavSub(t);
           }}
           onEdit={openEdit}
+          onOpenDraft={(d: ContractDraft) => {
+            setEdit((e) => ({ seq: e.seq + 1, req: { kind: "brand", ctType: d.ctType, ctName: d.ctName, brand: d.brand, form: d.form, draftId: d.id } }));
+            setNavSub(d.ctType);
+            toast("Brouillon chargé : vérifie-le, puis génère le PDF");
+          }}
           resume={lastGen ? { label: REG_TYPE_META[lastGen].label, onClick: () => setNavSub(lastGen) } : null}
         />
       </div>
@@ -729,6 +735,8 @@ function ContractGenerator({ initial }: { initial: EditRequest | null }) {
       return { upsert: [e], remove: historyOverflow(fresh) };
     });
     const added = entry as ContractHistoryEntry | null;
+    // Contrat généré depuis un brouillon de Claude : le brouillon a servi, on le retire.
+    if (ok && brandInit?.draftId) void listAppStateKey(CONTRACT_DRAFTS_KEY, [], [brandInit.draftId]);
     // Réimpression d'un contrat déjà archivé : on ne touche pas à son échéance.
     if (!ok || !added) return ok;
     // Auto-échéance de FIN de contrat : renseigne la page Échéances sans saisie manuelle.

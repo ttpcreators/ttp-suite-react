@@ -26,6 +26,7 @@ import { upcomingBirthdays } from "../_shared/birthdays.ts";
 import { amountOf, contractList, invoiceTotals, owesMoney, pctOf, reversementRows, type Detail, type Payout } from "../_shared/reversements.ts";
 import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/audience.ts";
 import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCartonnent, type DroitUsage, type PostCourt } from "../_shared/alfredSuivi.ts";
+import { CONTRACT_DRAFTS_KEY, DRAFT_OPTS, choisirCreateur, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "../_shared/contractDraft.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
 type Json = Record<string, unknown>;
@@ -2166,13 +2167,68 @@ const notifications: Tool = {
   },
 };
 
+const preparerContrat: Tool = {
+  name: "preparer_contrat",
+  title: "Préparer un contrat dans l'app",
+  description:
+    "Dépose un BROUILLON de contrat Marque × Créateur (ou UGC) dans la page Contrats de l'app, prérempli : Marc l'ouvre (« Brouillons à relire »), vérifie et génère le PDF lui même. Rien n'est envoyé ni signé. À utiliser quand Marc demande un contrat, avec les conditions convenues dans les mails (montant HT, livrables, droits et leur durée, paiement). Ce qui reste incertain va dans `note`. Avec `id` : remplace ce brouillon.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "Pour remplacer un brouillon déjà préparé" },
+      type: { type: "string", enum: ["marque", "ugc"], description: "marque (défaut) ou ugc" },
+      createur: { type: "string", description: "Nom du créateur dans le roster" },
+      marque: { type: "string" },
+      montant: { type: "string", description: "Ex. « 400 € HT »" },
+      livrables: { type: "string", description: "Ex. « 1 Reel + whitelisting 30 jours »" },
+      duree: { type: "string", description: "Durée du contrat, ex. « 3 mois » (sert aux fins de contrat)" },
+      commission: { type: "string", description: "Commission TTP en %, 20 par défaut" },
+      nature: { type: "string", enum: [...DRAFT_OPTS.nature], description: "sponso (post sponsorisé), ugc, gifting, ambassador, event" },
+      droits: { type: "string", enum: [...DRAFT_OPTS.droits], description: "organic (compte du créateur seul), repost (repost organique par la marque), paid (pub / whitelisting), buyout (cession totale)" },
+      duree_droits: { type: "string", enum: [...DRAFT_OPTS.duree_droits] },
+      territoire: { type: "string", enum: [...DRAFT_OPTS.territoire] },
+      paiement: { type: "string", enum: [...DRAFT_OPTS.paiement], description: "30j (30 j fin de mois), livraison, acompte (50/50), 45j" },
+      tva: { type: "string", enum: [...DRAFT_OPTS.tva], description: "non (non assujetti, art. 293 B) ou 20" },
+      exclusivite: { type: "string", enum: [...DRAFT_OPTS.exclusivite], description: "non, cat30, cat90, total" },
+      defraiement: { type: "boolean", description: "Frais et produits pris en charge par la marque" },
+      clauses: {
+        type: "array",
+        description: "Clauses en plus des clauses de l'agence (6 au plus)",
+        items: { type: "object", properties: { titre: { type: "string" }, texte: { type: "string" } }, required: ["titre", "texte"], additionalProperties: false },
+      },
+      note: { type: "string", description: "Ce que Marc doit vérifier avant de générer, avec la source (mail du …)" },
+      auteur: { type: "string", description: "Qui prépare : Alfred, Claude…" },
+    },
+    required: ["createur", "marque"],
+    additionalProperties: false,
+  },
+  write: true,
+  run: async (sb, _c, a) => {
+    const saisie = str(a.createur, 80);
+    // Tout le roster (quelques dizaines de noms) : la comparaison se fait sans accents ni majuscules.
+    const { data, error } = await sb.from("creators").select("name");
+    if (error) return fail(`Roster illisible : ${error.message}`);
+    const noms = ((data as Json[] | null) ?? []).map((c) => String(c.name ?? "")).filter(Boolean);
+    const ctName = choisirCreateur(noms, saisie);
+    if (!ctName) return fail(`Créateur « ${saisie} » introuvable ou ambigu dans le roster : écris son nom tel qu'il est dans l'app.`);
+    const prev = str(a.id, 64) ? lireBrouillons((await appState(sb))[CONTRACT_DRAFTS_KEY]).find((d) => d.id === str(a.id, 64)) : undefined;
+    if (str(a.id) && !prev) return fail(`Brouillon introuvable (${str(a.id, 64)}).`);
+    const id = prev?.id ?? `cd${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
+    const r = normaliserBrouillon(a, { id, ts: Date.now(), ctName, by: str(a.auteur, 40) || "Claude" });
+    if ("erreur" in r) return fail(r.erreur);
+    const { error: e2 } = await sb.rpc("app_state_list", { p_key: CONTRACT_DRAFTS_KEY, p_upsert: [r.brouillon], p_remove: [], p_prepend: !prev });
+    if (e2) return fail(`Brouillon non enregistré : ${e2.message}`);
+    return ok(resumeBrouillon(r.brouillon));
+  },
+};
+
 export const TOOLS: Tool[] = [
   pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif, aValider, ecarterProposition,
   creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, brouillonMail, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief,
   compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, notifications,
-  droitsUsage, noterDroits, postsCreateur,
+  droitsUsage, noterDroits, postsCreateur, preparerContrat,
   ...ADMIN_TOOLS,
 ];
 
