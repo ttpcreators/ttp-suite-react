@@ -13,6 +13,7 @@ import {
   RC_FIELDS,
   RC_GROUPS,
   RC_VARIANTS,
+  rcDefaultConfig,
   representationText,
   representationHTML,
 } from "@/lib/representationContract";
@@ -20,6 +21,7 @@ import { Overlay } from "@/components/mobile/ios-sheet";
 import { fmtDay, todayISO } from "@/lib/dates";
 import { viewableUrl } from "@/lib/openLater";
 import { dbTrash } from "@/lib/trash";
+import { CONTRACT_DRAFTS_KEY } from "../../supabase/functions/_shared/contractDraft.ts";
 import { CasesBar, ContractDocument, FoldSection, HistoryPanel, PanelSection, SettingsPanel, SwitchRow, docBtn, docIconBtn, docPrimaryBtn } from "@/components/contracts/contract-ui";
 
 type Cfg = Record<string, string>;
@@ -58,12 +60,7 @@ function toISO(s: string | null | undefined): string {
   return "";
 }
 
-function defaultConfig(variant: string): Cfg {
-  const base: Cfg = {};
-  for (const f of RC_FIELDS) base[f.key] = f.default;
-  const v = RC_VARIANTS.find((x) => x.key === variant) ?? RC_VARIANTS[0];
-  return { ...base, ...v.defaults };
-}
+const defaultConfig = (variant: string): Cfg => rcDefaultConfig(variant);
 
 function Modal({ title, onClose, children, footer, wide }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode; wide?: boolean }) {
   return (
@@ -81,7 +78,7 @@ function Modal({ title, onClose, children, footer, wide }: { title: string; onCl
 }
 
 /** `initial` : contrat enregistré à recharger (« Modifier » depuis la page d'arrivée Contrats). */
-export function RepresentationContract({ initial = null }: { initial?: ContractHist | null } = {}) {
+export function RepresentationContract({ initial = null, draftId }: { initial?: ContractHist | null; draftId?: string } = {}) {
   const creators = useCreators();
   const { data: cfgData } = useAppState<Configs>((s: AppState) => (s["representationConfigs"] as Configs) ?? {});
   const [localCfg, setLocalCfg] = useState<Configs | null>(null);
@@ -125,6 +122,30 @@ export function RepresentationContract({ initial = null }: { initial?: ContractH
   const cfgLoaded = cfgData != null;
   // Contrat chargé au montage : considéré comme déjà prérempli (le roster et les modèles ne l'écrasent pas).
   const prefilledRef = useRef<{ ct: string; withCfg: boolean } | null>(initial ? { ct: initial.creator ?? EXT, withCfg: true } : null);
+  // Brouillon préparé par Claude pour un créateur du roster : les infos Talent qu'il n'a pas mises
+  // viennent de la fiche du créateur (sans toucher à ce qu'il a réglé).
+  const draftFilledRef = useRef(false);
+  useEffect(() => {
+    if (!draftId || draftFilledRef.current || !initial?.creator) return;
+    let alive = true;
+    supabase.from("creators").select("name,birth,address,siren,email_pro").eq("name", initial.creator).limit(1).then(({ data }) => {
+      const row = (data?.[0] as { name: string; birth: string | null; address: string | null; siren: string | null; email_pro: string | null }) ?? null;
+      if (!alive || !row || draftFilledRef.current) return;
+      draftFilledRef.current = true;
+      setConfig((prev) => ({
+        ...prev,
+        talentNom: prev.talentNom || titleCase(row.name),
+        talentDateNaissance: prev.talentDateNaissance || toISO(row.birth),
+        talentAdresse: prev.talentAdresse || (row.address ?? ""),
+        talentSiret: prev.talentSiret || (row.siren ?? ""),
+        talentEmailPro: prev.talentEmailPro || (row.email_pro ?? ""),
+      }));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [draftId, initial?.creator]);
+
   useEffect(() => {
     if (!ctName) return;
     const done = prefilledRef.current;
@@ -305,6 +326,8 @@ export function RepresentationContract({ initial = null }: { initial?: ContractH
         return;
       }
       setLocalHist(next); // liste FRAÎCHE (pas l'affichage du moment, possiblement périmé)
+      // Contrat enregistré depuis un brouillon de Claude : le brouillon a servi, on le retire.
+      if (draftId) void listAppStateKey(CONTRACT_DRAFTS_KEY, [], [draftId]);
 
       // Auto-échéance : crée/actualise le suivi d'échéance (Marc risque d'oublier).
       // Bonus best-effort : n'empêche JAMAIS l'enregistrement du contrat s'il échoue.

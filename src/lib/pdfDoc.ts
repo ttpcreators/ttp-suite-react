@@ -24,13 +24,18 @@ export function esc(s: unknown): string {
  * rendus dans un iframe `srcdoc` (base `about:srcdoc`), où une URL relative est ambiguë.
  */
 export function appAssetUrl(path: string): string {
-  const base = import.meta.env.BASE_URL || "/";
+  const base = import.meta.env?.BASE_URL || "/";
+  // Hors navigateur (Alfred fabrique un contrat sur le Mac) : les polices et le logo de l'app en ligne.
+  if (typeof window === "undefined") return `${APP_ORIGIN}${base}${path}`;
   try {
     return new URL(`${base}${path}`, window.location.href).href;
   } catch {
     return `${base}${path}`;
   }
 }
+
+/** Adresse de l'app en ligne (documents fabriqués hors navigateur). */
+export const APP_ORIGIN = "https://app.ttpcreators.pro";
 
 /** URL absolue du monogramme TTP (`public/logo.png`), pour l'en-tête des documents. */
 export function ttpLogoUrl(): string {

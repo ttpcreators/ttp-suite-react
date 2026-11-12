@@ -1,6 +1,9 @@
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { boutonsLiens, chunks, clavier, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
+import { boutonsLiens, chunks, clavier, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -179,6 +182,26 @@ describe("Alfred : messages Telegram", () => {
 });
 
 describe("Alfred : documents en PDF", () => {
+  it("fabrique le contrat d'un .contrat.json avec le moteur de l'app, ou dit pourquoi il ne peut pas", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "alfred-contrat-"));
+    try {
+      writeFileSync(join(dir, "02-contrat-Nova-Lea.contrat.json"), JSON.stringify({ createur: "Léa", marque: "Nova", montant: "400 € HT" }));
+      const [m] = await contratDepuisJson(join(dir, "02-contrat-Nova-Lea.contrat.json"), "02-contrat-Nova-Lea.contrat.json");
+      expect(m.name).toBe("02-contrat-Nova-Lea.html");
+      expect(readFileSync(m.file, "utf8")).toContain("Contrat de partenariat commercial");
+      writeFileSync(join(dir, "03-contrat-x.contrat.json"), JSON.stringify({ createur: "Léa" }));
+      const [err] = await contratDepuisJson(join(dir, "03-contrat-x.contrat.json"), "03-contrat-x.contrat.json");
+      expect(err.plain).toBe("Je n'ai pas pu fabriquer le contrat (contrat-x.contrat.json) : Indique la marque.");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("nomme le document d'un contrat d'après son fichier .contrat.json", () => {
+    expect(nomContrat("02-contrat-Nova-Lea.contrat.json")).toBe("02-contrat-Nova-Lea.html");
+    expect(nomAffiche(nomContrat("02-contrat-Nova-Lea.contrat.json"))).toBe("contrat-Nova-Lea.html");
+  });
+
   it("imprime le HTML sans en-tête, vers le PDF demandé", () => {
     const a = pdfArgs("/tmp/x/02-proposition.html", "/tmp/x/02-proposition.pdf");
     expect(a).toContain("--headless");

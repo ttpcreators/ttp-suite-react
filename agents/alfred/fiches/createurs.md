@@ -70,7 +70,7 @@ Au point du lundi matin, après le rapport : un message par créateur actif qui 
 ## L'arrivée d'un nouveau créateur
 
 Quand un créateur rejoint le roster (tu le vois au point du matin, ou Marc te le dit), tu déroules l'accueil, et tu crées une tâche pour chaque étape qui reste à faire :
-1. le contrat de représentation (voir « Rédiger un contrat », modèle `contractHistory`), à faire signer ;
+1. le contrat de représentation (voir « Rédiger un contrat », `type` « representation »), à faire signer ;
 2. la fiche complète dans l'app (réseaux, email, commission, date d'anniversaire, langue), ce qui manque est demandé au créateur dans le message de bienvenue ;
 3. son espace créateur (accès créé par Marc dans l'app, page Accès) et sa boîte mail dans l'app si l'agence en gère une ;
 4. son media kit sur ttpcreators.pro (à créer ou à mettre à jour) ;

@@ -1,4 +1,4 @@
-import { CONTRACT_CSS, contractHead, contractTitle, docHead, docToday, pdfFileTitle } from "@/lib/pdfDoc";
+import { CONTRACT_CSS, contractHead, contractTitle, docHead, docToday, pdfFileTitle } from "./pdfDoc";
 import { sigImgHtml } from "./agencySignature";
 /**
  * Générateur de CONTRAT DE REPRÉSENTATION (agence × créateur) — data-driven.
@@ -388,4 +388,12 @@ ${articles}
 ${signaturesHTML(c.signatures)}
 <div class="ct-legal">${esc(RC_META.footer)}</div>
 </div></body></html>`;
+}
+
+/** Réglages par défaut d'une variante (« exclusif » ou « nonexclusif ») : champs puis valeurs de la variante. */
+export function rcDefaultConfig(variant: string): Record<string, string> {
+  const base: Record<string, string> = {};
+  for (const f of RC_FIELDS) base[f.key] = f.default;
+  const v = RC_VARIANTS.find((x) => x.key === variant) ?? RC_VARIANTS[0];
+  return { ...base, ...v.defaults };
 }

@@ -1,5 +1,5 @@
 /**
- * Brouillons de contrat Marque × Créateur ou UGC préparés par Claude (Alfred) avec l'outil
+ * Brouillons de contrat Marque × Créateur, UGC ou représentation préparés par Claude (Alfred) avec l'outil
  * `preparer_contrat` du connecteur. Rangés dans le blob agence, clé `contractDrafts` : la page
  * Contrats les montre en haut, « Ouvrir » charge le formulaire du générateur, et le brouillon
  * disparaît quand le contrat est généré. Logique pure (sans client Supabase), testée.
@@ -40,18 +40,38 @@ export type DraftForm = {
   defraiement: boolean;
 };
 
+/**
+ * Les réglages du contrat de représentation que Claude peut remplir (clés de `RC_FIELDS` dans
+ * `src/lib/representationContract.ts` : le test vérifie qu'elles y sont toutes).
+ */
+export const REPR_KEYS = [
+  "variante", "contratTest", "titrePersonnalise", "lieuSignature", "dateSignature",
+  "talentNom", "talentDateNaissance", "talentAdresse", "talentSiret", "talentEmailPro", "talentStatutTva",
+  "modeDuree", "dureeMois", "dateDebut", "dateFin", "taciteReconduction", "periodeReconductionMois", "preavisJours",
+  "essaiActif", "essaiJours", "essaiParEmail", "resiliationLibre", "resiliationLibreJours",
+  "modeCommission", "regimeFiscalComm", "commApportee", "commInitiee", "commUniforme", "commAutonome", "seuil",
+  "avantagesNatureInclus", "giftingSeuilStrict", "mandatEncaissement", "reversJours", "contestationVirementJours",
+  "gestionMail", "mailChangementAccesHeures", "mailRevocationHeures", "visibiliteEmail",
+] as const;
+
 export type ContractDraft = {
   id: string;
   ts: number;
   /** Qui l'a préparé (« Alfred », « Claude »). */
   by: string;
-  ctType: "marque" | "ugc";
-  /** Nom du créateur tel qu'il est dans le roster (clé des contrats). */
+  ctType: "marque" | "ugc" | "repr";
+  /** Nom du créateur tel qu'il est dans le roster (clé des contrats), ou tel qu'écrit s'il n'y est pas encore (représentation). */
   ctName: string;
+  /** Représentation : true si le talent n'est pas (encore) dans le roster. */
+  externe?: boolean;
+  /** La marque ; vide pour une représentation. */
   brand: string;
   /** Ce que Marc doit vérifier avant de générer (points en suspens, sources). */
   note: string;
-  form: DraftForm;
+  /** Marque × Créateur et UGC : le formulaire du générateur. */
+  form?: DraftForm;
+  /** Représentation : les réglages qui changent des réglages par défaut de la variante. */
+  config?: Record<string, string>;
 };
 
 type Json = Record<string, unknown>;
@@ -69,11 +89,15 @@ export function choisirCreateur(noms: string[], saisie: string): string | null {
   return proches.length === 1 ? proches[0] : null;
 }
 
+/** L'outil demande un contrat de représentation (type « representation » ou « repr »). */
+export const estRepresentation = (a: Json) => ["representation", "repr"].includes(txt(a.type, 20));
+
 /** Les entrées de l'outil → un brouillon bien formé, ou l'erreur à dire à Claude. */
 export function normaliserBrouillon(
   a: Json,
-  { id, ts, ctName, by = "Claude" }: { id: string; ts: number; ctName: string; by?: string },
+  { id, ts, ctName, by = "Claude", externe = false }: { id: string; ts: number; ctName: string; by?: string; externe?: boolean },
 ): { brouillon: ContractDraft } | { erreur: string } {
+  if (estRepresentation(a)) return brouillonRepresentation(a, { id, ts, ctName, by, externe });
   const type = txt(a.type || "marque", 10) === "ugc" ? "ugc" : "marque";
   const brand = txt(a.marque, 120);
   if (!brand) return { erreur: "Indique la marque." };
@@ -122,19 +146,52 @@ export function normaliserBrouillon(
   return { brouillon: { id, ts, by: txt(by, 40) || "Claude", ctType: type, ctName, brand, note: txt(a.note, 800), form } };
 }
 
+/** Valeur d'un réglage de représentation : texte court, nombre ou booléen (« true » / « false »). */
+const reglage = (v: unknown) => (typeof v === "boolean" || typeof v === "number" ? String(v) : txt(v, 300));
+
+/** Brouillon de contrat de représentation : la variante et les réglages connus du générateur. */
+function brouillonRepresentation(
+  a: Json,
+  { id, ts, ctName, by = "Claude", externe = false }: { id: string; ts: number; ctName: string; by?: string; externe?: boolean },
+): { brouillon: ContractDraft } | { erreur: string } {
+  const r = a.representation && typeof a.representation === "object" && !Array.isArray(a.representation) ? (a.representation as Json) : {};
+  const inconnues = Object.keys(r).filter((k) => !(REPR_KEYS as readonly string[]).includes(k));
+  if (inconnues.length) return { erreur: `Réglage inconnu du contrat de représentation : ${inconnues.join(", ")}. Permis : ${REPR_KEYS.join(", ")}.` };
+  const config: Record<string, string> = {};
+  for (const k of REPR_KEYS) {
+    const v = reglage(r[k]);
+    if (v) config[k] = v;
+  }
+  config.variante = config.variante === "nonexclusif" ? "nonexclusif" : "exclusif";
+  if (!config.talentNom) config.talentNom = ctName;
+  return {
+    brouillon: { id, ts, by: txt(by, 40) || "Claude", ctType: "repr", ctName, ...(externe ? { externe: true } : {}), brand: "", note: txt(a.note, 800), config },
+  };
+}
+
 /** Lecture tolérante du blob (entrées d'un autre format ignorées). */
 export function lireBrouillons(v: unknown): ContractDraft[] {
   if (!Array.isArray(v)) return [];
   return v.filter((d): d is ContractDraft => {
     if (!d || typeof d !== "object") return false;
     const o = d as Json;
-    return typeof o.id === "string" && typeof o.ctName === "string" && typeof o.brand === "string" && !!o.form && typeof o.form === "object";
+    if (typeof o.id !== "string" || typeof o.ctName !== "string" || typeof o.brand !== "string") return false;
+    if (o.ctType === "repr") return !!o.config && typeof o.config === "object";
+    return !!o.form && typeof o.form === "object";
   });
 }
 
 /** Le résumé que l'outil rend à Claude (et que Claude redit à Marc). */
 export function resumeBrouillon(d: ContractDraft): string {
   const f = d.form;
+  if (d.ctType === "repr" || !f) {
+    const c = d.config ?? {};
+    return [
+      `Brouillon de contrat prêt dans l'app : représentation de ${d.ctName} (${c.variante === "nonexclusif" ? "non exclusif" : "exclusif"})${d.externe ? ", pas encore dans le roster" : ""} · id ${d.id}`,
+      `Réglages repris : ${Object.keys(c).filter((k) => k !== "variante").join(", ") || "ceux par défaut"}`,
+      "Marc l'ouvre dans Contrats (en haut, « Brouillons à relire »), vérifie, puis l'enregistre : le brouillon disparaît alors tout seul.",
+    ].join("\n");
+  }
   const droits = f.rights === "organic" ? "organique" : `${f.rights} ${f.rightsDuration}`;
   return [
     `Brouillon de contrat prêt dans l'app : ${d.brand} × ${d.ctName} (${d.ctType === "ugc" ? "UGC" : "Marque × Créateur"}) · id ${d.id}`,
