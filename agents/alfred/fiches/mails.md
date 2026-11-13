@@ -55,7 +55,7 @@ Marc te demande « où j'en suis ? », « j'ai des mails en attente ? », « qu'
    - **Prêt, attend ton oui** : un brouillon déjà fait (`brouillons_claude`, ton `etat/suivi.md`). Tu le remets avec son bouton Envoyer.
    - **On attend leur réponse** : le dernier message est de Marc ; à relancer s'il a plus de 4 jours (voir « Les relances qui vendent »).
    - **Rien à faire** : un merci, une confirmation, une newsletter, une notification : tu ne le cites pas.
-4. **Croiser avec le reste de l'agence** : `taches` (en retard et du jour), `factures` (en retard), `planning` (aujourd'hui et demain), `whatsapp.mjs en-attente`, `dm_instagram`, `pipeline`. Un mail qui parle d'un deal en cours se rattache à ce deal (« Seoni attend ta réponse sur le prix, devis de 1 200 € du 6 novembre »).
+4. **Croiser avec le reste de l'agence** : la to-do réelle (`taches` en retard et du jour, et les doublons ou tâches périmées repérés, voir « La to-do en symbiose »), `factures` (en retard), `planning` (aujourd'hui et demain), `whatsapp.mjs en-attente`, `dm_instagram`, `pipeline`. Un mail qui parle d'un deal en cours se rattache à ce deal (« Seoni attend ta réponse sur le prix, devis de 1 200 € du 6 novembre »).
 5. **Réfléchir avant de répondre** : pour chaque fil, ce qui est en jeu (argent, deadline, relation), ce que Marc doit faire, et ta proposition (le brouillon est-il déjà prêt ? sinon, tu le prépares dans la foulée pour les trois plus importants).
 6. **Ta réponse**, courte et aérée, dans cet ordre :
    - une première ligne qui dit l'essentiel en chiffres (« **4 mails attendent ta réponse**, 2 brouillons prêts, 3 relances à faire ») ;
