@@ -16,7 +16,7 @@ import { readAppState } from "../_shared/appState.ts";
 import { pageAccess, postGraph } from "../_shared/instagram.ts";
 import { cleanDm, sendWhy } from "../_shared/igSend.ts";
 import {
-  INVOICE_STATUSES, TABLES, addressList, blockedSetting, defaultFranchise, euro2, invoiceParty, lockedInvoiceChange, invoiceTotals, mailHtml, nextInvoiceRef, nextQuoteRef, pct, readableRow, writableFields, type InvoiceLine,
+  INVOICE_STATUSES, TABLES, addressList, blockedSetting, defaultFranchise, euro2, invoiceParty, lockedInvoiceChange, invoiceTotals, mailHtml, nextQuoteRef, pct, readableRow, writableFields, type InvoiceLine,
 } from "../_shared/mcpAdmin.ts";
 import { eurRateOf } from "../_shared/reversements.ts";
 import { sendDraft, sendMail, type MailBox } from "./gmail.ts";
@@ -260,7 +260,7 @@ const preparerFacture: AdminTool = {
   name: "preparer_facture",
   title: "Préparer une facture",
   description:
-    "Crée ou met à jour une facture dans Facturation (fondateurs), avec les mêmes règles que l'app : lignes HT, TVA selon le régime réglé dans Compta (franchise par défaut ; avec TVA seulement si `tva` ou `franchise: false` est donné), commission du créateur (fiche roster, sinon dernière facture, sinon 20 %), numéro « AAAA-NNN » automatique, libellé « Marque × Prénom ». Sans `id`/`ref` : nouvelle facture en brouillon. Avec `id` ou `ref` : modifie cette facture (seuls les champs donnés changent ; `lignes` remplace toutes les lignes). Rappelle à l'utilisateur de vérifier puis d'envoyer depuis Facturation (le PDF est fait par l'app). Demande l'accord avant.",
+    "Crée ou met à jour une facture dans Facturation (fondateurs), avec les mêmes règles que l'app : lignes HT, TVA selon le régime réglé dans Compta (franchise par défaut ; avec TVA seulement si `tva` ou `franchise: false` est donné), commission du créateur (fiche roster, sinon dernière facture, sinon 20 %), numéro « AAAA-NNN » donné à l'émission (un brouillon n'en a pas, suite sans trou), libellé « Marque × Prénom ». Sans `id`/`ref` : nouvelle facture en brouillon. Avec `id` ou `ref` : modifie cette facture (seuls les champs donnés changent ; `lignes` remplace toutes les lignes). Rappelle à l'utilisateur de vérifier puis d'envoyer depuis Facturation (le PDF est fait par l'app). Demande l'accord avant.",
   inputSchema: {
     type: "object",
     properties: {
@@ -335,25 +335,27 @@ const preparerFacture: AdminTool = {
       ...(str(a.collab_id) ? { collab_id: str(a.collab_id) } : {}),
     };
     let id = row ? String(row.id) : "";
-    let ref = row ? String(row.ref) : "";
+    let ref = row ? String(row.ref ?? "") : "";
     if (row) {
       const { error } = await sb.from("invoices").update(summary).eq("id", id);
       if (error) return fail(`Facture non modifiée : ${error.message}`);
     } else {
-      // Numéro recalculé juste avant l'insertion (comme l'app : pas de doublon).
-      const { data: refs, error: e } = await sb.from("invoices").select("ref");
-      if (e) return fail(`Numérotation impossible : ${e.message}`);
-      ref = nextInvoiceRef(((refs as Json[] | null) ?? []).map((x) => String(x.ref)));
+      // Pas de numéro envoyé : la base le donne à l'émission (un brouillon n'en a pas).
       const { data: top } = await sb.from("invoices").select("sort_order").order("sort_order", { ascending: false, nullsFirst: false }).limit(1);
-      const { data, error } = await sb.from("invoices").insert({ ...summary, ref, sort_order: (Number(((top as Json[] | null) ?? [])[0]?.sort_order) || 0) + 1 }).select("id").single();
+      const { data, error } = await sb.from("invoices").insert({ ...summary, sort_order: (Number(((top as Json[] | null) ?? [])[0]?.sort_order) || 0) + 1 }).select("id, ref").single();
       if (error) return fail(`Facture non créée : ${error.message}`);
       id = String((data as Json).id);
+      ref = String((data as Json).ref ?? "");
+    }
+    if (row && !ref && summary.status !== "brouillon") {
+      const { data: got } = await sb.from("invoices").select("ref").eq("id", id).maybeSingle();
+      ref = String((got as Json | null)?.ref ?? "");
     }
     const { error: e2 } = await sb.rpc("app_state_merge", { p_key: "invoiceDetails", p_set: { [id]: detail }, p_remove: [] });
     if (creator) await sb.rpc("app_state_merge", { p_key: "creatorCommission", p_set: { [creator]: commission }, p_remove: [] });
     const fmt = (n: number) => euro2(n).replace(/ /g, " ");
     return ok([
-      `✓ Facture ${ref} ${row ? "mise à jour" : "créée"} (${summary.status}) : ${summary.party}`,
+      `✓ Facture ${ref || "brouillon (numéro donné à l'émission)"} ${row ? "mise à jour" : "créée"} (${summary.status}) : ${summary.party}`,
       ...items.map((l) => `- ${l.label} : ${l.qty} × ${fmt(l.unit)}`),
       `HT ${fmt(tot.ht)} · TVA ${detail.franchise ? "franchise" : `${detail.vatRate} %`} ${fmt(tot.tva)} · TTC ${fmt(tot.ttc)}`,
       `Commission ${commission} % : ${fmt(tot.commission)} · reversé au créateur ${fmt(tot.reversal)} · échéance ${detail.dueDate}`,
