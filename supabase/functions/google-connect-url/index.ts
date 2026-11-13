@@ -25,6 +25,7 @@ const SCOPES = [
   "https://www.googleapis.com/auth/gmail.modify", // mettre un mail à la corbeille depuis l'app (jamais de suppression définitive)
   "https://www.googleapis.com/auth/contacts.other.readonly", // photos de profil des correspondants (fonction mail-photos)
   "https://www.googleapis.com/auth/contacts.readonly", // idem, contacts enregistrés
+  "https://www.googleapis.com/auth/drive.file", // sauvegarde mensuelle rangée dans Drive (seulement les fichiers créés par l'app)
 ].join(" ");
 
 function getAllowedOrigins(): string[] {
