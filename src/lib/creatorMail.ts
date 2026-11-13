@@ -36,6 +36,8 @@ export type MailThreadLite = Decision & {
   startedTs?: number;
   /** L'agence a écrit dans l'échange (page « Envoyés ») ; absent avec une ancienne version du serveur. */
   sent?: boolean;
+  /** N'attend pas de réponse (réponse auto, notification, newsletter, transfert) : hors « À traiter ». */
+  kind?: "auto" | "notif" | "newsletter" | "forward";
 };
 
 /** Démarchage du mois en cours : marques contactées par l'agence pour ce créateur, et réponses. */
