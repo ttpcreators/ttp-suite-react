@@ -8,6 +8,7 @@ import { commissionMap, DEFAULT_COMMISSION } from "@/lib/commission";
 import { cents } from "@/lib/invoice";
 import { mandatesFrom, noPayoutIds, type ComptaDetail } from "@/lib/compta";
 import { collabIdMissing } from "@/lib/collabLinks";
+import { openCollab } from "@/lib/collabLinksDb";
 import { owesMoney, overpaid, reversementRows, type Payout, type PayoutsMap, type RevInvoice, type RevRow } from "@/lib/reversements";
 import { titleCase } from "@/lib/utils";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
@@ -54,6 +55,9 @@ export function Reversements() {
     let alive = true;
     // Collab de la facture (mode d'encaissement, page Compta) ; sans la colonne : sans elle.
     const load = async () => {
+      // Détail par facture (marque, numéro, date de paiement) ; colonne manquante : sans lui.
+      const full = await supabase.from("invoices").select("id,amount,status,creator,collab_id,party,ref,date,paid_at");
+      if (!full.error) return full;
       const withLink = await supabase.from("invoices").select("id,amount,status,creator,collab_id");
       return withLink.error && collabIdMissing(withLink.error) ? supabase.from("invoices").select("id,amount,status,creator") : withLink;
     };
@@ -240,8 +244,43 @@ export function Reversements() {
                 </p>
               )}
 
+              {/* D'où vient le montant : chaque facture payée par une marque, sa part, et ce qui
+                  est déjà reversé (les virements couvrent les plus anciennes d'abord). */}
+              {r.lines.length > 0 && (
+                <div className="mt-4">
+                  <div className="mb-1.5 text-[12px] font-medium text-muted-foreground">Factures payées par les marques</div>
+                  <ul className="divide-y divide-border overflow-hidden rounded-xl bg-panel">
+                    {r.lines.map((l) => (
+                      <li key={l.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-[12.5px]">
+                        <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                          {l.brand || "Marque"}
+                          {l.ref && <span className="font-normal text-faint"> · {l.ref}</span>}
+                          {l.paidOn && <span className="font-normal text-faint"> · payée le {fmtDayAny(l.paidOn)}</span>}
+                        </span>
+                        {l.collabId && (
+                          <button type="button" onClick={() => void openCollab(l.collabId as string)} className="shrink-0 text-[12px] font-medium text-primary hover:underline">
+                            Voir la collab
+                          </button>
+                        )}
+                        <span className="shrink-0 tabular-nums text-foreground">{formatEuro(l.du)}</span>
+                        <span
+                          className={
+                            l.state === "reverse"
+                              ? "shrink-0 rounded-full bg-signal/15 px-2 py-0.5 text-[11px] font-semibold text-signaltext"
+                              : "shrink-0 rounded-full bg-amber/15 px-2 py-0.5 text-[11px] font-semibold text-amber"
+                          }
+                        >
+                          {l.state === "reverse" ? "Reversé" : l.state === "partiel" ? `Reste ${formatEuro(cents(l.du - l.covered))}` : "À reverser"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {r.payouts.length > 0 && (
                 <div className="mt-3 space-y-1.5">
+                  <div className="text-[12px] font-medium text-muted-foreground">Virements au créateur</div>
                   {r.payouts.map((p) => (
                     <div key={p.id} className="flex items-center gap-2 rounded-lg bg-panel px-3 py-2 text-xs">
                       <Check className="h-3.5 w-3.5 shrink-0 text-signaltext" />

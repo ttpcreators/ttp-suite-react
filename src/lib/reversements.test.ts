@@ -128,3 +128,20 @@ describe("cohérence croisée agence ↔ créateur", () => {
     expect(rateFor("", { "Léna Test": 15 }, {})).toBe(20);
   });
 });
+
+describe("allocate (détail des factures)", () => {
+  it("couvre les plus anciennes factures d'abord", async () => {
+    const { allocate } = await import("./reversements");
+    const lines = [
+      { id: "b", brand: "Nike", ref: "F2", paidOn: "2026-10-20", collabId: null, du: 500 },
+      { id: "a", brand: "Alo", ref: "F1", paidOn: "2026-09-10", collabId: "c1", du: 300 },
+      { id: "c", brand: "Yade", ref: "F3", paidOn: "2026-11-02", collabId: null, du: 200 },
+    ];
+    const r = allocate(lines, 600);
+    expect(r.map((l) => [l.id, l.state, l.covered])).toEqual([
+      ["c", "a_reverser", 0],
+      ["b", "partiel", 300],
+      ["a", "reverse", 300],
+    ]);
+  });
+});

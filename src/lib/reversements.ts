@@ -13,7 +13,24 @@ import { cents, invoiceTotals, PAYOUT_TOLERANCE_EUR, type InvoiceDetailLike } fr
  * taux par défaut pris à tort.
  */
 
-export type RevInvoice = { id: string; amount: string | null; status: string | null; creator: string | null };
+export type RevInvoice = {
+  id: string; amount: string | null; status: string | null; creator: string | null;
+  /** Pour le détail (facultatifs) : marque, numéro, dates, collab. */
+  party?: string | null; ref?: string | null; date?: string | null; paid_at?: string | null; collab_id?: string | null;
+};
+
+/**
+ * Une facture payée par la marque, dans le détail d'un créateur : sa part, et ce que les
+ * virements déjà faits couvrent (les plus anciennes factures d'abord).
+ */
+export type RevLine = {
+  id: string; brand: string; ref: string; paidOn: string; collabId: string | null;
+  /** Part du créateur sur cette facture. */
+  du: number;
+  /** Déjà couvert par les virements. */
+  covered: number;
+  state: "reverse" | "partiel" | "a_reverser";
+};
 export type Payout = { id: string; date: string; amount: number; note?: string };
 export type PayoutsMap = Record<string, Payout[]>;
 
@@ -34,6 +51,8 @@ export type RevRow = {
   reverse: number;
   reste: number;
   payouts: Payout[];
+  /** Factures payées qui font ce montant, des plus récentes aux plus anciennes. */
+  lines: RevLine[];
 };
 
 const key = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
@@ -57,13 +76,13 @@ export function reversementRows(input: {
   for (const [name, rate] of Object.entries(input.savedRates ?? {})) if (Number.isFinite(Number(rate))) saved.set(key(name), Number(rate));
   const rateOf = (k: string) => roster.get(k)?.rate ?? saved.get(k) ?? input.defaultRate;
 
-  type Acc = { name: string; encaisse: number; ht: number; commission: number; du: number; keys: string[] };
+  type Acc = { name: string; encaisse: number; ht: number; commission: number; du: number; keys: string[]; lines: Omit<RevLine, "covered" | "state">[] };
   const acc = new Map<string, Acc>();
   const bump = (raw: string): Acc => {
     const k = key(raw);
     let a = acc.get(k);
     if (!a) {
-      a = { name: roster.get(k)?.name ?? raw.trim(), encaisse: 0, ht: 0, commission: 0, du: 0, keys: [] };
+      a = { name: roster.get(k)?.name ?? raw.trim(), encaisse: 0, ht: 0, commission: 0, du: 0, keys: [], lines: [] };
       acc.set(k, a);
     }
     return a;
@@ -76,7 +95,12 @@ export function reversementRows(input: {
     a.ht += t.ht;
     a.commission += t.commission;
     // Facture au nom du créateur (mandat) : la TVA facturée est la sienne, elle lui est reversée.
-    a.du += t.reversal + (input.details[iv.id]?.onBehalf ? t.tva : 0);
+    const share = t.reversal + (input.details[iv.id]?.onBehalf ? t.tva : 0);
+    a.du += share;
+    a.lines.push({
+      id: iv.id, brand: (iv.party ?? "").trim(), ref: (iv.ref ?? "").trim(),
+      paidOn: String(iv.paid_at ?? iv.date ?? "").slice(0, 10), collabId: iv.collab_id ?? null, du: cents(share),
+    });
   }
   // Les créateurs qui ont déjà des versements apparaissent aussi (même sans facture payée).
   for (const [k, list] of Object.entries(input.payouts ?? {})) {
@@ -104,6 +128,7 @@ export function reversementRows(input: {
       reverse,
       reste: cents(du - reverse),
       payouts,
+      lines: allocate(a.lines, reverse),
     });
   }
   return out.sort((x, y) => y.reste - x.reste);
@@ -113,3 +138,16 @@ export function reversementRows(input: {
 export const owesMoney = (r: Pick<RevRow, "reste">) => r.reste > PAYOUT_TOLERANCE_EUR;
 /** Versé plus que dû (facture supprimée ou repassée « en attente » après un virement). */
 export const overpaid = (r: Pick<RevRow, "reste">) => r.reste < -PAYOUT_TOLERANCE_EUR;
+
+/** Répartit le total versé sur les factures, les plus anciennes d'abord. */
+export function allocate(lines: Omit<RevLine, "covered" | "state">[], paid: number): RevLine[] {
+  let left = cents(paid);
+  const oldestFirst = [...lines].sort((x, y) => x.paidOn.localeCompare(y.paidOn) || x.id.localeCompare(y.id));
+  const out = oldestFirst.map((l): RevLine => {
+    const covered = cents(Math.max(0, Math.min(l.du, left)));
+    left = cents(left - covered);
+    const state = l.du - covered <= PAYOUT_TOLERANCE_EUR ? "reverse" : covered > 0 ? "partiel" : "a_reverser";
+    return { ...l, covered, state };
+  });
+  return out.reverse();
+}
