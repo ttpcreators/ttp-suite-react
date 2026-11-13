@@ -31,14 +31,14 @@ let running = false;
 const subs = new Set<() => void>();
 const emit = () => subs.forEach((f) => f());
 
-const isTodoNew = (t: Pick<MailThreadLite, "status" | "ts">) =>
-  t.status === "nouvelle" && (!t.ts || Date.now() - t.ts < STALE_NEW);
+const isTodoNew = (t: Pick<MailThreadLite, "status" | "ts" | "kind">) =>
+  t.status === "nouvelle" && !t.kind && (!t.ts || Date.now() - t.ts < STALE_NEW);
 /**
  * « À traiter » côté agence : UNE seule définition, pour la pastille du créateur ET
  * l'onglet « À traiter » de sa boîte (avant : la pastille comptait les nouvelles
  * demandes, l'onglet ne montrait que « À vérifier / valider » → 11 annoncés, 0 visibles).
  */
-export const isMailTodo = (t: Pick<MailThreadLite, "status" | "ts">) =>
+export const isMailTodo = (t: Pick<MailThreadLite, "status" | "ts" | "kind">) =>
   isTodoNew(t) || t.status === "a_verifier" || t.status === "a_valider";
 /** Échanges où le créateur a laissé un message pas encore lu par l'agence. */
 export function creatorUnreadNoteIds(name: string): Set<string> {

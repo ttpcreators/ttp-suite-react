@@ -45,6 +45,7 @@ import { serviceAccountToken, talentAddress } from "../_shared/gmailBox.ts";
 import { replyHtml, replyRaw, replyRecipient, replyReferences, replySubject } from "../_shared/creatorReply.ts";
 import { gfetch, classifyGmail, mapPool, charsetOf, decodeGmailBody, type GfetchOptions } from "../_shared/gfetch.ts";
 import { REACTION_MIME, parseReactionJson } from "../_shared/emailReaction.ts";
+import { KIND_HEADERS, threadKind } from "../_shared/mailKind.ts";
 import {
   addressList, aliasQuery, aliasRefused, brandAddressOf, brandOf, cleanComment, concernedMessages, displayName, header, isVisibleMessage,
   maskAgencyAddresses, normEmail, parseChoice, threadMatches, writesOutside,
@@ -55,7 +56,7 @@ const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
 const LIST_MAX = 40;
 const ATTACHMENT_MAX_BYTES = 20 * 1024 * 1024;
-const META_HEADERS = ["From", "To", "Cc", "Bcc", "Delivered-To", "X-Original-To", "Reply-To", "Subject", "Date"];
+const META_HEADERS = ["From", "To", "Cc", "Bcc", "Delivered-To", "X-Original-To", "Reply-To", "Subject", "Date", ...KIND_HEADERS];
 const NOTE_COLUMNS = "id, body, created_at, agency_read_at, by_role, author_name";
 
 type Sb = ReturnType<typeof getServiceClient>;
@@ -357,6 +358,10 @@ const fromAgency = (m: GMessage) =>
 // « Démarchée par l'agence » tant que la marque n'a pas répondu, puis « En négociation ».
 // Un mail de l'agence adressé au seul créateur n'est pas du démarchage : il arrive dans ses Reçus.
 const outreach = (m: GMessage) => fromAgency(m) && writesOutside(lite(m), AGENCY_DOMAIN);
+/** Nature d'un fil qui n'attend pas de réponse (cf. _shared/mailKind.ts), ou null. */
+const kindOf = (msgs: GMessage[]) =>
+  threadKind(msgs.map((m) => ({ labelIds: m.labelIds, snippet: m.snippet, headers: m.payload?.headers ?? [] })), (k) =>
+    (header(k.headers, "From").match(/[^\s<>"]+@[^\s<>"]+/)?.[0] ?? "").toLowerCase().endsWith("@" + AGENCY_DOMAIN));
 const autoStatus = (msgs: GMessage[]) =>
   msgs[0] && fromAgency(msgs[0])
     ? !outreach(msgs[0]) ? "nouvelle" : msgs.slice(1).some((m) => !fromAgency(m)) ? "negociation" : "demarchee"
@@ -446,6 +451,8 @@ async function listThreads(sb: Sb, token: string, s: Settings, fresh: boolean) {
         startedTs: Number(msgs[0].internalDate ?? 0),
         // « Envoyés » de l'espace créateur : l'agence a écrit dans l'échange (messages qu'il voit).
         sent: shown.some(fromAgency),
+        // Réponse auto, notification, newsletter, transfert : n'attend pas de réponse (hors « À traiter »).
+        ...(kindOf(msgs.filter((m) => !isReaction(m))) ? { kind: kindOf(msgs.filter((m) => !isReaction(m))) } : {}),
       };
     })
     .filter((x): x is NonNullable<typeof x> => x !== null)

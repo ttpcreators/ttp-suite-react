@@ -87,7 +87,13 @@ type InboxThread = {
   ts: number; count: number; direction: "in" | "out"; unread: boolean; box: MailBox;
   /** v2 : adresses du fil (To/Cc/Delivered-To) et fil hors boîte de réception (recherche). */
   to?: string[]; archived?: boolean;
+  /** v3 : n'attend pas de réponse (réponse auto, notification, newsletter, transfert) → hors « À traiter ». */
+  kind?: "auto" | "notif" | "newsletter" | "forward";
 };
+/** Étiquette des fils qui n'attendent pas de réponse. */
+const KIND_LABEL: Record<NonNullable<InboxThread["kind"]>, string> = { auto: "Réponse auto", notif: "Notification", newsletter: "Newsletter", forward: "Transféré" };
+/** « À traiter » : le dernier message vient de l'extérieur ET attend une réponse. */
+const needsReply = (t: InboxThread) => t.direction !== "out" && !t.kind;
 type Folder = "inbox" | "sent";
 type PageTokens = Partial<Record<MailBox, string>>;
 type ListRes = { ok?: boolean; threads?: InboxThread[]; nextPageTokens?: PageTokens; partial?: boolean; failedBoxes?: string[]; error?: string };
@@ -506,6 +512,9 @@ function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhot
                   </span>
                 )}
                 {t.archived && <span className="shrink-0 rounded bg-muted px-1.5 text-[11px] font-medium leading-[18px] text-muted-foreground">Archivé</span>}
+                {folder === "inbox" && t.direction !== "out" && t.kind && (
+                  <span title="N'attend pas de réponse : hors « À traiter »" className="shrink-0 rounded bg-muted px-1.5 text-[11px] font-medium leading-[18px] text-muted-foreground">{KIND_LABEL[t.kind]}</span>
+                )}
                 <span className="min-w-0 truncate text-[12.5px] leading-[18px] text-muted-foreground">
                   {t.direction === "out" && folder === "inbox" && <span className="text-faint">Toi : </span>}
                   {decodeEntities(t.snippet)}
@@ -1243,7 +1252,7 @@ export function Mails() {
   const [unreadExtra, setUnreadExtra] = useState<InboxThread[]>([]);
   const boxThreads = useMemo(() => {
     if (!(unreadOnly && folder === "inbox")) {
-      if (todoOnly && folder === "inbox") return boxAll.filter((t) => t.direction !== "out" || keyOf(t) === openKey);
+      if (todoOnly && folder === "inbox") return boxAll.filter((t) => needsReply(t) || keyOf(t) === openKey);
       return boxAll;
     }
     const here = boxAll.filter((t) => t.unread || unreadOnly.has(keyOf(t)));
@@ -1251,7 +1260,7 @@ export function Mails() {
     const more = unreadExtra.filter((t) => !seen.has(keyOf(t)) && (box === "all" || t.box === box) && (!creatorKey || rowCreators(t).includes(creatorKey)));
     return [...here, ...more];
   }, [boxAll, unreadOnly, todoOnly, openKey, folder, unreadExtra, box, creatorKey, rowCreators]);
-  const todoCount = useMemo(() => boxAll.filter((t) => t.direction !== "out").length, [boxAll]);
+  const todoCount = useMemo(() => boxAll.filter(needsReply).length, [boxAll]);
   const unreadLoaded = useMemo(() => boxAll.filter((t) => t.unread).length, [boxAll]);
   // Même chiffre que la pastille de la boîte (compte du serveur), sauf filtre par créateur.
   const unreadHere = creatorKey ? unreadLoaded : Math.max(unreadLoaded, unreadShown);
