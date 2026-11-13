@@ -376,9 +376,9 @@ export function Documents() {
 
       {rows !== null && rows.length > 1 && (
         <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:gap-3">
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2 sm:flex-[1_0_auto]">
             <PillSearch size="md" value={pageQ} onChange={setPageQ} placeholder="Rechercher…" />
-            <FilterBar value={sort} options={SORT_OPTIONS} onChange={setSort} placeholder="Trier" />
+            <FilterBar value={sort} options={SORT_OPTIONS} onChange={setSort} placeholder="Trier" nowrap />
           </div>
           {/* Mobile : les deux filtres côte à côte, même largeur ; ≥ sm : à droite. */}
           <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">

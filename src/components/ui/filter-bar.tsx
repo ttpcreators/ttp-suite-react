@@ -14,12 +14,17 @@ export function FilterBar({
   onChange,
   className,
   placeholder = "Filtrer",
+  nowrap = false,
 }: {
   options: FilterOpt[];
   value: string;
   onChange: (v: string) => void;
   className?: string;
   placeholder?: string;
+  /** Peu d'options (un tri) : les onglets restent sur une ligne et ne se laissent pas
+   *  écraser ; c'est la barre autour qui passe à la ligne. Sans ça, une option seule
+   *  tombait sous les autres et la pastille prenait deux lignes (on aurait dit un bug). */
+  nowrap?: boolean;
 }) {
   return (
     <>
@@ -38,10 +43,10 @@ export function FilterBar({
       </div>
       {/* Desktop : onglets segmentés */}
       <Tabs
-        className={cn("hidden md:block", className)}
+        className={cn("hidden md:block", nowrap && "md:shrink-0", className)}
         size="md"
         label={placeholder}
-        wrap
+        wrap={!nowrap}
         value={value}
         onValueChange={onChange}
         items={options.map((o) => ({ value: o.value, label: o.label }))}
