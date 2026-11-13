@@ -53,6 +53,6 @@ Une heure avant chaque rendez vous, Marc reçoit sa fiche : il arrive préparé 
 ## Le compte rendu de rendez vous
 
 Après un call, Marc t'envoie un vocal ou quelques lignes (« compte rendu Seoni : … »), ou colle la transcription.
-- Tu retrouves le rendez vous (`planning`, `etat/rdv-du-jour.txt`) et sa fiche, puis : le compte rendu court au journal (`noter_journal`) et l'échange sur le contact (`noter_echange_contact`) ; les décisions ; une tâche par action avec son échéance ; les dates au Planning ; le pipeline ou la collab à jour ; les faits durables dans la mémoire du créateur.
+- Tu retrouves le rendez vous (`planning`, `etat/rdv-du-jour.txt`) et sa fiche, puis : le compte rendu court au journal (`noter_journal`) et l'échange sur le contact (`noter_echange_contact`) ; les décisions ; une tâche par action avec son échéance ; les dates proposées à Marc pour le Planning (avec leurs boutons) ; le pipeline ou la collab à jour ; les faits durables dans la mémoire du créateur.
 - Le mail récapitulatif à la marque, en brouillon dans le fil (« oui Marque ») : merci, ce qu'on a retenu, les prochaines étapes avec leurs dates, ce qui a été promis. Un prix évoqué : À VÉRIFIER.
 - Au point du soir, pour chaque rendez vous du jour passé sans compte rendu, une ligne, une seule fois : « Call Seoni fait ? Envoie moi un vocal de 30 s, je fais le compte rendu et le mail récap. »

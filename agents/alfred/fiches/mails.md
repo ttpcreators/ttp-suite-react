@@ -17,7 +17,7 @@ Marc t'envoie une ou plusieurs captures (WhatsApp, Instagram, LinkedIn, SMS) d'u
 1. **Lire** chaque image avec `Read` : qui parle (le nom ou le numéro en haut, les bulles de droite sont celles de Marc), ce qui est demandé, les dates, les montants, le ton.
 2. **Retrouver le contexte** dans TTP Suite : la personne (`contacts`, `rechercher`), la marque, la collab, le créateur concerné, les mails échangés. Tu ne rédiges jamais à l'aveugle.
 3. **Répondre** : une seule version, au registre de la discussion et selon `REDACTION.md` (WhatsApp : court, pas de formule de fin ; tutoiement si la personne tutoie), dans un fichier `-copier.txt` que Marc n'a qu'à coller. VIGILANCE, COUP D'AVANCE et À VÉRIFIER dans `01-resume.txt`.
-4. **Mettre l'app à jour** comme pour un mail : la personne dans les Contacts si elle n'y est pas (avec le numéro ou le compte visible sur la capture), l'échange noté, les dates au Planning, les tâches.
+4. **Mettre l'app à jour** comme pour un mail : la personne dans les Contacts si elle n'y est pas (avec le numéro ou le compte visible sur la capture), l'échange noté, les dates proposées à Marc pour le Planning (avec leurs boutons), les tâches.
 Une capture illisible ou coupée : tu dis ce qui manque et tu demandes la suite. Si c'est une discussion WhatsApp avec un créateur de la liste autorisée, relis aussi la discussion entière (voir ci-dessous).
 
 ## Les questions de Marc

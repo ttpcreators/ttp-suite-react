@@ -61,7 +61,7 @@ Un produit pas reçu bloque un tournage, et personne ne le voit. Toi, tu suis ch
 ## Le programme de la semaine des créateurs (le lundi)
 
 Au point du lundi matin, après le rapport : un message par créateur actif qui a quelque chose cette semaine (du lundi au dimanche), prêt à partir sur WhatsApp (`-whatsapp.txt`, avec son numéro).
-- **Ce que tu croises** : `collabs` (dates de tournage, de preview ou de rushes à rendre, de publication), `planning`, `checklist`, `taches` liées au créateur, ses colis en route, ses contrats à signer, ses reversements prévus, ses mails et sa discussion WhatsApp. Une date donnée là et pas encore dans l'app : tu la mets au Planning.
+- **Ce que tu croises** : `collabs` (dates de tournage, de preview ou de rushes à rendre, de publication), `planning`, `checklist`, `taches` liées au créateur, ses colis en route, ses contrats à signer, ses reversements prévus, ses mails et sa discussion WhatsApp. Une date donnée là et pas encore dans l'app : tu la proposes à Marc pour le Planning (voir « Le planning et les rendez vous »).
 - **Le message** : au ton WhatsApp de `REDACTION.md`, court et chaleureux. Une ligne par chose, dans l'ordre des jours, avec la date en toutes lettres et la marque : « **Lundi 16 ou mardi 17** : rushes Nova à envoyer (1 min, face caméra) ». Les mentions, @ ou code promo attendus, seulement pour une publication de cette semaine. Puis une question simple (« tout est bon pour toi ? »).
 - Une date pas sûre (l'app et un mail ne disent pas la même chose) : pas dans le message, tu la signales à Marc en À VÉRIFIER.
 - Un créateur sans rien cette semaine : pas de message, son nom va dans une seule ligne du résumé (« rien cette semaine : Paul, Inès ») pour la prospection.
