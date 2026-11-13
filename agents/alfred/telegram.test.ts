@@ -75,20 +75,20 @@ describe("Alfred : messages Telegram", () => {
 
   it("ajoute un bouton Copier sous un texte WhatsApp court", () => {
     const [m] = messagesFor("02-whatsapp.txt", "Pour Léa sur WhatsApp\nCoucou Léa !");
-    expect(m.boutons).toEqual([[{ text: "Copier", copy_text: { text: "Coucou Léa !" } }]]);
+    expect(m.boutons).toEqual([[{ text: "Copier", copy_text: { text: "Coucou Léa !" } }], [{ text: "J'ai envoyé", callback_data: "envoye:Léa" }]]);
     const [long] = messagesFor("03-whatsapp.txt", `Pour Léa sur WhatsApp\n${"a".repeat(300)}`);
-    expect(long.boutons).toBeUndefined();
+    expect(long.boutons).toEqual([[{ text: "J'ai envoyé", callback_data: "envoye:Léa" }]]);
   });
 
   it("ouvre la discussion WhatsApp avec le texte déjà écrit quand le numéro est donné", () => {
     const [m] = messagesFor("02-whatsapp.txt", "Pour Léa sur WhatsApp · 33 6 00 00 00 00\nCoucou Léa & co !");
     expect(m.text.startsWith("Pour Léa sur WhatsApp\n")).toBe(true);
     expect(m.plain).not.toContain("33");
-    expect(m.boutons).toEqual([[{ text: "Ouvrir dans WhatsApp", url: "https://wa.me/33600000000?text=Coucou%20L%C3%A9a%20%26%20co%20!" }, { text: "Copier", copy_text: { text: "Coucou Léa & co !" } }]]);
+    expect(m.boutons).toEqual([[{ text: "Ouvrir dans WhatsApp", url: "https://wa.me/33600000000?text=Coucou%20L%C3%A9a%20%26%20co%20!" }, { text: "Copier", copy_text: { text: "Coucou Léa & co !" } }], [{ text: "J'ai envoyé", callback_data: "envoye:Léa" }]]);
     const [long] = messagesFor("03-whatsapp.txt", `Pour Léa sur WhatsApp · 33600000000\n${"é".repeat(800)}`);
     expect(long.boutons[0][0]).toEqual({ text: "Ouvrir dans WhatsApp", url: "https://wa.me/33600000000" });
     const [groupe] = messagesFor("04-whatsapp.txt", "Pour le groupe Léna × TTP sur WhatsApp\nHello");
-    expect(groupe.boutons).toEqual([[{ text: "Copier", copy_text: { text: "Hello" } }]]);
+    expect(groupe.boutons).toEqual([[{ text: "Copier", copy_text: { text: "Hello" } }], [{ text: "J'ai envoyé", callback_data: "envoye:le groupe Léna × TTP" }]]);
   });
 
   it("coupe un message trop long sur les fins de ligne", () => {

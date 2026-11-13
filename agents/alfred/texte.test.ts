@@ -34,3 +34,16 @@ describe("Alfred : le texte à envoyer ne contient que le message", () => {
     expect(m.plain).toContain("Note pour Marc : elle a refusé l'UGC en octobre");
   });
 });
+
+describe("Alfred : le bouton « J'ai envoyé »", () => {
+  it("suit chaque texte WhatsApp ou à copier, avec le nom de la personne", async () => {
+    // @ts-expect-error : module JavaScript d'Alfred, sans types.
+    const { messageEnvoye } = await import("./telegram.mjs");
+    const [wa] = messagesFor("02-whatsapp.txt", "Pour Léa sur WhatsApp · 33612345678\nHello Léa !");
+    const envoye = wa.boutons.flat().find((b: { text: string }) => b.text === "J'ai envoyé");
+    expect(envoye.callback_data).toBe("envoye:Léa");
+    expect(messageEnvoye(envoye.callback_data)).toBe("J'ai envoyé le message à Léa (bouton « J'ai envoyé »)");
+    const [copie] = messagesFor("03-copier.txt", "Message LinkedIn pour Paul\nBonjour Paul,");
+    expect(copie.boutons.flat().find((b: { text: string }) => b.text === "J'ai envoyé").callback_data).toBe("envoye:Paul");
+  });
+});

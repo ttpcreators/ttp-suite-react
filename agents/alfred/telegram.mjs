@@ -199,6 +199,20 @@ export function boutonWhatsApp(label, texte) {
   return { label: m[1].trim(), bouton: [{ text: "Ouvrir dans WhatsApp", url: avecTexte.length <= 2000 ? avecTexte : `https://wa.me/${numero}` }] };
 }
 
+/**
+ * Bouton « J'ai envoyé » sous un texte à copier (demande de Marc, 13 novembre 2026) : Marc dit
+ * d'un toucher qu'il a envoyé le message, et Alfred met la to-do et son suivi à jour. Pas de
+ * confirmation (rien ne part) : le toucher arrive à Alfred avec le message en contexte.
+ */
+export const ENVOYE = "envoye:";
+export function boutonEnvoye(label) {
+  const qui = String(label).replace(/^(Pour|Mail à|Message (LinkedIn |Instagram )?pour)\s+/i, "").replace(/\s+sur\s+(WhatsApp|Instagram).*$/i, "").trim();
+  return [{ text: "J'ai envoyé", callback_data: court(`${ENVOYE}${qui || "texte"}`) }];
+}
+
+/** Le message qu'Alfred reçoit quand Marc touche « J'ai envoyé ». */
+export const messageEnvoye = (data) => `J'ai envoyé le message à ${String(data).slice(ENVOYE.length) || "ce contact"} (bouton « J'ai envoyé »)`;
+
 /** Messages à envoyer pour un fichier déposé par Alfred. */
 export function messagesFor(name, content) {
   const text = content.replace(/\r\n/g, "\n").trim();
@@ -213,7 +227,8 @@ export function messagesFor(name, content) {
       const ligne = [...bouton, ...boutonCopier(body)];
       const apart = [...notes, ...(trous.length ? [`À compléter avant d'envoyer : ${trous.join(", ")}`] : [])];
       const pourMarc = apart.length ? `\n${apart.map((n) => `_${escapeMd(n)}_`).join("\n")}` : "";
-      return [{ text: `${escapeMd(label)}\n\`\`\`\n${escapeCode(body)}\n\`\`\`${pourMarc}`, md: true, plain: `${label}\n\n${body}${apart.length ? `\n\n${apart.join("\n")}` : ""}`, ...(ligne.length ? { boutons: [ligne] } : {}) }];
+      const boutons = [...(ligne.length ? [ligne] : []), boutonEnvoye(label)];
+      return [{ text: `${escapeMd(label)}\n\`\`\`\n${escapeCode(body)}\n\`\`\`${pourMarc}`, md: true, plain: `${label}\n\n${body}${apart.length ? `\n\n${apart.join("\n")}` : ""}`, boutons }];
     }
   }
   if (name.endsWith("-mail.txt") && text.length < LIMIT - 300) return [messageMail(text)];
@@ -849,6 +864,17 @@ async function main() {
       }
       const t = m.toucher;
       change = true;
+      // « J'ai envoyé » : rien ne part, pas de confirmation ; le bouton devient « Envoyé ✓ ».
+      if (String(t.data).startsWith(ENVOYE)) {
+        await clavierDe(t, t.clavier.map((l) => l.map((b) => (b.callback_data === t.data ? { text: "Envoyé ✓", callback_data: "deja-envoye" } : b))));
+        await repondre(t, "Noté, Alfred met la to-do à jour.");
+        kept.push({ ...m, text: messageEnvoye(t.data) });
+        continue;
+      }
+      if (t.data === "deja-envoye") {
+        await repondre(t, "Déjà noté.");
+        continue;
+      }
       const etape = etapeToucher(t.data, attente);
       if (etape.action === "demander") {
         const id = Math.random().toString(36).slice(2, 10);
