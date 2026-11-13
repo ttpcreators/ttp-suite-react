@@ -32,6 +32,8 @@ import { CreatorPickerField } from "@/components/ui/creator-picker";
 import { useBlockedCreators } from "@/lib/useExclusivites";
 import { CollabField, ObjectCollabLink, linkNewToCollab, useCollabsLite } from "@/components/collab-links";
 import { guessCollabId } from "@/lib/collabLinks";
+import { briefDealKind } from "@/lib/dealKind";
+import { DealBadge } from "@/components/ui/deal-badge";
 import { useIntent } from "@/lib/openIntent";
 
 type Row = {
@@ -182,6 +184,11 @@ export function Briefs() {
     if (!formOpen || collabTouched.current) return;
     setCollabId(brand.trim() && creator ? guessCollabId("briefs", { brand: brand.trim(), creator }, collabsLite) ?? "" : "");
   }, [formOpen, brand, creator, collabsLite]);
+  // Gifting ou rémunéré : budget du brief, sinon cachet de LA collab qui lui correspond.
+  const briefKind = (row: Row) => {
+    const cid = guessCollabId("briefs", row as unknown as Record<string, unknown>, collabsLite);
+    return briefDealKind(row.budget, cid ? collabsLite.find((c) => c.id === cid)?.cachet : null);
+  };
   const pickCollab = (v: string) => {
     collabTouched.current = true;
     setCollabId(v);
@@ -478,7 +485,10 @@ export function Briefs() {
               {activity.keys.has(`brief:${row.id}`) && <NewDot label="Du nouveau d'un créateur" />}
               <span className="truncate">{row.brand}</span>
             </h2>
-            <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{row.creator ? titleCase(row.creator) : "—"}</p>
+            <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+              <span className="truncate">{row.creator ? titleCase(row.creator) : "—"}</span>
+              <DealBadge kind={briefKind(row)} />
+            </p>
           </div>
           <div className="flex shrink-0 items-center gap-1">
             {!compact && (
@@ -688,7 +698,7 @@ export function Briefs() {
         <CollabField value={collabId} onChange={pickCollab} creator={creator} />
         <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" />
         <TextField label="Échéance" type="date" value={due} onChange={setDue} />
-        <TextField label="Budget" value={budget} onChange={setBudget} />
+        <TextField label="Budget" value={budget} onChange={setBudget} placeholder="ex 1 500 € ou Gifting" />
         <TextField label="Objectif" value={objectif} onChange={setObjectif} />
         <SelectField label="Statut" value={status} onChange={setStatus} options={STATUS_OPTS.map((s) => ({ value: s.value, label: s.label }))} />
         <AutoGrowTextField

@@ -46,6 +46,8 @@ import { CollabLinkedPanel, useCollabAutoTasks } from "@/components/collab-links
 import { CollabExcluPanel } from "@/components/exclu-alert";
 import { createStepTask } from "@/lib/collabLinksDb";
 import { autoTaskFor, cachetAmount, cachetCurrency } from "@/lib/collabLinks";
+import { dealKind } from "@/lib/dealKind";
+import { DealBadge } from "@/components/ui/deal-badge";
 import { putInvoicePrefill } from "@/lib/invoicePrefill";
 import { useIsWide } from "@/lib/iosUi";
 
@@ -724,7 +726,12 @@ export function Collabs() {
             {brandMark(row, "sm")}
             <div className="min-w-0">
             <h2 className="truncate text-[14px] font-semibold tracking-tight text-foreground">{row.brand}</h2>
-            {row.title && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{row.title}</p>}
+            {(row.title || dealKind(row.cachet)) && (
+              <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                {row.title && <span className="truncate">{row.title}</span>}
+                <DealBadge kind={dealKind(row.cachet)} />
+              </p>
+            )}
           </div>
           </div>
           <div className="flex shrink-0 items-center gap-1">
@@ -821,8 +828,9 @@ export function Collabs() {
               {brandMark(row, "sm")}
               <div className="min-w-0">
               <h2 className="truncate text-[14px] font-semibold tracking-tight text-foreground">{row.brand}</h2>
-              <p className="truncate text-[11px] text-muted-foreground">
-                {[row.title, row.cachet].filter(Boolean).join(" · ") || "Collab"}
+              <p className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span className="truncate">{[row.title, row.cachet].filter(Boolean).join(" · ") || "Collab"}</span>
+                <DealBadge kind={dealKind(row.cachet)} />
               </p>
             </div>
             </div>
@@ -920,7 +928,7 @@ export function Collabs() {
                         {r.brand}
                         {r.creator ? ` × ${firstName(r.creator)}` : ""}
                       </span>
-                      <span className={cn("block truncate text-[12px]", on ? "text-primary-foreground/80" : "text-muted-foreground")}>{stepDef(r.step).short}</span>
+                      <span className={cn("block truncate text-[12px]", on ? "text-primary-foreground/80" : "text-muted-foreground")}>{dealKind(r.cachet) === "gifting" ? "Gifting · " : ""}{stepDef(r.step).short}</span>
                     </span>
                     {d !== null && <span className={cn("shrink-0 text-[12px] font-semibold tabular-nums", on ? "text-primary-foreground/90" : "text-muted-foreground")}>{d} j</span>}
                   </button>
@@ -985,8 +993,9 @@ export function Collabs() {
               {row.brand}
               {row.creator ? ` × ${titleCase(row.creator)}` : ""}
             </h2>
-            <p className="mt-0.5 text-[14px] text-muted-foreground">
-              {[row.title, row.deliverables].filter(Boolean).join(" · ") || "Collab"} · étape {row.step} sur {STEP_COUNT}
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[14px] text-muted-foreground">
+              <DealBadge kind={dealKind(row.cachet)} />
+              <span>{[row.title, row.deliverables].filter(Boolean).join(" · ") || "Collab"} · étape {row.step} sur {STEP_COUNT}</span>
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
