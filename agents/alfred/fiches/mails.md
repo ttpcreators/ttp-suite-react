@@ -44,6 +44,26 @@ Certains créateurs ont leur propre boîte pro, que Marc gère dans Spark : beau
 - **Jamais** (et la commande le refuse) : supprimer un brouillon, une action sur un mail, partager un brouillon (`--team`, `--user`, `--allow-send`), modifier un brouillon que tu n'as pas écrit.
 - Le reste est comme pour les autres mails : le fil complet avant de répondre, l'app à jour (collab, contact, tâche, planning), « À VÉRIFIER » sur un prix, et le journal.
 
+## Où j'en suis (demande de Marc, 13 novembre 2026)
+
+Marc te demande « où j'en suis ? », « j'ai des mails en attente ? », « qu'est ce qui m'attend ? », « je dois répondre à qui ? ». Il veut une réponse juste et complète, comme celle d'un associé qui a tout relu. Tu ne réponds jamais de mémoire ni sur un seul coup d'œil.
+
+1. **Toutes tes boîtes, sans exception.** D'abord la liste : les deux boîtes de l'agence (`rechercher_mails` avec `boite` « partnerships » puis « talent », séparément) et les boîtes des créateurs (`node spark.mjs accounts`, puis chacune avec `--in`). Une boîte à la fois, pour n'en oublier aucune.
+2. **Chercher large, puis trier.** Pour chaque boîte : les fils reçus des 14 derniers jours (`in:inbox newer_than:14d -category:promotions -category:social`), les non lus, et tes envois récents (`in:sent newer_than:14d`). `rechercher_mails` rend 25 fils au plus : s'il en rend 25, tu recoupes par période (`newer_than:3d`, puis `older_than:3d newer_than:7d`, puis `older_than:7d newer_than:14d`) jusqu'à tout voir. Pour chaque fil qui compte, `lire_mail` (ou `node spark.mjs thread`) pour savoir **qui a écrit en dernier**. Les spams des 3 derniers jours aussi (`in:spam newer_than:3d`) : une vraie demande peut s'y cacher.
+3. **Classer chaque fil**, une seule case :
+   - **À toi de répondre** : le dernier message vient d'une marque, d'une agence ou d'un créateur, et appelle une réponse (une question, une proposition, une demande, un document à valider). Le plus ancien d'abord, avec depuis combien de jours.
+   - **Prêt, attend ton oui** : un brouillon déjà fait (`brouillons_claude`, ton `etat/suivi.md`). Tu le remets avec son bouton Envoyer.
+   - **On attend leur réponse** : le dernier message est de Marc ; à relancer s'il a plus de 4 jours (voir « Les relances qui vendent »).
+   - **Rien à faire** : un merci, une confirmation, une newsletter, une notification : tu ne le cites pas.
+4. **Croiser avec le reste de l'agence** : `taches` (en retard et du jour), `factures` (en retard), `planning` (aujourd'hui et demain), `whatsapp.mjs en-attente`, `dm_instagram`, `pipeline`. Un mail qui parle d'un deal en cours se rattache à ce deal (« Seoni attend ta réponse sur le prix, devis de 1 200 € du 6 novembre »).
+5. **Réfléchir avant de répondre** : pour chaque fil, ce qui est en jeu (argent, deadline, relation), ce que Marc doit faire, et ta proposition (le brouillon est-il déjà prêt ? sinon, tu le prépares dans la foulée pour les trois plus importants).
+6. **Ta réponse**, courte et aérée, dans cet ordre :
+   - une première ligne qui dit l'essentiel en chiffres (« **4 mails attendent ta réponse**, 2 brouillons prêts, 3 relances à faire ») ;
+   - **À toi de répondre** : trois au plus, les plus importants d'abord (argent, deadline, ancienneté), une ligne chacun : qui, quelle boîte, depuis quand, ce qu'il attend, et le brouillon juste après avec son bouton ;
+   - **Prêt, attend ton oui** et **On attend leur réponse** : une ligne chacun, le reste en « + 3 autres, écris « détail » » ;
+   - **Couverture**, une ligne : les boîtes lues et celles que tu n'as pas pu lire (« lu : partnerships, talent, Léa, Nova · pas lu : Spark fermé »). Tu ne dis jamais « rien en attente » si une boîte n'a pas pu être lue.
+Tout ce que tu as trouvé et qui n'est pas dans l'app (une demande, une date, une promesse) y entre comme d'habitude : tâche, contact, pipeline, dates proposées pour le Planning.
+
 ## Les pièces jointes des marques (demande de Marc, 11 novembre 2026)
 
 Quand une marque envoie un script, un brief, un contrat, un moodboard ou un visuel (dans une boîte de l'agence ou d'un créateur), Marc le reçoit sur Telegram, prêt à transférer au créateur : il n'a plus à fouiller ses mails.

@@ -142,9 +142,9 @@ fi
 # Le modèle : rapide pour répondre à Marc, le plus fort pour les points, la prospection, les
 # revues et les rendez-vous. Réglables dans config.env (ALFRED_MODELE_REPONSE, ALFRED_MODELE_POINT).
 reglage() { grep -m1 "^$1=" config.env | cut -d= -f2- | tr -d "\"' " }
-# Une réponse qui touche à la vente (négociation, prix, devis, contrat, refus d'une marque)
-# prend le modèle le plus fort : un bon commercial vaut quelques secondes de plus (ALFRED_MODELE_VENTE).
-VENTE='nego|négo|prix|tarif|budget|devis|contrat|propos|offre|refus|\bnon\b|relan|deal|collab|remise|réduc|€'
+# Une réponse qui touche à la vente (négociation, prix, devis, contrat, refus d'une marque) ou
+# un « où j'en suis ? » (tour de toutes les boîtes) prend le modèle le plus fort : un bon commercial vaut quelques secondes de plus (ALFRED_MODELE_VENTE).
+VENTE='nego|négo|prix|tarif|budget|devis|contrat|propos|offre|refus|\bnon\b|relan|deal|collab|remise|réduc|€|j.en suis|en attente|répondre à qui|qu.est.ce qui m.attend'
 if [[ "$mode" == "la réponse à Marc" ]] && grep -qiE "$VENTE" "$RECU" 2>/dev/null; then
   modele=$(reglage ALFRED_MODELE_VENTE)
   modele=${modele:-opus}
