@@ -11,9 +11,11 @@
 #                         des marques, DM, devis, relances, créateurs, argent à aller chercher).
 #                         Le lundi à 11 h : la prospection de la semaine ; le premier lundi
 #                         du mois à 14 h : la revue des tarifs ; le mercredi à 11 h : le
-#                         recrutement. Et, une heure avant chaque rendez-vous du jour, sa fiche.
+#                         recrutement. Du lundi au vendredi à 11 h, 13 h et 15 h : la VEILLE (les
+#                         mails arrivés depuis, modèle rapide, silencieuse sauf pour l'important).
+#                         Et, une heure avant chaque rendez-vous du jour, sa fiche.
 #                         En mode vacances (etat/vacances.txt) : le point du matin seulement.
-#   alfred.sh --point | --prospection | --tarifs | --recrutement : ce passage tout de suite (test).
+#   alfred.sh --point | --prospection | --tarifs | --recrutement | --veille : ce passage tout de suite (test).
 # Alfred lit TTP Suite par le connecteur « TTP Suite » du compte Claude de Marc, prépare des
 # brouillons, tient la to-do et dépose ses messages pour Marc dans etat/envoi/ ; ce script les
 # envoie ensuite par le bot Telegram d'Alfred, à Marc seul. Un mail ne part que sur un « oui »
@@ -131,6 +133,10 @@ elif [[ "$1" == "--tarifs" ]] || (( auto && ! ${#vacances} && jour == 1 && quant
 # Le mercredi à 11 h : le recrutement de la semaine (scouting).
 elif [[ "$1" == "--recrutement" ]] || (( auto && ! ${#vacances} && jour == 3 && heure == 11 )); then
   mode="le recrutement de la semaine"
+# Du lundi au vendredi à 11 h, 13 h et 15 h, entre les deux points : la veille (demande de Marc
+# le 2026-11-13). Seulement les mails arrivés depuis, et un message à Marc seulement pour l'important.
+elif [[ "$1" == "--veille" ]] || (( auto && ! ${#vacances} && jour <= 5 && (heure == 11 || heure == 13 || heure == 15) )); then
+  mode="la veille"
 elif (( recus > 0 )); then
   mode="la réponse à Marc"
 elif (( ${#rdv_dus} > 0 )); then
@@ -151,6 +157,9 @@ if [[ "$mode" == "la réponse à Marc" ]] && grep -qiE "$VENTE" "$RECU" 2>/dev/n
 elif [[ "$mode" == "la réponse à Marc" ]]; then
   modele=$(reglage ALFRED_MODELE_REPONSE)
   modele=${modele:-sonnet}
+elif [[ "$mode" == "la veille" ]]; then
+  modele=$(reglage ALFRED_MODELE_VEILLE)
+  modele=${modele:-sonnet}
 else
   modele=$(reglage ALFRED_MODELE_POINT)
   modele=${modele:-opus}
@@ -161,6 +170,12 @@ last=$(cat etat/dernier-passage 2>/dev/null)
 [[ "$last" == <-> ]] || last=$((now - 86400))
 # 15 minutes de marge pour ne rater aucun mail arrivé pendant le point précédent.
 after=$((last - 900))
+# La veille reprend là où la dernière veille (ou le dernier point) s'est arrêtée. Elle ne touche
+# pas à etat/dernier-passage : le point suivant revoit tous les mails depuis le point d'avant.
+if [[ "$mode" == "la veille" ]]; then
+  veille=$(cat etat/derniere-veille 2>/dev/null)
+  [[ "$veille" == <-> ]] && (( veille > last )) && after=$((veille - 900))
+fi
 requete="after:$after -in:sent -category:promotions -category:social"
 
 # Délégation en cours où Marc a autorisé l'envoi (ligne « jusqu'au AAAA-MM-JJ · … · envoi autorisé »,
@@ -287,8 +302,9 @@ if [[ "$etat" == (surcharge|autre) ]] && (( ${#envois} == 0 && ! deja )); then
   sleep 20
   lancer
 fi
-# Claude a répondu sans déposer de fichier : sa réponse part quand même, telle quelle.
-if [[ "$etat" == ok ]] && (( ${#envois} == 0 && ! deja )); then
+# Claude a répondu sans déposer de fichier : sa réponse part quand même, telle quelle (sauf pour
+# la veille, silencieuse quand rien d'important n'est arrivé).
+if [[ "$etat" == ok ]] && [[ "$mode" != "la veille" ]] && (( ${#envois} == 0 && ! deja )); then
   node passage.mjs texte "$SORTIE" > "$ENVOI/01-resume.txt" 2>> "$LOG"
   [ -s "$ENVOI/01-resume.txt" ] || rm -f "$ENVOI/01-resume.txt"
   envois=("$ENVOI"/*)
@@ -298,6 +314,7 @@ if [[ "$etat" == ok ]] && (( ${#envois} > 0 || deja )); then
   node passage.mjs reussi 2>> "$LOG"
   if (( ${#envois} == 0 )) || node telegram.mjs dossier "$ENVOI" >> "$LOG" 2>&1; then
     [[ "$mode" == "le point"* ]] && echo "$now" > etat/dernier-passage
+    [[ "$mode" == "la veille" ]] && echo "$now" > etat/derniere-veille
     [[ "$mode" == "la prospection"* ]] && date +%Y-%m-%d > etat/derniere-prospection
     [[ "$mode" == "la revue des tarifs"* ]] && date +%Y-%m-%d > etat/derniere-revue-tarifs
     # Retour de vacances fait : le mode vacances s'arrête.
@@ -305,6 +322,11 @@ if [[ "$etat" == ok ]] && (( ${#envois} > 0 || deja )); then
     for r in "${rdv_dus[@]}"; do print -r -- "$r" >> etat/rdv-prepares.txt; done
     garder etat/rdv-prepares.txt 200
   fi
+elif [[ "$etat" == ok && "$mode" == "la veille" ]]; then
+  # Veille sans rien d'important : rien à dire à Marc, la prochaine reprend d'ici.
+  node passage.mjs reussi 2>> "$LOG"
+  echo "$now" > etat/derniere-veille
+  for r in "${rdv_dus[@]}"; do print -r -- "$r" >> etat/rdv-prepares.txt; done
 elif (( deja )); then
   # Claude s'est arrêté après avoir déjà répondu en partie : on envoie ce qui reste, sans remettre
   # les messages de Marc en file (il aurait sa réponse deux fois), et on lui dit pourquoi.

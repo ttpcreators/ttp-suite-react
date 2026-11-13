@@ -26,6 +26,7 @@ import { upcomingBirthdays } from "../_shared/birthdays.ts";
 import { amountOf, contractList, invoiceTotals, owesMoney, pctOf, reversementRows, type Detail, type Payout } from "../_shared/reversements.ts";
 import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/audience.ts";
 import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCartonnent, type DroitUsage, type PostCourt } from "../_shared/alfredSuivi.ts";
+import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
 import { CONTRACT_DRAFTS_KEY, DRAFT_OPTS, choisirCreateur, estRepresentation, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "../_shared/contractDraft.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
@@ -1274,6 +1275,9 @@ const brouillonMail: Tool = {
     const to = str(a.a, 500);
     if (!/[^@\s]+@[^@\s]+\.[^@\s]+/.test(to)) return fail("Adresse du destinataire invalide.");
     const fil = str(a.fil, 40);
+    // Seulement le message : une note pour Marc ou un « [prénom] » partirait chez le destinataire.
+    const probleme = problemeTexteDestinataire(str(a.message, 20000));
+    if (probleme) return fail(probleme);
     try {
       // Signature des Réglages Mails (même règle qu'envoyer_mail) : le brouillon part tel quel sur « oui ».
       let html: string | undefined;

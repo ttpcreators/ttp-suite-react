@@ -35,6 +35,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { pieceAutorisee } from "./spark.mjs";
 import { oublierRepriseSi, repriseDue } from "./passage.mjs";
+import { separerNotes } from "./texte.mjs";
 
 const LIMIT = 4000; // Telegram plafonne à 4096 caractères par message.
 
@@ -168,7 +169,9 @@ export function messageMail(text) {
   const corps = [];
   const verifier = [];
   for (const l of suite) (/^À VÉRIFIER/i.test(l.trim()) ? verifier : corps).push(l);
-  const mail = corps.join("\n").trim();
+  // Les autres notes pour Marc sortent aussi du bloc du mail.
+  const { texte: mail, notes } = separerNotes(corps.join("\n"));
+  verifier.push(...notes);
   const html = [
     `<b>${escapeHtml(titre)}</b>${meta ? `\n${escapeHtml(meta)}` : ""}`,
     mail ? `<blockquote${mail.split("\n").length > 6 ? " expandable" : ""}>${escapeHtml(mail)}</blockquote>` : null,
@@ -202,11 +205,15 @@ export function messagesFor(name, content) {
   if (!text) return [];
   if (name.endsWith("-whatsapp.txt") || name.endsWith("-copier.txt")) {
     const [premiere, ...rest] = text.split("\n");
-    const body = rest.join("\n").trim();
+    // Seulement le message dans le bloc à copier : les notes pour Marc passent dessous, à part
+    // (demande de Marc, 13 novembre 2026 : rien qui trahisse l'IA chez le destinataire).
+    const { texte: body, notes, trous } = separerNotes(rest.join("\n"));
     const { label, bouton } = boutonWhatsApp(premiere.trim(), body);
     if (body && body.length < LIMIT - 200) {
       const ligne = [...bouton, ...boutonCopier(body)];
-      return [{ text: `${escapeMd(label)}\n\`\`\`\n${escapeCode(body)}\n\`\`\``, md: true, plain: `${label}\n\n${body}`, ...(ligne.length ? { boutons: [ligne] } : {}) }];
+      const apart = [...notes, ...(trous.length ? [`À compléter avant d'envoyer : ${trous.join(", ")}`] : [])];
+      const pourMarc = apart.length ? `\n${apart.map((n) => `_${escapeMd(n)}_`).join("\n")}` : "";
+      return [{ text: `${escapeMd(label)}\n\`\`\`\n${escapeCode(body)}\n\`\`\`${pourMarc}`, md: true, plain: `${label}\n\n${body}${apart.length ? `\n\n${apart.join("\n")}` : ""}`, ...(ligne.length ? { boutons: [ligne] } : {}) }];
     }
   }
   if (name.endsWith("-mail.txt") && text.length < LIMIT - 300) return [messageMail(text)];
