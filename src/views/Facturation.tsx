@@ -1459,23 +1459,25 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
             </EditorSection>
 
             <EditorSection title="Prestations" hint={showPreview ? "Modifie les quantités ou les prix, l'aperçu suit." : "Modifie les quantités ou les prix."}>
-              <div className="rounded-xl bg-panel p-3 sm:p-4">
-                <div className="hidden grid-cols-[minmax(0,1fr)_4rem_6.5rem_7rem_2rem] gap-2 px-1 pb-2 text-[12px] text-muted-foreground sm:grid">
+              {/* Mise en page selon la LARGEUR DU BLOC (pas de l'écran) : à côté de l'aperçu, le
+                  formulaire est étroit et la colonne « Livrable » s'écrasait (titres l'un sur l'autre). */}
+              <div className="@container rounded-xl bg-panel p-3 sm:p-4">
+                <div className="hidden grid-cols-[minmax(0,1fr)_4rem_6.5rem_7rem_2rem] gap-2 px-1 pb-2 text-[12px] text-muted-foreground @min-[34rem]:grid">
                   <span>Livrable</span>
                   <span>Qté</span>
                   <span>Prix HT</span>
                   <span className="text-right">Total</span>
                   <span />
                 </div>
-                <div className="flex flex-col gap-3 sm:gap-2">
+                <div className="flex flex-col gap-3 @min-[34rem]:gap-2">
                   {draft.items.map((it, i) => (
-                    <div key={it.id} className="grid grid-cols-[4rem_minmax(0,1fr)_minmax(0,1fr)_2rem] items-center gap-2 sm:grid-cols-[minmax(0,1fr)_4rem_6.5rem_7rem_2rem]">
+                    <div key={it.id} className="grid grid-cols-[4rem_minmax(0,1fr)_minmax(0,1fr)_2rem] items-center gap-2 @min-[34rem]:grid-cols-[minmax(0,1fr)_4rem_6.5rem_7rem_2rem]">
                       <input
                         value={it.label}
                         onChange={(e) => setItem(it.id, { label: e.target.value })}
                         placeholder="Désignation (ex : Reel Instagram)"
                         aria-label={`Livrable, ligne ${i + 1}`}
-                        className={cn(cellCls, "col-span-4 sm:col-span-1")}
+                        className={cn(cellCls, "col-span-4 @min-[34rem]:col-span-1")}
                       />
                       <input
                         value={draft.raw?.[`${it.id}:qty`] ?? fmtQty(it.qty)}
