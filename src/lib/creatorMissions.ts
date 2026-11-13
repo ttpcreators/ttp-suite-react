@@ -21,7 +21,7 @@ export type MissionCollab = {
   brief_id: string | null;
   created_at?: string | null;
 };
-export type MissionBrief = { id: string; brand: string | null; deliverables: string | null; due: string | null; status: string | null; consignes: string | null; resume?: BriefResume | null };
+export type MissionBrief = { id: string; brand: string | null; deliverables: string | null; due: string | null; status: string | null; consignes: string | null; resume?: BriefResume | null; pdf?: { name?: string; path?: string; docId?: string } | null };
 
 export type Mission = {
   /** « c:<id> » pour une collab, « b:<id> » pour un brief seul. */

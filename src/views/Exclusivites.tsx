@@ -15,6 +15,7 @@ import { cn, titleCase } from "@/lib/utils";
 import { openLater } from "@/lib/openLater";
 import { requestIntent } from "@/lib/openIntent";
 import { pdfText } from "@/lib/pdfText";
+import { fileContractDoc } from "@/lib/exclusiviteDoc";
 import { freshExclusivites, saveExclusivites, todayParis, useExclusivites } from "@/lib/useExclusivites";
 import {
   blockedCreators, daysLeft, excluState, fromAppContract, readContract, type Exclusivite, type ExcluState,
@@ -139,11 +140,16 @@ export function Exclusivites() {
     if (await persist([row])) {
       toast(prev ? "Exclusivité enregistrée ✓" : "Exclusivité suivie ✓");
       setFormOpen(false);
+      // Le contrat PDF rejoint Documents (agence + espace de la créatrice).
+      if (!(await fileContractDoc(row))) toast("Le contrat n'a pas pu être rangé dans Documents, réessaie");
     }
   };
 
   const follow = async (c: AppContract, d: Omit<Exclusivite, "id" | "createdAt">) => {
-    if (await persist([{ ...d, id: uid(), createdAt: Date.now() }])) toast(`Exclusivité ${c.brand} suivie ✓`);
+    if (await persist([{ ...d, id: uid(), createdAt: Date.now() }])) {
+      toast(`Exclusivité ${c.brand} suivie ✓`);
+      if (!(await fileContractDoc(d))) toast("Le contrat n'a pas pu être rangé dans Documents, réessaie");
+    }
   };
 
   // « Lire un contrat » : texte du PDF (navigateur), lecture par règles, fiche pré-remplie à vérifier.
