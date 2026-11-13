@@ -16,6 +16,10 @@
 // Appels :
 //   • pg_cron, le 1er de chaque mois : Authorization: Bearer <CRON_SECRET> ;
 //   • bouton « Envoyer la sauvegarde maintenant » (Paramètres) : JWT d'un FONDATEUR.
+// Google Drive : l'archive est aussi rangée dans « TTP Suite · Sauvegardes » (un .zip par
+// mois), avec les contacts à part dans « Contacts » (contacts-AAAA-MM.csv + contacts-a-jour.csv).
+// Autorisation « drive.file » (l'app ne voit que ses propres fichiers). Sans elle : le mail
+// part quand même et dit quoi faire.
 // Destinataires : les comptes fondateurs (adresse de connexion), ou la liste
 // `backupRecipients` des réglages si elle existe.
 // Envoi : boîte partnerships@ (connexion Google de l'app, droit gmail.send).
@@ -27,6 +31,7 @@ import { zipSync, strToU8 } from "npm:fflate@0.8.2";
 import { CRON_SECRET, corsHeaders, getAccessToken, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { readAppState } from "../_shared/appState.ts";
 import { backupMonth, mediakitPages, mediakitSlug, mimeMessage, pdfLinksIn, safeAppState, toCsv } from "../_shared/backup.ts";
+import { DriveFail, ensureFolder, putFile, type DriveError } from "../_shared/drive.ts";
 
 const SITE = "https://ttpcreators.pro";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
@@ -154,7 +159,40 @@ Deno.serve(async (req: Request) => {
     link = s?.signedUrl ?? "";
   }
 
-  // 5) Mail aux fondateurs
+  // 5) Google Drive (même jeton Google que l'envoi du mail)
+  let token = "";
+  try {
+    token = await getAccessToken(sb);
+  } catch {
+    token = "";
+  }
+  let drive: "ok" | DriveError | "google_non_connecte" = "google_non_connecte";
+  if (token) {
+    try {
+      const root = await ensureFolder(token, "TTP Suite · Sauvegardes");
+      await putFile(token, root, name, "application/zip", zip);
+      const contacts = files["donnees/contacts.csv"];
+      if (contacts) {
+        const dir = await ensureFolder(token, "Contacts", root);
+        await putFile(token, dir, `contacts-${month}.csv`, "text/csv", contacts);
+        await putFile(token, dir, "contacts-a-jour.csv", "text/csv", contacts);
+      }
+      drive = "ok";
+    } catch (e) {
+      drive = e instanceof DriveFail ? e.code : "drive_indisponible";
+      console.error("monthly-backup drive", String(e).slice(0, 300));
+    }
+  }
+  const driveNote =
+    drive === "ok"
+      ? `<p>Rangée aussi dans ton Google Drive : dossier « TTP Suite · Sauvegardes » (les contacts à part dans « Contacts »).</p>`
+      : drive === "api_desactivee"
+        ? `<p style="color:#b00020">Pas rangée dans Google Drive : l'API Google Drive n'est pas activée pour l'app (console Google Cloud).</p>`
+        : drive === "autorisation_manquante"
+          ? `<p style="color:#b00020">Pas rangée dans Google Drive : reconnecte Google dans Paramètres pour autoriser Drive.</p>`
+          : `<p style="color:#b00020">Pas rangée dans Google Drive cette fois (Drive injoignable).</p>`;
+
+  // 6) Mail aux fondateurs
   const listed = Array.isArray(state.backupRecipients) ? (state.backupRecipients as unknown[]).map((x) => String(x).trim().toLowerCase()).filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)) : [];
   const to = listed.length ? listed : await founderEmails(sb);
   if (!to.length) return json({ error: "aucun_destinataire" }, 409);
@@ -166,6 +204,7 @@ Deno.serve(async (req: Request) => {
     `</p>` +
     (missing.length ? `<p style="color:#b00020"><b>Sauvegarde incomplète.</b> Non lu ce jour-là : ${missing.join(", ")}. Relance « Envoyer maintenant » dans Paramètres.</p>` : "") +
     (link ? `<p><a href="${link}">Télécharger la sauvegarde (${mb} Mo)</a> · lien valable 30 jours.</p>` : "") +
+    driveNote +
     `<table style="border-collapse:collapse;font-size:13px">${counts.map((c) => `<tr><td style="padding:2px 12px 2px 0">${c.name}</td><td style="padding:2px 0;color:#555">${c.n}</td></tr>`).join("")}</table>` +
     `<p style="color:#777;font-size:12px">Le coffre des mots de passe n'est jamais inclus. Garde ce mail en lieu sûr.</p>`;
   const raw = mimeMessage({
@@ -175,12 +214,7 @@ Deno.serve(async (req: Request) => {
     html,
     attachments: attach ? [{ filename: name, mimeType: "application/zip", bytes: zip }] : [],
   });
-  let token: string;
-  try {
-    token = await getAccessToken(sb);
-  } catch {
-    return json({ error: "google_non_connecte", stored: !up.error }, 409);
-  }
+  if (!token) return json({ error: "google_non_connecte", stored: !up.error }, 409);
   // Envoi « media » : accepte un mail jusqu'à 35 Mo (le format JSON raw s'arrête à 5 Mo).
   const sent = await fetch("https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media", {
     method: "POST",
@@ -192,5 +226,5 @@ Deno.serve(async (req: Request) => {
     console.error("monthly-backup send", sent.status, (await sent.text()).slice(0, 300));
     return json({ error: "envoi_echoue", stored: !up.error }, 502);
   }
-  return json({ ok: true, month, files: Object.keys(files).length, bytes: zip.length, attached: attach, recipients: to.length, missing });
+  return json({ ok: true, month, files: Object.keys(files).length, bytes: zip.length, attached: attach, recipients: to.length, missing, drive });
 });
