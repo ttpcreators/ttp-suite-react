@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { decider, heureReprise, lireReprise, lireSortie, messageAttente, messageEchec, oublierRepriseSi, quand, repriseDue } from "./passage.mjs";
+import { decider, heureReprise, lireReprise, lireSortie, messageAttente, messageEchec, oublierRepriseSi, VEILLE, quand, repriseDue } from "./passage.mjs";
 
 // Mercredi 12 novembre 2026, 12 h 56 (heure locale).
 const MAINTENANT = new Date(2026, 10, 12, 12, 56).getTime();
@@ -125,6 +125,16 @@ describe("Alfred : les messages à Marc", () => {
     expect(messageAttente({ reprise, origine: "marc", maintenant: a(15, 2) })).toBeNull();
     expect(messageAttente({ reprise: { ...reprise, type: "essai" }, origine: "marc", maintenant: MAINTENANT })).toBeNull();
     expect(messageAttente({ reprise: null, maintenant: MAINTENANT })).toBeNull();
+  });
+});
+
+describe("Alfred : la veille de 11 h, 13 h et 15 h", () => {
+  it("ne dérange pas Marc quand elle ne peut pas se faire, sauf si Claude est déconnecté", () => {
+    const reprise = { type: "limite", quand: MAINTENANT + 3_600_000, fin: MAINTENANT + 3_600_000 };
+    expect(messageAttente({ reprise, mode: VEILLE, origine: "auto", maintenant: MAINTENANT })).toBe("");
+    expect(messageEchec({ type: "limite", mode: VEILLE, maintenant: MAINTENANT })).toBe("");
+    expect(messageEchec({ type: "surcharge", mode: VEILLE })).toBe("");
+    expect(messageEchec({ type: "connexion", mode: VEILLE })).toContain("/login");
   });
 });
 

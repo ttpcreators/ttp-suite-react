@@ -26,6 +26,8 @@ import { upcomingBirthdays } from "../_shared/birthdays.ts";
 import { amountOf, contractList, invoiceTotals, owesMoney, pctOf, reversementRows, type Detail, type Payout } from "../_shared/reversements.ts";
 import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/audience.ts";
 import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCartonnent, type DroitUsage, type PostCourt } from "../_shared/alfredSuivi.ts";
+import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
+import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
 import { CONTRACT_DRAFTS_KEY, DRAFT_OPTS, choisirCreateur, estRepresentation, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "../_shared/contractDraft.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
@@ -979,6 +981,7 @@ const creerTache: Tool = {
       createur: { type: "string", description: "Créateur concerné (facultatif)" },
       createurs: { type: "array", items: { type: "string" }, maxItems: 20, description: "Plusieurs créateurs concernés (facultatif) : tâche partagée, visible dans l'espace de chacun" },
       priorite: { type: "string", enum: ["haute", "moyenne", "basse"] },
+      forcer: { type: "boolean", description: "true seulement si une tâche proche existe mais que c'est vraiment une autre tâche" },
     },
     required: ["titre"],
     additionalProperties: false,
@@ -995,6 +998,16 @@ const creerTache: Tool = {
       const found = await rosterName(sb, n);
       if ("error" in found) return fail(found.error);
       if (!names.some((x) => x.toLowerCase() === found.name.toLowerCase())) names.push(found.name);
+    }
+    // Pas de doublon : une tâche ouverte qui dit la même chose pour le même créateur (y compris
+    // celles des automatismes, comme les tâches tirées des mails) se met à jour, elle ne se recrée pas.
+    if (a.forcer !== true) {
+      const lire = (cols: string) => sb.from("todos").select(cols).eq("done", false).limit(500);
+      let lu = await lire("id, text, creator, creators, due");
+      if (lu.error && /creators/i.test(lu.error.message)) lu = await lire("id, text, creator, due");
+      const double = tacheEnDouble(titre, names, ((lu.data as unknown as TacheOuverte[] | null) ?? []));
+      if (double)
+        return fail(`Une tâche ouverte dit déjà la même chose : « ${double.text} » (id ${double.id}${double.due && double.due !== "—" ? `, échéance ${double.due}` : ""}). Mets-la à jour (modifier_element, table todos : échéance, détails, statut) ou coche-la (cocher_tache) au lieu d'en créer une autre ; forcer = true seulement si c'est vraiment une autre tâche.`);
     }
     const { data: top } = await sb.from("todos").select("sort_order").order("sort_order", { ascending: true }).limit(1);
     const order = ((top as { sort_order: number }[] | null)?.[0]?.sort_order ?? 0) - 1;
@@ -1274,6 +1287,9 @@ const brouillonMail: Tool = {
     const to = str(a.a, 500);
     if (!/[^@\s]+@[^@\s]+\.[^@\s]+/.test(to)) return fail("Adresse du destinataire invalide.");
     const fil = str(a.fil, 40);
+    // Seulement le message : une note pour Marc ou un « [prénom] » partirait chez le destinataire.
+    const probleme = problemeTexteDestinataire(str(a.message, 20000));
+    if (probleme) return fail(probleme);
     try {
       // Signature des Réglages Mails (même règle qu'envoyer_mail) : le brouillon part tel quel sur « oui ».
       let html: string | undefined;

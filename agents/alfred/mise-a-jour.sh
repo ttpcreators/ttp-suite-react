@@ -28,10 +28,10 @@ if ! curl -fsSL --max-time 300 "https://codeload.github.com/$REPO/tar.gz/$sha" |
 fi
 neuf="$tmp/alfred"
 # Contrôle avant d'installer : les fichiers attendus sont là et lisibles.
-for f in installer.sh alfred.sh ecoute.sh telegram.mjs spark.mjs passage.mjs contrats.mjs CLAUDE.md mise-a-jour.sh fiches/points.md; do
+for f in installer.sh alfred.sh ecoute.sh telegram.mjs spark.mjs passage.mjs contrats.mjs texte.mjs CLAUDE.md mise-a-jour.sh fiches/points.md; do
   [ -s "$neuf/$f" ] || { note "version $sha incomplète ($f manquant), pas installée"; exit 0; }
 done
-zsh -n "$neuf/alfred.sh" && zsh -n "$neuf/installer.sh" && node --check "$neuf/telegram.mjs" && node --check "$neuf/spark.mjs" && node --check "$neuf/passage.mjs" && node --check "$neuf/contrats.mjs" && { [ ! -f "$neuf/whatsapp.mjs" ] || node --check "$neuf/whatsapp.mjs"; } || { note "version $sha illisible, pas installée"; exit 0; }
+zsh -n "$neuf/alfred.sh" && zsh -n "$neuf/installer.sh" && node --check "$neuf/telegram.mjs" && node --check "$neuf/spark.mjs" && node --check "$neuf/passage.mjs" && node --check "$neuf/contrats.mjs" && node --check "$neuf/texte.mjs" && { [ ! -f "$neuf/whatsapp.mjs" ] || node --check "$neuf/whatsapp.mjs"; } || { note "version $sha illisible, pas installée"; exit 0; }
 
 # On attend qu'Alfred ait fini son passage en cours, point ou réponse rapide (30 minutes au plus).
 for i in {1..180}; do

@@ -26,6 +26,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
+import { separerNotes } from "./texte.mjs";
 
 const DOMAINE = "@ttpcreators.pro";
 
@@ -234,6 +235,12 @@ async function main() {
         const b = await verifierMail(id, liste);
         if (b !== boite) throw new Error(`ce mail est dans ${b} : le brouillon doit partir de cette boîte (--account ${b})`);
       }
+    }
+    // Seulement le message : une note pour Marc ou un « [prénom] » partirait chez la marque.
+    for (const corps of opts["--body"] ?? []) {
+      const { notes, trous } = separerNotes(corps);
+      if (notes.length || trous.length)
+        throw new Error(`le texte contient ${notes.length ? `une note pour Marc (« ${notes[0].slice(0, 60)} »)` : `des trous à compléter (${trous.slice(0, 3).join(", ")})`} : mets seulement le message dans --body, et tes remarques dans ton message à Marc`);
     }
     for (const id of opts["--attach-id"] ?? []) await pieceAutorisee(id, liste);
     for (const f of opts["--attach"] ?? []) {

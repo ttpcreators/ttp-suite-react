@@ -23,6 +23,8 @@ const PAUSE_LIMITE = 15 * MINUTE;
 /** Connexion perdue : on réessaie toutes les heures, sans redire à Marc ce qu'il sait déjà. */
 const PAUSE_CONNEXION = 60 * MINUTE;
 const REPONSE = "la réponse à Marc";
+/** La veille de 11 h, 13 h et 15 h : silencieuse si elle ne peut pas se faire. */
+export const VEILLE = "la veille";
 const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 
 const court = (s, max = 160) => {
@@ -152,6 +154,8 @@ export function messageEchec({ type, raison = "", mode = REPONSE, garder = false
       type === "limite" ? ` : limite de ton abonnement Claude${fin ? `, jusqu'à ${fin}` : ""}` : type === "tours" ? " : trop d'étapes" : type === "connexion" ? " : plus connecté à Claude" : "";
     return `Je me suis arrêté avant la fin de ma réponse${pourquoi}. Redemande-moi ce qui manque.`;
   }
+  // La veille ratée ne dérange pas Marc (la suivante ou le point la rattrape), sauf si Claude est déconnecté.
+  if (mode === VEILLE && type !== "connexion") return "";
   const action = reponse ? "te répondre" : `faire ${mode}`;
   if (type === "limite") {
     const suite = garde ? ` Ton message est gardé : je te réponds tout seul ${fin ? "à ce moment-là" : "dès que ça repart"}.` : ` ${relance(mode, fin)}`;
@@ -180,7 +184,7 @@ export function messageAttente({ reprise, mode = REPONSE, origine = "marc", main
     if (origine !== "marc") return "";
     return `Toujours à la limite de ton abonnement Claude${fin ? `, jusqu'à ${fin}` : ""} : ton message est gardé, je te réponds tout seul ${fin ? "à ce moment-là" : "dès que ça repart"}.`;
   }
-  if (mode === "la préparation des rendez-vous") return "";
+  if (mode === "la préparation des rendez-vous" || mode === VEILLE) return "";
   return `Pas de ${mode.replace(/^(le |la )/, "")} pour l'instant : limite de ton abonnement Claude${fin ? `, jusqu'à ${fin}` : ""}. ${relance(mode, fin)}`;
 }
 
