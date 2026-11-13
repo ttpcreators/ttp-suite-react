@@ -61,6 +61,7 @@ import { CS_BAR_TABS, CS_FAVORABLE, csFavoritesShown, isMainTab, normalizeCsTab,
 import { discussionStage, normalizeMissionTab, sortDiscussions, type CreatorDiscussion, type MissionTab } from "@/lib/collabTabs";
 import { StaticFolderTabs } from "@/components/ui/folder-tabs";
 import { hasResume, parseResume, type BriefResume } from "@/lib/briefResume";
+import { briefPdfDoc, type BriefPdfLink } from "@/lib/briefPdf";
 import { brandInitial, briefKey, buildMissions, CREATOR_STAGES, creatorStage, missionAction, missionState, type Mission, type MissionCollab } from "@/lib/creatorMissions";
 import { BriefBlocks, MissionCard, MissionStages } from "@/components/creator-missions";
 import { SkeletonCard, SkeletonFigure, SkeletonList } from "@/components/creator-skeleton";
@@ -122,7 +123,7 @@ type Todo = { id: string; text: string; descr: string | null; due: string | null
 let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
 type Idea = { id: string; text: string; status: string | null; sort_order?: number; subtasks?: Subtask[] | null };
-type Brief = { id: string; brand: string | null; deliverables: string | null; due: string | null; status: string | null; consignes: string | null; resume?: BriefResume | null };
+type Brief = { id: string; brand: string | null; deliverables: string | null; due: string | null; status: string | null; consignes: string | null; resume?: BriefResume | null; pdf?: BriefPdfLink };
 type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string | null; type: string | null; who?: string | null; description?: string | null };
 type Doc = { id: string; name: string; type: string | null; size: string | null; path: string | null; created_at: string | null };
 type Invoice = { ref: string | null; party: string | null; amount: string | null; date: string | null; status: string | null };
@@ -821,8 +822,8 @@ export function CreatorSpace({
     supabase.from("ideas").select("id,text,status,sort_order,subtasks").eq("creator", name).order("sort_order").then(({ data, error }) => apply(error) && setIdeas((data as Idea[]) ?? []));
     // Colonne `resume` absente (SQL pas encore lancé) : on recharge sans elle.
     const briefsQ = (cols: string) => supabase.from("briefs").select(cols).eq("creator", name).order("created_at", { ascending: false });
-    void briefsQ("id,brand,deliverables,due,status,consignes,resume")
-      .then((r) => (r.error && /resume/i.test(r.error.message) ? briefsQ("id,brand,deliverables,due,status,consignes") : r))
+    void briefsQ("id,brand,deliverables,due,status,consignes,resume,pdf")
+      .then((r) => (r.error && /resume/i.test(r.error.message) ? briefsQ("id,brand,deliverables,due,status,consignes,pdf") : r))
       .then(({ data, error }) => {
         if (alive) markReady("briefs");
         if (apply(error)) setBriefs(((data as unknown as Brief[]) ?? []).map((x) => ({ ...x, resume: parseResume(x.resume) })));
@@ -3417,7 +3418,7 @@ export function CreatorSpace({
                     )}
                     {/* Le brief complet de la marque (PDF déposé par l'agence) */}
                     {(() => {
-                      const pdf = docs.find((d) => d.type === "brief" && d.path && d.name.toLowerCase().includes(m.brand.trim().toLowerCase()));
+                      const pdf = briefPdfDoc(b, briefs, docs) as Doc | null;
                       return pdf ? (
                         <button
                           type="button"
