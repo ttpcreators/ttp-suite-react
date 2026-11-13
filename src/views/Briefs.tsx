@@ -30,7 +30,9 @@ import { notifyCreator, notifyCreatorsChange } from "@/lib/push";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
 import { useBlockedCreators } from "@/lib/useExclusivites";
-import { CollabField, ObjectCollabLink, linkNewToCollab } from "@/components/collab-links";
+import { CollabField, ObjectCollabLink, linkNewToCollab, useCollabsLite } from "@/components/collab-links";
+import { guessCollabId } from "@/lib/collabLinks";
+import { useIntent } from "@/lib/openIntent";
 
 type Row = {
   id: string;
@@ -172,6 +174,34 @@ export function Briefs() {
   }, [live]);
 
   const [collabId, setCollabId] = useState(""); // formulaire : collab à relier (après le SQL collab_id)
+  // Collab choisie à la main (ou venue de « Créer le brief ») : on ne la devine plus.
+  const collabTouched = useRef(false);
+  const collabsLite = useCollabsLite();
+  // Marque + créateur saisis : la collab est choisie toute seule quand UNE SEULE correspond.
+  useEffect(() => {
+    if (!formOpen || collabTouched.current) return;
+    setCollabId(brand.trim() && creator ? guessCollabId("briefs", { brand: brand.trim(), creator }, collabsLite) ?? "" : "");
+  }, [formOpen, brand, creator, collabsLite]);
+  const pickCollab = (v: string) => {
+    collabTouched.current = true;
+    setCollabId(v);
+    const c = v ? collabsLite.find((x) => x.id === v) : undefined;
+    if (c && !brand.trim()) setBrand(c.brand);
+  };
+  // « Créer le brief » depuis la fiche d'une collab : formulaire prérempli et relié.
+  useIntent("brief:new", (data) => {
+    let d: { collabId?: string; brand?: string; creator?: string } = {};
+    try {
+      d = data ? JSON.parse(data) : {};
+    } catch {
+      d = {};
+    }
+    collabTouched.current = !!d.collabId;
+    setBrand(d.brand ?? "");
+    setCreator(d.creator ?? "");
+    setCollabId(d.collabId ?? "");
+    setFormOpen(true);
+  });
   const submit = async () => {
     if (!brand.trim()) {
       toast("Renseigne la marque");
@@ -198,6 +228,7 @@ export function Briefs() {
     setRows([created as unknown as Row, ...(rows ?? [])]);
     void linkNewToCollab("briefs", (created as { id: string }).id, collabId);
     setCollabId("");
+    collabTouched.current = false;
     if (creator) notifyCreator("brief", creator, brand.trim()); // push au créateur (s'il a activé les notifs)
     toast("Brief ajouté ✓");
     setFormOpen(false);
@@ -651,10 +682,10 @@ export function Briefs() {
         );
       })()}
 
-      <InlineForm open={formOpen} title="Nouveau brief" onClose={() => setFormOpen(false)} onSubmit={submit}>
+      <InlineForm open={formOpen} title="Nouveau brief" onClose={() => { setFormOpen(false); collabTouched.current = false; }} onSubmit={submit}>
         <TextField label="Marque" value={brand} onChange={setBrand} />
         <CreatorPickerField label="Créateur" value={creator} onChange={setCreator} creators={creators} blocked={blockedNew} />
-        <CollabField value={collabId} onChange={setCollabId} creator={creator} />
+        <CollabField value={collabId} onChange={pickCollab} creator={creator} />
         <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" />
         <TextField label="Échéance" type="date" value={due} onChange={setDue} />
         <TextField label="Budget" value={budget} onChange={setBudget} />

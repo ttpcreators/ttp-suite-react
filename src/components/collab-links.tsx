@@ -11,6 +11,7 @@ import { useRestrictedViews } from "@/lib/restrictedViews";
 import { formatEuro, parseAmount, saveAppStateKey, useAppState } from "@/lib/appState";
 import { collabChoices, collabLabel, linkGroups, type CollabLite, type LinkData, type LinkTable } from "@/lib/collabLinks";
 import { collabIdReady, getCollabLink, loadCollabsLite, loadLinkData, openCollab, setCollabLink } from "@/lib/collabLinksDb";
+import { requestIntent } from "@/lib/openIntent";
 
 /*
  * « La collab au centre » côté interface :
@@ -199,6 +200,14 @@ export function CollabLinkedPanel({ collab, onCreateInvoice, onPrepareRecap }: {
   const showInvoice = money && !!onCreateInvoice && collab.step >= 7;
   // Bilan pour la marque : proposé à l'étape 10, bouton principal à l'étape 11 « Bilan ».
   const showRecap = !!onPrepareRecap && collab.step >= 10;
+  // Pas encore de brief relié (ni suggéré) : « Créer le brief » ouvre le formulaire des Briefs
+  // déjà rempli (marque, créateur) et relié à cette collab.
+  const briefs = groups?.briefs;
+  const showBrief = ready && !!groups && !!briefs && briefs.linked.length + briefs.suggested.length === 0;
+  const createBrief = () => {
+    requestIntent("brief:new", JSON.stringify({ collabId: collab.id, brand: collab.brand, creator: collab.creator ?? "" }));
+    window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "briefs" }));
+  };
   return (
     <div className="rounded-[20px] bg-panel p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
@@ -221,6 +230,16 @@ export function CollabLinkedPanel({ collab, onCreateInvoice, onPrepareRecap }: {
             )}
           >
             <Sparkles className="h-4 w-4" /> Préparer le bilan
+          </button>
+        )}
+        {showBrief && (
+          <button
+            type="button"
+            onClick={createBrief}
+            title="Ouvre un nouveau brief déjà rempli et relié à cette collab"
+            className="flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-field px-3.5 text-[13px] font-semibold text-foreground transition-colors hover:bg-rowhover"
+          >
+            <Plus className="h-4 w-4" /> Créer le brief
           </button>
         )}
         {showInvoice && (
