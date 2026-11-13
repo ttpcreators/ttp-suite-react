@@ -19,6 +19,8 @@
 //   node whatsapp.mjs en-attente [--heures 12] [--jours 14]
 //                                                 les discussions où l'autre attend une réponse de Marc
 //   node whatsapp.mjs numero <id ou nom>          son numéro, pour le bouton « Ouvrir dans WhatsApp »
+//   node whatsapp.mjs piece <n°>                   ouvre une pièce jointe (« [document … · pièce 123] ») :
+//                                                 copiée dans etat/pieces/ pour être lue (PDF, photo, Word en texte)
 // ============================================================================
 
 import { execFileSync } from "node:child_process";
@@ -127,10 +129,27 @@ export function contenu(type, texte, titre, vocal = null) {
   return null;
 }
 
+/** Photo, vidéo, document ou GIF : une pièce jointe qu'Alfred peut ouvrir avec « piece <n°> ». */
+const PIECES = new Set([1, 2, 8, 11]);
+
+/** Le repère d'une pièce jointe dans une ligne : « · pièce 123 », ou pourquoi elle ne s'ouvre pas. */
+export function reperePiece(m) {
+  if (!PIECES.has(Number(m.type)) || !m.id) return "";
+  return m.fichier ? ` · pièce ${m.id}` : " · pas téléchargée sur ce Mac";
+}
+
 /** Une ligne lisible : « 2026-11-10 15:48 · Léna : texte ». */
 export function ligne(m, auteur) {
   const c = contenu(m.type, m.texte, m.titre, m.vocal ?? null);
-  return c === null ? null : `${heure(appleVersDate(m.date))} · ${auteur} : ${c.replace(/\s*\n\s*/g, " / ")}`;
+  if (c === null) return null;
+  const avecPiece = c.replace(/^\[([^\]]*)\]/, (_t, dedans) => `[${dedans}${reperePiece(m)}]`);
+  return `${heure(appleVersDate(m.date))} · ${auteur} : ${avecPiece.replace(/\s*\n\s*/g, " / ")}`;
+}
+
+/** Nom du fichier copié pour Alfred : « wa-123-brief.pdf » (rien qui sorte du dossier). */
+export function nomPiece(id, chemin) {
+  const base = String(chemin ?? "").split("/").pop().replace(/[^0-9A-Za-zÀ-ÿ._-]+/g, "_").replace(/^\.+/, "").slice(-80);
+  return `wa-${id}-${base || "piece"}`;
 }
 
 /** « 5 h », « 1 j 4 h », « 6 j » : depuis combien de temps quelqu'un attend. */
@@ -245,7 +264,7 @@ function vocaux(rows, compteur) {
 
 function messages(q, jid, depuis, max) {
   const apres = depuis ? `and m.ZMESSAGEDATE >= ${dateVersApple(depuis)}` : "";
-  const rows = q(`select m.ZMESSAGEDATE as date, m.ZISFROMME as moi, m.ZMESSAGETYPE as type, m.ZTEXT as texte, i.ZTITLE as titre,
+  const rows = q(`select m.Z_PK as id, m.ZMESSAGEDATE as date, m.ZISFROMME as moi, m.ZMESSAGETYPE as type, m.ZTEXT as texte, i.ZTITLE as titre,
       i.ZMEDIALOCALPATH as fichier, i.ZMOVIEDURATION as duree,
       coalesce(g.ZCONTACTNAME, g.ZFIRSTNAME) as membre
     from ZWAMESSAGE m join ZWACHATSESSION s on s.Z_PK = m.ZCHATSESSION
@@ -334,7 +353,33 @@ function main() {
     console.log(blocs.length ? blocs.join("\n\n") : `Rien de nouveau sur WhatsApp depuis le ${heure(depuis)}.`);
     return;
   }
-  throw new Error("Commandes : chercher <mot>, liste, lire <créateur> [--depuis AAAA-MM-JJ] [--max N] [--vocaux N], nouveaux --depuis \"AAAA-MM-JJ HH:MM\", en-attente [--heures N], numero <créateur>.");
+  if (mode === "piece") {
+    const id = Number(args[0]);
+    if (!Number.isInteger(id) || id <= 0) throw new Error("Usage : node whatsapp.mjs piece <n° de la pièce> (le numéro « pièce 123 » d'une ligne)");
+    const [p] = avecBase((q) => q(`select s.ZCONTACTJID as jid, m.ZMESSAGETYPE as type, i.ZMEDIALOCALPATH as fichier, i.ZTITLE as titre
+      from ZWAMESSAGE m join ZWACHATSESSION s on s.Z_PK = m.ZCHATSESSION left join ZWAMEDIAITEM i on i.Z_PK = m.ZMEDIAITEM where m.Z_PK = ${id}`));
+    // Seulement une pièce d'une discussion autorisée : les autres restent fermées.
+    if (!p || !liste.some((x) => x.jid === p.jid)) throw new Error(`Pièce ${id} introuvable dans les discussions autorisées.`);
+    if (!PIECES.has(Number(p.type)) || !p.fichier) throw new Error(`Pièce ${id} : pas de fichier sur ce Mac (pas téléchargé par WhatsApp Desktop).`);
+    const source = join(MEDIA_DIR, p.fichier);
+    if (!existsSync(source)) throw new Error(`Pièce ${id} : fichier absent de ce Mac (ouvre-le une fois dans WhatsApp Desktop pour le télécharger).`);
+    mkdirSync("etat/pieces", { recursive: true });
+    const dest = join("etat/pieces", nomPiece(id, p.titre && /\.[a-z0-9]{2,5}$/i.test(p.titre) ? p.titre : p.fichier));
+    copyFileSync(source, dest);
+    // Un document Word (ou RTF, OpenDocument) : son texte à côté, lisible directement.
+    if (/\.(docx?|rtf|odt|pages)$/i.test(dest)) {
+      try {
+        execFileSync("textutil", ["-convert", "txt", "-output", `${dest}.txt`, dest], { stdio: "ignore", timeout: 60_000 });
+        return console.log(`Pièce copiée : ${dest} · son texte : ${dest}.txt`);
+      } catch {
+        return console.log(`Pièce copiée : ${dest} (texte illisible : demande-la en PDF)`);
+      }
+    }
+    const nature = Number(p.type) === 2 ? " (vidéo : pour la regarder, demande à Marc de te la transférer sur Telegram)" : "";
+    console.log(`Pièce copiée : ${dest}${nature}`);
+    return;
+  }
+  throw new Error("Commandes : chercher <mot>, liste, lire <créateur> [--depuis AAAA-MM-JJ] [--max N] [--vocaux N], nouveaux --depuis \"AAAA-MM-JJ HH:MM\", en-attente [--heures N], numero <créateur>, piece <n°>.");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

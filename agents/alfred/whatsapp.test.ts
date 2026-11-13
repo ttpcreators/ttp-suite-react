@@ -71,3 +71,22 @@ describe("Alfred : discussions WhatsApp", () => {
     expect(attente(150)).toBe("6 j");
   });
 });
+
+describe("WhatsApp : les pièces jointes", () => {
+  it("donne le numéro de la pièce à ouvrir, ou dit pourquoi elle ne s'ouvre pas", async () => {
+    const { ligne, nomPiece, reperePiece } = await import("./whatsapp.mjs");
+    const doc = { id: 123, type: 8, titre: "brief Nova.pdf", fichier: "Media/x/brief.pdf", date: 784_400_000, moi: 0 };
+    expect(reperePiece(doc)).toBe(" · pièce 123");
+    expect(ligne(doc, "Léa")).toMatch(/Léa : \[document : brief Nova\.pdf · pièce 123\]$/);
+    expect(reperePiece({ ...doc, fichier: null })).toBe(" · pas téléchargée sur ce Mac");
+    expect(reperePiece({ ...doc, type: 0 })).toBe("");
+    expect(reperePiece({ ...doc, type: 3 })).toBe("");
+  });
+
+  it("nomme la copie sans pouvoir sortir du dossier", async () => {
+    const { nomPiece } = await import("./whatsapp.mjs");
+    expect(nomPiece(123, "brief Nova.pdf")).toBe("wa-123-brief_Nova.pdf");
+    expect(nomPiece(7, "../../.ssh/id_rsa")).toBe("wa-7-id_rsa");
+    expect(nomPiece(8, "")).toBe("wa-8-piece");
+  });
+});
