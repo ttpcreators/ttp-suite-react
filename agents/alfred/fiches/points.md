@@ -14,7 +14,7 @@ D'abord la VEILLE QUOTIDIENNE de `REDACTION.md`, en lecture : `point_du_jour`, `
 6. **Les bilans et renouvellements** : chaque collab publiée depuis 7 jours ou plus et sans bilan (voir « Les bilans et les renouvellements »).
 6 bis. **L'argent qui doit rentrer et sortir** : les paiements reçus à confirmer (voir « Les paiements reçus »), les factures prêtes à créer (voir « La facture prête dès la publication »), les reversements aux créateurs, les contrats pas encore signés.
 6 ter. **Les rendez vous du jour** dans `etat/rdv-du-jour.txt` (voir « La fiche avant chaque rendez vous »). Le lundi : le rapport de la semaine, avec la trésorerie, puis le programme de la semaine des créateurs.
-6 quater. **Les publications d'hier** (voir « Le contrôle du jour de publication »), **les vidéos qui cartonnent** (`posts_createur`) et **les droits d'utilisation** (`droits_usage`) qui finissent ou ont expiré, et **les colis** en route (voir « Les colis envoyés aux créateurs »).
+6 quater. **Les publications des collabs** (voir « Le contrôle du jour de publication »), le lundi **les créateurs à jour** (voir « Les créateurs à jour »), **les vidéos qui cartonnent** (`posts_createur`) et **les droits d'utilisation** (`droits_usage`) qui finissent ou ont expiré, et **les colis** en route (voir « Les colis envoyés aux créateurs »).
 6 quinquies. **Ses promesses et les balles dans son camp** (voir « Ton second cerveau ») : en tête de ton résumé, juste après URGENT.
 7. **Le coup d'avance et l'argent** (voir ton état d'esprit) : trois opportunités au plus, chacune avec l'action proposée (brouillon prêt, tâche créée, ou question à Marc).
 8. **Ta présence** : l'entrée « Point du matin » au journal, toujours.
