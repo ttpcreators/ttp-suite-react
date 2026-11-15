@@ -80,12 +80,20 @@ cd "$PONT"
 sed -i '' 's/fmt.Sprintf(":%d", port)/fmt.Sprintf("127.0.0.1:%d", port)/' main.go
 grep -q 'fmt.Sprintf("127.0.0.1:%d", port)' main.go || { echo "Correction 127.0.0.1 impossible : rien n'est installé." >&2; exit 1; }
 
-# 4. Compilation. D'abord avec la dernière version de whatsmeow (WhatsApp refuse les trop vieux
-#    clients), sinon avec celle du commit épinglé.
+# 4. Compilation avec la dernière version de whatsmeow : WhatsApp coupe tout de suite la connexion
+#    des vieux clients (testé sur l'iMac le 2026-11-16 avec celle du commit épinglé, de mars 2025).
+#    La version récente demande un context en premier argument de ces 5 fonctions : le code du
+#    pont est adapté avant la compilation (correction testée sur l'iMac : le QR code s'affiche).
+sed -i '' -e 's/client\.Download(/client.Download(context.Background(), /' \
+  -e 's/sqlstore\.New(/sqlstore.New(context.Background(), /' \
+  -e 's/container\.GetFirstDevice()/container.GetFirstDevice(context.Background())/' \
+  -e 's/client\.GetGroupInfo(/client.GetGroupInfo(context.Background(), /' \
+  -e 's/Store\.Contacts\.GetContact(/Store.Contacts.GetContact(context.Background(), /' main.go
+grep -q '"context"' main.go || { echo "Le code du pont a changé (import context absent) : rien n'est installé." >&2; exit 1; }
 echo "Compilation du pont (1 à 3 minutes la première fois)…"
-if ! { go get go.mau.fi/whatsmeow@latest >/dev/null 2>&1 && go mod tidy >/dev/null 2>&1 && CGO_ENABLED=1 go build -o pont . ; }; then
-  git checkout -q -- go.mod go.sum
-  CGO_ENABLED=1 go build -o pont .
+if ! { go get go.mau.fi/whatsmeow@latest >/dev/null && go mod tidy >/dev/null && CGO_ENABLED=1 go build -o pont . ; }; then
+  echo "La compilation du pont a échoué : envoie une capture de ce message à Claude. Rien n'est installé." >&2
+  exit 1
 fi
 
 # 5. Le QR code, la première fois (ou avec --qr) : le pont tourne ici, Marc scanne, puis Ctrl+C.
