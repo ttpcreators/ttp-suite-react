@@ -154,6 +154,7 @@ pour toute l'équipe dans Paramètres → Apparence → « Couleurs des classeur
 | `InstagramCard.tsx`, `TikTokCard.tsx`, `YouTubeCard.tsx`, `BrandInstagram.tsx` | Chiffres réseaux d'un créateur ou d'une marque. |
 | `ig-feed-stats.tsx` | « Mes stats » : feed Instagram (12 derniers posts), ce qui marche, chiffres 28 j, audience. Onglet créateur `evolution` et fiche créateur agence. |
 | `HashtagSearch.tsx`, `RivalWatch.tsx`, `TikTokRadar.tsx`, `YouTubeRadar.tsx`, `RadarFrame.tsx`, `SourcingGuide.tsx`, `OutreachComposer.tsx`, `MetaQuotaBadge.tsx` | Outils du Sourcing et du Scouting. |
+| `SpiderScan.tsx` (+ `src/lib/spiderEngine.ts`) | L'araignée qui s'affiche pendant une recherche (radars Instagram, TikTok et YouTube via `RadarFrame`, hashtag, analyse d'un créateur). Visuel seulement, aucun chiffre inventé : le moteur des pattes est partagé avec les vidéos TTP. |
 | `IgPlanner.tsx` | Planning → Posts Instagram. |
 
 ### Sous-dossiers

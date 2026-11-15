@@ -155,6 +155,7 @@ export function TikTokRadar({ platformTabs }: { platformTabs?: ReactNode } = {})
       platformTabs={platformTabs}
       lastRun={state?.at ?? null}
       running={running}
+      scanLabel="TikTok"
       onRun={() => void run()}
       help={
           <HelpTip title="D'où viennent ces données ?" align="end">

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { SpiderScan } from "@/components/SpiderScan";
 import { Check, Copy, Search, UserPlus, X } from "@/components/icons";
 import { Spin } from "@/components/ui/loader";
 import { Overlay } from "@/components/mobile/ios-sheet";
@@ -225,6 +226,7 @@ export function CreatorLookup({ inScouting, onAdd }: {
           {busy ? <Spin size={14} /> : <Search className="h-4 w-4" />} <span className="max-sm:hidden">Voir ses stats</span>
         </button>
       </form>
+      {busy && <SpiderScan label={`@${q.trim().replace(/^@/, "")}`} className="mb-4" />}
       {open && (
         <StatsSheet
           u={open.u} s={open.s} roster={open.roster}

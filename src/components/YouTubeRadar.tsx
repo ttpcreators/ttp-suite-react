@@ -154,6 +154,7 @@ export function YouTubeRadar({ platformTabs }: { platformTabs?: ReactNode } = {}
       platformTabs={platformTabs}
       lastRun={state?.at ?? null}
       running={running}
+      scanLabel="YouTube"
       onRun={() => void run()}
       help={
           <HelpTip title="Comment le radar YouTube trouve les collabs ?" align="end">
