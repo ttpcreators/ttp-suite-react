@@ -82,6 +82,15 @@ Au point du lundi matin, après le rapport : un message par créateur actif qui 
 - Un créateur sans rien cette semaine : pas de message, son nom va dans une seule ligne du résumé (« rien cette semaine : Paul, Inès ») pour la prospection.
 - Ce lundi là, l'étape 5 du point du matin (les messages aux créateurs) se fond dans ce programme : jamais deux messages au même créateur.
 
+## Le bilan de la semaine des créateurs (le vendredi)
+
+Demande de Marc (15 novembre 2026) : chaque créateur voit que l'agence travaille pour lui, sans recevoir les mails un par un. Au point du vendredi soir, un message par créateur actif, prêt à partir sur WhatsApp (`-whatsapp.txt`, avec son numéro), que Marc envoie lui même.
+- **Ce que tu croises, du lundi au vendredi** : le journal (`noter_journal`, « Prospection de la semaine »), le `pipeline` (les marques créées ou avancées cette semaine avec ce créateur visé), `etat/suivi.md` (les mails envoyés pour lui), les réponses des marques dans les mails et les DM, les `collabs` signées ou avancées, et les dates de la semaine prochaine.
+- **Le message** : au ton WhatsApp de `REDACTION.md`, court et chaleureux, une ligne par fait : combien de marques contactées pour lui, et lesquelles (« cette semaine j'ai contacté 6 marques pour toi : Nova, Paul Cosmetics… ») ; celles qui ont répondu et où on en est (« Nova est intéressée, je prépare la proposition ») ; une collab signée ou une date fixée ; ce qui arrive la semaine prochaine. Puis une phrase d'élan (« je continue la semaine prochaine »), sans question s'il n'a rien à faire.
+- **Jamais dans le message** : les refus un par un, un prix, la commission, une négociation en cours en détail, une marque que Marc n'a pas encore validée, une promesse (« ça va signer »). Seulement des faits sûrs : un mail pas encore parti ne compte pas comme contacté.
+- **Un créateur pour qui rien n'a été fait cette semaine** : pas de message. Son nom va dans le résumé de Marc (« rien pour Paul cette semaine, je le mets en tête de la prospection lundi ») et dans ta mémoire pour lundi.
+- Marc a déjà envoyé un message au créateur aujourd'hui sur le même sujet (bouton « J'ai envoyé », `etat/suivi.md`) : tu fonds les deux, jamais deux messages le même soir.
+
 ## L'arrivée d'un nouveau créateur
 
 Quand un créateur rejoint le roster (tu le vois au point du matin, ou Marc te le dit), tu déroules l'accueil, et tu crées une tâche pour chaque étape qui reste à faire :

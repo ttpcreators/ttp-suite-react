@@ -18,7 +18,7 @@ import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExc
 import type { Ctx } from "./oauth.ts";
 import { boxAddress, boxesFor, createDraft, deleteClaudeDraft, draftRefs, listClaudeDrafts, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
-import { mailHtml, sparkLink } from "../_shared/mcpAdmin.ts";
+import { addressList, mailHtml, sparkLink } from "../_shared/mcpAdmin.ts";
 import { guessEventKind } from "../_shared/eventKind.ts";
 import { comptaSummary, type ComptaInv } from "../_shared/compta.ts";
 import { activityText } from "../_shared/activityText.ts";
@@ -1273,6 +1273,7 @@ const brouillonMail: Tool = {
     properties: {
       boite: { type: "string", enum: ["partnerships", "talent"] },
       a: { type: "string", description: "Destinataire(s), séparés par des virgules" },
+      cci: { type: "string", description: "Copie cachée (facultatif), adresses séparées par des virgules. Un créateur mis « en copie » d'un mail à une marque va TOUJOURS ici, jamais en copie visible : la marque ne voit pas son adresse et ses réponses ne lui arrivent pas." },
       objet: { type: "string" },
       message: { type: "string", description: "Texte du mail, sans signature : la signature des Réglages Mails (avec son GIF) est ajoutée" },
       fil: { type: "string", description: "Id du fil pour répondre (facultatif)" },
@@ -1286,6 +1287,8 @@ const brouillonMail: Tool = {
     if (!boxesFor(box).length) return fail("Boîte talent@ non configurée.");
     const to = str(a.a, 500);
     if (!/[^@\s]+@[^@\s]+\.[^@\s]+/.test(to)) return fail("Adresse du destinataire invalide.");
+    const cci = addressList(str(a.cci, 500));
+    if (!cci) return fail("Adresse en copie cachée (cci) invalide.");
     const fil = str(a.fil, 40);
     // Seulement le message : une note pour Marc ou un « [prénom] » partirait chez le destinataire.
     const probleme = problemeTexteDestinataire(str(a.message, 20000));
@@ -1298,7 +1301,7 @@ const brouillonMail: Tool = {
         const sig = ms.signatureOn !== false ? String(ms.signatureHtml ?? "") : "";
         if (sig.trim()) html = mailHtml(str(a.message, 20000), sig);
       }
-      const r = await createDraft(sb, box, to, str(a.objet, 300), str(a.message, 20000), /^[A-Za-z0-9]+$/.test(fil) ? fil : undefined, html);
+      const r = await createDraft(sb, box, to, str(a.objet, 300), str(a.message, 20000), /^[A-Za-z0-9]+$/.test(fil) ? fil : undefined, html, cci);
       const how = r.replaced
         ? `Brouillon MIS À JOUR dans ${box}@ (il remplace celui déjà préparé pour ${to}, aucun doublon${r.removed ? `, ${r.removed} ancien${r.removed > 1 ? "s" : ""} doublon${r.removed > 1 ? "s" : ""} supprimé${r.removed > 1 ? "s" : ""}` : ""})`
         : `Brouillon prêt dans ${box}@ pour ${to}`;
@@ -1310,7 +1313,7 @@ const brouillonMail: Tool = {
         const thread = fil || refs?.threadId || "";
         liens = `${spark ? `\nOuvrir dans Spark : ${spark}` : ""}${thread ? `\nOuvrir dans l'app : https://app.ttpcreators.pro/?open=mails&thread=${thread}&box=${box}` : ""}`;
       }
-      return ok(`${how} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail, Spark ou l'app (Mails, dossier Brouillons).${r.id ? ` Id du brouillon : ${r.id}.` : ""}${liens}`);
+      return ok(`${how}${cci.length ? ` (en copie cachée : ${cci.join(", ")})` : ""} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail, Spark ou l'app (Mails, dossier Brouillons).${r.id ? ` Id du brouillon : ${r.id}.` : ""}${liens}`);
     } catch (e) {
       return fail(`Brouillon non créé : ${(e as Error).message}`);
     }
