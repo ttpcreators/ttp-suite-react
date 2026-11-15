@@ -27,6 +27,7 @@ import { amountOf, contractList, invoiceTotals, owesMoney, pctOf, reversementRow
 import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/audience.ts";
 import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCartonnent, type DroitUsage, type PostCourt } from "../_shared/alfredSuivi.ts";
 import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
+import { CREE_PAR_CLAUDE, preparerBrouillonPost } from "../_shared/igDraft.ts";
 import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
 import { CONTRACT_DRAFTS_KEY, DRAFT_OPTS, choisirCreateur, estRepresentation, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "../_shared/contractDraft.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
@@ -2019,6 +2020,46 @@ const postsInstagram: Tool = {
   },
 };
 
+// Brouillon de post du compte de l'agence (Planning › Posts Instagram) : jamais programmé ni publié ici.
+const brouillonPostInstagram: Tool = {
+  name: "brouillon_post_instagram",
+  title: "Préparer un post Instagram en brouillon",
+  description: "Dépose un BROUILLON de post pour le compte Instagram de l'agence dans Planning › Posts Instagram : type, légende prête, date proposée (heure de Paris), comptes en collaboration. Rien n'est programmé ni publié : Marc ajoute la photo ou la vidéo, relit et clique sur Programmer ou Publier dans l'app. Avec `id` : met à jour un brouillon déjà préparé par Claude (jamais un post de Marc, programmé ou publié).",
+  write: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      type: { type: "string", enum: ["post", "carrousel", "reel", "story"], description: "Défaut : post" },
+      legende: { type: "string", description: "La légende exacte, prête à publier (2 200 caractères au plus), sans note pour Marc" },
+      date: { type: "string", description: "Date proposée AAAA-MM-JJ (facultatif)" },
+      heure: { type: "string", description: "Heure proposée HH:MM, heure de Paris (défaut 18:00)" },
+      collaborateurs: { type: "string", description: "@ invités en collaboration, 3 au plus (créateur, marque)" },
+      createur: { type: "string" }, marque: { type: "string" }, collab: { type: "string", description: "Id de la collab liée" },
+      id: { type: "string", description: "Id d'un brouillon de Claude à mettre à jour" },
+    },
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const p = preparerBrouillonPost(a);
+    if ("error" in p) return fail(p.error);
+    const probleme = p.row.caption ? problemeTexteDestinataire(p.row.caption) : null;
+    if (probleme) return fail(probleme);
+    const id = str(a.id, 64);
+    const lien = "https://app.ttpcreators.pro/?open=view&view=planning";
+    const quand = p.row.scheduled_at ? `proposé le ${frDay(isoDay(new Date(p.row.scheduled_at)))} à ${new Intl.DateTimeFormat("fr-FR", { timeZone: TZ, hour: "2-digit", minute: "2-digit" }).format(new Date(p.row.scheduled_at))}` : "sans date";
+    if (id) {
+      // Seulement un brouillon de Claude : un post de Marc, programmé ou publié n'est jamais touché.
+      const { data, error } = await sb.from("ig_planned").update(p.row).eq("id", id).eq("status", "brouillon").eq("created_by", CREE_PAR_CLAUDE).select("id");
+      if (error) return fail(`Brouillon non mis à jour : ${error.message}`);
+      if (!data?.length) return fail("Aucun brouillon de Claude avec cet id (déjà programmé, publié, ou créé par quelqu'un de l'agence) : rien n'a été changé.");
+      return ok(`Brouillon de ${p.row.kind} MIS À JOUR (${quand}), toujours en brouillon. Id : ${id}.\nOuvrir dans l'app : ${lien}`);
+    }
+    const { data, error } = await sb.from("ig_planned").insert({ ...p.row, media: [], created_by: CREE_PAR_CLAUDE }).select("id").single();
+    if (error) return fail(`Brouillon non créé : ${error.message}`);
+    return ok(`Brouillon de ${p.row.kind} prêt dans Planning › Posts Instagram (${quand}). Rien n'est programmé : Marc ajoute ${p.row.kind === "carrousel" ? "les photos" : p.row.kind === "reel" ? "la vidéo" : "la photo ou la vidéo"}, relit et clique sur Programmer. Id : ${(data as Json).id}.\nOuvrir dans l'app : ${lien}`);
+  },
+};
+
 // ── Alfred : droits d'utilisation et posts qui cartonnent (_shared/alfredSuivi.ts) ──
 const droitsUsage: Tool = {
   name: "droits_usage",
@@ -2252,7 +2293,7 @@ const preparerContrat: Tool = {
 
 export const TOOLS: Tool[] = [
   pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif, aValider, ecarterProposition,
-  creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, brouillonMail, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
+  creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, brouillonMail, brouillonPostInstagram, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief,
   compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, notifications,
