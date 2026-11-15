@@ -16,6 +16,7 @@
 //   node telegram.mjs ecoute               écoute en continu et lance alfred.sh --reponse dès que Marc écrit
 //   node telegram.mjs telecharger <lien>   télécharge et découpe une vidéo (WeTransfer, SwissTransfer, Drive, Dropbox)
 //   node telegram.mjs rappels              envoie les rappels arrivés à échéance (etat/rappels.md)
+//   node telegram.mjs raccourcis           met les raccourcis des créateurs (etat/raccourcis.txt) dans le menu « / »
 //   node telegram.mjs joindre <id> [ordre] copie une pièce jointe d'un mail (Spark) dans le dossier
 //                                          d'envoi du passage (ALFRED_ENVOI, sinon etat/envoi) :
 //                                          elle part à Marc avec le prochain envoi, sous son nom d'origine
@@ -204,6 +205,29 @@ export function boutonWhatsApp(label, texte) {
  * d'un toucher qu'il a envoyé le message, et Alfred met la to-do et son suivi à jour. Pas de
  * confirmation (rien ne part) : le toucher arrive à Alfred avec le message en contexte.
  */
+/**
+ * Raccourcis des créateurs (etat/raccourcis.txt, une ligne « /lenapsl = Léna ») → commandes du
+ * menu « / » de Telegram. Telegram n'accepte que a-z, 0-9 et _ (32 au plus), 100 commandes.
+ * Une ligne invalide ou un raccourci en double est ignoré (et listé dans `refus`).
+ */
+export function commandesDepuis(texte) {
+  const commandes = [];
+  const refus = [];
+  for (const brut of String(texte ?? "").split("\n")) {
+    const ligne = brut.trim();
+    if (!ligne || ligne.startsWith("#")) continue;
+    const m = ligne.match(/^\/?([^\s=]+)\s*=\s*(.+)$/);
+    const cmd = m ? m[1].toLowerCase() : "";
+    const nom = m ? m[2].trim().slice(0, 256) : "";
+    if (!/^[a-z0-9_]{1,32}$/.test(cmd) || !nom || commandes.some((c) => c.command === cmd) || commandes.length >= 100) {
+      refus.push(ligne);
+      continue;
+    }
+    commandes.push({ command: cmd, description: nom });
+  }
+  return { commandes, refus };
+}
+
 export const ENVOYE = "envoye:";
 export function boutonEnvoye(label) {
   const qui = String(label).replace(/^(Pour|Mail à|Message (LinkedIn |Instagram )?pour)\s+/i, "").replace(/\s+sur\s+(WhatsApp|Instagram).*$/i, "").trim();
@@ -816,6 +840,16 @@ async function main() {
   const chatId = env.TELEGRAM_CHAT_ID;
   if (!token || !chatId) throw new Error("Jeton du bot d'Alfred ou identifiant de Marc manquant dans config.env (./installer.sh --bot).");
   const fil = join(here, "etat/conversation.md");
+
+  // Les raccourcis des créateurs dans le menu « / » de Telegram (seulement dans la discussion de Marc).
+  if (mode === "raccourcis") {
+    const file = join(here, "etat/raccourcis.txt");
+    const { commandes, refus } = commandesDepuis(existsSync(file) ? readFileSync(file, "utf8") : "");
+    const res = await api(token, "setMyCommands", { commands: commandes, scope: { type: "chat", chat_id: Number(chatId) } });
+    if (!res.ok) throw new Error(`Telegram a refusé le menu : ${res.description ?? "erreur inconnue"}`);
+    console.log(`Menu à jour : ${commandes.length} raccourci(s)${refus.length ? ` ; ignoré(s) (lettres minuscules, chiffres et _ seulement, sans doublon) : ${refus.join(" | ")}` : ""}.`);
+    return;
+  }
 
   if (mode === "rappels") {
     const file = join(here, "etat/rappels.md");

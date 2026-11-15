@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { boutonsLiens, chunks, clavier, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
+import { boutonsLiens, chunks, clavier, commandesDepuis, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -276,5 +276,19 @@ describe("Alfred : envoi au fil de l'eau", () => {
     expect(dossierEnvoi(undefined)).toBe("etat/envoi");
     expect(fichierRecuIds("etat/recu-reponse-ids.txt")).toBe("etat/recu-reponse-ids.txt");
     expect(fichierRecuIds("/etc/passwd")).toBe("etat/recu-ids.txt");
+  });
+});
+
+describe("raccourcis des créateurs", () => {
+  it("transforme les lignes en commandes du menu Telegram", () => {
+    const { commandes, refus } = commandesDepuis("# mes raccourcis\n/leapsl = Léa\nnova = Nova (box)\n\n/LeaPsl = Léa encore\n/inès = Inès\n/sans\n");
+    expect(commandes).toEqual([
+      { command: "leapsl", description: "Léa" },
+      { command: "nova", description: "Nova (box)" },
+    ]);
+    expect(refus).toEqual(["/LeaPsl = Léa encore", "/inès = Inès", "/sans"]);
+  });
+  it("accepte un fichier vide", () => {
+    expect(commandesDepuis("")).toEqual({ commandes: [], refus: [] });
   });
 });
