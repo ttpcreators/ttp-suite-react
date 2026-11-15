@@ -16,6 +16,7 @@
 // créatrice se déconnecte ou retire l'accès chez Google (ytForget), pas seulement le lien.
 // ============================================================================
 
+import { erSurVues } from "./engagementRate.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { tidySecret } from "./instagram.ts";
 
@@ -190,10 +191,7 @@ export function ytStats(videos: YtVideo[], now = Date.now()) {
   const avg = (list: YtVideo[]) => (list.length ? Math.round(list.reduce((s, v) => s + (v.views ?? 0), 0) / list.length) : null);
   const longs = settled(videos.filter((v) => !v.short));
   const shorts = settled(videos.filter((v) => v.short));
-  const pool = [...longs, ...shorts];
-  const views = pool.reduce((s, v) => s + (v.views ?? 0), 0);
-  const inter = pool.reduce((s, v) => s + (v.likes ?? 0) + (v.comments ?? 0), 0);
-  const er = views > 0 ? Math.round((inter / views) * 10000) / 100 : null;
+  const er = erSurVues(videos.map((v) => ({ at: v.at, views: v.views, likes: v.likes ?? 0, comments: v.comments })), now);
   const ts = videos.map((v) => Date.parse(v.at)).filter((t) => !Number.isNaN(t)).sort((a, b) => a - b);
   const weeks = ts.length >= 2 ? (ts[ts.length - 1] - ts[0]) / (7 * 86400000) : 0;
   const perWeek = weeks > 0 ? Math.round(((ts.length - 1) / weeks) * 10) / 10 : null;

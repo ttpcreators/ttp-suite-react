@@ -9,7 +9,7 @@
 #   alfred.sh           : launchd, toutes les heures pile. Envoie les rappels arrivés à
 #                         l'heure ; du lundi au vendredi à 9 h et 17 h, fait le POINT (mails
 #                         des marques, DM, devis, relances, créateurs, argent à aller chercher).
-#                         Le lundi à 11 h : la prospection de la semaine ; le premier lundi
+#                         Le lundi à 11 h : la prospection de la semaine ; le 1er
 #                         du mois à 14 h : la revue des tarifs ; le mercredi à 11 h : le
 #                         recrutement. Du lundi au vendredi à 11 h, 13 h et 15 h : la VEILLE (les
 #                         mails arrivés depuis, modèle rapide, silencieuse sauf pour l'important).
@@ -127,8 +127,8 @@ if [[ "$1" == "--point" ]] || (( auto && jour <= 5 && heure == 9 )) || (( auto &
 # Le lundi à 11 h : la prospection de la semaine, créateur par créateur.
 elif [[ "$1" == "--prospection" ]] || (( auto && ! ${#vacances} && jour == 1 && heure == 11 )); then
   mode="la prospection de la semaine"
-# Le premier lundi du mois à 14 h : la revue des tarifs.
-elif [[ "$1" == "--tarifs" ]] || (( auto && ! ${#vacances} && jour == 1 && quantieme <= 7 && heure == 14 )); then
+# Le 1er du mois à 14 h (demande de Marc, 16 novembre 2026) : la revue des tarifs et des media kits.
+elif [[ "$1" == "--tarifs" ]] || (( auto && ! ${#vacances} && quantieme == 1 && heure == 14 )); then
   mode="la revue des tarifs du mois"
 # Le mercredi à 11 h : le recrutement de la semaine (scouting).
 elif [[ "$1" == "--recrutement" ]] || (( auto && ! ${#vacances} && jour == 3 && heure == 11 )); then
@@ -199,7 +199,7 @@ done < etat/delegations.md
 ttp="mcp__claude_ai_TTP_Suite__"
 lire="droits_usage posts_createur brouillons_claude journal_agents stats_collab compta lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
 agir="brouillon_post_instagram noter_droits noter_journal creer_meet ajouter_au_scouting changer_statut_scouting creer_brouillon_mail supprimer_brouillon preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
-sur_oui="envoyer_brouillon noter_lecon"
+sur_oui="envoyer_brouillon noter_lecon maj_chiffres_mediakit"
 interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture ecarter_proposition proposer_action preparer_reponse_mail resumer_brief"
 # Seule commande permise : télécharger et découper une vidéo dont le lien est dans un mail.
 # Skill : ses skills (.claude/skills, voir skills/LISEZ-MOI.md du dépôt), des consignes à lire.
@@ -218,10 +218,12 @@ ici="/$PWD"
 allowed=("Read($ici/**)" "Edit($ici/etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)" "Bash(node telegram.mjs joindre:*)" "Bash(node telegram.mjs raccourcis)"
   "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)")
 denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash(spark:*)"
-  "Edit($ici/etat/whatsapp-autorises.txt)")
-# Ajouter une discussion à la liste autorisée (`autoriser`) : seulement pendant un passage où Marc a
-# écrit (ses consignes exigent son « oui »). Rien n'est jamais envoyé sur WhatsApp.
-(( recus > 0 )) || denied+=("Bash(node whatsapp.mjs autoriser:*)")
+  "Edit($ici/etat/whatsapp-autorises.txt)" "Edit($ici/etat/whatsapp-a-envoyer/**)" "Edit($ici/etat/whatsapp-envoyes/**)")
+# Envoi WhatsApp (choix de Marc le 2026-11-15) : `whatsapp.mjs envoyer` ne fait partir que le texte
+# gardé par telegram.mjs quand Marc l'a reçu (Alfred ne peut pas écrire dans etat/whatsapp-a-envoyer/),
+# et seulement pendant un passage où Marc a écrit : ses consignes exigent son « oui » pour CE texte.
+# Même règle pour ajouter une discussion à la liste autorisée (`autoriser`).
+(( recus > 0 )) || denied+=("Bash(node whatsapp.mjs envoyer:*)" "Bash(node whatsapp.mjs autoriser:*)")
 if (( recus > 0 )); then
   # Marc vient d'écrire : Alfred gère toute l'app sur sa demande (choix de Marc le 2026-11-06).
   # Ses consignes gardent la règle : un mail ou un DM ne part que sur un « oui » explicite.

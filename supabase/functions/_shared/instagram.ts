@@ -9,6 +9,7 @@
 // facultatif. Les comptes PERSONNELS ne sont pas visibles par cet outil.
 // ============================================================================
 
+import { erSurAbonnes } from "./engagementRate.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 // Collés à la main dans le Terminal : on enlève espaces et guillemets éventuels.
@@ -220,14 +221,12 @@ export function postImage(m: Record<string, unknown>): string {
 }
 
 /**
- * Engagement public moyen (likes + commentaires) / abonnés, en %, sur les posts
- * donnés ; les posts aux likes masqués sont ignorés. null si rien à mesurer.
+ * Engagement public moyen (likes + commentaires) / abonnés, en %. Passer TOUS les posts
+ * relevés : la formule commune choisit elle même les 12 retenus. null si rien à mesurer.
  */
 export function engagementRate(media: IgPost[], followers: number): number | null {
-  const counted = media.filter((m) => m.likes !== null);
-  if (!counted.length || followers <= 0) return null;
-  const avg = counted.reduce((s, m) => s + (m.likes ?? 0) + m.comments, 0) / counted.length;
-  return Math.round((avg / followers) * 10000) / 100; // 2 décimales
+  // La formule commune (12 derniers posts de plus de 7 jours, likes masqués exclus) : _shared/engagementRate.ts.
+  return erSurAbonnes(media.map((m) => ({ at: m.at, likes: m.likes, comments: m.comments })), followers);
 }
 
 /** Posts par semaine sur la période couverte par les posts donnés. */
