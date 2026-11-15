@@ -1856,6 +1856,7 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
       platformTabs={platformTabs}
       runNote="Passe toutes les 2 heures"
       running={scanning}
+      scanLabel="Instagram"
       runLabel={scanning ? "Lecture des posts (1 à 2 min)…" : "Lancer le radar"}
       onRun={() => void runScan()}
       help={

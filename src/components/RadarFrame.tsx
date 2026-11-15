@@ -4,6 +4,7 @@ import { RefreshCw, Search } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { fmtAgo } from "@/lib/instagram";
+import { SpiderScan } from "@/components/SpiderScan";
 
 /**
  * Cadre commun des trois radars à marques (Instagram, TikTok, YouTube) : la même
@@ -22,6 +23,8 @@ export function RadarFrame({
   lastRun,
   runNote,
   running,
+  scanLabel = "la plateforme",
+  scanItems,
   runLabel = "Lancer le radar",
   onRun,
   help,
@@ -41,6 +44,10 @@ export function RadarFrame({
   lastRun?: string | null;
   runNote?: string;
   running: boolean;
+  /** Ce que l'araignée fouille pendant la lecture (« TikTok », « YouTube »…). */
+  scanLabel?: string;
+  /** Les textes que l'araignée lit pendant la lecture (marques et comptes déjà connus). */
+  scanItems?: string[];
   runLabel?: string;
   onRun: () => void;
   help?: ReactNode;
@@ -76,6 +83,8 @@ export function RadarFrame({
             {help}
           </div>
         </div>
+
+        {running && <SpiderScan label={scanLabel} items={scanItems} className="mt-3" />}
 
         {/* 2. Le tri + la recherche */}
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">
