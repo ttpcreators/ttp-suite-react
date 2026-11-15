@@ -7,6 +7,7 @@ import { toast } from "@/components/ui/toast";
 import { Spin } from "@/components/ui/loader";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { SpiderScan } from "@/components/SpiderScan";
+import { InstaPromenade } from "@/components/InstaPromenade";
 import { SPIDER_COLORS as K } from "@/lib/spiderEngine";
 import { TtpSpider } from "@/components/icons/ttp-icons";
 
@@ -239,6 +240,9 @@ export function Araignee() {
           );
         })}
       </div>
+
+      {/* La promenade Instagram : partir d'un compte et se promener de créateur en créateur */}
+      <InstaPromenade />
 
       {/* Les trouvailles du passage */}
       {since && (

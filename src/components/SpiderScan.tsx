@@ -67,7 +67,9 @@ export function SpiderScan({
   const target = useRef<Pt>({ x: 120, y: 90 });
   const current = useRef("0:0");
   const trailRef = useRef(trail);
-  trailRef.current = trail;
+  useEffect(() => {
+    trailRef.current = trail;
+  }, [trail]);
 
   // Le rythme : une nouvelle ligne toutes les 1,15 s, et le chrono.
   useEffect(() => {
