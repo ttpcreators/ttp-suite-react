@@ -155,6 +155,7 @@ export function YouTubeRadar({ platformTabs }: { platformTabs?: ReactNode } = {}
       lastRun={state?.at ?? null}
       running={running}
       scanLabel="YouTube"
+      scanItems={(rows ?? []).slice(0, 30).map((r) => `${r.name} · ${r.posts.length} vidéo${r.posts.length > 1 ? "s" : ""} sponsorisée${r.posts.length > 1 ? "s" : ""}`)}
       onRun={() => void run()}
       help={
           <HelpTip title="Comment le radar YouTube trouve les collabs ?" align="end">

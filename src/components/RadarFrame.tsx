@@ -24,6 +24,7 @@ export function RadarFrame({
   runNote,
   running,
   scanLabel = "la plateforme",
+  scanItems,
   runLabel = "Lancer le radar",
   onRun,
   help,
@@ -45,6 +46,8 @@ export function RadarFrame({
   running: boolean;
   /** Ce que l'araignée fouille pendant la lecture (« TikTok », « YouTube »…). */
   scanLabel?: string;
+  /** Les textes que l'araignée lit pendant la lecture (marques et comptes déjà connus). */
+  scanItems?: string[];
   runLabel?: string;
   onRun: () => void;
   help?: ReactNode;
@@ -81,7 +84,7 @@ export function RadarFrame({
           </div>
         </div>
 
-        {running && <SpiderScan label={scanLabel} className="mt-3" />}
+        {running && <SpiderScan label={scanLabel} items={scanItems} className="mt-3" />}
 
         {/* 2. Le tri + la recherche */}
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3">

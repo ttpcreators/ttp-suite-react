@@ -156,6 +156,7 @@ export function TikTokRadar({ platformTabs }: { platformTabs?: ReactNode } = {})
       lastRun={state?.at ?? null}
       running={running}
       scanLabel="TikTok"
+      scanItems={brands.slice(0, 30).map((b) => `${b.name} · ${b.creators.slice(0, 3).map((c) => `@${c}`).join(" ")}`)}
       onRun={() => void run()}
       help={
           <HelpTip title="D'où viennent ces données ?" align="end">

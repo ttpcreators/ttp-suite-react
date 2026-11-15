@@ -79,7 +79,7 @@ export function HashtagSearch({ onClose }: { onClose: () => void }) {
       </form>
       <p className="mt-2 text-[11px] text-faint">Meta ne dit pas qui a publié : ouvre un post pour voir le compte, puis ajoute-le au scouting. 30 hashtags différents par semaine au maximum.</p>
 
-      {busy && <SpiderScan label={`#${tag.trim().replace(/^#/, "")}`} className="mt-3" />}
+      {busy && <SpiderScan label={`#${tag.trim().replace(/^#/, "")}`} items={posts?.map((p) => p.caption ?? "").filter(Boolean)} className="mt-3" />}
       {why && <div className="mt-3 rounded-lg bg-panel px-3 py-2.5 text-[12px] text-muted-foreground">{igWhyText(why)}</div>}
       {posts && posts.length === 0 && !why && <div className="mt-3 text-[12px] text-faint">Aucun post pour ce hashtag.</div>}
       {posts && posts.length > 0 && (
