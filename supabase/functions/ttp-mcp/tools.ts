@@ -28,6 +28,7 @@ import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/
 import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCartonnent, type DroitUsage, type PostCourt } from "../_shared/alfredSuivi.ts";
 import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
 import { CREE_PAR_CLAUDE, preparerBrouillonPost } from "../_shared/igDraft.ts";
+import { appliquerChiffres } from "../_shared/mediakitChiffres.ts";
 import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
 import { CONTRACT_DRAFTS_KEY, DRAFT_OPTS, choisirCreateur, estRepresentation, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "../_shared/contractDraft.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
@@ -2060,6 +2061,42 @@ const brouillonPostInstagram: Tool = {
   },
 };
 
+// ── Alfred : chiffres du media kit, le 1er du mois, après le « oui » de Marc ──
+const majChiffresMediakit: Tool = {
+  name: "maj_chiffres_mediakit",
+  title: "Mettre à jour les chiffres d'un media kit",
+  description: "Met à jour les CHIFFRES d'une plateforme du media kit d'un créateur (abonnés, engagement, vues moyennes, vues des stories), visibles aussitôt sur sa page ttpcreators.pro/mediakit. Ne touche à rien d'autre (bio, marques, tarifs, photos, autres réseaux). À n'appeler qu'après le « oui » de Marc sur les nouveaux chiffres, et seulement avec des chiffres relevés dans l'app (fiche_createur), jamais estimés. Engagement : celui de l'app, même base que le kit.",
+  write: true,
+  founder: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      createur: { type: "string", description: "Nom du créateur du roster" },
+      plateforme: { type: "string", enum: ["instagram", "tiktok", "youtube"] },
+      abonnes: { type: "string", description: "Nombre d'abonnés (facultatif)" },
+      engagement: { type: "string", description: "Taux en %, ex. 4,25 (facultatif)" },
+      vues_moyennes: { type: "string", description: "Vues moyennes par vidéo (facultatif)" },
+      vues_story: { type: "string", description: "Vues moyennes d'une story (facultatif)" },
+    },
+    required: ["createur", "plateforme"],
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const found = await rosterName(sb, str(a.createur, 80));
+    if ("error" in found) return fail(found.error);
+    const { data, error } = await sb.from("creators").select("id, mediakit").eq("name", found.name).limit(1);
+    if (error) return fail(`Lecture du media kit impossible : ${error.message}`);
+    const row = (data as Json[] | null)?.[0];
+    if (!row) return fail(`Aucune fiche pour ${titleCase(found.name)}.`);
+    const r = appliquerChiffres(row.mediakit, { plateforme: str(a.plateforme, 20), abonnes: a.abonnes, engagement: a.engagement, vues_moyennes: a.vues_moyennes, vues_story: a.vues_story });
+    if ("error" in r) return fail(r.error);
+    if (!r.changements.length) return ok(`Media kit de ${titleCase(found.name)} déjà à jour (${str(a.plateforme, 20)}) : rien n'a changé.`);
+    const { error: e2 } = await sb.from("creators").update({ mediakit: r.mediakit }).eq("id", row.id);
+    if (e2) return fail(`Media kit non mis à jour : ${e2.message}`);
+    return ok(`✓ Media kit de ${titleCase(found.name)} mis à jour (${str(a.plateforme, 20)}) :\n${r.changements.map((x) => `• ${x}`).join("\n")}\nLa page publique les affiche tout de suite ; le PDF téléchargeable suit dans l'heure (le site se refait toutes les heures).`);
+  },
+};
+
 // ── Alfred : droits d'utilisation et posts qui cartonnent (_shared/alfredSuivi.ts) ──
 const droitsUsage: Tool = {
   name: "droits_usage",
@@ -2293,7 +2330,7 @@ const preparerContrat: Tool = {
 
 export const TOOLS: Tool[] = [
   pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif, aValider, ecarterProposition,
-  creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, brouillonMail, brouillonPostInstagram, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
+  creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief,
   compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, notifications,

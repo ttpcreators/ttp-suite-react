@@ -12,6 +12,7 @@
 // TT_REDIRECT_URI facultatif.
 // ============================================================================
 
+import { erSurVues } from "./engagementRate.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { tidySecret } from "./instagram.ts";
 
@@ -151,7 +152,7 @@ export function ttStats(videos: TtVideo[]) {
   const views = sum("views");
   const avgViews = withViews.length ? Math.round(views / withViews.length) : null;
   const avgLikes = withViews.length ? Math.round(sum("likes") / withViews.length) : null;
-  const er = views > 0 ? Math.round(((sum("likes") + sum("comments") + sum("shares")) / views) * 10000) / 100 : null;
+  const er = erSurVues(videos.map((v) => ({ at: v.at, views: v.views, likes: v.likes, comments: v.comments, shares: v.shares })));
   const ts = videos.map((v) => Date.parse(v.at)).filter((t) => !Number.isNaN(t)).sort((a, b) => a - b);
   const weeks = ts.length >= 2 ? (ts[ts.length - 1] - ts[0]) / (7 * 86400000) : 0;
   const perWeek = weeks > 0 ? Math.round(((ts.length - 1) / weeks) * 10) / 10 : null;
