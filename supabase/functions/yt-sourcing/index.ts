@@ -15,6 +15,7 @@
 // AUTH : verify_jwt = true + rôle agence vérifié dans profiles.
 // ============================================================================
 
+import { erSurVues } from "../_shared/engagementRate.ts";
 import { corsHeaders, getServiceClient } from "../_shared/google.ts";
 import { tidySecret } from "../_shared/instagram.ts";
 import { agencyHint, emailsIn, isPaid } from "../_shared/signals.ts";
@@ -93,7 +94,7 @@ async function readChannels(ids: string[]): Promise<Channel[]> {
       const subs = st.hiddenSubscriberCount ? null : Number(st.subscriberCount ?? 0) || 0;
       const withViews = videos.filter((v) => v.views > 0);
       const avgViews = withViews.length ? Math.round(withViews.reduce((a, v) => a + v.views, 0) / withViews.length) : null;
-      const er = withViews.length ? Math.round((withViews.reduce((a, v) => a + v.likes + v.comments, 0) / withViews.reduce((a, v) => a + v.views, 0)) * 10000) / 100 : null;
+      const er = erSurVues(videos);
       const ts = videos.map((v) => Date.parse(v.at)).filter((t) => !Number.isNaN(t)).sort((a, b) => a - b);
       const weeks = ts.length >= 2 ? (ts[ts.length - 1] - ts[0]) / (7 * DAY) : 0;
       const perWeek = weeks > 0 ? Math.round(((ts.length - 1) / weeks) * 10) / 10 : null;

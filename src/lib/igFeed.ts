@@ -1,3 +1,4 @@
+import { ratioPct } from "../../supabase/functions/_shared/engagementRate.ts";
 /**
  * Page « Mes stats » (logique PURE, testée par igFeed.test.ts) : à partir de la colonne
  * `creators.ig` écrite chaque jour par ig-sync (feed des 12 derniers posts, statistiques
@@ -75,7 +76,7 @@ export function rankFeed(feed: FeedPost[], n = 3, now: Date = new Date()): { top
 /** Taux d'engagement des 28 derniers jours : interactions ÷ vues, en % (comme le relevé automatique). */
 export function engagement28(ins: { views?: number | null; interactions?: number | null } | null | undefined): number | null {
   if (!ins || !num(ins.views) || ins.views <= 0 || !num(ins.interactions)) return null;
-  return Math.round((ins.interactions / ins.views) * 1000) / 10;
+  return ratioPct(ins.interactions, ins.views);
 }
 
 /** Ratio « ×2,4 » (null si rien à comparer ou trop proche de la moyenne). */

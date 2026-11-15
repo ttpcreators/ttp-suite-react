@@ -1,3 +1,4 @@
+import { ratioPct } from "./engagementRate.ts";
 // ============================================================================
 // _shared/creatorCollabs.ts : les collabs d'un créateur, post par post (fiche « Analyser
 // un créateur » du Scouting, ig-sourcing mode « collabs »). Règles PURES, testées.
@@ -22,7 +23,7 @@ export function postKind(type: string, product: string): string {
 /** Engagement d'un post en % (null si les likes sont masqués ou sans abonnés). */
 export function postEr(likes: number | null, comments: number, followers: number): number | null {
   if (likes == null || !followers) return null;
-  return Math.round(((likes + comments) / followers) * 10000) / 100;
+  return ratioPct(likes + comments, followers);
 }
 
 /** Une ligne par marque : nombre de posts, dont payés, dernier post, engagement moyen. */

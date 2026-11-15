@@ -152,7 +152,7 @@ async function toData(p: IgProfile): Promise<Json> {
   return {
     v: DATA_V, name: p.name, followers: p.followers, following: p.following, posts: p.posts,
     deals: [...deals].slice(0, 8), cites: [...cites].slice(0, 15),
-    er: last12.length ? engagementRate(last12, p.followers) : null,
+    er: engagementRate(p.media, p.followers),
     perWeek: last12.length ? postsPerWeek(last12) : null,
     lastPost: p.media[0]?.at ?? null,
     bio: p.bio.slice(0, 300), website: p.website, email, emailFrom, agency,

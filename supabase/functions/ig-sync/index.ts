@@ -22,6 +22,7 @@
 // AUTH : verify_jwt = false (config.toml) ; Bearer CRON_SECRET (cron) OU JWT agence.
 // ============================================================================
 
+import { ratioPct } from "../_shared/engagementRate.ts";
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { discover, discoverImages, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, type IgPost, type IgResult } from "../_shared/instagram.ts";
 import { accountTotals, audience, freshToken, loginReady, ownMediaImages, postInsights, recentReels, type IgAccount, type Split } from "../_shared/instagram-login.ts";
@@ -171,7 +172,7 @@ async function syncCreator(ctx: Ctx, c: CreatorRow): Promise<Json> {
       next = {
         ...prev, at: now, ok: now, why: null,
         username: p.username, followers: p.followers, following: p.following, posts: p.posts,
-        er: engagementRate(last12, p.followers), perWeek: postsPerWeek(last12), lastPost: p.media[0]?.at ?? null,
+        er: engagementRate(p.media, p.followers), perWeek: postsPerWeek(last12), lastPost: p.media[0]?.at ?? null,
         history: pushDay(prev.history, p.followers),
       };
       if (mainIsInstagram(c) && p.followers > 0) patch.followers = fmtInt(p.followers);
@@ -211,7 +212,7 @@ async function syncCreator(ctx: Ctx, c: CreatorRow): Promise<Json> {
   const ins = next.insights as Json | undefined;
   if (!error && ins && ins.at === now && typeof ins.views === "number" && ins.views > 0 && typeof ins.interactions === "number") {
     await recordAutoMeasure(ctx.sb, { id: c.id, name: c.name, platform: c.platform ?? null }, {
-      platform: "instagram", er: Math.round((ins.interactions / ins.views) * 10000) / 100,
+      platform: "instagram", er: ratioPct(ins.interactions, ins.views) ?? 0,
       followers: typeof next.followers === "number" ? next.followers : null,
       detail: "Relevé automatique Instagram : interactions ÷ vues sur les 28 derniers jours (statistiques du compte connecté)",
     });
@@ -352,7 +353,7 @@ async function syncContact(ctx: Ctx, ct: ContactRow): Promise<Json> {
       const last12 = p.media.slice(0, 12);
       next = {
         at: now, ok: now, why: null, username: p.username, name: p.name, website: p.website,
-        followers: p.followers, posts: p.posts, er: engagementRate(last12, p.followers), perWeek: postsPerWeek(last12),
+        followers: p.followers, posts: p.posts, er: engagementRate(p.media, p.followers), perWeek: postsPerWeek(last12),
         lastPost: p.media[0] ? { at: p.media[0].at, url: p.media[0].url } : null,
       };
     }

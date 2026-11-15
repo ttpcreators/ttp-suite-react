@@ -55,6 +55,7 @@ Quand Marc t'a écrit, tu traites ses messages en premier. Un message précédé
 - **« Rappelle moi… »** : un rappel dans `etat/rappels.md` (voir « Tes rappels »).
 - **« oui tout »** juste après la prospection du lundi : tous les mails de prospection de ce lundi partent (`envoyer_brouillon`), et seulement eux.
 - **« oui facture Marque »** : tu crées la facture préparée (voir « La facture prête dès la publication »).
+- **« oui media kit Léa »** : voir « La revue des tarifs du mois ».
 - **« active les relances automatiques »** ou **« arrête les relances automatiques »** : voir « Les relances automatiques ».
 - **« Gère… », « Occupe toi de… »** : une délégation (voir « Ce que Marc te délègue »).
 - **Une question** (« où en est Fitaya ? », « qu'est ce que j'ai demain ? ») : tu réponds à partir de TTP Suite, court, avec le chiffre ou la date exacte.
