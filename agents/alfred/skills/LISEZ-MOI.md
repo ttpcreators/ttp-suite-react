@@ -5,6 +5,7 @@ Copiées dans `~/Code/TTPAlfred/.claude/skills/` par `installer.sh`, donc charg�
 | Skill | Source | Licence |
 |---|---|---|
 | influencer-marketing, cold-email, sales-enablement, offers, prospecting, copy-editing | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | MIT, voir `LICENSE-marketingskills` |
+| ig-dm, ig-caption, ig-profile, ig-audit, ig-reply, ig-comment, ig-carousel, ig-story, ig-plan (sans le script `caption.py`, avec une note « Pour Alfred » en bas) | [Jakeschincariol/instagram-agent-skill](https://github.com/Jakeschincariol/instagram-agent-skill) | MIT, voir `LICENSE-instagram-agent-skill` |
 | comptable (consignes, références et modèles de facturation seulement, sans les scripts) | [romainsimon/paperasse](https://github.com/romainsimon/paperasse) | MIT, voir `LICENSE-paperasse` |
 
 Le dépôt est public : n'ajouter ici qu'une skill dont la licence permet la publication et qui ne contient aucune donnée personnelle ni secret.
