@@ -189,10 +189,11 @@ async function claudeTwins(token: string, to: string, subject: string, threadId?
  * la même personne et le même objet, il est MIS À JOUR au lieu d'en créer un nouveau, et
  * ses éventuels doublons plus anciens (copies du même brouillon) sont supprimés.
  */
-export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, subject: string, message: string, threadId?: string, html?: string): Promise<{ id: string; replaced: boolean; removed: number }> {
+export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, subject: string, message: string, threadId?: string, html?: string, bcc: string[] = []): Promise<{ id: string; replaced: boolean; removed: number }> {
   const token = await tokenFor(sb, box, "modify");
   // X-TTP-Source : la page Mails de l'app affiche « par Claude » sur ce brouillon.
-  const headers: string[] = [`To: ${clean(to)}`, `Subject: ${encWord(clean(subject))}`, "X-TTP-Source: claude", "MIME-Version: 1.0"];
+  // Bcc : copie cachée (un créateur qui suit la prospection faite pour lui) ; Gmail la retire à l'envoi.
+  const headers: string[] = [`To: ${clean(to)}`, ...(bcc.length ? [`Bcc: ${clean(bcc.join(", "))}`] : []), `Subject: ${encWord(clean(subject))}`, "X-TTP-Source: claude", "MIME-Version: 1.0"];
   if (threadId) {
     // Réponse : rattachée au dernier message du fil (le fil reste groupé chez la marque).
     const t = await gjson(token, `${GMAIL}/threads/${encodeURIComponent(threadId)}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=References`);
