@@ -31,7 +31,23 @@ function pick(words: string[], salt: number) {
   return ok[salt % Math.min(2, ok.length)].i;
 }
 
-export function SpiderScan({ label, items, className }: { label: string; items?: string[]; className?: string }) {
+export function SpiderScan({
+  label,
+  items,
+  className,
+  idle = false,
+  note,
+  height = H,
+}: {
+  label: string;
+  items?: string[];
+  className?: string;
+  /** Au repos : elle ne lit plus, elle attend sur sa toile (page Araignée). */
+  idle?: boolean;
+  /** Texte de la barre noire à la place du compteur (au repos). */
+  note?: string;
+  height?: number;
+}) {
   const reduce = useReducedMotion() ?? false;
   const box = useRef<HTMLDivElement>(null);
   const wordEls = useRef(new Map<string, HTMLSpanElement>());
@@ -55,6 +71,7 @@ export function SpiderScan({ label, items, className }: { label: string; items?:
 
   // Le rythme : une nouvelle ligne toutes les 1,15 s, et le chrono.
   useEffect(() => {
+    if (idle) return;
     const t0 = performance.now();
     const a = window.setInterval(() => setStep((s) => s + 1), STEP_MS);
     const b = window.setInterval(() => setSecs(Math.floor((performance.now() - t0) / 1000)), 250);
@@ -62,7 +79,7 @@ export function SpiderScan({ label, items, className }: { label: string; items?:
       window.clearInterval(a);
       window.clearInterval(b);
     };
-  }, []);
+  }, [idle]);
 
   const line = step % lines.length;
   const offset = Math.max(0, Math.min(line - 1, lines.length - VISIBLE));
@@ -133,7 +150,7 @@ export function SpiderScan({ label, items, className }: { label: string; items?:
   const pad = (n: number) => String(n).padStart(3, "0");
 
   return (
-    <div ref={box} className={cn("relative overflow-hidden rounded-[18px] bg-white text-[#111] ring-1 ring-black/5 dark:bg-[#0E0E10] dark:text-[#F2F2F4] dark:ring-white/10", className)} style={{ height: H }} role="status" aria-live="polite">
+    <div ref={box} className={cn("relative overflow-hidden rounded-[18px] bg-white text-[#111] ring-1 ring-black/5 dark:bg-[#0E0E10] dark:text-[#F2F2F4] dark:ring-white/10", className)} style={{ height }} role="status" aria-live="polite">
       <span className="sr-only">Recherche en cours sur {label}</span>
 
       {/* Les lignes que l'araignée lit */}
@@ -204,14 +221,14 @@ export function SpiderScan({ label, items, className }: { label: string; items?:
       {/* Les barres du bas, comme dans la vidéo */}
       <div className="absolute inset-x-0 bottom-0 font-mono text-[12px] leading-none text-white">
         <div className="inline-block bg-[#111] px-3 py-1.5 dark:bg-white dark:text-[#111]">
-          L'ARAIGNÉE FOUILLE {label.toUpperCase()} · LIGNES LUES {step} · {secs} S
+          {idle && note ? note.toUpperCase() : `L'ARAIGNÉE FOUILLE ${label.toUpperCase()} · LIGNES LUES ${step} · ${secs} S`}
         </div>
         <div className="grid grid-cols-2">
           <div className="truncate px-3 py-1.5" style={{ background: K.joint }}>
             MOTS REPÉRÉS {pad(marked)} {last ? last.word.slice(0, 14) : ""}
           </div>
           <div className="truncate px-3 py-1.5" style={{ background: K.violet }}>
-            EN COURS {pad(secs)} S · {label.toUpperCase().slice(0, 16)}
+            {idle ? "AU REPOS" : `EN COURS ${pad(secs)} S`} · {label.toUpperCase().slice(0, 16)}
           </div>
         </div>
       </div>

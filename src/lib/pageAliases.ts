@@ -22,6 +22,7 @@ export const PAGE_ALIASES: Partial<Record<ViewId, string[]>> = {
   echeances: ["echeance", "echeances", "expiration", "renouvellement contrat", "fin de contrat"],
   exclusivites: ["exclu", "exclusivite", "exclusivites", "non concurrence", "concurrent", "clause"],
   diagnostique: ["diagnostic", "bug", "panne"],
+  araignee: ["araignée", "araignee", "spider", "scraping", "robots", "lancer les radars", "crawler"],
   sourcing: ["sourcing", "radar", "trouver", "recruter", "marques instagram", "concurrents", "agences concurrentes", "veille"],
   messages: ["dm", "messages", "messagerie", "inbox", "instagram"],
   roster: ["createurs", "talents"],

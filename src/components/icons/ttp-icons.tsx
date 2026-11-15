@@ -60,6 +60,7 @@ export const TtpTag = make("TtpTag", <><path d="M3 12 L9 5 H21 V19 H9 Z" /><path
 
 // ── Prospection ──────────────────────────────────────────────────────────────
 export const TtpContacts = make("TtpContacts", <><path d="M4 7 L12 3 L20 7 V21 H4 Z" /><path d="M10 9 H14 V13 H10 Z" /><path d="M7.5 18 L12 15.5 L16.5 18" /></>);
+export const TtpSpider = make("TtpSpider", <><path d="M12 2.5 V8.5" /><path d="M9.5 8.5 H14.5 V16 H9.5 Z" /><path d="M9.5 10 L6 7 L3 8.5 M9.5 12.5 H5 L3 14 M9.5 15 L6 18 L4 21 M14.5 10 L18 7 L21 8.5 M14.5 12.5 H19 L21 14 M14.5 15 L18 18 L20 21" /></>);
 export const TtpSourcing = make("TtpSourcing", <><path d="M4 9.5 L10.5 5 L17 9.5 V16 H4 Z" /><path d="M14.5 16 L20.5 21" /><path d="M8 11.5 H13" /></>);
 export const TtpSend = make("TtpSend", <><path d="M3 11 L21 4 L15 20 L11 13 Z" /><path d="M11 13 L21 4" /></>);
 export const TtpPipeline = make("TtpPipeline", <path d="M3 5 H21 L14 13 V20 L10 18 V13 Z" />);
