@@ -11,4 +11,6 @@
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
   <key>ThrottleInterval</key><integer>30</integer>
+  <!-- Interactive : macOS ne met jamais l'écoute en veille (App Nap), sinon elle peut se figer. -->
+  <key>ProcessType</key><string>Interactive</string>
 </dict></plist>

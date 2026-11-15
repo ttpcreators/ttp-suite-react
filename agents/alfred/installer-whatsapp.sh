@@ -13,12 +13,13 @@
 #   - Alfred n'envoie qu'avec `node whatsapp.mjs envoyer <id>` : le texte que Marc a vu, à un
 #     contact de la liste autorisée, pendant un passage où Marc a écrit (voir alfred.sh).
 #
+#   À lancer par Marc dans l'app Terminal de l'iMac (le QR code s'affiche dans la fenêtre).
 #   zsh ~/Code/TTPAlfred/installer-whatsapp.sh          installe, QR code la première fois, démarre
 #   zsh ~/Code/TTPAlfred/installer-whatsapp.sh --qr     refait le QR code (téléphone changé, déconnecté)
 #   zsh ~/Code/TTPAlfred/installer-whatsapp.sh --arret  arrête le pont et retire le bouton Envoyer
 # Aucun secret ici : la session WhatsApp reste dans ~/Code/TTPAlfred-whatsapp/…/store (sur l'iMac).
 set -e
-export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$HOME/go/bin"
+export PATH="$HOME/.local/go/bin:$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$HOME/go/bin"
 COMMIT=7d6a06dcdce1f01dfb24f60e1030d5efba9f3b88
 DEST="$HOME/Code/TTPAlfred-whatsapp"
 PONT="$DEST/whatsapp-mcp/whatsapp-bridge"
@@ -43,10 +44,27 @@ if [[ "$1" == "--arret" ]]; then
   exit 0
 fi
 
-# 1. Les outils : Go (pour compiler le pont) et git.
-command -v brew >/dev/null || { echo "Homebrew manque : https://brew.sh" >&2; exit 1; }
-command -v go >/dev/null || brew install go
-command -v git >/dev/null || xcode-select --install
+# 1. Les outils : Go (pour compiler le pont) et git. Pas besoin de Homebrew : sans Go, la version
+#    officielle est téléchargée sur go.dev dans ~/.local/go, après contrôle de son empreinte SHA-256.
+if ! command -v go >/dev/null; then
+  arch=$(uname -m); [[ "$arch" == x86_64 ]] && arch=amd64
+  echo "Installation de Go dans ~/.local/go…"
+  info=$(curl -fsS --max-time 30 "https://go.dev/dl/?mode=json")
+  ligne=$(print -r -- "$info" | /usr/bin/python3 -c "import json,sys
+d=json.load(sys.stdin)[0]
+f=[f for f in d['files'] if f['os']=='darwin' and f['arch']=='$arch' and f['kind']=='archive'][0]
+print(f['filename'], f['sha256'])")
+  fichier=${ligne% *}; empreinte=${ligne#* }
+  [[ "$fichier" == go*.darwin-$arch.tar.gz && "$empreinte" =~ '^[0-9a-f]{64}$' ]] || { echo "Version de Go introuvable sur go.dev." >&2; exit 1; }
+  tmp=$(mktemp -d "${TMPDIR:-/tmp}/go-dl.XXXXXX")
+  curl -fsSL --max-time 600 -o "$tmp/$fichier" "https://go.dev/dl/$fichier"
+  echo "$empreinte  $tmp/$fichier" | shasum -a 256 -c - >/dev/null || { echo "Empreinte de Go incorrecte : rien n'est installé." >&2; rm -rf "$tmp"; exit 1; }
+  mkdir -p "$HOME/.local" && rm -rf "$HOME/.local/go"
+  tar -xzf "$tmp/$fichier" -C "$HOME/.local"
+  rm -rf "$tmp"
+fi
+command -v go >/dev/null || { echo "Go introuvable après installation." >&2; exit 1; }
+command -v git >/dev/null || { echo "git manque : lance « xcode-select --install », puis relance ce script." >&2; exit 1; }
 
 # 2. Le code du pont, à la version épinglée.
 mkdir -p "$DEST" && chmod 700 "$DEST"
