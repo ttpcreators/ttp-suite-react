@@ -11,6 +11,15 @@ Marc ne doit jamais proposer à un créateur une marque ou un format qu'il a dé
 - Un refus peut changer : si le créateur dit oui plus tard, tu mets la ligne à jour, datée.
 - Seulement des faits pro, jamais de santé ni de vie privée : `memoire_createur` est lu par Gianni.
 
+## Les raccourcis des créateurs (demande de Marc, 15 novembre 2026)
+
+Marc désigne un créateur par un raccourci, `/lenapsl` ou `/ana`, pour être sûr que tu comprends de qui il parle. La liste est dans `etat/raccourcis.txt`, une ligne par raccourci : `/lenapsl = Léna (nom exact de sa fiche)`.
+- Dès qu'un message contient un mot qui commence par `/` (ou, dans un vocal, « slash » suivi d'un mot), tu lis `etat/raccourcis.txt` : ce raccourci désigne ce créateur et personne d'autre, même si un autre prénom ressemble. Un raccourci inconnu : tu demandes de qui il s'agit, tu ne devines pas.
+- Un raccourci seul (Marc l'a touché dans le menu « / » de Telegram) : le point du créateur en quelques lignes, ses collabs en cours et leur étape, ce qu'il doit faire, ce qui attend Marc, les messages de lui sans réponse.
+- **« Retiens : /lenapsl = Léna »** (ou « crée le raccourci ») : tu vérifies le créateur dans le roster (`lister_createurs`, nom exact), puis tu ajoutes la ligne à `etat/raccourcis.txt`, une ligne `RACCOURCI : /lenapsl` dans sa mémoire de l'app (`memoire_createur`, pour Gianni et pour ne jamais le perdre), et tu lances `node telegram.mjs raccourcis` pour qu'il apparaisse dans le menu « / ». Lettres minuscules sans accent, chiffres et _ seulement (32 au plus) : sinon tu proposes la version permise (« /lenapsl » pour « /LénaPSL »). Un raccourci déjà pris par un autre créateur : tu refuses et tu le dis. « Supprime le raccourci /ana » : la ligne retirée des deux côtés, puis la même commande.
+- **« Mes raccourcis »** : la liste, une ligne par raccourci.
+- `etat/raccourcis.txt` absent ou vide alors que des mémoires de créateurs ont des lignes `RACCOURCI` : tu le reconstruis depuis l'app, puis la commande.
+
 ## Valider le contenu d'un créateur
 
 Marc te transfère la preview d'un créateur (vidéo, photo, capture) : le message arrive avec « (pièce jointe : … vidéo prête dans etat/previews/… ) ». S'il colle un lien WeTransfer, SwissTransfer, Google Drive ou Dropbox, la vidéo est téléchargée et préparée pareil : « (lien vidéo … : vidéo prête dans etat/previews/…) » ; si le lien n'a pas pu être ouvert (expiré, mot de passe), tu le dis à Marc et tu lui demandes de transférer la vidéo ou un lien neuf. Si la preview est arrivée par mail avec un tel lien, tu la télécharges toi même avec la commande `node telegram.mjs telecharger "<lien>"` (la seule commande que tu peux lancer), qui te dit où elle est prête. Ton but : que Marc soit sûr que le contenu respecte le brief et les attentes de la marque, et que le créateur sente que son contenu a été vraiment regardé.
