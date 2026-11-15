@@ -21,13 +21,24 @@
 //   node whatsapp.mjs numero <id ou nom>          son numéro, pour le bouton « Ouvrir dans WhatsApp »
 //   node whatsapp.mjs piece <n°>                   ouvre une pièce jointe (« [document … · pièce 123] ») :
 //                                                 copiée dans etat/pieces/ pour être lue (PDF, photo, Word en texte)
+//
+// Envoi (choix de Marc le 2026-11-15 : Alfred envoie sur WhatsApp, seulement sur son « oui ») :
+//   node whatsapp.mjs envoyer <id>                envoie le texte préparé etat/whatsapp-a-envoyer/<id>.txt,
+//                                                 celui que Marc a vu sur Telegram (bouton « Envoyer »)
+//   node whatsapp.mjs autoriser "<id WhatsApp>" "<Nom (créateur, marque, équipe)>"
+//                                                 ajoute une discussion pro à la liste (après le « oui » de Marc)
+// L'envoi passe par le pont WhatsApp de l'iMac (installer-whatsapp.sh, appareil lié, écoute
+// seulement 127.0.0.1:8080). alfred.sh ne permet ces deux commandes que pendant un passage où Marc
+// a écrit, et Alfred ne peut pas écrire lui même dans etat/whatsapp-a-envoyer/ : seul le texte
+// déposé par telegram.mjs au moment où Marc l'a reçu peut partir, à un contact de la liste.
 // ============================================================================
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { separerNotes } from "./texte.mjs";
 
 const BASE = join(homedir(), "Library/Group Containers/group.net.whatsapp.WhatsApp.shared/ChatStorage.sqlite");
 const CONTACTS = join(BASE, "..", "ContactsV2.sqlite");
@@ -35,6 +46,11 @@ const LISTE = process.env.WA_LISTE || "etat/whatsapp-autorises.txt";
 /** Les dates WhatsApp comptent les secondes depuis le 1er janvier 2001. */
 const EPOQUE_APPLE = 978307200;
 const JID = /^[0-9A-Za-z@._-]+$/;
+const A_ENVOYER = "etat/whatsapp-a-envoyer";
+const ENVOYES = "etat/whatsapp-envoyes";
+const PONT = process.env.WA_PONT || "http://127.0.0.1:8080";
+/** Un texte préparé part dans les 7 jours, ensuite il est trop vieux (Marc l'a peut être oublié). */
+const VALIDITE_MS = 7 * 24 * 3600 * 1000;
 
 // ── Logique pure (testée) ───────────────────────────────────────────────────
 
@@ -173,6 +189,58 @@ export function balleChezMarc(rows, now, heures = 12) {
 }
 
 // ── Accès à la copie WhatsApp ───────────────────────────────────────────────
+
+// ── Envoi (logique pure, testée) ────────────────────────────────────────────
+
+/** Identifiant d'un texte préparé (donné par telegram.mjs, porté par le bouton « Envoyer »). */
+export const ID_ENVOI = /^[a-z0-9]{6,12}$/;
+
+/**
+ * Lit un texte préparé « Pour Léa sur WhatsApp · 33612345678 » + le message. Renvoie
+ * { nom, numero, texte } ou { erreur }.
+ */
+export function lirePreparation(brut) {
+  const [premiere = "", ...reste] = String(brut ?? "").replace(/\r\n/g, "\n").trim().split("\n");
+  const m = /^Pour\s+(.+?)\s+sur\s+WhatsApp\s*(?:·\s*\+?([\d ]{8,20}))?\s*$/i.exec(premiere.trim());
+  if (!m) return { erreur: "Première ligne illisible : « Pour Prénom sur WhatsApp · numéro »." };
+  const numero = m[2] ? m[2].replace(/\D/g, "") : null;
+  return { nom: m[1].trim(), numero: numero && numero.length >= 8 && numero.length <= 15 ? numero : null, texte: reste.join("\n").trim() };
+}
+
+/** La raison de ne pas envoyer ce texte, ou null s'il peut partir tel quel. */
+export function refusEnvoi(texte) {
+  const t = String(texte ?? "").trim();
+  if (!t) return "Le message est vide.";
+  if (t.length > 4000) return `Message trop long (${t.length} caractères, 4 000 au plus).`;
+  if (/[—–]/.test(t)) return "Le message contient un tiret long : il ne part pas (règle de Marc).";
+  const { texte: propre, notes, trous } = separerNotes(t);
+  if (notes.length) return `Le message contient une note pour Marc (« ${notes[0]} ») : il ne part pas.`;
+  if (trous.length) return `Le message a un trou à compléter (${trous.join(", ")}) : il ne part pas.`;
+  if (propre !== t.replace(/\n{3,}/g, "\n\n")) return "Le message contient autre chose que le texte à envoyer.";
+  return null;
+}
+
+/**
+ * Le contact de la liste à qui envoyer : trouvé par son nom, et, si le texte préparé porte un
+ * numéro, ce numéro doit être le sien. { entree } ou { erreur }.
+ */
+export function destinataire(liste, prep, numeroConnu = () => null) {
+  const entree = trouver(liste, prep.nom);
+  if (!entree) return { erreur: `« ${prep.nom} » n'est pas dans la liste WhatsApp autorisée : rien n'est envoyé.` };
+  if (prep.numero) {
+    const n = numeroConnu(entree);
+    if (n && n !== prep.numero) return { erreur: `Le numéro du texte (${prep.numero}) n'est pas celui de ${entree.nom} : rien n'est envoyé.` };
+  }
+  return { entree };
+}
+
+/** Une ligne de la liste autorisée, ou null si l'identifiant ou le nom est invalide. */
+export function ligneAutorisee(jid, nom) {
+  const j = String(jid ?? "").trim();
+  const n = String(nom ?? "").replace(/[|\n\r]/g, " ").trim().slice(0, 80);
+  if (!/^[0-9A-Za-z._-]+@(s\.whatsapp\.net|g\.us|lid)$/.test(j) || !n) return null;
+  return `${j} | ${n}`;
+}
 
 function copier(base = BASE) {
   if (!existsSync(base)) throw new Error("WhatsApp Desktop n'a pas de discussions sur ce Mac (fichier introuvable). Il faut l'ouvrir et le relier au téléphone.");
@@ -379,12 +447,67 @@ function main() {
     console.log(`Pièce copiée : ${dest}${nature}`);
     return;
   }
-  throw new Error("Commandes : chercher <mot>, liste, lire <créateur> [--depuis AAAA-MM-JJ] [--max N] [--vocaux N], nouveaux --depuis \"AAAA-MM-JJ HH:MM\", en-attente [--heures N], numero <créateur>, piece <n°>.");
+  throw new Error("Commandes : chercher <mot>, liste, lire <créateur> [--depuis AAAA-MM-JJ] [--max N] [--vocaux N], nouveaux --depuis \"AAAA-MM-JJ HH:MM\", en-attente [--heures N], numero <créateur>, piece <n°>, envoyer <id>, autoriser \"<id>\" \"<Nom>\".");
+}
+
+/** Le numéro (chiffres) d'une entrée de la liste, depuis son identifiant ou le carnet de WhatsApp Desktop. */
+function numeroEntree(entree) {
+  if (entree.jid.endsWith("@g.us")) return null;
+  if (entree.jid.endsWith("@s.whatsapp.net")) return numeroDe(entree.jid);
+  if (!existsSync(CONTACTS)) return null;
+  const lid = entree.jid.split("@")[0];
+  try {
+    return numeroDe(entree.jid, avecBase((q) => q(`select ZLID as lid, ZWHATSAPPID as wa, ZPHONENUMBER as tel from ZWAADDRESSBOOKCONTACT where ZLID like '${lid}%'`), CONTACTS));
+  } catch {
+    return null;
+  }
+}
+
+async function envoyer(id) {
+  if (!ID_ENVOI.test(String(id ?? ""))) throw new Error("Usage : node whatsapp.mjs envoyer <id> (l'id du bouton « Envoyer », « oui whatsapp <id> »).");
+  const fichier = join(A_ENVOYER, `${id}.txt`);
+  if (!existsSync(fichier)) throw new Error(`Texte ${id} introuvable ou déjà envoyé (${ENVOYES}/).`);
+  if (Date.now() - statSync(fichier).mtimeMs > VALIDITE_MS) throw new Error(`Texte ${id} préparé il y a plus de 7 jours : remontre le à Marc avant de l'envoyer.`);
+  const prep = lirePreparation(readFileSync(fichier, "utf8"));
+  if (prep.erreur) throw new Error(prep.erreur);
+  const refus = refusEnvoi(prep.texte);
+  if (refus) throw new Error(refus);
+  const { entree, erreur } = destinataire(listeAutorisee(), prep, numeroEntree);
+  if (erreur) throw new Error(erreur);
+  const recipient = numeroEntree(entree) ?? entree.jid;
+  let res;
+  try {
+    res = await fetch(`${PONT}/api/send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ recipient, message: prep.texte }),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch {
+    throw new Error("Le pont WhatsApp de l'iMac ne répond pas : rien n'est parti. Marc doit le relancer (zsh installer-whatsapp.sh).");
+  }
+  const r = await res.json().catch(() => ({}));
+  if (!res.ok || !r.success) throw new Error(`WhatsApp a refusé l'envoi : ${r.message ?? res.status}. Rien n'est parti.`);
+  mkdirSync(ENVOYES, { recursive: true });
+  renameSync(fichier, join(ENVOYES, `${id}.txt`));
+  appendFileSync(join(ENVOYES, "journal.log"), `${heure(new Date())} · ${id} · ${entree.nom}\n`);
+  console.log(`Envoyé sur WhatsApp à ${entree.nom} (${heure(new Date())}).`);
+}
+
+function autoriser(jid, nom) {
+  const l = ligneAutorisee(jid, nom);
+  if (!l) throw new Error("Usage : node whatsapp.mjs autoriser \"<id WhatsApp>\" \"<Nom (créateur, marque ou équipe)>\" (l'id donné par « chercher »).");
+  if (listeAutorisee().some((x) => x.jid === l.split(" | ")[0])) return console.log("Déjà dans la liste.");
+  appendFileSync(LISTE, `${existsSync(LISTE) && !readFileSync(LISTE, "utf8").endsWith("\n") && readFileSync(LISTE, "utf8") ? "\n" : ""}${l}\n`);
+  console.log(`Ajouté à la liste : ${l}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const [mode, ...args] = process.argv.slice(2);
   try {
-    main();
+    if (mode === "envoyer") await envoyer(args[0]);
+    else if (mode === "autoriser") autoriser(args[0], args.slice(1).join(" "));
+    else main();
   } catch (e) {
     console.error(e.message);
     process.exit(1);

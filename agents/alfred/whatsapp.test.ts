@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { appleVersDate, attente, balleChezMarc, cleVocal, contenu, duree, correspond, dateVersApple, heure, ligne, lireDate, lireListe, numeroDe, trouver } from "./whatsapp.mjs";
+import { appleVersDate, attente, balleChezMarc, cleVocal, contenu, duree, correspond, dateVersApple, heure, ligne, lireDate, lireListe, numeroDe, trouver, lirePreparation, refusEnvoi, destinataire, ligneAutorisee, ID_ENVOI } from "./whatsapp.mjs";
 
 describe("Alfred : discussions WhatsApp", () => {
   it("convertit les dates WhatsApp (secondes depuis 2001) à l'heure de Paris", () => {
@@ -88,5 +88,38 @@ describe("WhatsApp : les pièces jointes", () => {
     expect(nomPiece(123, "brief Nova.pdf")).toBe("wa-123-brief_Nova.pdf");
     expect(nomPiece(7, "../../.ssh/id_rsa")).toBe("wa-7-id_rsa");
     expect(nomPiece(8, "")).toBe("wa-8-piece");
+  });
+
+  it("lit le texte préparé que Marc a vu sur Telegram", () => {
+    expect(lirePreparation("Pour Léa sur WhatsApp · 33 6 00 00 00 00\nCoucou Léa !\nÀ demain")).toEqual({ nom: "Léa", numero: "33600000000", texte: "Coucou Léa !\nÀ demain" });
+    expect(lirePreparation("Pour Groupe Nova × TTP sur WhatsApp\nHello")).toEqual({ nom: "Groupe Nova × TTP", numero: null, texte: "Hello" });
+    expect(lirePreparation("Pour @lea sur Instagram\nHello")).toHaveProperty("erreur");
+    expect(ID_ENVOI.test("ab12cd34")).toBe(true);
+    expect(ID_ENVOI.test("../x")).toBe(false);
+  });
+
+  it("refuse un texte qui ne peut pas partir tel quel", () => {
+    expect(refusEnvoi("Coucou Léa, ton tournage est demain !")).toBeNull();
+    expect(refusEnvoi("")).toMatch(/vide/);
+    expect(refusEnvoi("Coucou — à demain")).toMatch(/tiret/);
+    expect(refusEnvoi("Coucou [prénom]")).toMatch(/trou/);
+    expect(refusEnvoi("Coucou\nÀ VÉRIFIER : le prix")).toMatch(/note/);
+    expect(refusEnvoi("x".repeat(4001))).toMatch(/trop long/);
+  });
+
+  it("n'envoie qu'à un contact de la liste, au bon numéro", () => {
+    const liste = [{ jid: "33600000000@s.whatsapp.net", nom: "Léa Test" }, { jid: "120363000000@g.us", nom: "Nova × TTP" }];
+    const num = (e: { jid: string }) => numeroDe(e.jid);
+    expect(destinataire(liste, { nom: "Léa", numero: "33600000000" }, num)).toEqual({ entree: liste[0] });
+    expect(destinataire(liste, { nom: "Léa", numero: "33611111111" }, num)).toHaveProperty("erreur");
+    expect(destinataire(liste, { nom: "Maman", numero: null }, num)).toHaveProperty("erreur");
+    expect(destinataire(liste, { nom: "Nova", numero: null }, num)).toEqual({ entree: liste[1] });
+  });
+
+  it("n'ajoute à la liste qu'un identifiant WhatsApp valide", () => {
+    expect(ligneAutorisee("33600000000@s.whatsapp.net", "Paul (marque Nova)")).toBe("33600000000@s.whatsapp.net | Paul (marque Nova)");
+    expect(ligneAutorisee("33600000000@s.whatsapp.net", "a | b\nc")).toBe("33600000000@s.whatsapp.net | a   b c");
+    expect(ligneAutorisee("rm -rf", "X")).toBeNull();
+    expect(ligneAutorisee("120363000000@g.us", "")).toBeNull();
   });
 });
