@@ -203,8 +203,8 @@ sur_oui="envoyer_brouillon noter_lecon"
 interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture ecarter_proposition proposer_action preparer_reponse_mail resumer_brief"
 # Seule commande permise : télécharger et découper une vidéo dont le lien est dans un mail.
 # Skill : ses skills (.claude/skills, voir skills/LISEZ-MOI.md du dépôt), des consignes à lire.
-# WhatsApp (choix de Marc le 2026-11-10) : lecture seule des discussions de etat/whatsapp-autorises.txt
-# (whatsapp.mjs refuse les autres ; Alfred ne peut pas modifier cette liste). Spark (choix de Marc le
+# WhatsApp (choix de Marc le 2026-11-10, élargi au pro le 2026-11-15) : lecture des discussions de
+# etat/whatsapp-autorises.txt (whatsapp.mjs refuse les autres ; Alfred n'y ajoute que par `autoriser`). Spark (choix de Marc le
 # 2026-11-10) : lire les boîtes des créateurs gérées dans Spark Desktop et y préparer des brouillons,
 # seulement par spark.mjs, qui refuse toute boîte hors de TTP Creators (ALFRED_SPARK_BOITES dans config.env).
 # Jamais d'envoi, de suppression ni d'action.
@@ -219,6 +219,9 @@ allowed=("Read($ici/**)" "Edit($ici/etat/**)" "WebFetch" "WebSearch" "Skill" "Ba
   "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)")
 denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash(spark:*)"
   "Edit($ici/etat/whatsapp-autorises.txt)")
+# Ajouter une discussion à la liste autorisée (`autoriser`) : seulement pendant un passage où Marc a
+# écrit (ses consignes exigent son « oui »). Rien n'est jamais envoyé sur WhatsApp.
+(( recus > 0 )) || denied+=("Bash(node whatsapp.mjs autoriser:*)")
 if (( recus > 0 )); then
   # Marc vient d'écrire : Alfred gère toute l'app sur sa demande (choix de Marc le 2026-11-06).
   # Ses consignes gardent la règle : un mail ou un DM ne part que sur un « oui » explicite.

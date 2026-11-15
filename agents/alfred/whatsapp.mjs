@@ -21,10 +21,15 @@
 //   node whatsapp.mjs numero <id ou nom>          son numéro, pour le bouton « Ouvrir dans WhatsApp »
 //   node whatsapp.mjs piece <n°>                   ouvre une pièce jointe (« [document … · pièce 123] ») :
 //                                                 copiée dans etat/pieces/ pour être lue (PDF, photo, Word en texte)
+//   node whatsapp.mjs autoriser "<id WhatsApp>" "<Nom (créateur, marque, équipe)>"
+//                                                 ajoute une discussion pro à la liste (après le « oui » de Marc ;
+//                                                 alfred.sh ne le permet que pendant un passage où Marc a écrit)
+// Rien n'est jamais envoyé sur WhatsApp (choix de Marc le 2026-11-16 : pas de pont non officiel,
+// pour ne pas risquer un blocage du compte).
 // ============================================================================
 
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -173,6 +178,14 @@ export function balleChezMarc(rows, now, heures = 12) {
 }
 
 // ── Accès à la copie WhatsApp ───────────────────────────────────────────────
+
+/** Une ligne de la liste autorisée, ou null si l'identifiant ou le nom est invalide. */
+export function ligneAutorisee(jid, nom) {
+  const j = String(jid ?? "").trim();
+  const n = String(nom ?? "").replace(/[|\n\r]/g, " ").trim().slice(0, 80);
+  if (!/^[0-9A-Za-z._-]+@(s\.whatsapp\.net|g\.us|lid)$/.test(j) || !n) return null;
+  return `${j} | ${n}`;
+}
 
 function copier(base = BASE) {
   if (!existsSync(base)) throw new Error("WhatsApp Desktop n'a pas de discussions sur ce Mac (fichier introuvable). Il faut l'ouvrir et le relier au téléphone.");
@@ -379,12 +392,22 @@ function main() {
     console.log(`Pièce copiée : ${dest}${nature}`);
     return;
   }
-  throw new Error("Commandes : chercher <mot>, liste, lire <créateur> [--depuis AAAA-MM-JJ] [--max N] [--vocaux N], nouveaux --depuis \"AAAA-MM-JJ HH:MM\", en-attente [--heures N], numero <créateur>, piece <n°>.");
+  throw new Error("Commandes : chercher <mot>, liste, lire <créateur> [--depuis AAAA-MM-JJ] [--max N] [--vocaux N], nouveaux --depuis \"AAAA-MM-JJ HH:MM\", en-attente [--heures N], numero <créateur>, piece <n°>, autoriser \"<id>\" \"<Nom>\".");
+}
+
+function autoriser(jid, nom) {
+  const l = ligneAutorisee(jid, nom);
+  if (!l) throw new Error("Usage : node whatsapp.mjs autoriser \"<id WhatsApp>\" \"<Nom (créateur, marque ou équipe)>\" (l'id donné par « chercher »).");
+  if (listeAutorisee().some((x) => x.jid === l.split(" | ")[0])) return console.log("Déjà dans la liste.");
+  appendFileSync(LISTE, `${existsSync(LISTE) && !readFileSync(LISTE, "utf8").endsWith("\n") && readFileSync(LISTE, "utf8") ? "\n" : ""}${l}\n`);
+  console.log(`Ajouté à la liste : ${l}`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const [mode, ...args] = process.argv.slice(2);
   try {
-    main();
+    if (mode === "autoriser") autoriser(args[0], args.slice(1).join(" "));
+    else main();
   } catch (e) {
     console.error(e.message);
     process.exit(1);

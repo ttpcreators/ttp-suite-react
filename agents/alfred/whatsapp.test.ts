@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { appleVersDate, attente, balleChezMarc, cleVocal, contenu, duree, correspond, dateVersApple, heure, ligne, lireDate, lireListe, numeroDe, trouver } from "./whatsapp.mjs";
+import { appleVersDate, attente, balleChezMarc, cleVocal, contenu, duree, correspond, dateVersApple, heure, ligne, lireDate, lireListe, numeroDe, trouver, ligneAutorisee } from "./whatsapp.mjs";
 
 describe("Alfred : discussions WhatsApp", () => {
   it("convertit les dates WhatsApp (secondes depuis 2001) à l'heure de Paris", () => {
@@ -88,5 +88,12 @@ describe("WhatsApp : les pièces jointes", () => {
     expect(nomPiece(123, "brief Nova.pdf")).toBe("wa-123-brief_Nova.pdf");
     expect(nomPiece(7, "../../.ssh/id_rsa")).toBe("wa-7-id_rsa");
     expect(nomPiece(8, "")).toBe("wa-8-piece");
+  });
+
+  it("n'ajoute à la liste qu'un identifiant WhatsApp valide", () => {
+    expect(ligneAutorisee("33600000000@s.whatsapp.net", "Paul (marque Nova)")).toBe("33600000000@s.whatsapp.net | Paul (marque Nova)");
+    expect(ligneAutorisee("33600000000@s.whatsapp.net", "a | b\nc")).toBe("33600000000@s.whatsapp.net | a   b c");
+    expect(ligneAutorisee("rm -rf", "X")).toBeNull();
+    expect(ligneAutorisee("120363000000@g.us", "")).toBeNull();
   });
 });
