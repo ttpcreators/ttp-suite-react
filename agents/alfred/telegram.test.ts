@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { aEnvoyerWhatsApp, boutonsLiens, chunks, clavier, commandesDepuis, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
+import { boutonsLiens, chunks, clavier, commandesDepuis, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -290,18 +290,5 @@ describe("raccourcis des créateurs", () => {
   });
   it("accepte un fichier vide", () => {
     expect(commandesDepuis("")).toEqual({ commandes: [], refus: [] });
-  });
-
-  it("ajoute le bouton Envoyer sous un texte WhatsApp que le pont peut envoyer", () => {
-    const brut = "Pour Léa sur WhatsApp · 33600000000\nCoucou Léa !";
-    expect(aEnvoyerWhatsApp("02-whatsapp.txt", brut)).toBe("Pour Léa sur WhatsApp · 33600000000\nCoucou Léa !\n");
-    expect(aEnvoyerWhatsApp("02-copier.txt", brut)).toBeNull();
-    expect(aEnvoyerWhatsApp("02-whatsapp.txt", "Pour @lea sur Instagram\nHello")).toBeNull();
-    expect(aEnvoyerWhatsApp("02-whatsapp.txt", "Pour Léa sur WhatsApp\nCoucou [prénom]")).toBeNull();
-    expect(aEnvoyerWhatsApp("02-whatsapp.txt", "Pour Léa sur WhatsApp\nCoucou — Léa")).toBeNull();
-    const [m] = messagesFor("02-whatsapp.txt", brut, { waEnvoi: "ab12cd34" });
-    expect(m.boutons[0][0]).toEqual({ text: "Envoyer", callback_data: "oui whatsapp ab12cd34" });
-    const [sans] = messagesFor("02-whatsapp.txt", brut);
-    expect(sans.boutons[0][0].text).toBe("Ouvrir dans WhatsApp");
   });
 });

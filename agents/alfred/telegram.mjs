@@ -237,23 +237,8 @@ export function boutonEnvoye(label) {
 /** Le message qu'Alfred reçoit quand Marc touche « J'ai envoyé ». */
 export const messageEnvoye = (data) => `J'ai envoyé le message à ${String(data).slice(ENVOYE.length) || "ce contact"} (bouton « J'ai envoyé »)`;
 
-/**
- * Texte WhatsApp que le pont de l'iMac peut envoyer (choix de Marc le 2026-11-15) : un
- * « …-whatsapp.txt » « Pour X sur WhatsApp », sans note ni trou. Renvoie le contenu à garder dans
- * etat/whatsapp-a-envoyer/<id>.txt (exactement ce que Marc voit), ou null.
- */
-export function aEnvoyerWhatsApp(name, content) {
-  if (!name.endsWith("-whatsapp.txt")) return null;
-  const [premiere = "", ...rest] = String(content ?? "").replace(/\r\n/g, "\n").trim().split("\n");
-  if (!/^Pour\s+.+?\s+sur\s+WhatsApp\b/i.test(premiere.trim())) return null;
-  const { texte, notes, trous } = separerNotes(rest.join("\n"));
-  if (!texte || notes.length || trous.length || /[—–]/.test(texte)) return null;
-  return `${premiere.trim()}\n${texte}\n`;
-}
-
-/** Messages à envoyer pour un fichier déposé par Alfred. `waEnvoi` : id du texte que le bouton
- * « Envoyer » fait partir sur WhatsApp (« oui whatsapp <id> »). */
-export function messagesFor(name, content, { waEnvoi = null } = {}) {
+/** Messages à envoyer pour un fichier déposé par Alfred. */
+export function messagesFor(name, content) {
   const text = content.replace(/\r\n/g, "\n").trim();
   if (!text) return [];
   if (name.endsWith("-whatsapp.txt") || name.endsWith("-copier.txt")) {
@@ -263,7 +248,7 @@ export function messagesFor(name, content, { waEnvoi = null } = {}) {
     const { texte: body, notes, trous } = separerNotes(rest.join("\n"));
     const { label, bouton } = boutonWhatsApp(premiere.trim(), body);
     if (body && body.length < LIMIT - 200) {
-      const ligne = [...(waEnvoi ? [{ text: "Envoyer", callback_data: court(`oui whatsapp ${waEnvoi}`) }] : []), ...bouton, ...boutonCopier(body)];
+      const ligne = [...bouton, ...boutonCopier(body)];
       const apart = [...notes, ...(trous.length ? [`À compléter avant d'envoyer : ${trous.join(", ")}`] : [])];
       const pourMarc = apart.length ? `\n${apart.map((n) => `_${escapeMd(n)}_`).join("\n")}` : "";
       const boutons = [...(ligne.length ? [ligne] : []), boutonEnvoye(label)];
@@ -767,24 +752,13 @@ async function envoyerFichiers({ token, chatId, here, dir, names, fil, supprimer
   const fichierIds = join(here, fichierRecuIds(process.env.ALFRED_RECU_IDS));
   const ids = existsSync(fichierIds) ? readFileSync(fichierIds, "utf8").split("\n").map(Number).filter(Boolean) : [];
   let replyTo = !existsSync(marque) && ids.length ? ids[ids.length - 1] : null;
-  const waActif = readEnv(join(here, "config.env")).ALFRED_WA_ENVOI === "1";
   let n = 0;
   for (const name of names) {
     const chemin = join(dir, name);
     // Un .txt = un message ; un .contrat.json = un contrat fabriqué par le moteur de l'app ;
     // tout autre fichier (document .html, PDF) part en pièce jointe.
-    // Pont WhatsApp installé (ALFRED_WA_ENVOI=1 dans config.env) : le texte est gardé tel que Marc
-    // le voit, et son bouton « Envoyer » le fait partir après confirmation (whatsapp.mjs envoyer).
-    const brut = name.endsWith(".txt") ? readFileSync(chemin, "utf8") : "";
-    const garde = waActif ? aEnvoyerWhatsApp(name, brut) : null;
-    let waEnvoi = null;
-    if (garde) {
-      waEnvoi = Math.random().toString(36).slice(2, 10).padEnd(8, "0");
-      mkdirSync(join(here, "etat/whatsapp-a-envoyer"), { recursive: true });
-      writeFileSync(join(here, "etat/whatsapp-a-envoyer", `${waEnvoi}.txt`), garde);
-    }
     const messages = name.endsWith(".txt")
-      ? messagesFor(name, brut, { waEnvoi })
+      ? messagesFor(name, readFileSync(chemin, "utf8"))
       : name.endsWith(".contrat.json")
         ? await contratDepuisJson(chemin, name)
         : [{ file: chemin, name }];

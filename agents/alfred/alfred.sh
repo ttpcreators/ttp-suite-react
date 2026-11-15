@@ -218,12 +218,10 @@ ici="/$PWD"
 allowed=("Read($ici/**)" "Edit($ici/etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)" "Bash(node telegram.mjs joindre:*)" "Bash(node telegram.mjs raccourcis)"
   "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)")
 denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash(spark:*)"
-  "Edit($ici/etat/whatsapp-autorises.txt)" "Edit($ici/etat/whatsapp-a-envoyer/**)" "Edit($ici/etat/whatsapp-envoyes/**)")
-# Envoi WhatsApp (choix de Marc le 2026-11-15) : `whatsapp.mjs envoyer` ne fait partir que le texte
-# gardé par telegram.mjs quand Marc l'a reçu (Alfred ne peut pas écrire dans etat/whatsapp-a-envoyer/),
-# et seulement pendant un passage où Marc a écrit : ses consignes exigent son « oui » pour CE texte.
-# Même règle pour ajouter une discussion à la liste autorisée (`autoriser`).
-(( recus > 0 )) || denied+=("Bash(node whatsapp.mjs envoyer:*)" "Bash(node whatsapp.mjs autoriser:*)")
+  "Edit($ici/etat/whatsapp-autorises.txt)")
+# Ajouter une discussion à la liste autorisée (`autoriser`) : seulement pendant un passage où Marc a
+# écrit (ses consignes exigent son « oui »). Rien n'est jamais envoyé sur WhatsApp.
+(( recus > 0 )) || denied+=("Bash(node whatsapp.mjs autoriser:*)")
 if (( recus > 0 )); then
   # Marc vient d'écrire : Alfred gère toute l'app sur sa demande (choix de Marc le 2026-11-06).
   # Ses consignes gardent la règle : un mail ou un DM ne part que sur un « oui » explicite.
