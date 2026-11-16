@@ -11,11 +11,11 @@
 #                         des marques, DM, devis, relances, créateurs, argent à aller chercher).
 #                         Le lundi à 11 h : la prospection de la semaine ; le 1er
 #                         du mois à 14 h : la revue des tarifs ; le mercredi à 11 h : le
-#                         recrutement. Du lundi au vendredi à 11 h, 13 h et 15 h : la VEILLE (les
+#                         recrutement ; le jeudi à 11 h : la veille créative. Du lundi au vendredi à 11 h, 13 h et 15 h : la VEILLE (les
 #                         mails arrivés depuis, modèle rapide, silencieuse sauf pour l'important).
 #                         Et, une heure avant chaque rendez-vous du jour, sa fiche.
 #                         En mode vacances (etat/vacances.txt) : le point du matin seulement.
-#   alfred.sh --point | --prospection | --tarifs | --recrutement | --veille : ce passage tout de suite (test).
+#   alfred.sh --point | --prospection | --tarifs | --recrutement | --creative | --veille : ce passage tout de suite (test).
 # Alfred lit TTP Suite par le connecteur « TTP Suite » du compte Claude de Marc, prépare des
 # brouillons, tient la to-do et dépose ses messages pour Marc dans etat/envoi/ ; ce script les
 # envoie ensuite par le bot Telegram d'Alfred, à Marc seul. Un mail ne part que sur un « oui »
@@ -98,7 +98,7 @@ aujourdhui=$(date +%Y-%m-%d)
 
 # Mode vacances : etat/vacances.txt commence par « AAAA-MM-JJ », le dernier jour d'absence de
 # Marc (écrit par Alfred quand Marc dit « je pars jusqu'au … »). Pendant l'absence : le point du
-# matin seulement (l'urgent), pas de point du soir, de prospection, de revue ni de recrutement.
+# matin seulement (l'urgent), pas de point du soir, de prospection, de revue, de recrutement ni de veille créative.
 # Le premier point après : le résumé du retour, puis le fichier est vidé.
 vacances=""
 retour=0
@@ -133,6 +133,9 @@ elif [[ "$1" == "--tarifs" ]] || (( auto && ! ${#vacances} && quantieme == 1 && 
 # Le mercredi à 11 h : le recrutement de la semaine (scouting).
 elif [[ "$1" == "--recrutement" ]] || (( auto && ! ${#vacances} && jour == 3 && heure == 11 )); then
   mode="le recrutement de la semaine"
+# Le jeudi à 11 h (demande de Marc, 16 novembre 2026) : la veille créative (tendances, idées par créateur).
+elif [[ "$1" == "--creative" ]] || (( auto && ! ${#vacances} && jour == 4 && heure == 11 )); then
+  mode="la veille créative de la semaine"
 # Du lundi au vendredi à 11 h, 13 h et 15 h, entre les deux points : la veille (demande de Marc
 # le 2026-11-13). Seulement les mails arrivés depuis, et un message à Marc seulement pour l'important.
 elif [[ "$1" == "--veille" ]] || (( auto && ! ${#vacances} && jour <= 5 && (heure == 11 || heure == 13 || heure == 15) )); then
