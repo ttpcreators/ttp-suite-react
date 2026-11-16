@@ -37,6 +37,15 @@ Marc se sert aussi de l'araignée lui même, depuis Chrome (fiche marque, fiche 
 - **Une vérif de collab ou des publications** avec un manque ou un retard : c'est un contrôle déjà fait. Tu ne le refais pas le même jour ; tu le reprends dans « Le contrôle du jour de publication » : le suivi à J+3 puis J+7, les captures de stories à demander, et la collab qui avance quand tout est en ligne. Ce qui est marqué « À suivre par Alfred » est pour toi.
 - **Un ajout au Scouting, un contact, une tâche** : ils sont déjà dans l'app, tu ne les recrées pas.
 
+## Alfred et l'araignée, une seule équipe (demande de Marc, 16 novembre 2026)
+
+L'araignée et toi travaillez sur les mêmes collabs, les mêmes créateurs et la même to-do : ce que l'une a vu, l'autre ne le refait pas, et rien ne tombe entre les deux.
+1. **Les deadlines de publication** : le jour prévu (voir « Le contrôle du jour de publication »), tu lis d'abord `journal_agents` : une vérif de l'araignée du jour sur cette collab fait foi. Sans vérif, et sans post trouvé par l'app : pour un TikTok ou un YouTube, tu regardes toi même la page publique du créateur dans la fenêtre de l'araignée (`start`, `now`, `find` du post trouvé, `done`) ; pour Instagram et les stories (connexion nécessaire), tu demandes à Marc en une ligne de lancer la vérif des publications de l'araignée depuis Chrome (« Lance la vérif de l'araignée : Léa × Nova, prévu aujourd'hui »).
+2. **Une vérif où tout est en ligne** : c'est la preuve. La tâche « Publier … » du créateur est cochée, la collab avance, une ligne `publication · OK` dans `etat/suivi.md`. Un manque ou un retard : le suivi à J+3 puis J+7 reste le tien, sans refaire la vérif le même jour.
+3. **Le suivi de contenu** : ce que l'araignée marque « À suivre par Alfred » (une preview à relancer, une capture de story à demander, un lien à corriger) devient une tâche (sans doublon, voir « La to-do en symbiose »), avec le message au créateur prêt, et elle se coche quand c'est fait.
+4. **Les idées** : la veille du matin de l'araignée (actualité des marques) et ses fiches marque nourrissent ta veille créative du jeudi (une campagne qui démarre est une idée de contenu pour le bon créateur) ; et toute recherche web que tu fais pour cette veille se voit dans sa fenêtre (voir « Un scraping à la main, visible dans la salle »).
+5. **Avant de préparer quoi que ce soit** (voir « Vérifier avant de préparer ») : le journal de l'araignée compte comme une source. Une proposition, une tâche ou un contact qu'elle a déjà faits ne se refont pas.
+
 ## Si l'araignée n'est pas prête
 
 `node araignee.mjs etat` dit ce qui manque sur ce Mac. Tu ne l'installes jamais toi même : tu le dis à Marc en une ligne, avec ce qu'il doit faire (double-cliquer « Installer l'araignée sur ce Mac » dans iCloud Drive › Araignée ; ou installer `uv` ; ou accepter le téléchargement du navigateur de l'araignée, environ 110 Mo). En attendant, tu fais le travail avec `WebFetch` et `WebSearch`, et tu le précises.

@@ -470,7 +470,7 @@ function main() {
         return console.log(`Pièce copiée : ${dest} (texte illisible : demande-la en PDF)`);
       }
     }
-    const nature = Number(p.type) === 2 ? " (vidéo : pour la regarder, demande à Marc de te la transférer sur Telegram)" : "";
+    const nature = Number(p.type) === 2 ? ` (vidéo : pour la regarder, node telegram.mjs preparer ${dest})` : "";
     console.log(`Pièce copiée : ${dest}${nature}`);
     return;
   }

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { aEnvoyerWhatsApp, boutonsLiens, chunks, clavier, commandesDepuis, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
+import { aEnvoyerWhatsApp, boutonsLiens, chunks, clavier, commandesDepuis, COMMANDES_DE_BASE, menuDepuis, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -42,7 +42,7 @@ describe("Alfred : messages Telegram", () => {
     expect(m.text).toBe(
       "<b>Mail à Erwann (Marque Test)</b>\nÀ : erwann@exemple.fr · Objet : Rendez vous\n\n<blockquote>Bonjour Erwann,\nLequel vous arrange ?</blockquote>\n\n<b>À vérifier</b> : les créneaux",
     );
-    expect(m.boutons).toEqual([[{ text: "Envoyer", callback_data: "oui Erwann" }, { text: "Ouvrir dans Spark", url: "https://sparkmailapp.com/dpl/bl?token=abc" }]]);
+    expect(m.boutons).toEqual([[{ text: "Envoyer", callback_data: "oui Erwann" }], [{ text: "Ouvrir dans Spark", url: "https://sparkmailapp.com/dpl/bl?token=abc" }]]);
     // Brouillon dans la boîte d'un créateur : Alfred ne peut pas l'envoyer, pas de bouton Envoyer.
     const [s] = messagesFor("03-mail.txt", "Mail à Lola (Marque) · à envoyer depuis Spark\n\nHello\n\nOuvrir dans Spark : https://sparkmailapp.com/dpl/bl?token=x");
     expect(s.boutons).toEqual([[{ text: "Ouvrir dans Spark", url: "https://sparkmailapp.com/dpl/bl?token=x" }]]);
@@ -292,6 +292,15 @@ describe("raccourcis des créateurs", () => {
   });
   it("accepte un fichier vide", () => {
     expect(commandesDepuis("")).toEqual({ commandes: [], refus: [] });
+  });
+  it("met les commandes d'Alfred avant les raccourcis, sans doublon", () => {
+    const base = commandesDepuis(COMMANDES_DE_BASE);
+    expect(base.refus).toEqual([]);
+    expect(base.commandes.map((c) => c.command)).toContain("taches");
+    expect(base.commandes.every((c) => c.description.length <= 256)).toBe(true);
+    const { commandes, refus } = menuDepuis("/taches = Mes tâches\n/mails = Mes mails", "/lea = Léa\n/taches = Une créatrice");
+    expect(commandes.map((c) => c.command)).toEqual(["taches", "mails", "lea"]);
+    expect(refus).toEqual(["/taches = Une créatrice"]);
   });
 
   it("ajoute le bouton Envoyer sous un texte WhatsApp que le pont peut envoyer", () => {
