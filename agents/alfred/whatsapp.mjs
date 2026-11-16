@@ -120,6 +120,13 @@ export function correspond(nomDiscussion, mots) {
   return mots.map(normaliser).filter((m) => m.length >= 3).some((m) => n.includes(m));
 }
 
+/** Un message contient tous les mots cherchés (sans accents ni majuscules, mots de 3 lettres ou plus). */
+export function contientMots(texte, mots) {
+  const n = normaliser(texte);
+  const utiles = mots.map(normaliser).filter((m) => m.length >= 3);
+  return utiles.length > 0 && utiles.every((m) => n.includes(m));
+}
+
 const MEDIAS = { 1: "photo", 2: "vidéo", 3: "vocal", 4: "contact", 5: "position", 8: "document", 11: "gif", 15: "sticker" };
 
 /** « 0:42 », « 12:05 » pour une durée en secondes. */
@@ -421,6 +428,26 @@ function main() {
     console.log(blocs.length ? blocs.join("\n\n") : `Rien de nouveau sur WhatsApp depuis le ${heure(depuis)}.`);
     return;
   }
+  // Avant d'agir (demande de Marc, 16 novembre 2026) : ce sujet a-t-il déjà été traité sur WhatsApp ?
+  if (mode === "fouiller") {
+    const mots = args.filter((a, i) => !a.startsWith("--") && !(args[i - 1] ?? "").startsWith("--"));
+    if (!mots.some((m) => normaliser(m).length >= 3)) throw new Error("Donne au moins un mot de 3 lettres (« facture Farid », « preview Nova »).");
+    const jours = Math.min(Math.max(Number(option(args, "--jours", 30)) || 30, 1), 365);
+    const depuis = new Date(Date.now() - jours * 86_400_000);
+    const blocs = avecBase((q) =>
+      liste
+        .map((x) => {
+          // Les vocaux déjà transcrits comptent aussi (aucune nouvelle transcription ici).
+          const rows = vocaux(messages(q, x.jid, depuis, 2000), { reste: 0 });
+          const trouves = rows.filter((m) => contientMots(`${x.nom} ${m.texte ?? ""} ${m.titre ?? ""} ${m.vocal?.texte ?? ""}`, mots));
+          return { x, lignes: afficher(x, trouves).slice(-15) };
+        })
+        .filter((b) => b.lignes.length)
+        .map((b) => [`## ${b.x.nom}`, ...b.lignes].join("\n")),
+    );
+    console.log(blocs.length ? blocs.join("\n\n") : `Rien sur WhatsApp ces ${jours} derniers jours avec : ${mots.join(" ")}.`);
+    return;
+  }
   if (mode === "piece") {
     const id = Number(args[0]);
     if (!Number.isInteger(id) || id <= 0) throw new Error("Usage : node whatsapp.mjs piece <n° de la pièce> (le numéro « pièce 123 » d'une ligne)");
@@ -447,7 +474,7 @@ function main() {
     console.log(`Pièce copiée : ${dest}${nature}`);
     return;
   }
-  throw new Error("Commandes : chercher <mot>, liste, lire <créateur> [--depuis AAAA-MM-JJ] [--max N] [--vocaux N], nouveaux --depuis \"AAAA-MM-JJ HH:MM\", en-attente [--heures N], numero <créateur>, piece <n°>, envoyer <id>, autoriser \"<id>\" \"<Nom>\".");
+  throw new Error("Commandes : chercher <mot>, liste, lire <créateur> [--depuis AAAA-MM-JJ] [--max N] [--vocaux N], nouveaux --depuis \"AAAA-MM-JJ HH:MM\", en-attente [--heures N], fouiller <mots> [--jours N], numero <créateur>, piece <n°>, envoyer <id>, autoriser \"<id>\" \"<Nom>\".");
 }
 
 /** Le numéro (chiffres) d'une entrée de la liste, depuis son identifiant ou le carnet de WhatsApp Desktop. */
