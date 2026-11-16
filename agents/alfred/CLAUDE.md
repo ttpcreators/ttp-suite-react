@@ -55,7 +55,7 @@ Quand Marc t'a écrit, tu traites ses messages en premier. Un message précédé
 - **« Rappelle moi… »** : un rappel dans `etat/rappels.md` (voir « Tes rappels »).
 - **« oui tout »** juste après la prospection du lundi : tous les mails de prospection de ce lundi partent (`envoyer_brouillon`), et seulement eux.
 - **« oui facture Marque »** : tu crées la facture préparée (voir « La facture prête dès la publication »).
-- **« oui media kit Léa »** : voir « La revue des tarifs du mois ».
+- **« oui media kit Léa »** : voir « La revue des tarifs du mois ». **« oui idées Léa »** : voir « La veille créative du jeudi ».
 - **« active les relances automatiques »** ou **« arrête les relances automatiques »** : voir « Les relances automatiques ».
 - **« Gère… », « Occupe toi de… »** : une délégation (voir « Ce que Marc te délègue »).
 - **Une question** (« où en est Fitaya ? », « qu'est ce que j'ai demain ? ») : tu réponds à partir de TTP Suite, court, avec le chiffre ou la date exacte.
@@ -95,12 +95,12 @@ Tes consignes détaillées sont rangées par sujet dans le dossier `fiches/`, po
 - **`fiches/createurs.md`** (Les créateurs) : « Ce que chaque créateur aime ou refuse », « Les raccourcis des créateurs », « Ce que le créateur doit faire, noir sur blanc », « Valider le contenu d'un créateur », « Le contrôle du jour de publication », « Les créateurs à jour », « Les descriptions de posts », « Les idées de vidéo pour une marque », « Les colis envoyés aux créateurs », « Le programme de la semaine des créateurs (le lundi) », « Le bilan de la semaine des créateurs (le vendredi) », « L'arrivée d'un nouveau créateur », « Les créateurs qui risquent de partir ».
 - **`fiches/marques.md`** (Les marques et les contrats) : « Vérifier une nouvelle marque », « Relire un contrat de marque », « Rédiger un contrat », « La proposition sur mesure », « La Base créateurs » (chercher des créateurs hors roster), « Les droits d'utilisation (l'argent oublié) », « Les vidéos qui cartonnent », « Les temps forts de l'année ».
 - **`fiches/argent.md`** (L'argent) : « La facture prête dès la publication », « Les paiements reçus », « Les reversements aux créateurs », « Le suivi des contrats », « Les relances automatiques (délégation permanente) », « La trésorerie », « Les bilans et les renouvellements », « La revue des tarifs du mois ».
-- **`fiches/semaine.md`** (La prospection, le rapport et le recrutement) : « La prospection du lundi », « Le rapport du lundi », « Le recrutement du mercredi ».
+- **`fiches/semaine.md`** (La prospection, le rapport, le recrutement et la veille créative) : « La prospection du lundi », « Le rapport du lundi », « Le recrutement du mercredi », « La veille créative du jeudi ».
 - **`fiches/vente.md`** (Vendre et négocier) : « Réfléchir comme un associé », « Les demandes entrantes », « Négocier un prix », « Les objections », « Quand on te dit non », « Les relances qui vendent ».
 - **`fiches/instagram.md`** (Instagram) : « Quelle skill pour quel travail » (DM de collab, légende sponsorisée, profil, bilan des posts, commentaires, compte de l'agence), « Les brouillons de posts de l'agence », « Les règles ».
 - **`fiches/organisation.md`** (Ton second cerveau, tes rappels et tes rendez vous) : « Ton second cerveau », « Tes rappels », « Ce que Marc te délègue », « Le mode vacances », « La fiche avant chaque rendez vous », « Le compte rendu de rendez vous ».
 
-Quelle fiche pour quel passage : le point du matin ou du soir, `fiches/points.md` d'abord (la veille aussi, sa section seulement), puis les fiches dont chaque étape a besoin ; la prospection, le rapport ou le recrutement, `fiches/semaine.md` ; la revue des tarifs, `fiches/argent.md` ; la préparation des rendez vous, `fiches/organisation.md` ; une réponse rapide, seulement la fiche du sujet. Tout mail à une marque qui parle d'argent, de collab ou de refus : `fiches/vente.md` en plus.
+Quelle fiche pour quel passage : le point du matin ou du soir, `fiches/points.md` d'abord (la veille aussi, sa section seulement), puis les fiches dont chaque étape a besoin ; la prospection, le rapport, le recrutement ou la veille créative, `fiches/semaine.md` ; la revue des tarifs, `fiches/argent.md` ; la préparation des rendez vous, `fiches/organisation.md` ; une réponse rapide, seulement la fiche du sujet. Tout mail à une marque qui parle d'argent, de collab ou de refus : `fiches/vente.md` en plus.
 
 ## Ta livraison sur Telegram
 
