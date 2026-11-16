@@ -236,6 +236,7 @@ fonction avec `Authorization: Bearer <CRON_SECRET>`.
 |---|---|---|---|---|---|
 | `google-connect-url` | URL d'autorisation Google (state signé) | `googleCalendar.ts` | oui | rôle agence, origine autorisée | |
 | `google-oauth-callback` | Retour de Google, jetons, premier cycle | navigateur (Google) | non | state signé | |
+| `creator-box-callback` | Boîte Gmail d'un créateur reliée à TTP Suite : lien signé de 7 jours, puis retour de Google, jeton dans `creator_mail_boxes` (logique `_shared/creatorBox.ts`) | navigateur (créateur, Google) | non | state signé | |
 | `google-status` | Statut de connexion (sans jeton) | `googleCalendar.ts` | oui | rôle agence | |
 | `google-disconnect` | Déconnexion propre | `googleCalendar.ts` | oui | rôle agence | |
 | `google-sync` | Synchro dans les deux sens `events` ↔ Agenda | pg_cron, `googleCalendar.ts`, appels internes | non | CRON_SECRET ou agence | `17 * * * *` |

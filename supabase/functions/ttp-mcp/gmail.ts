@@ -7,22 +7,26 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { getAccessToken } from "../_shared/google.ts";
 import { boxToken, talentAddress } from "../_shared/gmailBox.ts";
+import { connectedCreatorBox, creatorBoxToken, isCreatorBox, normEmail } from "../_shared/creatorBox.ts";
 import { gfetch, decodeGmailBody, charsetOf, mapPool } from "../_shared/gfetch.ts";
 import { addressOf, findSendAs, fromHeader, refusSendAs, usableSendAs, type RawSendAs, type SendAs } from "../_shared/sendAs.ts";
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
-export type MailBox = "partnerships" | "talent";
+/** « partnerships », « talent », ou l'adresse d'une boîte de créateur connectée (creator_mail_boxes). */
+export type MailBox = string;
 type Hdr = { name: string; value: string };
 type Part = { mimeType?: string; filename?: string; headers?: Hdr[]; body?: { data?: string; size?: number; attachmentId?: string }; parts?: Part[] };
 type Msg = { id: string; threadId: string; labelIds?: string[]; snippet?: string; internalDate?: string; payload?: Part };
 
 export function boxesFor(box: string | undefined): MailBox[] {
+  if (box && isCreatorBox(box)) return normEmail(box) ? [normEmail(box) as string] : [];
   if (box === "partnerships") return ["partnerships"];
   if (box === "talent") return talentAddress() ? ["talent"] : [];
   return talentAddress() ? ["partnerships", "talent"] : ["partnerships"];
 }
 
 async function tokenFor(sb: SupabaseClient, box: MailBox, mode: "read" | "modify"): Promise<string> {
+  if (isCreatorBox(box)) return await creatorBoxToken(sb, box);
   return box === "talent" ? await boxToken(sb, "talent", mode) : await getAccessToken(sb);
 }
 
@@ -253,6 +257,22 @@ export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, 
   return { id: String(res.id ?? ""), replaced: false, removed: 0 };
 }
 
+/**
+ * La boîte demandée par un outil : « partnerships », « talent », ou l'adresse d'une boîte de
+ * créateur connectée. null + message si elle n'est pas utilisable.
+ */
+export async function parseMailBox(sb: SupabaseClient, v: unknown): Promise<{ box: MailBox } | { error: string }> {
+  const s = String(v ?? "").trim().toLowerCase();
+  if (s === "partnerships") return { box: "partnerships" };
+  if (s === "talent") return talentAddress() ? { box: "talent" } : { error: "Boîte talent@ non configurée." };
+  const e = normEmail(s);
+  if (e) {
+    if (await connectedCreatorBox(sb, e)) return { box: e };
+    return { error: `La boîte ${e} n'est pas connectée à TTP Suite (boites_createurs ; lien_boite_createur pour la connecter).` };
+  }
+  return { error: "Boîte : partnerships, talent, ou l'adresse d'une boîte de créateur connectée (boites_createurs)." };
+}
+
 /** Adresses « Envoyer en tant que » réglées dans Gmail pour cette boîte (principale + alias validés). */
 export async function listSendAs(sb: SupabaseClient, box: MailBox): Promise<SendAs[]> {
   const token = await tokenFor(sb, box, "read");
@@ -279,6 +299,7 @@ export async function resolveSender(sb: SupabaseClient, box: MailBox, address: s
 
 /** Adresse de la boîte (pour les liens Spark). */
 export function boxAddress(box: MailBox): string {
+  if (isCreatorBox(box)) return box;
   return box === "talent" ? talentAddress() : "partnerships@ttpcreators.pro";
 }
 
@@ -369,7 +390,7 @@ export async function sendDraft(sb: SupabaseClient, box: MailBox, draftId: strin
 export async function sendMail(sb: SupabaseClient, box: MailBox, m: {
   to: string[]; cc: string[]; bcc: string[]; subject: string; html: string; threadId?: string; from?: SendAs;
 }): Promise<{ id: string; threadId: string; subject: string }> {
-  const token = box === "talent" ? await boxToken(sb, "talent", "send") : await getAccessToken(sb);
+  const token = isCreatorBox(box) ? await creatorBoxToken(sb, box) : box === "talent" ? await boxToken(sb, "talent", "send") : await getAccessToken(sb);
   let subject = clean(m.subject);
   const extra: string[] = [];
   if (m.threadId) {

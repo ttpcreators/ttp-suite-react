@@ -17,6 +17,10 @@ project_id = "zizvggziggswhrbuyhuo"
 [functions.google-oauth-callback]
 verify_jwt = false
 
+# Boîte Gmail d'un créateur reliée à TTP Suite : lien ouvert dans le navigateur, puis retour de Google (state signé).
+[functions.creator-box-callback]
+verify_jwt = false
+
 [functions.google-webhook]
 verify_jwt = false
 
