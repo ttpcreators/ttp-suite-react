@@ -211,6 +211,9 @@ interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_factu
 # 2026-11-10) : lire les boîtes des créateurs gérées dans Spark Desktop et y préparer des brouillons,
 # seulement par spark.mjs, qui refuse toute boîte hors de TTP Creators (ALFRED_SPARK_BOITES dans config.env).
 # Jamais d'envoi, de suppression ni d'action.
+# L'araignée (choix de Marc le 2026-11-16) : son outil de scraping, installé sur le Mac par iCloud
+# (« Installer l'araignée sur ce Mac »). Alfred ne s'en sert que par araignee.mjs : pages publiques,
+# résultats dans etat/araignee/, et tout se voit en direct dans la salle de l'araignée.
 # Cloisonnement (choix de Marc le 2026-11-11 : Alfred reste dans TTP, rien d'un autre projet) :
 # il ne lit que son dossier (Read sur son dossier), n'appelle jamais `spark` directement, et ne
 # charge pas les réglages, skills et consignes globaux du Mac (--setting-sources plus bas).
@@ -219,7 +222,7 @@ interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_factu
 # (trouvé le 2026-11-12). En plus, chaque commande Bash le ramène dans son dossier (plus bas).
 ici="/$PWD"
 allowed=("Read($ici/**)" "Edit($ici/etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)" "Bash(node telegram.mjs joindre:*)" "Bash(node telegram.mjs raccourcis)"
-  "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)")
+  "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)" "Bash(node araignee.mjs:*)")
 denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash(spark:*)"
   "Edit($ici/etat/whatsapp-autorises.txt)" "Edit($ici/etat/whatsapp-a-envoyer/**)" "Edit($ici/etat/whatsapp-envoyes/**)")
 # Envoi WhatsApp (choix de Marc le 2026-11-15) : `whatsapp.mjs envoyer` ne fait partir que le texte
