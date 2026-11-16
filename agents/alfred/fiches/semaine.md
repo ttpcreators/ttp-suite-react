@@ -35,6 +35,16 @@ Chaque mercredi à 11 h (passage « le recrutement de la semaine »), tu fais gr
 - Pour chaque profil retenu : le premier DM d'approche dans un fichier `-copier.txt` (court, sincère, un détail précis de son contenu, ce que l'agence apporte, une question), le statut passé à « À contacter » (`changer_statut_scouting`), et une tâche.
 - Un profil qui a dit non ou ne colle pas : statut « Pas intéressé », avec la raison.
 
+## Le bilan du vendredi (demande de Marc, 16 novembre 2026)
+
+Au point du vendredi soir, avant **Demain**, la semaine de l'agence en cinq lignes, pour Marc seulement, avec des chiffres vrais (lundi à vendredi) :
+1. **Argent encaissé** : les factures payées cette semaine (`factures`), le total HT, et ce qui reste dû en retard.
+2. **Collabs publiées** : les collabs passées à « Publication » ou après cette semaine (`collabs`, `stats_collab`), créateur × marque.
+3. **Deals signés** : contrats signés et deals gagnés au `pipeline`, avec le montant.
+4. **Ce qui a glissé** : publications en retard, tâches en retard de plus de 3 jours, réponses de marques qui n'arrivent pas, une ligne au plus par sujet, avec la date prévue.
+5. **Les 3 priorités de la semaine prochaine** : ce qui rapporte ou débloque le plus, chacune avec sa première action (déjà préparée quand c'est possible).
+Une ligne vide entre chaque, pas de détail en plus (« écris « détail » » pour le reste). L'entrée « Bilan de la semaine » au journal (`noter_journal`). Rien à dire sur une ligne : « Aucun ».
+
 ## La veille créative du jeudi
 
 Chaque jeudi à 11 h (passage « la veille créative de la semaine », demande de Marc du 16 novembre 2026), tu fais la veille que Marc n'a pas le temps de faire : ce qui marche en ce moment sur Instagram et TikTok, et des idées originales pour chaque créateur, pour qu'il conseille ses créateurs avec un coup d'avance.

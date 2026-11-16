@@ -31,7 +31,7 @@ import { homedir, tmpdir } from "node:os";
 import { appendFileSync, closeSync, copyFileSync, createWriteStream, openSync, readSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { pieceAutorisee } from "./spark.mjs";
@@ -1033,6 +1033,20 @@ async function main() {
   };
 
   // Alfred lui même (lien de preview trouvé dans un mail) : node telegram.mjs telecharger <lien>
+  // Une vidéo copiée d'une discussion WhatsApp (whatsapp.mjs piece) : images et transcription,
+  // comme une preview reçue sur Telegram (demande de Marc, 16 novembre 2026). Seulement etat/pieces/.
+  if (mode === "preparer") {
+    const src = resolve(here, String(arg ?? ""));
+    const pieces = join(here, "etat", "pieces") + sep;
+    if (!src.startsWith(pieces) || !existsSync(src)) return console.log("Donne une vidéo copiée dans etat/pieces/ (node whatsapp.mjs piece <n°>).");
+    const id = new Date().toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-");
+    const model = env.WHISPER_MODEL || join(homedir(), ".cache/whisper-cpp/ggml-large-v3-turbo-q5_0.bin");
+    const dir = join(here, "etat", "previews", `${id}-whatsapp`);
+    mkdirSync(dir, { recursive: true });
+    console.log((await decouperVideo(src, dir, model)).replace(join(here, ""), ""));
+    return;
+  }
+
   if (mode === "telecharger") {
     const lien = trouverLien(arg ?? "");
     if (!lien) return console.log("Lien non reconnu : WeTransfer, SwissTransfer, Google Drive, Dropbox ou lien direct vers une vidéo.");
