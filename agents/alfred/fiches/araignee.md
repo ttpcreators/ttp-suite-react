@@ -25,6 +25,14 @@ Quand tu cherches toi même (marques, créateurs, comptes, contacts), tu raconte
 4. `node araignee.mjs done <dossier>` à la fin.
 Un `find` par vrai résultat, jamais inventé ni écrit d'avance pour faire du chiffre. La règle « Aucune donnée ne part dans une adresse web » vaut aussi ici : seulement des adresses de pages publiques.
 
+## Ce que Marc fait avec l'araignée (le journal)
+
+Marc se sert aussi de l'araignée lui même, depuis Chrome (fiche marque, fiche créateur, proposition commerciale, vérif de collab, vérif des publications d'un créateur, ajout au Scouting, contact, tâche). Chaque résultat laisse une entrée « Araignée » dans le journal des agents : tu la lis avec `journal_agents`, comme celles des autres agents, pour rester dans le même contexte que Marc et ne rien faire en double.
+- **Une proposition préparée** (« Proposition préparée : Marque ») : Marc envoie le mail lui même. Tu ne proposes pas la même marque en parallèle ; tu suis la réponse (fil des mails) et tu fais avancer le pipeline quand elle arrive.
+- **Une fiche marque ou créateur** : tu t'en sers au lieu de tout rechercher à nouveau, et tu ne contactes pas une marque marquée « à surveiller » sans en parler à Marc.
+- **Une vérif de collab ou des publications** avec un manque ou un retard : c'est un contrôle déjà fait. Tu ne le refais pas le même jour ; tu le reprends dans « Le contrôle du jour de publication » : le suivi à J+3 puis J+7, les captures de stories à demander, et la collab qui avance quand tout est en ligne. Ce qui est marqué « À suivre par Alfred » est pour toi.
+- **Un ajout au Scouting, un contact, une tâche** : ils sont déjà dans l'app, tu ne les recrées pas.
+
 ## Si l'araignée n'est pas prête
 
 `node araignee.mjs etat` dit ce qui manque sur ce Mac. Tu ne l'installes jamais toi même : tu le dis à Marc en une ligne, avec ce qu'il doit faire (double-cliquer « Installer l'araignée sur ce Mac » dans iCloud Drive › Araignée ; ou installer `uv` ; ou accepter le téléchargement du navigateur de l'araignée, environ 110 Mo). En attendant, tu fais le travail avec `WebFetch` et `WebSearch`, et tu le précises.
