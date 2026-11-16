@@ -248,17 +248,17 @@ fonction avec `Authorization: Bearer <CRON_SECRET>`.
 |---|---|---|---|---|---|
 | `ig-avatar` | Profils Instagram du Scouting | `Vivier.tsx` | oui | rôle agence | |
 | `ig-hashtag` | Posts par hashtag | `HashtagSearch.tsx` | oui | rôle agence | |
-| `ig-sync` | Chiffres Instagram du roster (+ feed des 12 derniers posts, images copiées dans `avatars/feed/`), des collabs, des marques | pg_cron, `instagram.ts`, `ig-callback` | non | CRON_SECRET ou agence | `20 5 * * *` |
+| `ig-sync` | Chiffres Instagram du roster (+ feed des 12 derniers posts, images copiées dans `avatars/feed/`), des collabs, des marques | pg_cron, `instagram.ts`, `ig-callback` | non | CRON_SECRET ou agence | `20 5 * * *` et `30 14 * * *` |
 | `ig-connect` / `ig-callback` | Un créateur connecte son Instagram | `instagram.ts` / navigateur | oui / non | créateur ou agence / state signé | |
 | `ig-sourcing` | Sourcing, radar à marques, concurrents | pg_cron, `Sourcing.tsx`, `RivalWatch.tsx` | non | CRON_SECRET ou agence | `40 */2 * * *` |
 | `ig-inbox` | DM du compte de l'agence | pg_cron, `Messages.tsx`, `ig-webhook` | non | CRON_SECRET ou agence | `25 * * * *` |
 | `ig-webhook` | Réception des DM en direct (Meta) | Meta | non | signature `X-Hub-Signature-256` | |
 | `ig-publish` | Publie les posts programmés | pg_cron, `IgPlanner.tsx` | non | CRON_SECRET ou agence | `* * * * *` |
 | `tt-connect` / `tt-callback` | Un créateur connecte son TikTok | `tiktok.ts` / navigateur | oui / non | créateur ou agence / state signé | |
-| `tt-sync` | Chiffres TikTok des créateurs connectés | pg_cron, `tiktok.ts`, `tt-callback` | non | CRON_SECRET ou agence | `0 6 * * *` |
+| `tt-sync` | Chiffres TikTok des créateurs connectés | pg_cron, `tiktok.ts`, `tt-callback` | non | CRON_SECRET ou agence | `0 6 * * *` et `45 14 * * *` |
 | `tt-radar` | Radar à collabs TikTok | pg_cron, `TikTokRadar.tsx` | non | CRON_SECRET ou agence | `0 7 * * *` |
 | `yt-connect` / `yt-callback` | Un créateur connecte sa chaîne (retour via `public/yt-callback/`) | `youtube.ts` / navigateur | oui / non | créateur ou agence / state signé | |
-| `yt-sync` | Chiffres YouTube des créateurs connectés | pg_cron, `youtube.ts`, `yt-callback` | non | CRON_SECRET ou agence | `15 6 * * *` |
+| `yt-sync` | Chiffres YouTube des créateurs connectés | pg_cron, `youtube.ts`, `yt-callback` | non | CRON_SECRET ou agence | `15 6 * * *` et `50 14 * * *` |
 | `yt-radar` | Radar à collabs YouTube | pg_cron, `YouTubeRadar.tsx` | non | CRON_SECRET ou agence | `30 7 * * *` |
 | `yt-sourcing` | Sourcing YouTube | `Sourcing.tsx` | oui | rôle agence | |
 
