@@ -112,7 +112,7 @@ export async function signState(
  * Vérifie un state signé. Lève une erreur si signature invalide, malformé, ou
  * TTL dépassé. Retourne le payload décodé sinon.
  */
-export async function verifyState(token: string): Promise<StatePayload> {
+export async function verifyState(token: string, ttlMs = STATE_TTL_MS): Promise<StatePayload> {
   const parts = token.split(".");
   if (parts.length !== 2) throw new Error("state_malformed");
   const [p, sig] = parts;
@@ -131,7 +131,7 @@ export async function verifyState(token: string): Promise<StatePayload> {
   if (!payload.origin || typeof payload.iat !== "number") {
     throw new Error("state_bad_payload");
   }
-  if (Date.now() - payload.iat > STATE_TTL_MS) {
+  if (Date.now() - payload.iat > ttlMs) {
     throw new Error("state_expired");
   }
   return payload;
