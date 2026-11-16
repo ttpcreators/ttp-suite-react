@@ -222,6 +222,8 @@ describe("Alfred : documents en PDF", () => {
   it("demande une confirmation avant d'agir sur un bouton", () => {
     const attente = { abc123: { data: "oui Erwann", libelle: "Envoyer", clavier: [], at: 1 } };
     expect(etapeToucher("oui Erwann", attente)).toEqual({ action: "demander" });
+    expect(etapeToucher("oui Erwann", attente, "Envoyer")).toEqual({ action: "direct" });
+    expect(etapeToucher("fait tâche d57b", attente, "Fait")).toEqual({ action: "demander" });
     expect(etapeToucher("ok:abc123", attente)).toMatchObject({ action: "valider", id: "abc123", entree: { data: "oui Erwann" } });
     expect(etapeToucher("non:abc123", attente)).toMatchObject({ action: "annuler", id: "abc123" });
     expect(etapeToucher("ok:zzz999", attente)).toEqual({ action: "perime" });

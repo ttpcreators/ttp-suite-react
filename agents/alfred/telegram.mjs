@@ -302,10 +302,12 @@ export function toucherDeMarc(u, marcId) {
 /**
  * Confirmation des boutons d'action (demande de Marc, 11 novembre 2026 : éviter un toucher par
  * erreur). 1er toucher : on demande « Confirmer : libellé » ou « Annuler » ; seul « Confirmer »
- * envoie l'action à Alfred. `attente` : les demandes en cours, par identifiant court.
+ * envoie l'action à Alfred. Sauf le bouton Envoyer d'un mail (« oui Marque ») : un seul toucher. `attente` : les demandes en cours, par identifiant court.
  */
-export function etapeToucher(data, attente = {}) {
+export function etapeToucher(data, attente = {}, libelle = "") {
   const m = /^(ok|non):([0-9a-z]{4,12})$/.exec(String(data ?? ""));
+  // Le bouton Envoyer d'un mail part en un seul toucher (demande de Marc, 16 novembre 2026).
+  if (!m && libelle === "Envoyer" && /^oui\s/i.test(String(data ?? ""))) return { action: "direct" };
   if (!m) return { action: "demander" };
   const entree = attente[m[2]];
   if (!entree) return { action: "perime" };
@@ -935,10 +937,14 @@ async function main() {
         await repondre(t, "Déjà noté.");
         continue;
       }
-      const etape = etapeToucher(t.data, attente);
-      if (etape.action === "demander") {
+      const libelle = /« (.+) »\)$/.exec(m.text)?.[1] ?? "Envoyer";
+      const etape = etapeToucher(t.data, attente, libelle);
+      if (etape.action === "direct") {
+        await clavierDe(t, t.clavier.map((l) => l.map((b) => (b.callback_data === t.data ? { text: "Envoi en cours…", callback_data: "deja-envoye" } : b))));
+        await repondre(t, "C'est parti, Alfred l'envoie.");
+        kept.push({ ...m, text: `${t.data} (bouton « Envoyer », confirmé)` });
+      } else if (etape.action === "demander") {
         const id = Math.random().toString(36).slice(2, 10);
-        const libelle = /« (.+) »\)$/.exec(m.text)?.[1] ?? "Envoyer";
         attente[id] = { data: t.data, libelle, clavier: t.clavier, at: Date.now() };
         await clavierDe(t, clavierConfirmation(id, libelle));
         await repondre(t, "Touche Confirmer pour valider.");

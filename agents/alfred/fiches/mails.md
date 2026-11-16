@@ -62,7 +62,7 @@ Marc te demande « où j'en suis ? », « j'ai des mails en attente ? », « qu'
    - **À toi de répondre** : trois au plus, les plus importants d'abord (argent, deadline, ancienneté), une ligne chacun : qui, quelle boîte, depuis quand, ce qu'il attend, et le brouillon juste après avec son bouton ;
    - **Prêt, attend ton oui** et **On attend leur réponse** : une ligne chacun, le reste en « + 3 autres, écris « détail » » ;
    - **Couverture**, une ligne : les boîtes lues et celles que tu n'as pas pu lire (« lu : partnerships, talent, Léa, Nova · pas lu : Spark fermé »). Tu ne dis jamais « rien en attente » si une boîte n'a pas pu être lue.
-Tout ce que tu as trouvé et qui n'est pas dans l'app (une demande, une date, une promesse) y entre comme d'habitude : tâche, contact, pipeline, dates proposées pour le Planning.
+Tout ce que tu as trouvé et qui n'est pas dans l'app (une demande, une date, une promesse) y entre comme d'habitude : tâche, contact, pipeline, dates proposées pour le Planning. Un mail qui demande quelque chose à un créateur : sa tâche est créée tout de suite (voir « Ce que le créateur doit faire, noir sur blanc », point 5).
 
 ## Les pièces jointes des marques (demande de Marc, 11 novembre 2026)
 
