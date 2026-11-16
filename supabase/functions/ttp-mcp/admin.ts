@@ -19,7 +19,7 @@ import {
   INVOICE_STATUSES, TABLES, addressList, blockedSetting, defaultFranchise, euro2, invoiceParty, lockedInvoiceChange, invoiceTotals, mailHtml, nextInvoiceRef, nextQuoteRef, pct, readableRow, writableFields, type InvoiceLine,
 } from "../_shared/mcpAdmin.ts";
 import { eurRateOf } from "../_shared/reversements.ts";
-import { sendDraft, sendMail, type MailBox } from "./gmail.ts";
+import { resolveSender, sendDraft, sendMail, type MailBox } from "./gmail.ts";
 import type { Ctx } from "./oauth.ts";
 
 type Json = Record<string, unknown>;
@@ -458,7 +458,7 @@ const envoyerMail: AdminTool = {
   name: "envoyer_mail",
   title: "Envoyer un mail",
   description:
-    "ENVOIE un mail depuis une boîte de l'agence (partnerships@ ou talent@), signature des Réglages Mails ajoutée. `fil` (id d'un fil, via rechercher_mails) : réponse dans ce fil. Toujours montrer le texte final, les destinataires (À, Cc, Cci) et la boîte, et attendre un « oui » explicite de l'utilisateur avant d'appeler cet outil. Pour préparer sans envoyer : brouillon_mail.",
+    "ENVOIE un mail depuis une boîte de l'agence (partnerships@ ou talent@), signature des Réglages Mails ajoutée. Avec `envoyer_en_tant_que` (alias d'une créatrice), le mail part DE cet alias, avec son nom affiché et la signature Gmail de l'alias (pas celle de l'agence). `fil` (id d'un fil, via rechercher_mails) : réponse dans ce fil. Toujours montrer le texte final, les destinataires (À, Cc, Cci), la boîte ET l'adresse d'envoi (« De »), et attendre un « oui » explicite de l'utilisateur avant d'appeler cet outil. Pour préparer sans envoyer : creer_brouillon_mail.",
   inputSchema: {
     type: "object",
     properties: {
@@ -469,6 +469,7 @@ const envoyerMail: AdminTool = {
       message: { type: "string", description: "Texte du mail (sans signature)" },
       fil: { type: "string", description: "Id du fil Gmail pour répondre dedans" },
       signature: { type: "boolean", description: "false pour ne pas ajouter la signature (par défaut : ajoutée)" },
+      envoyer_en_tant_que: { type: "string", description: "Facultatif : alias mail d'une créatrice (ex. anamilanovic@ttpcreators.pro, via alias_createurs ou fiche_createur) pour envoyer EN SON NOM. Accepté seulement s'il est réglé dans « Envoyer en tant que » de la boîte dans Gmail ; les réponses de la marque reviennent sur l'alias." },
     },
     required: ["boite", "a", "message"],
     additionalProperties: false,
@@ -486,14 +487,23 @@ const envoyerMail: AdminTool = {
     const text = str(a.message, 20000);
     if (!text) return fail("Message vide.");
     if (!str(a.objet) && !str(a.fil)) return fail("Indique l'objet du mail.");
-    const st = await readAppState(sb);
-    const ms = (st.mailSettings as Json | undefined) ?? {};
-    const sig = a.signature !== false && ms.signatureOn !== false ? String(ms.signatureHtml ?? "") : "";
+    const alias = str(a.envoyer_en_tant_que, 200);
     try {
-      const r = await sendMail(sb, box, { to, cc, bcc, subject: str(a.objet, 300), html: mailHtml(text, sig), threadId: str(a.fil, 64) || undefined });
-      return ok(`✓ Mail envoyé depuis ${box}@ à ${to.join(", ")}${cc.length ? ` (cc ${cc.join(", ")})` : ""} · objet « ${r.subject} ».`);
+      // Alias : vérifié dans les « Envoyer en tant que » de la boîte AVANT tout envoi.
+      const from = alias ? await resolveSender(sb, box, alias) : undefined;
+      let sig = "";
+      if (a.signature !== false) {
+        if (from) sig = from.signature; // comme Gmail : la signature de l'alias choisi
+        else {
+          const ms = ((await readAppState(sb)).mailSettings as Json | undefined) ?? {};
+          sig = ms.signatureOn !== false ? String(ms.signatureHtml ?? "") : "";
+        }
+      }
+      const r = await sendMail(sb, box, { to, cc, bcc, subject: str(a.objet, 300), html: mailHtml(text, sig), threadId: str(a.fil, 64) || undefined, from });
+      return ok(`✓ Mail envoyé ${from ? `de ${from.email}${from.name ? ` (${from.name})` : ""} via ${box}@` : `depuis ${box}@`} à ${to.join(", ")}${cc.length ? ` (cc ${cc.join(", ")})` : ""} · objet « ${r.subject} ».`);
     } catch (e) {
       const m = (e as Error).message ?? "";
+      if (m.startsWith("alias_refuse: ")) return fail(m.slice(14));
       return fail(/not_connected|invalid_grant/.test(m) ? "La boîte n'est pas connectée à l'app (Planning → Google Agenda → Connecter)." : /403|insufficient/i.test(m) ? "Gmail refuse l'envoi : le droit d'envoi manque pour cette boîte." : `Envoi impossible : ${m}`);
     }
   },
@@ -506,12 +516,13 @@ const envoyerBrouillon: AdminTool = {
   name: "envoyer_brouillon",
   title: "Envoyer un brouillon",
   description:
-    "ENVOIE un brouillon Gmail préparé par Claude (creer_brouillon_mail donne son id), exactement tel qu'il est dans Gmail, puis il quitte les brouillons. Un brouillon écrit à la main est refusé. N'appeler qu'après un « oui » explicite de l'utilisateur pour CE brouillon précis (destinataire et objet montrés avant).",
+    "ENVOIE un brouillon Gmail préparé par Claude (creer_brouillon_mail donne son id), exactement tel qu'il est dans Gmail, puis il quitte les brouillons. Un brouillon écrit à la main est refusé. Il part de l'adresse choisie à sa création ; `envoyer_en_tant_que` (facultatif) vérifie qu'il part bien de cet alias, sinon rien n'est envoyé. N'appeler qu'après un « oui » explicite de l'utilisateur pour CE brouillon précis (destinataire, objet et adresse d'envoi montrés avant).",
   inputSchema: {
     type: "object",
     properties: {
       boite: { type: "string", enum: ["partnerships", "talent"] },
       brouillon: { type: "string", description: "Id du brouillon Gmail (donné par creer_brouillon_mail)" },
+      envoyer_en_tant_que: { type: "string", description: "Facultatif : alias mail d'une créatrice (ex. anamilanovic@ttpcreators.pro, via alias_createurs ou fiche_createur) pour envoyer EN SON NOM. Accepté seulement s'il est réglé dans « Envoyer en tant que » de la boîte dans Gmail ; les réponses de la marque reviennent sur l'alias." },
     },
     required: ["boite", "brouillon"],
     additionalProperties: false,
@@ -523,11 +534,15 @@ const envoyerBrouillon: AdminTool = {
     if (box !== "partnerships" && box !== "talent") return fail("Boîte : partnerships ou talent.");
     const id = str(a.brouillon, 64);
     if (!/^[A-Za-z0-9_-]+$/.test(id)) return fail("Id de brouillon invalide.");
+    const alias = str(a.envoyer_en_tant_que, 200);
     try {
-      const r = await sendDraft(sb, box, id);
-      return ok(`✓ Brouillon envoyé depuis ${box}@ à ${r.to} · objet « ${r.subject} ».`);
+      if (alias) await resolveSender(sb, box, alias);
+      const r = await sendDraft(sb, box, id, alias || undefined);
+      return ok(`✓ Brouillon envoyé de ${r.from || `${box}@`} à ${r.to} · objet « ${r.subject} ».`);
     } catch (e) {
       const m = (e as Error).message ?? "";
+      if (m.startsWith("alias_refuse: ")) return fail(m.slice(14));
+      if (m.startsWith("from_mismatch: ")) return fail(`Ce brouillon part de ${m.slice(15)}, pas de ${alias} : rien n'est envoyé. Refais le brouillon avec envoyer_en_tant_que.`);
       if (m === "not_claude") return fail("Ce brouillon n'a pas été préparé par Claude : à envoyer depuis Gmail ou l'app.");
       if (/gmail_404/.test(m)) return fail("Brouillon introuvable : déjà envoyé ou supprimé.");
       return fail(/not_connected|invalid_grant/.test(m) ? "La boîte n'est pas connectée à l'app (Planning → Google Agenda → Connecter)." : /403|insufficient/i.test(m) ? "Gmail refuse l'envoi : le droit d'envoi manque pour cette boîte." : `Envoi impossible : ${m}`);

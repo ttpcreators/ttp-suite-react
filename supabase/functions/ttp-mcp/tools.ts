@@ -16,7 +16,8 @@ import { doublonPlanning, type Candidat, type PlanEvent } from "../_shared/plann
 import { readAppState } from "../_shared/appState.ts";
 import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
 import type { Ctx } from "./oauth.ts";
-import { boxAddress, boxesFor, createDraft, deleteClaudeDraft, draftRefs, listClaudeDrafts, readThread, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
+import { boxAddress, boxesFor, createDraft, deleteClaudeDraft, draftRefs, listClaudeDrafts, listSendAs, readThread, resolveSender, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
+import { findSendAs, type SendAs } from "../_shared/sendAs.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
 import { addressList, mailHtml, sparkLink } from "../_shared/mcpAdmin.ts";
 import { guessEventKind } from "../_shared/eventKind.ts";
@@ -310,6 +311,9 @@ const ficheCreateur: Tool = {
     ]);
     const badF = [col, ev, td, inv].find((r) => (r as { error?: unknown }).error);
     if (badF) return fail("Lecture impossible : réessaie dans un instant.");
+    // Alias mail (section « Mails » de la fiche) : l'adresse pour écrire en son nom.
+    const { data: mailSet } = await sb.from("creator_mail_settings").select("alias").ilike("creator", pat).limit(1);
+    const aliasMail = String(((mailSet as Json[] | null) ?? [])[0]?.alias ?? "").trim().toLowerCase();
     const ig = c.ig as Json | null;
     const tt = c.tt as Json | null;
     const yt = c.yt as Json | null;
@@ -330,6 +334,7 @@ const ficheCreateur: Tool = {
     const out = [
       `# ${titleCase(name)}`,
       `Niche : ${c.niche ?? "?"} · plateforme : ${c.platform || "?"} · abonnés tous réseaux : ${compact(au.total)}${perPlatformText(au) ? ` (${perPlatformText(au)})` : ""} · engagement : ${c.er ?? "?"} · statut : ${c.status ?? "?"}${c.ville ? ` · ${c.ville}` : ""}`,
+      ...(aliasMail ? [`Alias mail : ${aliasMail} (pour écrire en son nom : envoyer_en_tant_que dans creer_brouillon_mail / envoyer_mail)`] : []),
       `Comptes : ${[c.handle && `@${String(c.handle).replace(/^@+/, "").trim()}`, c.instagram && `IG ${c.instagram}`, c.tiktok && `TikTok ${c.tiktok}`, c.youtube && `YouTube ${c.youtube}`, c.email_pro && `email pro ${c.email_pro}`].filter(Boolean).join(" · ") || "?"}`,
       ig && ig.followers != null
         ? `Instagram (relevé automatique Meta) : ${ig.followers} abonnés${ig.er != null ? ` · engagement ${pct(ig.er)}` : ""}${ig.reach30 ? ` · couverture 28 j ${ig.reach30}` : ""}`
@@ -1171,6 +1176,35 @@ const creerMeet: Tool = {
 
 // Brouillons préparés par Claude : la liste, avec ceux auxquels l'agence a déjà répondu
 // elle même (doublons à retirer), et leur suppression (jamais un brouillon écrit à la main).
+const aliasCreateurs: Tool = {
+  name: "alias_createurs",
+  title: "Alias mail des créatrices",
+  description: "Donne l'alias mail de chaque créatrice (section « Mails » de sa fiche, ex. anamilanovic@ttpcreators.pro) et la boîte où il est réglé en « Envoyer en tant que » dans Gmail. À utiliser AVANT d'écrire au nom d'une créatrice (envoyer_en_tant_que dans creer_brouillon_mail, envoyer_mail, envoyer_brouillon) pour prendre le bon alias et la bonne boîte. `createur` (facultatif) : un nom pour filtrer.",
+  inputSchema: { type: "object", properties: { createur: { type: "string", description: "Nom (ou début du nom) de la créatrice" } }, additionalProperties: false },
+  run: async (sb, _c, a) => {
+    const who = str(a.createur, 80).toLowerCase();
+    const { data, error } = await sb.from("creator_mail_settings").select("creator, alias, enabled").order("creator");
+    if (error) return fail("Lecture impossible : réessaie dans un instant.");
+    const rows = ((data as Json[] | null) ?? []).filter((r) => String(r.alias ?? "").trim() && (!who || String(r.creator ?? "").toLowerCase().includes(who)));
+    if (!rows.length) return ok(who ? `Aucun alias mail pour « ${str(a.createur, 80)} » (fiche créateur → Mails).` : "Aucun alias mail enregistré (fiche créateur → Mails).");
+    // « Envoyer en tant que » de chaque boîte, lus une seule fois.
+    const boxes: { box: MailBox; list: SendAs[] | null }[] = [];
+    for (const b of boxesFor("all")) boxes.push({ box: b, list: await listSendAs(sb, b).catch(() => null) });
+    const lines = rows.map((r) => {
+      const alias = String(r.alias).trim().toLowerCase();
+      const found = boxes.flatMap((b) => {
+        const hit = b.list ? findSendAs(b.list, alias) : null;
+        return hit ? [{ box: b.box, name: hit.name }] : [];
+      });
+      const where = found.length
+        ? `envoi possible depuis ${found.map((f) => `boite « ${f.box} »`).join(" ou ")}${found[0].name ? ` (nom affiché « ${found[0].name} »)` : ""}`
+        : boxes.some((b) => !b.list) ? "boîtes Gmail non lues : réessaie" : "PAS réglé en « Envoyer en tant que » dans Gmail : envoi en son nom impossible";
+      return `- ${titleCase(String(r.creator))} : ${alias} · ${where}${r.enabled === false ? " · section Mails coupée" : ""}`;
+    });
+    return ok(`# Alias mail des créatrices\n${lines.join("\n")}\n\nRien ne part sans un « oui » explicite : montrer l'adresse d'envoi (« De »), les destinataires et le texte avant.`);
+  },
+};
+
 const brouillonsClaude: Tool = {
   name: "brouillons_claude",
   title: "Brouillons préparés par Claude",
@@ -1268,7 +1302,7 @@ const statsCollab: Tool = {
 const brouillonMail: Tool = {
   name: "creer_brouillon_mail",
   title: "Préparer un brouillon de mail",
-  description: "Prépare un BROUILLON dans Gmail (partnerships@ ou talent@), en nouveau mail ou en réponse dans un fil existant, avec la signature de l'agence (Réglages Mails). Rien n'est envoyé : Marc relit et envoie depuis Gmail ou l'app. Un seul brouillon par destinataire et par objet : rappeler l'outil avec le même destinataire et le même objet MET À JOUR le brouillon existant (jamais de doublon).",
+  description: "Prépare un BROUILLON dans Gmail (partnerships@ ou talent@), en nouveau mail ou en réponse dans un fil existant, avec la signature de l'agence (Réglages Mails). Avec `envoyer_en_tant_que` (alias d'une créatrice, via alias_createurs), le brouillon part DE cet alias, avec son nom affiché et la signature Gmail de l'alias. Rien n'est envoyé : Marc relit et envoie depuis Gmail ou l'app. Un seul brouillon par destinataire et par objet : rappeler l'outil avec le même destinataire et le même objet MET À JOUR le brouillon existant (jamais de doublon).",
   write: true,
   inputSchema: {
     type: "object",
@@ -1280,6 +1314,7 @@ const brouillonMail: Tool = {
       message: { type: "string", description: "Texte du mail, sans signature : la signature des Réglages Mails (avec son GIF) est ajoutée" },
       fil: { type: "string", description: "Id du fil pour répondre (facultatif)" },
       signature: { type: "boolean", description: "false pour ne pas ajouter la signature (par défaut : ajoutée)" },
+      envoyer_en_tant_que: { type: "string", description: "Facultatif : alias mail d'une créatrice (ex. anamilanovic@ttpcreators.pro, via alias_createurs ou fiche_createur) pour écrire EN SON NOM. Accepté seulement s'il est réglé dans « Envoyer en tant que » de la boîte dans Gmail ; les réponses de la marque reviennent sur l'alias." },
     },
     required: ["boite", "a", "objet", "message"],
     additionalProperties: false,
@@ -1295,18 +1330,35 @@ const brouillonMail: Tool = {
     // Seulement le message : une note pour Marc ou un « [prénom] » partirait chez le destinataire.
     const probleme = problemeTexteDestinataire(str(a.message, 20000));
     if (probleme) return fail(probleme);
+    const alias = str(a.envoyer_en_tant_que, 200);
     try {
+      // Alias : vérifié dans les « Envoyer en tant que » de la boîte avant de préparer quoi que ce soit.
+      let from: SendAs | undefined;
+      if (alias) {
+        try {
+          from = await resolveSender(sb, box, alias);
+        } catch (e) {
+          const m = (e as Error).message ?? "";
+          return fail(m.startsWith("alias_refuse: ") ? m.slice(14) : `Alias non vérifié : ${m}`);
+        }
+      }
       // Signature des Réglages Mails (même règle qu'envoyer_mail) : le brouillon part tel quel sur « oui ».
+      // Depuis un alias : sa signature Gmail à lui, comme quand on le choisit dans Gmail.
       let html: string | undefined;
       if (a.signature !== false) {
-        const ms = ((await appState(sb)).mailSettings as Json | undefined) ?? {};
-        const sig = ms.signatureOn !== false ? String(ms.signatureHtml ?? "") : "";
+        let sig = "";
+        if (from) sig = from.signature;
+        else {
+          const ms = ((await appState(sb)).mailSettings as Json | undefined) ?? {};
+          sig = ms.signatureOn !== false ? String(ms.signatureHtml ?? "") : "";
+        }
         if (sig.trim()) html = mailHtml(str(a.message, 20000), sig);
       }
-      const r = await createDraft(sb, box, to, str(a.objet, 300), str(a.message, 20000), /^[A-Za-z0-9]+$/.test(fil) ? fil : undefined, html, cci);
+      const r = await createDraft(sb, box, to, str(a.objet, 300), str(a.message, 20000), /^[A-Za-z0-9]+$/.test(fil) ? fil : undefined, html, cci, from);
+      const de = from ? ` (de ${from.email}${from.name ? `, « ${from.name} »` : ""})` : "";
       const how = r.replaced
-        ? `Brouillon MIS À JOUR dans ${box}@ (il remplace celui déjà préparé pour ${to}, aucun doublon${r.removed ? `, ${r.removed} ancien${r.removed > 1 ? "s" : ""} doublon${r.removed > 1 ? "s" : ""} supprimé${r.removed > 1 ? "s" : ""}` : ""})`
-        : `Brouillon prêt dans ${box}@ pour ${to}`;
+        ? `Brouillon MIS À JOUR dans ${box}@${de} (il remplace celui déjà préparé pour ${to}, aucun doublon${r.removed ? `, ${r.removed} ancien${r.removed > 1 ? "s" : ""} doublon${r.removed > 1 ? "s" : ""} supprimé${r.removed > 1 ? "s" : ""}` : ""})`
+        : `Brouillon prêt dans ${box}@${de} pour ${to}`;
       // Liens pour l'ouvrir tout de suite : dans Spark (l'app mail de Marc) et dans les Mails de l'app.
       let liens = "";
       if (r.id) {
@@ -2330,7 +2382,7 @@ const preparerContrat: Tool = {
 
 export const TOOLS: Tool[] = [
   pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif, aValider, ecarterProposition,
-  creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
+  creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief,
   compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, notifications,

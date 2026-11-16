@@ -8,6 +8,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4
 import { getAccessToken } from "../_shared/google.ts";
 import { boxToken, talentAddress } from "../_shared/gmailBox.ts";
 import { gfetch, decodeGmailBody, charsetOf, mapPool } from "../_shared/gfetch.ts";
+import { addressOf, findSendAs, fromHeader, refusSendAs, usableSendAs, type RawSendAs, type SendAs } from "../_shared/sendAs.ts";
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 export type MailBox = "partnerships" | "talent";
@@ -189,11 +190,12 @@ async function claudeTwins(token: string, to: string, subject: string, threadId?
  * la même personne et le même objet, il est MIS À JOUR au lieu d'en créer un nouveau, et
  * ses éventuels doublons plus anciens (copies du même brouillon) sont supprimés.
  */
-export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, subject: string, message: string, threadId?: string, html?: string, bcc: string[] = []): Promise<{ id: string; replaced: boolean; removed: number }> {
+export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, subject: string, message: string, threadId?: string, html?: string, bcc: string[] = [], from?: SendAs): Promise<{ id: string; replaced: boolean; removed: number }> {
   const token = await tokenFor(sb, box, "modify");
   // X-TTP-Source : la page Mails de l'app affiche « par Claude » sur ce brouillon.
   // Bcc : copie cachée (un créateur qui suit la prospection faite pour lui) ; Gmail la retire à l'envoi.
-  const headers: string[] = [`To: ${clean(to)}`, ...(bcc.length ? [`Bcc: ${clean(bcc.join(", "))}`] : []), `Subject: ${encWord(clean(subject))}`, "X-TTP-Source: claude", "MIME-Version: 1.0"];
+  // From : alias d'une créatrice (« Envoyer en tant que » vérifié avant), sinon la boîte.
+  const headers: string[] = [...(from ? [fromHeader(from)] : []), `To: ${clean(to)}`, ...(bcc.length ? [`Bcc: ${clean(bcc.join(", "))}`] : []), `Subject: ${encWord(clean(subject))}`, "X-TTP-Source: claude", "MIME-Version: 1.0"];
   if (threadId) {
     // Réponse : rattachée au dernier message du fil (le fil reste groupé chez la marque).
     const t = await gjson(token, `${GMAIL}/threads/${encodeURIComponent(threadId)}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=References`);
@@ -249,6 +251,30 @@ export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, 
     body: JSON.stringify({ message: msg }),
   });
   return { id: String(res.id ?? ""), replaced: false, removed: 0 };
+}
+
+/** Adresses « Envoyer en tant que » réglées dans Gmail pour cette boîte (principale + alias validés). */
+export async function listSendAs(sb: SupabaseClient, box: MailBox): Promise<SendAs[]> {
+  const token = await tokenFor(sb, box, "read");
+  const res = await gjson(token, `${GMAIL}/settings/sendAs`);
+  return usableSendAs((res.sendAs as RawSendAs[] | undefined) ?? []);
+}
+
+/**
+ * Alias d'envoi demandé (`envoyer_en_tant_que`) : accepté seulement s'il est réglé dans
+ * Gmail pour `box`. Sinon une erreur `alias_refuse: <message clair>` (et la bonne boîte
+ * s'il est réglé dans l'autre).
+ */
+export async function resolveSender(sb: SupabaseClient, box: MailBox, address: string): Promise<SendAs> {
+  const list = await listSendAs(sb, box);
+  const hit = findSendAs(list, address);
+  if (hit) return hit;
+  let other: { box: string; found: boolean } | undefined;
+  for (const b of boxesFor("all").filter((x) => x !== box)) {
+    const l = await listSendAs(sb, b).catch(() => []);
+    if (findSendAs(l, address)) other = { box: b, found: true };
+  }
+  throw new Error(`alias_refuse: ${refusSendAs(address.trim().toLowerCase(), box, list, other)}`);
 }
 
 /** Adresse de la boîte (pour les liens Spark). */
@@ -320,17 +346,20 @@ export async function deleteClaudeDraft(sb: SupabaseClient, box: MailBox, draftI
  * EXACTEMENT tel qu'il est dans Gmail (relu, éventuellement retouché par Marc), puis Gmail le
  * retire des brouillons. Un brouillon écrit à la main n'est jamais envoyé par ici.
  */
-export async function sendDraft(sb: SupabaseClient, box: MailBox, draftId: string): Promise<{ to: string; subject: string; threadId: string }> {
+export async function sendDraft(sb: SupabaseClient, box: MailBox, draftId: string, expectFrom?: string): Promise<{ to: string; subject: string; threadId: string; from: string }> {
   const token = await tokenFor(sb, box, "modify");
   const d = (await gjson(token, `${GMAIL}/drafts/${encodeURIComponent(draftId)}?format=metadata`)) as DraftRes;
   const h = d.message?.payload?.headers;
   if (header(h, "x-ttp-source").toLowerCase() !== "claude") throw new Error("not_claude");
+  // Alias demandé : le brouillon doit déjà partir de cette adresse (rien n'est réécrit à l'envoi).
+  const from = addressOf(header(h, "from")) || boxAddress(box);
+  if (expectFrom && from !== expectFrom.trim().toLowerCase()) throw new Error(`from_mismatch: ${from}`);
   const res = await gjson(token, `${GMAIL}/drafts/send`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id: draftId }),
   });
-  return { to: header(h, "to"), subject: header(h, "subject"), threadId: String(res.threadId ?? d.message?.threadId ?? "") };
+  return { to: header(h, "to"), subject: header(h, "subject"), threadId: String(res.threadId ?? d.message?.threadId ?? ""), from };
 }
 
 /**
@@ -338,7 +367,7 @@ export async function sendDraft(sb: SupabaseClient, box: MailBox, draftId: strin
  * (In-Reply-To / References du dernier message, objet « Re: » repris s'il manque).
  */
 export async function sendMail(sb: SupabaseClient, box: MailBox, m: {
-  to: string[]; cc: string[]; bcc: string[]; subject: string; html: string; threadId?: string;
+  to: string[]; cc: string[]; bcc: string[]; subject: string; html: string; threadId?: string; from?: SendAs;
 }): Promise<{ id: string; threadId: string; subject: string }> {
   const token = box === "talent" ? await boxToken(sb, "talent", "send") : await getAccessToken(sb);
   let subject = clean(m.subject);
@@ -356,6 +385,8 @@ export async function sendMail(sb: SupabaseClient, box: MailBox, m: {
     }
   }
   const head = [
+    // Alias d'une créatrice (vérifié avant) : les réponses de la marque reviennent dessus.
+    ...(m.from ? [fromHeader(m.from)] : []),
     `To: ${m.to.join(", ")}`,
     ...(m.cc.length ? [`Cc: ${m.cc.join(", ")}`] : []),
     ...(m.bcc.length ? [`Bcc: ${m.bcc.join(", ")}`] : []),
