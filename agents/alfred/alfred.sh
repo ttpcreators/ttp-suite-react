@@ -304,7 +304,7 @@ lancer() {
   [ -f "$ENVOI/.deja-cite" ] && deja=1
 }
 
-rm -f "$ENVOI"/* "$ENVOI"/.deja-cite
+rm -f "$ENVOI"/* "$ENVOI"/.deja-cite "$ENVOI"/.silence
 lancer
 # Raté sans avoir rien envoyé, pour une raison passagère (Claude surchargé, coupure) : un nouvel
 # essai 20 secondes plus tard, sans déranger Marc.
@@ -315,7 +315,9 @@ if [[ "$etat" == (surcharge|autre) ]] && (( ${#envois} == 0 && ! deja )); then
 fi
 # Claude a répondu sans déposer de fichier : sa réponse part quand même, telle quelle (sauf pour
 # la veille, silencieuse quand rien d'important n'est arrivé).
-if [[ "$etat" == ok ]] && [[ "$mode" != "la veille" ]] && (( ${#envois} == 0 && ! deja )); then
+# Sauf un silence voulu (fichier .silence) : un envoi confirmé par bouton, déjà affiché « Envoyé ✓ »
+# (demande de Marc le 2026-11-16 : pas de message en double).
+if [[ "$etat" == ok ]] && [[ "$mode" != "la veille" ]] && [ ! -f "$ENVOI/.silence" ] && (( ${#envois} == 0 && ! deja )); then
   node passage.mjs texte "$SORTIE" > "$ENVOI/01-resume.txt" 2>> "$LOG"
   [ -s "$ENVOI/01-resume.txt" ] || rm -f "$ENVOI/01-resume.txt"
   envois=("$ENVOI"/*)
@@ -338,6 +340,9 @@ elif [[ "$etat" == ok && "$mode" == "la veille" ]]; then
   node passage.mjs reussi 2>> "$LOG"
   echo "$now" > etat/derniere-veille
   for r in "${rdv_dus[@]}"; do print -r -- "$r" >> etat/rdv-prepares.txt; done
+elif [[ "$etat" == ok ]] && [ -f "$ENVOI/.silence" ]; then
+  # Silence voulu : tout est fait, rien à dire à Marc.
+  node passage.mjs reussi 2>> "$LOG"
 elif (( deja )); then
   # Claude s'est arrêté après avoir déjà répondu en partie : on envoie ce qui reste, sans remettre
   # les messages de Marc en file (il aurait sa réponse deux fois), et on lui dit pourquoi.

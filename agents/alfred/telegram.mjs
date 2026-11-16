@@ -158,7 +158,7 @@ export const boutonsLiens = (liens) => liens.map((l) => (estApp(l.url) ? { text:
 
 /**
  * Un mail à valider (…-mail.txt) : titre en gras, le texte du mail en citation repliable,
- * « À vérifier » en gras, et les boutons Envoyer (vaut « oui Marque ») et Ouvrir dans Spark.
+ * « À vérifier » en gras, le bouton Envoyer (vaut « oui Marque ») seul sur sa ligne, puis Ouvrir dans Spark et Ouvrir dans l'app.
  * Pas de « oui Marque » sur la 1re ligne (brouillon dans la boîte d'un créateur) : pas de bouton Envoyer.
  */
 export function messageMail(text) {
@@ -180,8 +180,11 @@ export function messageMail(text) {
   ]
     .filter(Boolean)
     .join("\n\n");
-  const ligne = [...(oui ? [{ text: "Envoyer", callback_data: court(oui) }] : []), ...boutonsLiens(liens)];
-  return { text: html, html: true, plain: text, ...clavier(ligne, actions) };
+  // Envoyer seul sur sa ligne, puis les liens (Spark pour le téléphone, l'app pour l'ordinateur) : plus lisible sur un téléphone.
+  const envoyer = oui ? [{ text: "Envoyer", callback_data: court(oui) }] : [];
+  const ouvrir = boutonsLiens(liens);
+  if (envoyer.length && ouvrir.length) return { text: html, html: true, plain: text, boutons: [envoyer, ouvrir, ...(clavier([], actions).boutons ?? [])] };
+  return { text: html, html: true, plain: text, ...clavier([...envoyer, ...ouvrir], actions) };
 }
 
 /** Bouton Copier de Telegram : 256 caractères au plus ; au delà, le bloc à toucher suffit. */
@@ -205,6 +208,36 @@ export function boutonWhatsApp(label, texte) {
  * d'un toucher qu'il a envoyé le message, et Alfred met la to-do et son suivi à jour. Pas de
  * confirmation (rien ne part) : le toucher arrive à Alfred avec le message en contexte.
  */
+/**
+ * Les commandes d'Alfred (demande de Marc, 16 novembre 2026) : le menu « / » de Telegram. Écrites
+ * dans etat/commandes.txt au premier lancement, puis personnalisées par Marc (« ajoute /x = … »,
+ * « change /mails »). Format : « /commande = ce qu'Alfred doit faire » ; le menu montre ce texte.
+ */
+export const COMMANDES_DE_BASE = [
+  "# Tes commandes : « /commande = ce qu'Alfred fait ». Dis à Alfred « ajoute /x = … » ou « change /mails : … ».",
+  "/point = Où j'en suis : tâches, mails, WhatsApp, argent",
+  "/taches = Mes tâches du jour et en retard",
+  "/mails = Les mails qui attendent ma réponse, toutes les boîtes",
+  "/whatsapp = Qui attend ma réponse sur WhatsApp",
+  "/relances = Ce qu'il faut relancer : marques, créateurs, factures",
+  "/publications = Les publications de la semaine et celles en retard",
+  "/argent = Factures en retard, paiements reçus, reversements à faire",
+  "/commandes = La liste de mes commandes et raccourcis",
+].join("\n");
+
+/** Le menu complet : les commandes d'abord, puis les raccourcis des créateurs (100 au plus en tout). */
+export function menuDepuis(texteCommandes, texteRaccourcis) {
+  const a = commandesDepuis(texteCommandes);
+  const b = commandesDepuis(texteRaccourcis);
+  const commandes = [...a.commandes];
+  const refus = [...a.refus, ...b.refus];
+  for (const c of b.commandes) {
+    if (commandes.some((x) => x.command === c.command) || commandes.length >= 100) refus.push(`/${c.command} = ${c.description}`);
+    else commandes.push(c);
+  }
+  return { commandes, refus };
+}
+
 /**
  * Raccourcis des créateurs (etat/raccourcis.txt, une ligne « /lenapsl = Léna ») → commandes du
  * menu « / » de Telegram. Telegram n'accepte que a-z, 0-9 et _ (32 au plus), 100 commandes.
@@ -872,10 +905,12 @@ async function main() {
   // Les raccourcis des créateurs dans le menu « / » de Telegram (seulement dans la discussion de Marc).
   if (mode === "raccourcis") {
     const file = join(here, "etat/raccourcis.txt");
-    const { commandes, refus } = commandesDepuis(existsSync(file) ? readFileSync(file, "utf8") : "");
+    const fichierCommandes = join(here, "etat/commandes.txt");
+    if (!existsSync(fichierCommandes)) writeFileSync(fichierCommandes, `${COMMANDES_DE_BASE}\n`);
+    const { commandes, refus } = menuDepuis(readFileSync(fichierCommandes, "utf8"), existsSync(file) ? readFileSync(file, "utf8") : "");
     const res = await api(token, "setMyCommands", { commands: commandes, scope: { type: "chat", chat_id: Number(chatId) } });
     if (!res.ok) throw new Error(`Telegram a refusé le menu : ${res.description ?? "erreur inconnue"}`);
-    console.log(`Menu à jour : ${commandes.length} raccourci(s)${refus.length ? ` ; ignoré(s) (lettres minuscules, chiffres et _ seulement, sans doublon) : ${refus.join(" | ")}` : ""}.`);
+    console.log(`Menu à jour : ${commandes.length} commande(s) et raccourci(s)${refus.length ? ` ; ignoré(s) (lettres minuscules, chiffres et _ seulement, sans doublon) : ${refus.join(" | ")}` : ""}.`);
     return;
   }
 
@@ -940,8 +975,8 @@ async function main() {
       const libelle = /« (.+) »\)$/.exec(m.text)?.[1] ?? "Envoyer";
       const etape = etapeToucher(t.data, attente, libelle);
       if (etape.action === "direct") {
-        await clavierDe(t, t.clavier.map((l) => l.map((b) => (b.callback_data === t.data ? { text: "Envoi en cours…", callback_data: "deja-envoye" } : b))));
-        await repondre(t, "C'est parti, Alfred l'envoie.");
+        await clavierDe(t, t.clavier.map((l) => l.map((b) => (b.callback_data === t.data ? { text: "Envoyé ✓", callback_data: "deja-envoye" } : b))));
+        await repondre(t, "Envoyé. Alfred met la to-do à jour.");
         kept.push({ ...m, text: `${t.data} (bouton « Envoyer », confirmé)` });
       } else if (etape.action === "demander") {
         const id = Math.random().toString(36).slice(2, 10);
