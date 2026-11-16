@@ -1,7 +1,7 @@
 // ============================================================================
 // ttp-mcp/tools.ts : les outils de TTP Suite pour Claude.
 // Lecture : point du jour, recherche, roster, fiche créateur, mails, DM Instagram,
-// scouting (créateurs / sportifs), contacts, pipeline, collabs, planning, tâches,
+// scouting (créateurs / sportifs), Base créateurs, contacts, pipeline, collabs, planning, tâches,
 // factures et méthode TARIF (fondateurs), briefs. Actions : tâche, rendez-vous, brouillon de mail, contact,
 // échange noté, scouting, étape de collab, résumé de brief. Claude demande l'accord avant chaque action.
 // Accès complet des fondateurs (admin.ts) : lire / créer / modifier / supprimer (Corbeille) partout,
@@ -31,6 +31,7 @@ import { CREE_PAR_CLAUDE, preparerBrouillonPost } from "../_shared/igDraft.ts";
 import { appliquerChiffres } from "../_shared/mediakitChiffres.ts";
 import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
 import { CONTRACT_DRAFTS_KEY, DRAFT_OPTS, choisirCreateur, estRepresentation, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "../_shared/contractDraft.ts";
+import { cleanUser, construireBase, filtrerBase, ligneBase, type BaseMeta, type BaseRow } from "../_shared/baseCreateurs.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
 type Json = Record<string, unknown>;
@@ -2217,6 +2218,85 @@ const sourcing: Tool = {
   },
 };
 
+const baseCreateurs: Tool = {
+  name: "base_createurs",
+  title: "Base créateurs (façon Kolsquare)",
+  description:
+    "Cherche dans la Base créateurs de TTP : tous les comptes Instagram déjà lus par l'agence (radars, araignée, Scouting, veille), filtrables comme la page Prospection › Base créateurs : niche, ville, abonnés min/max, engagement minimum (en %), actif ces 30 jours, partenariats déjà faits, sans agence, hors roster et Scouting. Pour « trouve-moi 5 créatrices running à Lyon », préparer une sélection pour une marque ou repérer des talents à recruter. Avec `liste` : montre une liste déjà préparée pour une marque (son titre ou son adresse). Les créateurs retirés à leur demande (RGPD) n'apparaissent jamais. Lecture seule.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      recherche: { type: "string", description: "Mots à trouver dans le nom, le @, la bio ou les marques" },
+      niche: { type: "string", description: "Mode, Beauté, Lifestyle, Fitness, Food, Voyage, Famille, Humour, Tech, Gaming, Déco, Musique, Business, Sport, Animaux, Auto" },
+      ville: { type: "string" },
+      abonnes_min: { type: "number" },
+      abonnes_max: { type: "number" },
+      engagement_min: { type: "number", description: "En %, ex. 3" },
+      actif_30j: { type: "boolean", description: "A posté ces 30 derniers jours" },
+      avec_partenariats: { type: "boolean", description: "A déjà fait des posts payés" },
+      sans_agence: { type: "boolean", description: "Pas déjà dans une autre agence (vrai par défaut)" },
+      hors_ttp: { type: "boolean", description: "Sans les créateurs du roster ni du Scouting" },
+      tri: { type: "string", enum: ["abonnes", "engagement", "recent", "nom"] },
+      limite: { type: "number", description: "20 par défaut, 50 au plus" },
+      liste: { type: "string", description: "Titre ou adresse d'une liste pour une marque" },
+    },
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const rows: BaseRow[] = [];
+    for (let from = 0; from < 20000; from += 1000) {
+      const { data, error } = await sb.from("ig_profiles").select("username, data, at").range(from, from + 999);
+      if (error) return fail(`Base illisible : ${error.message}`);
+      rows.push(...((data ?? []) as BaseRow[]));
+      if (!data || data.length < 1000) break;
+    }
+    const [m, cr, pl] = await Promise.all([
+      sb.from("creator_base_meta").select("username, niche, ville, note, excluded"),
+      sb.from("creators").select("handle, instagram"),
+      sb.from("creator_pool").select("handle"),
+    ]);
+    const meta: Record<string, BaseMeta> = Object.fromEntries(((m.data ?? []) as BaseMeta[]).map((x) => [x.username, x]));
+    const roster = new Set<string>();
+    for (const c of (cr.data ?? []) as Json[]) for (const h of [c.instagram, c.handle]) if (h && cleanUser(String(h))) roster.add(cleanUser(String(h)));
+    const scouting = new Set(((pl.data ?? []) as Json[]).map((x) => cleanUser(String(x.handle ?? ""))).filter(Boolean));
+    const base = construireBase(rows, meta, roster, scouting);
+    const now = Date.now();
+
+    const liste = str(a.liste, 120);
+    if (liste) {
+      const slug = liste.replace(/^.*[?&]l=/, "").trim();
+      const { data: ls, error } = await sb.from("creator_lists").select("slug, title, brand, intro, usernames, public").or(`slug.eq.${JSON.stringify(slug)},title.ilike.${JSON.stringify(like(liste))}`).limit(3);
+      if (error) return fail(m.error ? "Les listes arrivent quand le SQL de la Base créateurs sera lancé." : `Listes illisibles : ${error.message}`);
+      const l = ((ls ?? []) as Json[])[0];
+      if (!l) return fail(`Aucune liste ne correspond à « ${liste} ».`);
+      const byUser = Object.fromEntries(base.filter((c) => !c.excluded).map((c) => [c.username, c]));
+      const people = ((l.usernames as string[] | null) ?? []).map((u) => byUser[u]).filter(Boolean);
+      return ok([
+        `# Liste « ${l.title} »${l.brand ? ` pour ${l.brand}` : ""} · ${people.length} créateur(s)`,
+        l.public ? `Lien pour la marque : https://ttpcreators.pro/selection/?l=${l.slug}` : "Lien pour la marque : pas encore activé (page Base créateurs › Listes).",
+        l.intro ? `Mot pour la marque : ${l.intro}` : "",
+        ...people.map((c) => ligneBase(c, now)),
+      ].filter(Boolean).join("\n"));
+    }
+
+    const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
+    const tri = ["abonnes", "engagement", "recent", "nom"].includes(String(a.tri)) ? (a.tri as "abonnes") : "abonnes";
+    const found = filtrerBase(base, {
+      recherche: str(a.recherche, 120), niche: str(a.niche, 40), ville: str(a.ville, 60),
+      abonnesMin: num(a.abonnes_min), abonnesMax: num(a.abonnes_max), engagementMin: num(a.engagement_min),
+      actif30j: a.actif_30j === true, avecPartenariats: a.avec_partenariats === true, sansAgence: a.sans_agence !== false, horsTtp: a.hors_ttp === true, tri,
+    }, now);
+    const lim = int(a.limite, 20, 1, 50);
+    const total = base.filter((c) => !c.excluded).length;
+    return ok([
+      `# Base créateurs · ${found.length} trouvé(s) sur ${total}${found.length > lim ? ` · les ${lim} premiers` : ""}`,
+      ...found.slice(0, lim).map((c) => ligneBase(c, now)),
+      found.length ? "Chiffres Instagram au dernier passage de l'app. Niche « devinée » = tirée de la bio. Pour en faire une liste pour une marque : page Base créateurs (cases à cocher)." : "Personne ne correspond. Élargis un filtre (ville, taille, engagement).",
+      m.error ? "(Le SQL de la Base créateurs n'est pas encore lancé : niches et villes sont toutes devinées.)" : "",
+    ].filter(Boolean).join("\n"));
+  },
+};
+
 const notifications: Tool = {
   name: "notifications",
   title: "Notifications",
@@ -2333,7 +2413,7 @@ export const TOOLS: Tool[] = [
   creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief,
-  compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, notifications,
+  compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, baseCreateurs, notifications,
   droitsUsage, noterDroits, postsCreateur, preparerContrat,
   ...ADMIN_TOOLS,
 ];

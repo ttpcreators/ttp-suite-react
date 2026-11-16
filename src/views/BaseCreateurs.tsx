@@ -6,7 +6,8 @@ import { Spin } from "@/components/ui/loader";
 import { dbInsert } from "@/lib/db";
 import { fmtCompact } from "@/lib/timeSeries";
 import { fmtAgo, fmtEr } from "@/lib/instagram";
-import { CREATOR_NICHES, guessNiche } from "@/lib/niche";
+import { CREATOR_NICHES } from "@/lib/niche";
+import { VILLES, cleanUser, construireBase, deburr, filtrerBase, type BaseCreateur, type BaseMeta, type BaseProf } from "../../supabase/functions/_shared/baseCreateurs.ts";
 import { useStickyState } from "@/lib/useStickyState";
 import { TtpSpider } from "@/components/icons/ttp-icons";
 
@@ -21,15 +22,11 @@ import { TtpSpider } from "@/components/icons/ttp-icons";
  * Avant le SQL 2026-11-16-base-createurs.sql, la base s'affiche quand même (sans listes).
  */
 
-type Prof = {
-  name?: string; followers?: number; er?: number | null; perWeek?: number | null; lastPost?: string | null;
-  bio?: string; website?: string; email?: string; agency?: string | null; deals?: string[]; cites?: string[];
-  picture?: string; isBrand?: boolean; pending?: boolean; platform?: string;
-};
+type Prof = BaseProf;
 type Row = { username: string; data: Prof; at: string | null };
-type Meta = { username: string; niche: string | null; ville: string | null; note: string | null; excluded: boolean };
+type Meta = BaseMeta;
 type List = { id: string; slug: string; title: string; brand: string | null; intro: string | null; usernames: string[]; public: boolean; updated_at: string };
-type Creator = Row & { niche: string | null; ville: string | null; guessed: boolean; note: string | null; excluded: boolean; tag: "roster" | "scouting" | null };
+type Creator = BaseCreateur;
 
 const SITE = "https://ttpcreators.pro/selection/?l=";
 const TIERS = [
@@ -39,21 +36,8 @@ const TIERS = [
   { id: "macro", label: "Macro · 500K +", min: 5e5, max: Infinity },
 ] as const;
 const SORTS = ["abonnes", "engagement", "recent", "nom"] as const;
-const VILLES = [
-  "Paris", "Marseille", "Lyon", "Toulouse", "Nice", "Nantes", "Montpellier", "Strasbourg", "Bordeaux", "Lille", "Rennes", "Reims",
-  "Toulon", "Grenoble", "Dijon", "Angers", "Nîmes", "Annecy", "Biarritz", "Cannes", "Monaco", "Bruxelles", "Genève", "Lausanne",
-  "Montréal", "Londres", "Dubaï", "Rouen", "Tours", "Metz", "Brest", "Caen", "Perpignan", "Ajaccio", "Clermont-Ferrand", "Saint-Étienne",
-];
 const IN = "h-9 rounded-full border border-border bg-surface px-3 text-[13px] text-foreground outline-none focus:border-primary";
-const deburr = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-const cleanUser = (h: string) => h.trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/[/?#].*$/, "").toLowerCase();
 const missingTable = (e: { code?: string } | null) => !!e && (e.code === "42P01" || e.code === "PGRST205" || e.code === "PGRST202");
-
-/** Ville citée dans la bio (« 📍Lyon », « Paris / Londres ») : la première de la liste trouvée. */
-export function guessVille(bio: string): string | null {
-  const b = ` ${deburr(bio).replace(/[^a-z0-9]+/g, " ")} `;
-  return VILLES.find((v) => b.includes(` ${deburr(v).replace(/[^a-z0-9]+/g, " ")} `)) ?? null;
-}
 
 /** Adresse publique d'une liste : le titre lisible + 4 caractères au hasard (introuvable sans le lien). */
 export function slugFor(title: string): string {
@@ -122,25 +106,8 @@ export function BaseCreateurs() {
     };
   }, [reload]);
 
-  const creators: Creator[] = useMemo(
-    () =>
-      (rows ?? []).map((r) => {
-        const m = meta[r.username];
-        const text = `${r.data.name ?? ""} ${r.data.bio ?? ""}`;
-        const gn = m?.niche ? null : guessNiche(text);
-        const gv = m?.ville ? null : guessVille(r.data.bio ?? "");
-        return {
-          ...r,
-          niche: m?.niche || gn,
-          ville: m?.ville || gv,
-          guessed: !m?.niche && !!gn,
-          note: m?.note ?? null,
-          excluded: !!m?.excluded,
-          tag: roster.has(r.username) ? "roster" : scouting.has(r.username) ? "scouting" : null,
-        };
-      }),
-    [rows, meta, roster, scouting],
-  );
+  // Même logique que l'outil base_createurs d'Alfred (supabase/functions/_shared/baseCreateurs.ts).
+  const creators: Creator[] = useMemo(() => construireBase(rows ?? [], meta, roster, scouting), [rows, meta, roster, scouting]);
 
   const villes = useMemo(() => {
     const n = new Map<string, number>();
@@ -148,34 +115,12 @@ export function BaseCreateurs() {
     return [...n.entries()].sort((a, b) => b[1] - a[1]).map(([v]) => v);
   }, [creators]);
 
-  const filtered = useMemo(() => {
-    const words = deburr(q).split(/\s+/).filter(Boolean);
-    const month = Date.now() - 30 * 864e5;
-    const list = creators.filter((c) => {
-      if (c.excluded !== retires) return false;
-      const d = c.data;
-      if (words.length) {
-        const hay = deburr(`${c.username} ${d.name ?? ""} ${d.bio ?? ""} ${c.niche ?? ""} ${c.ville ?? ""} ${(d.deals ?? []).join(" ")}`);
-        if (!words.every((w) => hay.includes(w))) return false;
-      }
-      if (niche && c.niche !== niche) return false;
-      if (ville && c.ville !== ville) return false;
-      if (tiers.size && !TIERS.some((t) => tiers.has(t.id) && (d.followers ?? 0) >= t.min && (d.followers ?? 0) < t.max)) return false;
-      if (erMin && (d.er ?? 0) < erMin) return false;
-      if (actifs && !(d.lastPost && Date.parse(d.lastPost) > month)) return false;
-      if (deals && !(d.deals ?? []).length) return false;
-      if (horsAgence && d.agency) return false;
-      if (cacherTtp && c.tag) return false;
-      return true;
-    });
-    const by: Record<(typeof SORTS)[number], (a: Creator, b: Creator) => number> = {
-      abonnes: (a, b) => (b.data.followers ?? 0) - (a.data.followers ?? 0),
-      engagement: (a, b) => (b.data.er ?? -1) - (a.data.er ?? -1),
-      recent: (a, b) => Date.parse(b.at ?? "0") - Date.parse(a.at ?? "0"),
-      nom: (a, b) => (a.data.name || a.username).localeCompare(b.data.name || b.username, "fr"),
-    };
-    return list.sort(by[sort]);
-  }, [creators, q, niche, ville, tiers, erMin, actifs, deals, horsAgence, cacherTtp, retires, sort]);
+  const filtered = useMemo(
+    () =>
+      filtrerBase(creators, { recherche: q, niche, ville, engagementMin: erMin, actif30j: actifs, avecPartenariats: deals, sansAgence: horsAgence, horsTtp: cacherTtp, tri: sort }, Date.now(), retires)
+        .filter((c) => !tiers.size || TIERS.some((t) => tiers.has(t.id) && (c.data.followers ?? 0) >= t.min && (c.data.followers ?? 0) < t.max)),
+    [creators, q, niche, ville, tiers, erMin, actifs, deals, horsAgence, cacherTtp, retires, sort],
+  );
 
   useEffect(() => setShown(60), [q, niche, ville, tiers, erMin, actifs, deals, horsAgence, cacherTtp, retires, sort]);
 

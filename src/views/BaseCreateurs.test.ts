@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { guessVille, slugFor } from "./BaseCreateurs";
+import { slugFor } from "./BaseCreateurs";
+import { guessVille } from "../../supabase/functions/_shared/baseCreateurs.ts";
 
 describe("guessVille", () => {
   it("trouve la ville citée dans la bio, accents et emojis compris", () => {
