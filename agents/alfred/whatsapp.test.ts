@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { appleVersDate, attente, balleChezMarc, cleVocal, contenu, duree, correspond, dateVersApple, heure, ligne, lireDate, lireListe, numeroDe, trouver, lirePreparation, refusEnvoi, destinataire, ligneAutorisee, ID_ENVOI } from "./whatsapp.mjs";
+import { contientMots, appleVersDate, attente, balleChezMarc, cleVocal, contenu, duree, correspond, dateVersApple, heure, ligne, lireDate, lireListe, numeroDe, trouver, lirePreparation, refusEnvoi, destinataire, ligneAutorisee, ID_ENVOI } from "./whatsapp.mjs";
 
 describe("Alfred : discussions WhatsApp", () => {
   it("convertit les dates WhatsApp (secondes depuis 2001) à l'heure de Paris", () => {
@@ -22,6 +22,11 @@ describe("Alfred : discussions WhatsApp", () => {
     expect(trouver(liste, "Inconnu")).toBeNull();
   });
 
+  it("retrouve un sujet déjà traité, tous les mots, sans accents", () => {
+    expect(contientMots("Farid : voici la Facture de Léna", ["facture", "lena"])).toBe(true);
+    expect(contientMots("Farid : voici le devis", ["facture", "farid"])).toBe(false);
+    expect(contientMots("ok", ["de", "a"])).toBe(false);
+  });
   it("ne cherche qu'avec des mots de 3 lettres ou plus", () => {
     expect(correspond("Léna PSL", ["lena"])).toBe(true);
     expect(correspond("Léna PSL", ["le"])).toBe(false);
