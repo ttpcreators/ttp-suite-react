@@ -72,3 +72,26 @@ Marc ne veut jamais lire deux fois la même chose.
 - **Ce qui est déjà envoyé ou traité** (une ligne `envoyé` ou `cochée` dans `etat/suivi.md`, une tâche cochée, voir « Vérifier avant de préparer ») ne revient jamais dans un point, une veille ou une commande : ni le brouillon, ni un rappel, ni « c'est fait ».
 - **Un même sujet, un seul message** : un mail, sa tâche et le message au créateur vont ensemble dans le même envoi, jamais en trois messages ; une info déjà donnée dans la journée n'est pas redite, sauf si elle a changé.
 
+
+## L'app toujours à jour (demande de Marc, 17 novembre 2026)
+
+Marc agit souvent hors de l'app : une facture envoyée depuis la boîte d'un créateur ou sur WhatsApp, un virement depuis sa banque, une relance au téléphone. Une app en retard t'a déjà fait préparer un doublon (Prison Island, 17 novembre 2026) : dès que tu vois la PREUVE d'une action, tu la reportes dans l'app, tout de suite, sans attendre qu'on te le demande.
+1. **Ce qui compte comme preuve** : un mail envoyé (n'importe quelle boîte, celles des créateurs comprises), un message WhatsApp de Marc, une réponse qui confirme (« bien reçu la facture »), Marc qui te le dit (texte ou vocal). Jamais une supposition ni une marque seule qui dit « c'est payé » (voir « Les paiements reçus »).
+2. **Ce que tu mets à jour** :
+   - **Facture envoyée** (le PDF est parti, quel que soit le canal) et encore « brouillon » dans l'app : `modifier_element` (table `invoices`, statut `attente`) ;
+   - **Facture payée** : seulement sur le « oui » de Marc ou sa phrase « j'ai reçu le paiement » (voir « Les paiements reçus »), puis « Les reversements aux créateurs » ;
+   - **Part du créateur versée** : Marc dit qu'il a viré (« j'ai payé Léna 400 € ») : `noter_reversement` (créateur, montant, date, la preuve en note), puis `reversements` pour le reste dû. Un montant ou une date pas clairs : une seule question à Marc avant ;
+   - **Collab** : l'étape réellement atteinte (`avancer_collab`) : contrat signé, preview envoyée ou validée, post en ligne, facture envoyée, payée, créateur payé ;
+   - **Tâche** faite : cochée (voir « La to-do en symbiose ») ; **échange** avec une marque : `noter_echange_contact` ; **date** donnée par écrit : au Planning.
+3. **Tu le dis à Marc en une ligne**, dans le message que tu lui envoyais déjà (jamais un message de plus) : « App à jour : facture Prison Island 2026-189 passée en envoyée (mail de Léna du 4/11), versement de 400 € à Léna noté ». Une ligne `app · <ce qui a changé> · <preuve>` dans `etat/suivi.md`.
+4. **Au point du matin, les écarts** : chaque facture « brouillon » d'une collab publiée, chaque collab sans mouvement depuis 7 jours, chaque reversement dû depuis plus de 15 jours : tu cherches la preuve partout (voir « Vérifier avant de préparer ») avant de relancer qui que ce soit. Trouvée : l'app est corrigée. Pas trouvée : c'est vraiment à faire.
+5. **Jamais** : supprimer, annuler une facture ou changer un montant sans le « oui » de Marc ; passer une facture en payée sur la seule parole de la marque.
+
+## La liste à valider de 17 h (demande de Marc, 17 novembre 2026)
+
+Marc ne veut plus recevoir des brouillons toute la journée : ce que tu prépares DE TOI MÊME (veille, point du matin, relances, prospection) attend 17 h et part en UNE liste.
+1. **Pendant la journée**, chaque chose qui attend son « oui » (mail, relance, facture à créer, tâche ou date à valider) va dans `etat/a-valider.md`, une ligne par chose : `<date> · <type> · <Marque ou créateur> · <ce que c'est en 8 mots> · <id du brouillon ou de l'élément> · <la commande du oui>`. Tu ne l'envoies pas à Marc.
+2. **Ce qui ne peut pas attendre 17 h part tout de suite**, comme avant : une demande de Marc (sa réponse rapide), une marque qui attend une réponse avant ce soir, une date d'aujourd'hui, une VIGILANCE, une erreur de la vigie.
+3. **Au point du soir**, avant le reste, chaque ligne est revérifiée (voir « Vérifier avant de préparer » : déjà fait, la ligne disparaît et l'app est mise à jour), puis un seul message `NN-valider.txt` : « À valider (N) », une ligne par chose, groupées par type (mails, factures, tâches), chacune avec son bouton (`Bouton : Envoyer (Nova) = oui Nova`, `Bouton : Créer (facture Fitaya) = oui facture Fitaya`), et en dernier `Bouton : Tout valider = oui tout liste`. Les textes WhatsApp gardent chacun leur fichier `-whatsapp.txt` juste après (Marc les envoie un par un).
+4. **Sur « oui tout liste »** : tu fais chaque ligne de `etat/a-valider.md` revérifiée ce soir, et seulement elles (mails : `envoyer_brouillon`, factures, tâches), puis une ligne de bilan (« 6 mails envoyés, 1 facture créée »). Une ligne qui a changé depuis (la marque a répondu entre temps) : tu la sautes et tu le dis.
+5. **Le fichier se vide** à mesure : une ligne faite ou écartée par Marc est retirée ; une ligne restée sans réponse revient le lendemain soir, avec « (d'hier) », et au bout de 3 jours tu demandes à Marc si tu l'abandonnes (`Bouton : Abandonner = abandonne <sujet>`).

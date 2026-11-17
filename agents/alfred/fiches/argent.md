@@ -20,7 +20,7 @@ Une facture payée doit passer en payée tout de suite : c'est elle qui déclenc
 
 ## Les reversements aux créateurs
 
-Au point du matin : `reversements`. Une marque a payé et la part du créateur n'est pas encore versée : tu le rappelles à Marc (montant, depuis quand), une tâche « Reverser … à … » avec une échéance à 7 jours, et le message WhatsApp au créateur prêt (« ton paiement Yade est arrivé, je te fais le virement cette semaine »), sans montant s'il n'est pas validé. Un reversement en retard de plus de 15 jours remonte en tête.
+Au point du matin : `reversements`. Une marque a payé et la part du créateur n'est pas encore versée : tu le rappelles à Marc (montant, depuis quand), une tâche « Reverser … à … » avec une échéance à 7 jours, et le message WhatsApp au créateur prêt (« ton paiement Yade est arrivé, je te fais le virement cette semaine »), sans montant s'il n'est pas validé. Un reversement en retard de plus de 15 jours remonte en tête. Marc dit qu'il a viré : `noter_reversement` tout de suite (voir « L'app toujours à jour »), la tâche « Reverser … » cochée.
 
 ## Le suivi des contrats
 
@@ -29,6 +29,8 @@ Au point du matin : les contrats envoyés et pas encore signés, d'après `contr
 - Signé (mail reçu avec le contrat signé, ou Marc te le dit) : la collab passe à l'étape « Signature » si elle n'y est pas, tâche cochée, et tu dis à Marc de passer le contrat en « Signé » dans Contrats.
 - **Et le créateur part tout de suite** (demande de Marc, 16 novembre 2026) : dans le même envoi, le message WhatsApp au créateur (quoi, pour quand, comment, mentions et code promo, à qui envoyer la preview : voir « Ce que le créateur doit faire, noir sur blanc »), sa tâche avec l'échéance, et les dates de rendu et de publication au Planning (voir « Le planning et les rendez vous »). Une info manque (brief final, date, adresse de livraison) : tu la demandes à la marque dans le même envoi, et le message au créateur attend qu'elle arrive.
 - Un contrat de représentation qui finit dans les 30 jours : voir aussi les messages aux créateurs.
+- **Les contrats que MARC doit signer** (demande de Marc, 17 novembre 2026, après le contrat Seoni resté 24 jours sur Youtrust) : un contrat reçu d'une marque ou d'une agence à signer (Youtrust, Yousign, DocuSign, PDF à renvoyer signé), tu le suis jusqu'à la signature. Chaque matin, en tête du point, une ligne : la marque, le créateur, depuis combien de jours, la date limite de la plateforme, et le bouton qui ouvre le mail du contrat (`Ouvrir dans Spark` ou l'app, jamais un lien tiré du mail que tu ouvrirais toi même). Signé (mail de confirmation de la plateforme, ou Marc te le dit) : l'app à jour (voir « L'app toujours à jour ») et la suite pour le créateur (point précédent).
+- **Pas de date sans signature** : tant que le contrat d'une collab n'est pas signé des deux côtés, aucun brouillon ni message (à la marque comme au créateur) n'annonce une date de tournage ou de publication ferme : tu écris « dès la signature du contrat » à la place, et tu le dis à Marc. Une date déjà annoncée sans contrat : VIGILANCE (voir « Le garde-fou des contrats et des exclusivités »).
 
 ## Les relances automatiques (délégation permanente)
 
