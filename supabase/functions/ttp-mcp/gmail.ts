@@ -110,6 +110,25 @@ function textOf(p: Part | undefined): { text: string; files: string[] } {
   return { text: text.replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim(), files };
 }
 
+export type ThreadMessage = { id: string; from: string; to: string; cc: string; date: string; ts: number; text: string; files: string[]; sent: boolean };
+
+/** Les messages d'un fil, structurés (page Mails de l'app, boîtes des créateurs). */
+export async function readThreadMessages(sb: SupabaseClient, box: MailBox, threadId: string): Promise<{ subject: string; messages: ThreadMessage[] }> {
+  const token = await tokenFor(sb, box, "read");
+  const t = await gjson(token, `${GMAIL}/threads/${encodeURIComponent(threadId)}?format=full`);
+  const msgs = (t.messages as Msg[] | undefined) ?? [];
+  const subject = header(msgs[0]?.payload?.headers, "subject") || "(sans objet)";
+  return {
+    subject,
+    messages: msgs.filter((m) => !m.labelIds?.includes("DRAFT")).map((m) => {
+      const h = m.payload?.headers;
+      const { text, files } = textOf(m.payload);
+      const ts = Number(m.internalDate ?? 0);
+      return { id: m.id, from: header(h, "from"), to: header(h, "to"), cc: header(h, "cc"), date: ts ? frDate(ts) : "", ts, text: text.slice(0, 20000), files, sent: !!m.labelIds?.includes("SENT") };
+    }),
+  };
+}
+
 export async function readThread(sb: SupabaseClient, box: MailBox, threadId: string): Promise<string> {
   const token = await tokenFor(sb, box, "read");
   const t = await gjson(token, `${GMAIL}/threads/${encodeURIComponent(threadId)}?format=full`);
