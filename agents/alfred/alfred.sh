@@ -11,11 +11,12 @@
 #                         des marques, DM, devis, relances, créateurs, argent à aller chercher).
 #                         Le lundi à 11 h : la prospection de la semaine ; le 1er
 #                         du mois à 14 h : la revue des tarifs ; le mercredi à 11 h : le
-#                         recrutement ; le jeudi à 11 h : la veille créative. Du lundi au vendredi à 11 h, 13 h et 15 h : la VEILLE (les
+#                         recrutement ; le jeudi à 11 h : la veille créative. Tous les jours à 6 h : la VIGIE des réseaux ; le mardi et le
+#                         vendredi à 16 h : le POINT CONTENU des créateurs. Du lundi au vendredi à 11 h, 13 h et 15 h : la VEILLE (les
 #                         mails arrivés depuis, modèle rapide, silencieuse sauf pour l'important).
 #                         Et, une heure avant chaque rendez-vous du jour, sa fiche.
 #                         En mode vacances (etat/vacances.txt) : le point du matin seulement.
-#   alfred.sh --point | --prospection | --tarifs | --recrutement | --creative | --veille : ce passage tout de suite (test).
+#   alfred.sh --point | --prospection | --tarifs | --recrutement | --creative | --veille | --vigie | --contenu : ce passage tout de suite (test).
 # Alfred lit TTP Suite par le connecteur « TTP Suite » du compte Claude de Marc, prépare des
 # brouillons, tient la to-do et dépose ses messages pour Marc dans etat/envoi/ ; ce script les
 # envoie ensuite par le bot Telegram d'Alfred, à Marc seul. Un mail ne part que sur un « oui »
@@ -136,6 +137,14 @@ elif [[ "$1" == "--recrutement" ]] || (( auto && ! ${#vacances} && jour == 3 && 
 # Le jeudi à 11 h (demande de Marc, 16 novembre 2026) : la veille créative (tendances, idées par créateur).
 elif [[ "$1" == "--creative" ]] || (( auto && ! ${#vacances} && jour == 4 && heure == 11 )); then
   mode="la veille créative de la semaine"
+# Tous les jours à 6 h, vacances et week-end compris (demande de Marc, 17 novembre 2026) : la vigie
+# des réseaux (les erreurs des créateurs sur leurs posts). Silencieuse quand tout va bien.
+elif [[ "$1" == "--vigie" ]] || (( auto && heure == 6 )); then
+  mode="la vigie des réseaux"
+# Le mardi et le vendredi à 16 h (demande de Marc, 17 novembre 2026) : le point contenu des créateurs,
+# pour que Marc fasse ses retours sur leurs posts.
+elif [[ "$1" == "--contenu" ]] || (( auto && ! ${#vacances} && (jour == 2 || jour == 5) && heure == 16 )); then
+  mode="le point contenu des créateurs"
 # Du lundi au vendredi à 11 h, 13 h et 15 h, entre les deux points : la veille (demande de Marc
 # le 2026-11-13). Seulement les mails arrivés depuis, et un message à Marc seulement pour l'important.
 elif [[ "$1" == "--veille" ]] || (( auto && ! ${#vacances} && jour <= 5 && (heure == 11 || heure == 13 || heure == 15) )); then
@@ -319,7 +328,7 @@ fi
 # la veille, silencieuse quand rien d'important n'est arrivé).
 # Sauf un silence voulu (fichier .silence) : un envoi confirmé par bouton, déjà affiché « Envoyé ✓ »
 # (demande de Marc le 2026-11-16 : pas de message en double).
-if [[ "$etat" == ok ]] && [[ "$mode" != "la veille" ]] && [ ! -f "$ENVOI/.silence" ] && (( ${#envois} == 0 && ! deja )); then
+if [[ "$etat" == ok ]] && [[ "$mode" != "la veille" && "$mode" != "la vigie des réseaux" ]] && [ ! -f "$ENVOI/.silence" ] && (( ${#envois} == 0 && ! deja )); then
   node passage.mjs texte "$SORTIE" > "$ENVOI/01-resume.txt" 2>> "$LOG"
   [ -s "$ENVOI/01-resume.txt" ] || rm -f "$ENVOI/01-resume.txt"
   envois=("$ENVOI"/*)
@@ -337,10 +346,10 @@ if [[ "$etat" == ok ]] && (( ${#envois} > 0 || deja )); then
     for r in "${rdv_dus[@]}"; do print -r -- "$r" >> etat/rdv-prepares.txt; done
     garder etat/rdv-prepares.txt 200
   fi
-elif [[ "$etat" == ok && "$mode" == "la veille" ]]; then
-  # Veille sans rien d'important : rien à dire à Marc, la prochaine reprend d'ici.
+elif [[ "$etat" == ok && ( "$mode" == "la veille" || "$mode" == "la vigie des réseaux" ) ]]; then
+  # Veille ou vigie sans rien d'important : rien à dire à Marc, la prochaine reprend d'ici.
   node passage.mjs reussi 2>> "$LOG"
-  echo "$now" > etat/derniere-veille
+  [[ "$mode" == "la veille" ]] && echo "$now" > etat/derniere-veille
   for r in "${rdv_dus[@]}"; do print -r -- "$r" >> etat/rdv-prepares.txt; done
 elif [[ "$etat" == ok ]] && [ -f "$ENVOI/.silence" ]; then
   # Silence voulu : tout est fait, rien à dire à Marc.
