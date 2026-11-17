@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { aEnvoyerWhatsApp, boutonsLiens, chunks, clavier, commandesDepuis, COMMANDES_DE_BASE, menuDepuis, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
+import { ajouterCommandes, carteDepuis, cleSujet, commandeFixe, doitSonner, enHtml, extraireSujet, graphiqueHtml, ligneRemise, messageMail, aEnvoyerWhatsApp, boutonsLiens, chunks, clavier, commandesDepuis, COMMANDES_DE_BASE, menuDepuis, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -42,7 +42,10 @@ describe("Alfred : messages Telegram", () => {
     expect(m.text).toBe(
       "<b>Mail à Erwann (Marque Test)</b>\nÀ : erwann@exemple.fr · Objet : Rendez vous\n\n<blockquote>Bonjour Erwann,\nLequel vous arrange ?</blockquote>\n\n<b>À vérifier</b> : les créneaux",
     );
-    expect(m.boutons).toEqual([[{ text: "Envoyer", callback_data: "oui Erwann" }], [{ text: "Ouvrir dans Spark", url: "https://sparkmailapp.com/dpl/bl?token=abc" }]]);
+    expect(m.boutons).toEqual([
+      [{ text: "Envoyer", callback_data: "oui Erwann" }, { text: "Modifier", callback_data: "modifier:Erwann" }, { text: "Plus tard", callback_data: "plus-tard:Erwann" }],
+      [{ text: "Ouvrir dans Spark", url: "https://sparkmailapp.com/dpl/bl?token=abc" }],
+    ]);
     // Brouillon dans la boîte d'un créateur : Alfred ne peut pas l'envoyer, pas de bouton Envoyer.
     const [s] = messagesFor("03-mail.txt", "Mail à Lola (Marque) · à envoyer depuis Spark\n\nHello\n\nOuvrir dans Spark : https://sparkmailapp.com/dpl/bl?token=x");
     expect(s.boutons).toEqual([[{ text: "Ouvrir dans Spark", url: "https://sparkmailapp.com/dpl/bl?token=x" }]]);
@@ -314,5 +317,68 @@ describe("raccourcis des créateurs", () => {
     expect(m.boutons[0][0]).toEqual({ text: "Envoyer", callback_data: "oui whatsapp ab12cd34" });
     const [sans] = messagesFor("02-whatsapp.txt", brut);
     expect(sans.boutons[0][0].text).toBe("Ouvrir dans WhatsApp");
+  });
+
+  describe("présentation (demande de Marc, 17 novembre 2026)", () => {
+    it("replie le détail sous la réponse", () => {
+      const h = enHtml("La facture Nova est partie le 4/11.\nDétail :\nMail de Léna à Ilona\nRéponse « bien reçu »");
+      expect(h.startsWith("La facture Nova est partie le 4/11.")).toBe(true);
+      expect(h).toContain("<blockquote expandable>Mail de Léna à Ilona\nRéponse « bien reçu »</blockquote>");
+    });
+
+    it("met le mail dans un bloc à copier quand il n'y a pas de bouton Envoyer", () => {
+      const m = messageMail("Mail à Julie (Ferflex) · à envoyer depuis Spark\nÀ : julie@exemple.fr · Objet : Re: Collab\nBonjour Julie,\nMerci !");
+      expect(m.text).toContain("<pre>Bonjour Julie,\nMerci !</pre>");
+    });
+
+    it("retire la ligne Sujet et normalise la clé", () => {
+      const { sujet, texte } = extraireSujet("Sujet : Prison Island\nLa facture est partie.");
+      expect(sujet).toBe("Prison Island");
+      expect(texte).toBe("La facture est partie.");
+      expect(cleSujet("Prison-Island ")).toBe(cleSujet("prison island"));
+      expect(cleSujet("Léna × Kosbiotic")).toBe("lena kosbiotic");
+    });
+
+    it("fait sonner seulement l'urgent", () => {
+      expect(doitSonner({ texte: "VIGILANCE : contrat pas signé", mode: "la veille" })).toBe(true);
+      expect(doitSonner({ texte: "Voici", mode: "la réponse à Marc" })).toBe(true);
+      expect(doitSonner({ texte: "À valider (4)", nom: "02-valider.txt", mode: "le point du soir" })).toBe(true);
+      expect(doitSonner({ texte: "Bonjour", mode: "le point du matin", premier: true })).toBe(true);
+      expect(doitSonner({ texte: "Mail à Nova", mode: "le point du matin", premier: false })).toBe(false);
+      expect(doitSonner({ texte: "Bilan", mode: "le bilan du soir", premier: true })).toBe(false);
+    });
+
+    it("change un bouton fixe en commande", () => {
+      expect(commandeFixe("À valider")).toBe("/valider");
+      expect(commandeFixe(" Point ")).toBe("/point");
+      expect(commandeFixe("point du jour ?")).toBeNull();
+    });
+
+    it("ajoute une seule fois les nouvelles commandes", () => {
+      const a = ajouterCommandes("/point = Où j'en suis\n", "");
+      expect(a.nouvelles).toEqual(["/valider", "/createurs"]);
+      expect(a.texte).toContain("/valider = ");
+      const b = ajouterCommandes("/point = Où j'en suis\n", "/valider\n/createurs\n");
+      expect(b.nouvelles).toEqual([]);
+      expect(b.texte).toBe("/point = Où j'en suis\n");
+    });
+
+    it("range un mail remis à plus tard dans la liste à valider", () => {
+      const quand = new Date("2026-11-17T10:00:00Z");
+      expect(ligneRemise("soir", "Nova", quand)).toBe("2026-11-17 · mail · Nova · remis par Marc, à partir du 2026-11-17 17:00 · · oui Nova");
+      expect(ligneRemise("demain", "Nova", quand)).toContain("à partir du 2026-11-18 09:00");
+    });
+
+    it("lit la photo d'une carte, et s'en passe sans photo", () => {
+      expect(carteDepuis("Photo : https://exemple.fr/a.jpg\n**Léna**\n2 collabs")).toEqual({ photo: "https://exemple.fr/a.jpg", texte: "**Léna**\n2 collabs" });
+      expect(carteDepuis("**Léna**").photo).toBeNull();
+    });
+
+    it("dessine un graphique sobre, la semaine en bleu", () => {
+      const h = graphiqueHtml({ titre: "Encaissé", unite: "€", barres: [{ label: "S-1", valeur: 1200 }, { label: "Cette semaine", valeur: 2400, actuel: true }] });
+      expect(h).toContain("#2563eb");
+      expect(h).toContain("2 400 €");
+      expect(h).toContain("Cette semaine");
+    });
   });
 });

@@ -43,7 +43,7 @@ Au point du vendredi soir, avant **Demain**, la semaine de l'agence en cinq lign
 3. **Deals signés** : contrats signés et deals gagnés au `pipeline`, avec le montant.
 4. **Ce qui a glissé** : publications en retard, tâches en retard de plus de 3 jours, réponses de marques qui n'arrivent pas, une ligne au plus par sujet, avec la date prévue.
 5. **Les 3 priorités de la semaine prochaine** : ce qui rapporte ou débloque le plus, chacune avec sa première action (déjà préparée quand c'est possible).
-Une ligne vide entre chaque, pas de détail en plus (« écris « détail » » pour le reste). L'entrée « Bilan de la semaine » au journal (`noter_journal`). Rien à dire sur une ligne : « Aucun ».
+Une ligne vide entre chaque, pas de détail en plus (« écris « détail » » pour le reste). Puis le graphique de la semaine (voir « Le bilan du vendredi en image »). L'entrée « Bilan de la semaine » au journal (`noter_journal`). Rien à dire sur une ligne : « Aucun ».
 
 ## La veille créative du jeudi
 

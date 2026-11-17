@@ -17,6 +17,7 @@
 //   node telegram.mjs telecharger <lien>   télécharge et découpe une vidéo (WeTransfer, SwissTransfer, Drive, Dropbox)
 //   node telegram.mjs rappels              envoie les rappels arrivés à échéance (etat/rappels.md)
 //   node telegram.mjs raccourcis           met les raccourcis des créateurs (etat/raccourcis.txt) dans le menu « / »
+//   node telegram.mjs clavier [--forcer]   envoie les boutons fixes du bas de l'écran (une fois par version)
 //   node telegram.mjs joindre <id> [ordre] copie une pièce jointe d'un mail (Spark) dans le dossier
 //                                          d'envoi du passage (ALFRED_ENVOI, sinon etat/envoi) :
 //                                          elle part à Marc avec le prochain envoi, sous son nom d'origine
@@ -81,6 +82,8 @@ export const escapeHtml = (s) => String(s).replace(/&/g, "&amp;").replace(/</g, 
 const LIGNE_LIEN = /^\s*(Ouvrir dans [^:\n]{2,30}) : (https?:\/\/\S+)\s*$/;
 /** Rubriques mises en gras toutes seules en début de ligne. */
 const RUBRIQUE = /^(VIGILANCE|URGENT|ARGENT|À VALIDER|DANS L'APP|À VÉRIFIER|COUP D'AVANCE)\b/;
+/** « Détail : » seul sur sa ligne : la suite du message se replie. */
+const DETAIL = /^\s*\**\s*détails?\s*\**\s*:?\s*\**\s*$/i;
 /** callback_data de Telegram : 64 octets au plus. */
 const court = (s, max = 64) => {
   let out = String(s);
@@ -137,7 +140,19 @@ export function enHtml(text) {
       .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, (_, t, u) => `<a href="${u.replace(/"/g, "%22")}">${t}</a>`)
       .replace(/(^|[\s(])(https?:\/\/[^\s<]{50,})/g, (_, a, u) => `${a}<a href="${u.replace(/"/g, "%22")}">lien</a>`)
       .replace(RUBRIQUE, "<b>$1</b>");
+  // « Détail : » seul sur sa ligne (demande de Marc, 17 novembre 2026) : tout ce qui suit part
+  // dans un bloc replié, ouvert d'un toucher. La réponse reste au dessus, en une ou deux lignes.
+  let detail = null;
   for (const l of lignes) {
+    if (detail) {
+      detail.push(enLigne(l.replace(/^>\s?/, "")));
+      continue;
+    }
+    if (DETAIL.test(l)) {
+      fermer();
+      detail = [];
+      continue;
+    }
     if (/^>\s?/.test(l)) {
       cite.push(enLigne(l.replace(/^>\s?/, "")));
       continue;
@@ -149,6 +164,8 @@ export function enHtml(text) {
     out.push(enLigne(l));
   }
   fermer();
+  const corps = detail?.join("\n").trim();
+  if (corps) out.push("", `<b>Détail</b>\n<blockquote expandable>${corps}</blockquote>`);
   return out.join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
@@ -173,15 +190,23 @@ export function messageMail(text) {
   // Les autres notes pour Marc sortent aussi du bloc du mail.
   const { texte: mail, notes } = separerNotes(corps.join("\n"));
   verifier.push(...notes);
+  // Sans bouton Envoyer (boîte d'un créateur dans Spark) : le mail dans un bloc qu'un toucher copie en entier.
+  const blocMail = oui
+    ? `<blockquote${mail.split("\n").length > 6 ? " expandable" : ""}>${escapeHtml(mail)}</blockquote>`
+    : `<pre>${escapeHtml(mail)}</pre>`;
   const html = [
     `<b>${escapeHtml(titre)}</b>${meta ? `\n${escapeHtml(meta)}` : ""}`,
-    mail ? `<blockquote${mail.split("\n").length > 6 ? " expandable" : ""}>${escapeHtml(mail)}</blockquote>` : null,
+    mail ? blocMail : null,
     ...verifier.map((v) => escapeHtml(v.trim()).replace(/^À VÉRIFIER/i, "<b>À vérifier</b>")),
   ]
     .filter(Boolean)
     .join("\n\n");
   // Envoyer seul sur sa ligne, puis les liens (Spark pour le téléphone, l'app pour l'ordinateur) : plus lisible sur un téléphone.
-  const envoyer = oui ? [{ text: "Envoyer", callback_data: court(oui) }] : [];
+  // Envoyer, Modifier (Marc répond avec sa correction), Plus tard (remis dans la liste de 17 h ou à demain).
+  const qui = oui ? oui.replace(/^oui\s+/i, "").trim() : "";
+  const envoyer = oui
+    ? [{ text: "Envoyer", callback_data: court(oui) }, { text: "Modifier", callback_data: court(`${MODIFIER}${qui}`) }, { text: "Plus tard", callback_data: court(`${PLUS_TARD}${qui}`) }]
+    : [];
   const ouvrir = boutonsLiens(liens);
   if (envoyer.length && ouvrir.length) return { text: html, html: true, plain: text, boutons: [envoyer, ouvrir, ...(clavier([], actions).boutons ?? [])] };
   return { text: html, html: true, plain: text, ...clavier([...envoyer, ...ouvrir], actions) };
@@ -310,6 +335,123 @@ export function messagesFor(name, content, { waEnvoi = null } = {}) {
     return [{ text: enHtml(texte), html: true, plain: text, ...clavier(boutonsLiens(liens), actions) }];
   }
   return chunks(text).map((t) => ({ text: t, md: false }));
+}
+
+// ── Présentation des messages (demande de Marc, 17 novembre 2026) ─────────────
+
+/** Boutons d'un brouillon gérés ici même, sans réveiller Alfred : Modifier et Plus tard. */
+export const MODIFIER = "modifier:";
+export const PLUS_TARD = "plus-tard:";
+export const PLUS_TARD_QUAND = "plus-tard-quand:";
+
+/** Le clavier qui remplace « Plus tard » : ce soir à 17 h ou demain matin. */
+export const clavierPlusTard = (qui) => [[
+  { text: "Ce soir, 17 h", callback_data: court(`${PLUS_TARD_QUAND}soir:${qui}`) },
+  { text: "Demain, 9 h", callback_data: court(`${PLUS_TARD_QUAND}demain:${qui}`) },
+]];
+
+/** La ligne ajoutée à etat/a-valider.md quand Marc remet un mail à plus tard. */
+export function ligneRemise(quand, qui, maintenant = new Date()) {
+  const jour = (d) => d.toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" });
+  const demain = new Date(maintenant.getTime() + 86_400_000);
+  const quandTexte = quand === "demain" ? `à partir du ${jour(demain)} 09:00` : `à partir du ${jour(maintenant)} 17:00`;
+  return `${jour(maintenant)} · mail · ${qui} · remis par Marc, ${quandTexte} · · oui ${qui}`;
+}
+
+/** « Sujet : Prison Island » seul sur sa ligne : le message répond au précédent du même dossier. */
+export function extraireSujet(texte) {
+  let sujet = null;
+  const reste = String(texte ?? "")
+    .split("\n")
+    .filter((l) => {
+      const m = /^\s*Sujet\s*:\s*(.{2,80}?)\s*$/i.exec(l);
+      if (m && !sujet) {
+        sujet = m[1];
+        return false;
+      }
+      return true;
+    })
+    .join("\n");
+  return { sujet, texte: reste };
+}
+
+/** Clé d'un sujet : sans accents, casse ni ponctuation (« Prison Island » = « prison-island »). */
+export const cleSujet = (s) =>
+  String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * Le téléphone de Marc sonne seulement pour l'urgent (demande de Marc, 17 novembre 2026) : une
+ * réponse à ce qu'il vient d'écrire, une VIGILANCE ou un URGENT, un rappel, la liste à valider de
+ * 17 h, et le premier message d'un point. Le reste arrive en silence.
+ */
+export function doitSonner({ texte = "", nom = "", mode = "", premier = false }) {
+  if (/\b(VIGILANCE|URGENT)\b|🔴/.test(texte)) return true;
+  if (mode === "la réponse à Marc") return true;
+  if (/-valider\.txt$/.test(nom)) return true;
+  if (premier && /^le point du (matin|soir)$/.test(mode)) return true;
+  return false;
+}
+
+/** Les boutons fixes en bas de l'écran (clavier de Telegram) et la commande que chacun vaut. */
+export const BOUTONS_FIXES = [["Point", "À valider"], ["Mails", "Créateurs", "Argent"]];
+const FIXES = { point: "/point", "à valider": "/valider", mails: "/mails", créateurs: "/createurs", argent: "/argent" };
+/** Un toucher sur un bouton fixe arrive comme son texte : on le change en commande. */
+export const commandeFixe = (texte) => FIXES[String(texte ?? "").trim().toLowerCase()] ?? null;
+/** Version du clavier fixe : changer ce numéro le renvoie à Marc à la prochaine mise à jour. */
+export const VERSION_CLAVIER = "1";
+
+/** Commandes ajoutées après coup : mises une seule fois dans etat/commandes.txt (Marc peut les retirer ensuite). */
+export const COMMANDES_AJOUTEES = [
+  "/valider = Ce qui attend mon oui, tout de suite (comme la liste de 17 h)",
+  "/createurs = Mes créateurs, une ligne chacun avec son raccourci",
+];
+export function ajouterCommandes(texte, deja) {
+  const faites = new Set(String(deja ?? "").split("\n").map((l) => l.trim()).filter(Boolean));
+  let out = String(texte ?? "");
+  const nouvelles = [];
+  for (const c of COMMANDES_AJOUTEES) {
+    const cmd = c.split(" ")[0];
+    if (faites.has(cmd)) continue;
+    nouvelles.push(cmd);
+    if (!new RegExp(`^${cmd}\\s*=`, "m").test(out)) out = `${out.replace(/\n*$/, "")}\n${c}\n`;
+  }
+  return { texte: out, nouvelles };
+}
+
+/** « Photo : https://… » en 1re ligne d'une carte (…-carte.txt) : la photo et le texte dessous. */
+export function carteDepuis(texte) {
+  const [premiere = "", ...reste] = String(texte ?? "").replace(/\r\n/g, "\n").trim().split("\n");
+  const m = /^\s*Photo\s*:\s*(https:\/\/\S+)\s*$/i.exec(premiere);
+  return m ? { photo: m[1], texte: reste.join("\n").trim() } : { photo: null, texte: String(texte ?? "").trim() };
+}
+
+/**
+ * Le graphique du bilan (…-graphique.json) : barres horizontales, sobres (gris, la valeur de la
+ * semaine en bleu de l'app), lisibles sur un téléphone. Données : { titre, sousTitre, unite,
+ * barres: [{ label, valeur, actuel }] }. Rendu en image par Chrome sur l'iMac.
+ */
+export function graphiqueHtml(d) {
+  const barres = (Array.isArray(d?.barres) ? d.barres : []).slice(0, 8).map((b) => ({ label: String(b?.label ?? ""), valeur: Number(b?.valeur) || 0, actuel: !!b?.actuel }));
+  const max = Math.max(1, ...barres.map((b) => b.valeur));
+  const unite = String(d?.unite ?? "");
+  const fmt = (n) => `${n.toLocaleString("fr-FR", { maximumFractionDigits: 0 }).replace(/ /g, " ")}${unite ? ` ${unite}` : ""}`;
+  const ligne = (b, i) => {
+    const y = 150 + i * 92;
+    const w = Math.round((b.valeur / max) * 620);
+    return `<text x="60" y="${y}" class="l">${escapeHtml(b.label)}</text>
+<rect x="60" y="${y + 14}" width="${Math.max(w, 4)}" height="40" rx="8" fill="${b.actuel ? "#2563eb" : "#cbd5e1"}"/>
+<text x="${60 + Math.max(w, 4) + 16}" y="${y + 43}" class="v">${escapeHtml(fmt(b.valeur))}</text>`;
+  };
+  const h = 170 + barres.length * 92;
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+html,body{margin:0;background:#fff}svg{display:block}
+text{font-family:Inter,-apple-system,"Helvetica Neue",Arial,sans-serif;fill:#0f172a}
+.t{font-size:34px;font-weight:700}.s{font-size:22px;fill:#64748b}.l{font-size:24px;fill:#334155}.v{font-size:24px;font-weight:600}
+</style></head><body><svg xmlns="http://www.w3.org/2000/svg" width="900" height="${h}" viewBox="0 0 900 ${h}">
+<text x="60" y="56" class="t">${escapeHtml(String(d?.titre ?? ""))}</text>
+<text x="60" y="90" class="s">${escapeHtml(String(d?.sousTitre ?? ""))}</text>
+${barres.map(ligne).join("\n")}
+</svg></body></html>`;
 }
 
 /**
@@ -803,14 +945,29 @@ async function envoyerFichiers({ token, chatId, here, dir, names, fil, supprimer
   const ids = existsSync(fichierIds) ? readFileSync(fichierIds, "utf8").split("\n").map(Number).filter(Boolean) : [];
   let replyTo = !existsSync(marque) && ids.length ? ids[ids.length - 1] : null;
   const waActif = readEnv(join(here, "config.env")).ALFRED_WA_ENVOI === "1";
+  const mode = String(process.env.ALFRED_MODE ?? "");
+  const sujets = lireSujets(here);
   let n = 0;
   for (const name of names) {
     const chemin = join(dir, name);
+    // Le message épinglé « Aujourd'hui », la carte d'un créateur et le graphique ont leur propre envoi.
+    if (name.endsWith("-epingle.txt") || name.endsWith("-carte.txt") || name.endsWith("-graphique.json")) {
+      try {
+        await envoyerSpecial({ token, chatId, here, chemin, name, fil });
+        n++;
+      } catch (e) {
+        console.error(`${new Date().toISOString()} ${name} : ${e.message}`);
+      }
+      if (supprimer) rmSync(chemin, { force: true });
+      continue;
+    }
     // Un .txt = un message ; un .contrat.json = un contrat fabriqué par le moteur de l'app ;
     // tout autre fichier (document .html, PDF) part en pièce jointe.
     // Pont WhatsApp installé (ALFRED_WA_ENVOI=1 dans config.env) : le texte est gardé tel que Marc
     // le voit, et son bouton « Envoyer » le fait partir après confirmation (whatsapp.mjs envoyer).
-    const brut = name.endsWith(".txt") ? readFileSync(chemin, "utf8") : "";
+    // « Sujet : … » (ligne retirée du message) : le message répond au précédent du même dossier.
+    const { sujet, texte: brut } = name.endsWith(".txt") ? extraireSujet(readFileSync(chemin, "utf8")) : { sujet: null, texte: "" };
+    const cle = sujet ? cleSujet(sujet) : "";
     const garde = waActif ? aEnvoyerWhatsApp(name, brut) : null;
     let waEnvoi = null;
     if (garde) {
@@ -836,7 +993,10 @@ async function envoyerFichiers({ token, chatId, here, dir, names, fil, supprimer
         // Contrat fabriqué ici : son HTML et son PDF ne restent pas dans le dossier d'envoi.
         if (m.temporaire) for (const f of [m.temporaire, m.file]) rmSync(f, { force: true });
       } else {
-        await send(token, chatId, m, replyTo);
+        const silence = !doitSonner({ texte: String(m.plain ?? m.text), nom: name, mode, premier: n === 0 });
+        const cite = replyTo ?? (cle && sujets[cle]?.id) ?? null;
+        const id = await send(token, chatId, m, cite, { silence });
+        if (cle && id) sujets[cle] = { id, at: Date.now() };
         appendFileSync(fil, `\n### ${stamp()} · Alfred\n${m.plain ?? m.text}\n`);
       }
       // Le marqueur dit aussi à alfred.sh que Marc a déjà reçu quelque chose (même sans message à citer).
@@ -846,7 +1006,45 @@ async function envoyerFichiers({ token, chatId, here, dir, names, fil, supprimer
     }
     if (supprimer) rmSync(chemin, { force: true });
   }
+  try {
+    writeFileSync(join(here, "etat/sujets.json"), JSON.stringify(sujets));
+  } catch {
+    // le fil par dossier est un confort : jamais une raison de bloquer l'envoi
+  }
   return n;
+}
+
+/** Épinglé, carte (photo + texte + boutons) ou graphique (image) : silencieux. */
+async function envoyerSpecial({ token, chatId, here, chemin, name, fil }) {
+  const brut = readFileSync(chemin, "utf8");
+  if (name.endsWith("-epingle.txt")) {
+    const { liens, actions, texte } = extraireLiens(brut.trim());
+    const msg = { text: enHtml(texte), html: true, plain: texte, ...clavier(boutonsLiens(liens), actions) };
+    await epingler(token, chatId, here, msg);
+    appendFileSync(fil, `\n### ${stamp()} · Alfred (épinglé)\n${texte}\n`);
+    return;
+  }
+  if (name.endsWith("-carte.txt")) {
+    const { photo, texte: corps } = carteDepuis(brut);
+    const { liens, actions, texte } = extraireLiens(corps);
+    const boutons = clavier(boutonsLiens(liens), actions).boutons ?? null;
+    const html = enHtml(texte);
+    try {
+      if (!photo || html.length > 1000) throw new Error("sans photo");
+      await sendPhoto(token, chatId, photo, { caption: html, boutons, silence: true });
+    } catch {
+      await send(token, chatId, { text: html, html: true, plain: texte, ...(boutons ? { boutons } : {}) }, null, { silence: true });
+    }
+    appendFileSync(fil, `\n### ${stamp()} · Alfred (carte)\n${texte}\n`);
+    return;
+  }
+  const d = JSON.parse(brut);
+  const nb = Math.min(8, Array.isArray(d?.barres) ? d.barres.length : 0);
+  const image = await enImage(graphiqueHtml(d), 170 + nb * 92);
+  const legende = escapeHtml(String(d?.legende ?? d?.titre ?? ""));
+  if (image) await sendPhoto(token, chatId, image, { caption: legende, silence: true });
+  else await send(token, chatId, { text: `${legende}\n${(d?.barres ?? []).map((b) => `${b.label} : ${b.valeur}${d?.unite ? ` ${d.unite}` : ""}`).join("\n")}`, md: false }, null, { silence: true });
+  appendFileSync(fil, `\n### ${stamp()} · Alfred (graphique)\n${d?.titre ?? ""}\n`);
 }
 
 /** Envoie un fichier à Marc (contrat rédigé, document), 50 Mo au plus. */
@@ -859,15 +1057,87 @@ async function sendDocument(token, chatId, path, name, replyTo = null) {
   if (!res.ok) throw new Error(`Telegram a refusé le document ${name} : ${res.description ?? "erreur inconnue"}`);
 }
 
-async function send(token, chatId, msg, replyTo = null) {
+async function send(token, chatId, msg, replyTo = null, { silence = false } = {}) {
   const cite = replyTo ? { reply_parameters: { message_id: replyTo, allow_sending_without_reply: true } } : {};
   const clavier = msg.boutons ? { reply_markup: { inline_keyboard: msg.boutons } } : {};
-  const call = (body) => api(token, "sendMessage", { chat_id: chatId, disable_web_page_preview: true, ...cite, ...clavier, ...body });
+  const muet = silence ? { disable_notification: true } : {};
+  const call = (body) => api(token, "sendMessage", { chat_id: chatId, disable_web_page_preview: true, ...cite, ...clavier, ...muet, ...body });
   const mode = msg.md ? "MarkdownV2" : msg.html ? "HTML" : null;
   let res = await call(mode ? { text: msg.text, parse_mode: mode } : { text: msg.text });
   // Mise en forme refusée : on renvoie le même texte, sans mise en forme.
   if (!res.ok && mode) res = await call({ text: msg.plain });
   if (!res.ok) throw new Error(`Telegram a refusé le message : ${res.description ?? "erreur inconnue"}`);
+  return res.result?.message_id ?? null;
+}
+
+/** Une photo avec sa légende (carte d'un créateur, graphique) : par adresse, ou fichier du Mac. */
+async function sendPhoto(token, chatId, photo, { caption = "", boutons = null, silence = false, replyTo = null } = {}) {
+  const form = new FormData();
+  form.append("chat_id", String(chatId));
+  if (caption) {
+    form.append("caption", caption.slice(0, 1024));
+    form.append("parse_mode", "HTML");
+  }
+  if (boutons) form.append("reply_markup", JSON.stringify({ inline_keyboard: boutons }));
+  if (silence) form.append("disable_notification", "true");
+  if (replyTo) form.append("reply_parameters", JSON.stringify({ message_id: replyTo, allow_sending_without_reply: true }));
+  if (/^https:\/\//.test(photo)) form.append("photo", photo);
+  else form.append("photo", new Blob([readFileSync(photo)]), "image.png");
+  const res = await fetch(`https://api.telegram.org/bot${token}/sendPhoto`, { method: "POST", body: form }).then((r) => r.json());
+  if (!res.ok) throw new Error(`Telegram a refusé la photo : ${res.description ?? "erreur inconnue"}`);
+  return res.result?.message_id ?? null;
+}
+
+/** Le graphique en image (Chrome sans fenêtre, comme les PDF). null si Chrome n'est pas là. */
+async function enImage(html, hauteur) {
+  const nav = CHROME.find((c) => existsSync(c));
+  if (!nav) return null;
+  const dir = join(tmpdir(), `alfred-img-${process.pid}-${Date.now()}`);
+  mkdirSync(dir, { recursive: true });
+  const src = join(dir, "g.html");
+  const out = join(dir, "g.png");
+  writeFileSync(src, html);
+  try {
+    await promisify(execFile)(nav, [`--user-data-dir=${join(dir, "profil")}`, "--headless", "--disable-gpu", "--no-first-run", "--hide-scrollbars", "--force-device-scale-factor=2", `--window-size=900,${hauteur}`, `--screenshot=${out}`, pathToFileURL(src).href], { timeout: 60_000 });
+    return existsSync(out) && statSync(out).size > 1000 ? out : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Le message épinglé « Aujourd'hui » : mis à jour s'il date d'aujourd'hui, sinon nouveau et épinglé. */
+async function epingler(token, chatId, here, msg) {
+  const fichier = join(here, "etat/epingle.json");
+  const jour = new Date().toLocaleDateString("sv-SE", { timeZone: "Europe/Paris" });
+  let avant = {};
+  try {
+    avant = existsSync(fichier) ? JSON.parse(readFileSync(fichier, "utf8")) : {};
+  } catch {
+    avant = {};
+  }
+  if (avant.id && avant.jour === jour) {
+    const res = await api(token, "editMessageText", { chat_id: chatId, message_id: avant.id, text: msg.text, parse_mode: "HTML", disable_web_page_preview: true, ...(msg.boutons ? { reply_markup: { inline_keyboard: msg.boutons } } : {}) });
+    if (res.ok || /not modified/i.test(res.description ?? "")) return avant.id;
+  }
+  const id = await send(token, chatId, msg, null, { silence: true });
+  if (id) {
+    if (avant.id) await api(token, "unpinChatMessage", { chat_id: chatId, message_id: avant.id }).catch(() => {});
+    await api(token, "pinChatMessage", { chat_id: chatId, message_id: id, disable_notification: true }).catch(() => {});
+    writeFileSync(fichier, JSON.stringify({ id, jour }));
+  }
+  return id;
+}
+
+/** Les fils par dossier (etat/sujets.json) : le dernier message envoyé pour chaque sujet, 30 jours. */
+function lireSujets(here) {
+  try {
+    const f = join(here, "etat/sujets.json");
+    const o = existsSync(f) ? JSON.parse(readFileSync(f, "utf8")) : {};
+    for (const [k, v] of Object.entries(o)) if (Date.now() - Number(v?.at ?? 0) > 30 * 86_400_000) delete o[k];
+    return o;
+  } catch {
+    return {};
+  }
 }
 
 async function main() {
@@ -907,11 +1177,34 @@ async function main() {
     const file = join(here, "etat/raccourcis.txt");
     const fichierCommandes = join(here, "etat/commandes.txt");
     if (!existsSync(fichierCommandes)) writeFileSync(fichierCommandes, `${COMMANDES_DE_BASE}\n`);
+    // Les commandes ajoutées depuis (/valider, /createurs) : une seule fois, Marc peut les retirer ensuite.
+    const fichierAjouts = join(here, "etat/commandes-ajoutees.txt");
+    const { texte: avecAjouts, nouvelles } = ajouterCommandes(readFileSync(fichierCommandes, "utf8"), existsSync(fichierAjouts) ? readFileSync(fichierAjouts, "utf8") : "");
+    if (nouvelles.length) {
+      writeFileSync(fichierCommandes, avecAjouts);
+      appendFileSync(fichierAjouts, `${nouvelles.join("\n")}\n`);
+    }
     const { commandes, refus } = menuDepuis(readFileSync(fichierCommandes, "utf8"), existsSync(file) ? readFileSync(file, "utf8") : "");
     const res = await api(token, "setMyCommands", { commands: commandes, scope: { type: "chat", chat_id: Number(chatId) } });
     if (!res.ok) throw new Error(`Telegram a refusé le menu : ${res.description ?? "erreur inconnue"}`);
     console.log(`Menu à jour : ${commandes.length} commande(s) et raccourci(s)${refus.length ? ` ; ignoré(s) (lettres minuscules, chiffres et _ seulement, sans doublon) : ${refus.join(" | ")}` : ""}.`);
     return;
+  }
+
+  // Les boutons fixes en bas de l'écran (Point, À valider, Mails, Créateurs, Argent) : envoyés une
+  // fois par version (mise-a-jour.sh), ils restent ensuite à la place du clavier.
+  if (mode === "clavier") {
+    const fichier = join(here, "etat/clavier-version");
+    if (arg !== "--forcer" && existsSync(fichier) && readFileSync(fichier, "utf8").trim() === VERSION_CLAVIER) return console.log("Clavier déjà en place.");
+    const res = await api(token, "sendMessage", {
+      chat_id: chatId,
+      text: "Tes raccourcis sont en bas de l'écran : Point, À valider, Mails, Créateurs, Argent. Un toucher suffit.",
+      disable_notification: true,
+      reply_markup: { keyboard: BOUTONS_FIXES.map((l) => l.map((text) => ({ text }))), is_persistent: true, resize_keyboard: true },
+    });
+    if (!res.ok) throw new Error(`Telegram a refusé le clavier : ${res.description ?? "erreur inconnue"}`);
+    writeFileSync(fichier, VERSION_CLAVIER);
+    return console.log("Clavier envoyé.");
   }
 
   if (mode === "rappels") {
@@ -972,6 +1265,35 @@ async function main() {
         await repondre(t, "Déjà noté.");
         continue;
       }
+      // Modifier : Marc répond avec sa correction, sans réveiller Alfred pour rien (demande de Marc, 17/11/2026).
+      if (String(t.data).startsWith(MODIFIER)) {
+        const qui = String(t.data).slice(MODIFIER.length);
+        await repondre(t, "Écris ta correction en réponse.");
+        await api(token, "sendMessage", {
+          chat_id: chatId,
+          text: `Ta correction pour le mail ${qui} ? Réponds à ce message (« plus court », « enlève le prix », ou le texte à mettre).`,
+          reply_parameters: { message_id: t.message, allow_sending_without_reply: true },
+          reply_markup: { force_reply: true, input_field_placeholder: `Correction du mail ${qui}`.slice(0, 64) },
+        }).catch(() => {});
+        continue;
+      }
+      // Plus tard : ce soir 17 h ou demain 9 h, rangé dans la liste à valider.
+      if (String(t.data).startsWith(PLUS_TARD_QUAND)) {
+        const [quand, ...rest] = String(t.data).slice(PLUS_TARD_QUAND.length).split(":");
+        const qui = rest.join(":");
+        appendFileSync(join(here, "etat/a-valider.md"), `${ligneRemise(quand, qui)}\n`);
+        await clavierDe(t, [[{ text: quand === "demain" ? "Remis à demain 9 h ✓" : "Remis à 17 h ✓", callback_data: "deja-envoye" }]]);
+        await repondre(t, quand === "demain" ? "Je te le remets demain à 9 h." : "Je te le remets à 17 h.");
+        appendFileSync(fil, `\n### ${stamp()} · Marc\nMail ${qui} remis à plus tard (${quand === "demain" ? "demain 9 h" : "ce soir 17 h"})\n`);
+        continue;
+      }
+      if (String(t.data).startsWith(PLUS_TARD)) {
+        const qui = String(t.data).slice(PLUS_TARD.length);
+        attente[`pt${String(t.message).slice(-8)}`] = { data: t.data, libelle: "Plus tard", clavier: t.clavier, at: Date.now() };
+        await clavierDe(t, [...clavierPlusTard(qui), [{ text: "Retour", callback_data: `non:pt${String(t.message).slice(-8)}` }]]);
+        await repondre(t, "Quand veux-tu le revoir ?");
+        continue;
+      }
       const libelle = /« (.+) »\)$/.exec(m.text)?.[1] ?? "Envoyer";
       const etape = etapeToucher(t.data, attente, libelle);
       if (etape.action === "direct") {
@@ -1021,6 +1343,11 @@ async function main() {
       m.text = `(pièce jointe : ${m.media.name} · ${prete.replace(join(here, ""), "")})${m.text ? `\n${m.text}` : ""}`;
     }
     for (const m of kept) {
+      // Bouton fixe du bas de l'écran (« Point », « À valider »…) : la commande qu'il vaut.
+      const fixe = !m.toucher && commandeFixe(m.text);
+      if (fixe) m.text = fixe;
+      // 👀 : Marc voit tout de suite que son message est arrivé (👌 quand c'est fait, voir l'écoute).
+      if (!m.toucher && m.id) api(token, "setMessageReaction", { chat_id: chatId, message_id: m.id, reaction: [{ type: "emoji", emoji: "👀" }] }).catch(() => {});
       const full = m.reply ? `${m.reply}\n${m.text}` : m.text;
       appendFileSync(join(here, "etat/file-recue.txt"), `[${stamp(m.at)}] ${full}\n\n`);
       // Pour qu'Alfred réponde en citant ce message (comme « Répondre » sur Telegram).
@@ -1029,7 +1356,7 @@ async function main() {
     }
     // L'offset n'avance qu'une fois les messages rangés : rien ne se perd si on s'arrête avant.
     if (next !== offset) writeFileSync(offsetFile, String(next));
-    return kept.length;
+    return kept;
   };
 
   // Alfred lui même (lien de preview trouvé dans un mail) : node telegram.mjs telecharger <lien>
@@ -1057,7 +1384,7 @@ async function main() {
   }
 
   if (mode === "recevoir") {
-    console.log(await ranger(0));
+    console.log((await ranger(0)).length);
     return;
   }
 
@@ -1066,8 +1393,10 @@ async function main() {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     for (;;) {
       let n = 0;
+      let recus = [];
       try {
-        n = await ranger(50);
+        recus = await ranger(50);
+        n = recus.length;
       } catch (e) {
         console.error(`${new Date().toISOString()} ${e.message}`);
         await sleep(e.code === 409 ? 30_000 : 5_000);
@@ -1081,12 +1410,14 @@ async function main() {
       const typing = () => api(token, "sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
       typing();
       const tick = setInterval(typing, 4_000);
-      await new Promise((resolve) => {
+      const code = await new Promise((resolve) => {
         const p = spawn("/bin/zsh", [join(here, "alfred.sh"), "--reponse", ...(reprise ? ["reprise"] : [])], { stdio: "ignore" });
-        p.on("exit", resolve);
-        p.on("error", resolve);
+        p.on("exit", (c) => resolve(c));
+        p.on("error", () => resolve(1));
       });
       clearInterval(tick);
+      // 👌 sur les messages de Marc traités (Telegram n'a pas de ✅ parmi ses réactions).
+      if (code === 0) for (const m of recus) if (!m.toucher && m.id) api(token, "setMessageReaction", { chat_id: chatId, message_id: m.id, reaction: [{ type: "emoji", emoji: "👌" }] }).catch(() => {});
       // Le passage relancé n'a pas pu se faire (il n'a pas touché à la reprise) : on l'oublie, pour ne pas boucler.
       if (reprise) oublierRepriseSi(here, reprise);
     }
@@ -1100,8 +1431,22 @@ async function main() {
     if (!pid) throw new Error("Usage : node telegram.mjs suivre <dossier> <pid de Claude>");
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
     let total = 0;
+    // Le message d'avancement (demande de Marc, 17 novembre 2026) : Alfred écrit dans
+    // <dossier>/.avancement ce qu'il fait (« Je lis le fil Prison Island… ») ; un seul message,
+    // mis à jour, puis retiré quand la réponse est partie.
+    const avancement = join(dir, ".avancement");
+    let avId = null;
+    let avTexte = "";
     for (;;) {
       const encore = vivant(pid);
+      if (existsSync(avancement)) {
+        const t = readFileSync(avancement, "utf8").trim().split("\n").pop()?.slice(0, 200) ?? "";
+        if (t && t !== avTexte) {
+          avTexte = t;
+          if (avId) await api(token, "editMessageText", { chat_id: chatId, message_id: avId, text: `⏳ ${t}` }).catch(() => {});
+          else avId = await send(token, chatId, { text: `⏳ ${t}`, md: false }, null, { silence: true }).catch(() => null);
+        }
+      }
       const names = fichiersPrets(lireDossier(dir), Date.now());
       if (names.length) {
         try {
@@ -1114,6 +1459,8 @@ async function main() {
       if (!encore) break;
       await sleep(1000);
     }
+    if (avId) await api(token, "deleteMessage", { chat_id: chatId, message_id: avId }).catch(() => {});
+    rmSync(avancement, { force: true });
     console.log(`${total} message(s) envoyé(s) au fil de l'eau.`);
     return;
   }

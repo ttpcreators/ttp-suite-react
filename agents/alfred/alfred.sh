@@ -16,7 +16,7 @@
 #                         mails arrivés depuis, modèle rapide, silencieuse sauf pour l'important).
 #                         Et, une heure avant chaque rendez-vous du jour, sa fiche.
 #                         En mode vacances (etat/vacances.txt) : le point du matin seulement.
-#   alfred.sh --point | --prospection | --tarifs | --recrutement | --creative | --veille | --vigie | --contenu : ce passage tout de suite (test).
+#   alfred.sh --point | --prospection | --tarifs | --recrutement | --creative | --veille | --vigie | --contenu | --bilan-soir : ce passage tout de suite (test).
 # Alfred lit TTP Suite par le connecteur « TTP Suite » du compte Claude de Marc, prépare des
 # brouillons, tient la to-do et dépose ses messages pour Marc dans etat/envoi/ ; ce script les
 # envoie ensuite par le bot Telegram d'Alfred, à Marc seul. Un mail ne part que sur un « oui »
@@ -145,6 +145,10 @@ elif [[ "$1" == "--vigie" ]] || (( auto && heure == 6 )); then
 # pour que Marc fasse ses retours sur leurs posts.
 elif [[ "$1" == "--contenu" ]] || (( auto && ! ${#vacances} && (jour == 2 || jour == 5) && heure == 16 )); then
   mode="le point contenu des créateurs"
+# Du lundi au vendredi à 20 h (demande de Marc, 17 novembre 2026) : le bilan du soir en 3 lignes,
+# en silence (ce qu'Alfred a fait, ce qu'il a évité, ce qui attend demain).
+elif [[ "$1" == "--bilan-soir" ]] || (( auto && ! ${#vacances} && jour <= 5 && heure == 20 )); then
+  mode="le bilan du soir"
 # Du lundi au vendredi à 11 h, 13 h et 15 h, entre les deux points : la veille (demande de Marc
 # le 2026-11-13). Seulement les mails arrivés depuis, et un message à Marc seulement pour l'important.
 elif [[ "$1" == "--veille" ]] || (( auto && ! ${#vacances} && jour <= 5 && (heure == 11 || heure == 13 || heure == 15) )); then
@@ -156,6 +160,10 @@ elif (( ${#rdv_dus} > 0 )); then
 else
   exit 0
 fi
+
+# Le mode du passage, pour telegram.mjs : le téléphone de Marc ne sonne que pour l'urgent
+# (une réponse à son message, une VIGILANCE, la liste de 17 h, le début d'un point).
+export ALFRED_MODE="$mode"
 
 # Le modèle : rapide pour répondre à Marc, le plus fort pour les points, la prospection, les
 # revues et les rendez-vous. Réglables dans config.env (ALFRED_MODELE_REPONSE, ALFRED_MODELE_POINT).
@@ -171,7 +179,7 @@ if [[ "$mode" == "la réponse à Marc" ]] && grep -qiE "$VENTE" "$RECU" 2>/dev/n
 elif [[ "$mode" == "la réponse à Marc" ]]; then
   modele=$(reglage ALFRED_MODELE_REPONSE)
   modele=${modele:-sonnet}
-elif [[ "$mode" == "la veille" ]]; then
+elif [[ "$mode" == "la veille" || "$mode" == "le bilan du soir" ]]; then
   modele=$(reglage ALFRED_MODELE_VEILLE)
   modele=${modele:-sonnet}
 else

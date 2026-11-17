@@ -337,6 +337,7 @@ const ficheCreateur: Tool = {
     const out = [
       `# ${titleCase(name)}`,
       `Niche : ${c.niche ?? "?"} · plateforme : ${c.platform || "?"} · abonnés tous réseaux : ${compact(au.total)}${perPlatformText(au) ? ` (${perPlatformText(au)})` : ""} · engagement : ${c.er ?? "?"} · statut : ${c.status ?? "?"}${c.ville ? ` · ${c.ville}` : ""}`,
+      ...(/^https:\/\//.test(String(c.photo_url ?? "")) ? [`Photo : ${c.photo_url}`] : []),
       ...(aliasMail ? [`Alias mail : ${aliasMail} (pour écrire en son nom : envoyer_en_tant_que dans creer_brouillon_mail / envoyer_mail)`] : []),
       `Comptes : ${[c.handle && `@${String(c.handle).replace(/^@+/, "").trim()}`, c.instagram && `IG ${c.instagram}`, c.tiktok && `TikTok ${c.tiktok}`, c.youtube && `YouTube ${c.youtube}`, c.email_pro && `email pro ${c.email_pro}`].filter(Boolean).join(" · ") || "?"}`,
       ig && ig.followers != null
@@ -450,11 +451,22 @@ const noterReversement: Tool = {
       date: { type: "string", description: "AAAA-MM-JJ, jour du virement (défaut : aujourd'hui)" },
       note: { type: "string", description: "D'où vient la preuve (« Telegram de Marc 16/11 », « facture JNPR 2026-186 »)" },
       forcer: { type: "boolean", description: "true : noter même si un versement du même montant existe déjà à 5 jours près (deux virements réels)" },
+      retirer: { type: "string", description: "Annuler : l'id d'un versement noté par erreur (donné quand il a été noté) ; il est retiré, montant et date ignorés" },
     },
     required: ["createur", "montant", "note"],
     additionalProperties: false,
   },
   run: async (sb, _c, a) => {
+    // Annuler (bouton « Annuler » de Marc sur Telegram) : le versement est retiré, rien d'autre.
+    const retirer = str(a.retirer, 60);
+    if (retirer) {
+      const frais = ((await appState(sb)).creatorPayouts ?? {}) as Record<string, Json[]>;
+      const cles = Object.keys(frais).filter((k) => Array.isArray(frais[k]) && frais[k].some((p) => String(p?.id) === retirer));
+      if (!cles.length) return fail(`Versement ${retirer} introuvable : déjà retiré ?`);
+      const p_set = Object.fromEntries(cles.map((k) => [k, frais[k].filter((p) => String(p?.id) !== retirer)]));
+      const { error } = await sb.rpc("app_state_merge", { p_key: "creatorPayouts", p_set, p_remove: [] });
+      return error ? fail(`Versement non retiré : ${error.message}`) : ok(`✓ Versement ${retirer} retiré de Reversements.`);
+    }
     const montant = Math.round(Number(a.montant) * 100) / 100;
     if (!(montant > 0) || montant > 50_000) return fail("Montant invalide.");
     const date = dateVersement(a.date, isoDay());
@@ -473,7 +485,7 @@ const noterReversement: Tool = {
     const frais = ((await appState(sb)).creatorPayouts ?? {}) as Record<string, unknown[]>;
     const { error } = await sb.rpc("app_state_merge", { p_key: "creatorPayouts", p_set: { [k]: [entree, ...(Array.isArray(frais[k]) ? frais[k] : [])] }, p_remove: [] });
     if (error) return fail(`Versement non noté : ${error.message}`);
-    return ok(`✓ Versement noté dans Reversements : ${eur(montant)} à ${titleCase(k)} le ${frDay(date)}${note ? ` (${note})` : ""}. Relis le reste avec reversements.`);
+    return ok(`✓ Versement noté dans Reversements : ${eur(montant)} à ${titleCase(k)} le ${frDay(date)}${note ? ` (${note})` : ""} [id ${entree.id}, pour l'annuler : retirer]. Relis le reste avec reversements.`);
   },
 };
 
