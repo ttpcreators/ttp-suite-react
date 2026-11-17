@@ -29,6 +29,7 @@ import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/
 import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCartonnent, type DroitUsage, type PostCourt } from "../_shared/alfredSuivi.ts";
 import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
 import { ciblesEchange, requeteEchange, texteEchanges } from "../_shared/dejaEchange.ts";
+import { cleDuCreateur, dateVersement, versementEnDouble } from "../_shared/versement.ts";
 import { CREE_PAR_CLAUDE, preparerBrouillonPost } from "../_shared/igDraft.ts";
 import { appliquerChiffres } from "../_shared/mediakitChiffres.ts";
 import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
@@ -432,6 +433,47 @@ const reversements: Tool = {
       ...shown.map((r) => `- ${titleCase(r.creator)} · reste ${eur(r.reste)} · dû ${eur(r.du)} (factures payées ${eur(r.encaisse)} TTC, commission ${r.rate} %) · versé ${eur(r.reverse)}${r.lastPayout ? ` · dernier virement ${frDay(r.lastPayout)}` : ""}`),
       shown.length ? "" : "Tout est à jour.",
     ].filter(Boolean).join("\n"));
+  },
+};
+
+const noterReversement: Tool = {
+  name: "noter_reversement",
+  title: "Noter un versement à un créateur",
+  description: "Enregistre dans la page Reversements un virement que l'agence a FAIT à un créateur (sa part), comme le bouton « Ajouter un paiement » de l'app (réservé aux fondateurs). Seulement avec une preuve : Marc dit qu'il a viré, ou un relevé, un message du créateur qui confirme. Un versement du même montant à 5 jours près déjà noté est refusé (doublon), sauf `forcer`. Renvoie le reste à verser après.",
+  write: true,
+  founder: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      createur: { type: "string", description: "Nom du créateur, comme dans le roster" },
+      montant: { type: "number", description: "Montant viré en euros" },
+      date: { type: "string", description: "AAAA-MM-JJ, jour du virement (défaut : aujourd'hui)" },
+      note: { type: "string", description: "D'où vient la preuve (« Telegram de Marc 16/11 », « facture JNPR 2026-186 »)" },
+      forcer: { type: "boolean", description: "true : noter même si un versement du même montant existe déjà à 5 jours près (deux virements réels)" },
+    },
+    required: ["createur", "montant", "note"],
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const montant = Math.round(Number(a.montant) * 100) / 100;
+    if (!(montant > 0) || montant > 50_000) return fail("Montant invalide.");
+    const date = dateVersement(a.date, isoDay());
+    if (!date) return fail("Date invalide : AAAA-MM-JJ, pas dans le futur.");
+    const note = str(a.note, 200);
+    const { data: cr } = await sb.from("creators").select("name");
+    const st = await appState(sb);
+    const carte = ((st.creatorPayouts ?? {}) as Record<string, unknown[]>);
+    const k = cleDuCreateur(str(a.createur, 80), carte, ((cr as Json[] | null) ?? []).map((c) => String(c.name)));
+    if (!k) return fail(`Créateur introuvable : « ${str(a.createur, 80)} ». Prends le nom exact du roster (lister_createurs).`);
+    const liste = Array.isArray(carte[k]) ? carte[k] : [];
+    const double = versementEnDouble(liste, montant, date);
+    if (double && a.forcer !== true) return fail(`Déjà noté : ${eur(Number((double as Json).amount))} le ${frDay(String((double as Json).date))}${(double as Json).note ? ` (${(double as Json).note})` : ""}. Rien ajouté. Deux virements réels : rappelle avec forcer.`);
+    const entree = { id: crypto.randomUUID(), date, amount: montant, ...(note ? { note } : {}) };
+    // Relu frais puis fusionné sous verrou côté base (app_state_merge), comme la page Reversements.
+    const frais = ((await appState(sb)).creatorPayouts ?? {}) as Record<string, unknown[]>;
+    const { error } = await sb.rpc("app_state_merge", { p_key: "creatorPayouts", p_set: { [k]: [entree, ...(Array.isArray(frais[k]) ? frais[k] : [])] }, p_remove: [] });
+    if (error) return fail(`Versement non noté : ${error.message}`);
+    return ok(`✓ Versement noté dans Reversements : ${eur(montant)} à ${titleCase(k)} le ${frDay(date)}${note ? ` (${note})` : ""}. Relis le reste avec reversements.`);
   },
 };
 
@@ -2492,7 +2534,7 @@ const preparerContrat: Tool = {
 };
 
 export const TOOLS: Tool[] = [
-  pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, methodeTarif, aValider, ecarterProposition,
+  pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, methodeTarif, aValider, ecarterProposition,
   creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief,
