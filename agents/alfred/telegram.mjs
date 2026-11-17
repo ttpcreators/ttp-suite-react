@@ -511,8 +511,11 @@ export function marcMessages(updates, marcId, offset = 0) {
     if (!m || String(m.from?.id) !== String(marcId) || m.chat?.type !== "private") continue;
     const voice = m.voice?.file_id ?? m.audio?.file_id ?? null;
     const media = mediaOf(m);
-    const text = String(m.text ?? m.caption ?? "").trim();
-    if ((!text && !voice && !media) || text === "/start") continue;
+    const brut = String(m.text ?? m.caption ?? "").trim();
+    if ((!brut && !voice && !media) || brut === "/start") continue;
+    // Transféré d'une autre discussion : une information, jamais une demande de Marc (règle 4).
+    const origine = origineTransfert(m);
+    const text = origine ? `(message transféré de ${origine} : une information, pas une demande de Marc)\n${brut}` : brut;
     // « Répondre » sur un message : on garde le passage cité (ou tout le message) pour le contexte.
     const cited = m.reply_to_message;
     const quoted = String(m.quote?.text ?? cited?.text ?? cited?.caption ?? "").replace(/\s+/g, " ").trim();
@@ -522,6 +525,16 @@ export function marcMessages(updates, marcId, offset = 0) {
     kept.push({ id: Number(m.message_id) || null, at: new Date(Number(m.date) * 1000), text, ...(voice ? { voice } : {}), ...(media ? { media } : {}), ...(reply ? { reply } : {}) });
   }
   return { kept, next };
+}
+
+/** Qui a écrit un message transféré à Alfred (null s'il vient de Marc lui même). */
+export function origineTransfert(m) {
+  const o = m?.forward_origin;
+  if (!o) return m?.forward_from ? [m.forward_from.first_name, m.forward_from.last_name].filter(Boolean).join(" ") || "quelqu'un" : null;
+  if (o.type === "user") return [o.sender_user?.first_name, o.sender_user?.last_name].filter(Boolean).join(" ") || "quelqu'un";
+  if (o.type === "hidden_user") return o.sender_user_name || "quelqu'un";
+  if (o.type === "chat" || o.type === "channel") return o.sender_chat?.title ?? o.chat?.title ?? "un groupe";
+  return "quelqu'un";
 }
 
 /**
@@ -545,7 +558,85 @@ export function mediaOf(m) {
   if (d?.file_id && (/(msword|wordprocessingml|opendocument\.text|rtf)/.test(mime) || WORD_EXT.test(String(d.file_name ?? "")))) {
     return { fileId: d.file_id, kind: "doc", name: d.file_name ?? "document.docx", size: Number(d.file_size ?? 0) };
   }
+  // Partagé depuis le téléphone (demande de Marc, 17 novembre 2026) : un mail exporté de Spark
+  // ou de Mail (.eml), un texte, une page HTML ou un tableau CSV.
+  const nom = String(d?.file_name ?? "");
+  if (d?.file_id && (/message\/rfc822/.test(mime) || /\.eml$/i.test(nom))) return { fileId: d.file_id, kind: "mail", name: nom || "mail.eml", size: Number(d.file_size ?? 0) };
+  if (d?.file_id && (/^text\//.test(mime) || /\.(txt|html?|csv|md)$/i.test(nom))) return { fileId: d.file_id, kind: "texte", name: nom || "texte.txt", size: Number(d.file_size ?? 0) };
+  // Tout autre fichier : gardé, et Alfred dit qu'il ne sait pas le lire (jamais un partage ignoré en silence).
+  if (d?.file_id) return { fileId: d.file_id, kind: "autre", name: nom || "fichier", size: Number(d.file_size ?? 0) };
   return null;
+}
+
+/** Décode un morceau de mail (base64 ou quoted-printable) dans son jeu de caractères. */
+function decoderPartie(corps, encodage, charset) {
+  const enc = String(encodage ?? "").toLowerCase();
+  let octets;
+  if (enc === "base64") octets = Buffer.from(corps.replace(/\s+/g, ""), "base64");
+  else if (enc === "quoted-printable")
+    octets = Buffer.from(corps.replace(/=\r?\n/g, "").replace(/=([0-9A-F]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16))), "latin1");
+  else octets = Buffer.from(corps, "latin1");
+  try {
+    return new TextDecoder(/^(utf-?8|)$/i.test(String(charset ?? "")) ? "utf-8" : String(charset)).decode(octets);
+  } catch {
+    return new TextDecoder("utf-8").decode(octets);
+  }
+}
+
+/** En-tête d'un mail, mots encodés (=?UTF-8?B?…?=) décodés. */
+function enTete(entetes, nom) {
+  const m = new RegExp(`^${nom}:[ \\t]*(.*(?:\\r?\\n[ \\t].*)*)`, "im").exec(entetes);
+  if (!m) return "";
+  return m[1].replace(/\r?\n[ \t]+/g, " ").replace(/=\?([^?]+)\?([bq])\?([^?]*)\?=/gi, (_, cs, t, v) =>
+    t.toLowerCase() === "b" ? decoderPartie(v, "base64", cs) : decoderPartie(v.replace(/_/g, " "), "quoted-printable", cs),
+  ).trim();
+}
+
+/**
+ * Un mail exporté (.eml) → texte lisible : De, À, Date, Objet, puis le texte du message (la partie
+ * texte, sinon le HTML sans balises). Les pièces jointes sont nommées, pas lues.
+ */
+export function texteDuMail(brut) {
+  const s = String(brut ?? "");
+  const coupe = s.search(/\r?\n\r?\n/);
+  const entetes = coupe < 0 ? s : s.slice(0, coupe);
+  const corps = coupe < 0 ? "" : s.slice(coupe).replace(/^\r?\n\r?\n/, "");
+  const parties = [];
+  const pieces = [];
+  const parcourir = (h, c) => {
+    const type = enTete(h, "Content-Type") || "text/plain";
+    const limite = /boundary="?([^";\r\n]+)"?/i.exec(type)?.[1];
+    if (/^multipart\//i.test(type) && limite) {
+      for (const bloc of c.split(`--${limite}`).slice(1)) {
+        if (bloc.startsWith("--")) break;
+        const b = bloc.replace(/^\r?\n/, "");
+        const i = b.search(/\r?\n\r?\n/);
+        if (i >= 0) parcourir(b.slice(0, i), b.slice(i).replace(/^\r?\n\r?\n/, ""));
+      }
+      return;
+    }
+    const dispo = enTete(h, "Content-Disposition");
+    const fichier = /name="?([^";\r\n]+)"?/i.exec(`${dispo} ${type}`)?.[1];
+    if (/attachment/i.test(dispo) || (fichier && !/^text\//i.test(type))) {
+      if (fichier) pieces.push(fichier);
+      return;
+    }
+    const charset = /charset="?([^";\s]+)"?/i.exec(type)?.[1] ?? "utf-8";
+    const texte = decoderPartie(c, enTete(h, "Content-Transfer-Encoding"), charset);
+    if (/^text\/plain/i.test(type)) parties.push({ html: false, texte });
+    else if (/^text\/html/i.test(type)) parties.push({ html: true, texte: texte.replace(/<(style|script)[\s\S]*?<\/\1>/gi, "").replace(/<br\s*\/?>|<\/p>|<\/div>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"') });
+  };
+  parcourir(entetes, corps);
+  const texte = (parties.find((p) => !p.html) ?? parties[0])?.texte.replace(/\n{3,}/g, "\n\n").trim() ?? "";
+  return [
+    `De : ${enTete(entetes, "From")}`,
+    `À : ${enTete(entetes, "To")}${enTete(entetes, "Cc") ? `\nCc : ${enTete(entetes, "Cc")}` : ""}`,
+    `Date : ${enTete(entetes, "Date")}`,
+    `Objet : ${enTete(entetes, "Subject")}`,
+    ...(pieces.length ? [`Pièces jointes : ${pieces.join(", ")}`] : []),
+    "",
+    texte || "(message vide)",
+  ].join("\n");
 }
 
 /**
@@ -635,9 +726,21 @@ async function preparerMedia(token, media, dir, model) {
     const res = await fetch(`https://api.telegram.org/file/bot${token}/${f.result.file_path}`);
     if (!res.ok) return "fichier impossible à télécharger";
     mkdirSync(dir, { recursive: true });
-    const ext = (String(f.result.file_path).match(/\.[a-z0-9]+$/i)?.[0] ?? String(media.name).match(/\.[a-z0-9]+$/i)?.[0] ?? (media.kind === "pdf" ? ".pdf" : media.kind === "image" ? ".jpg" : media.kind === "doc" ? ".docx" : ".mp4")).toLowerCase();
+    const ext = (String(f.result.file_path).match(/\.[a-z0-9]+$/i)?.[0] ?? String(media.name).match(/\.[a-z0-9]+$/i)?.[0] ?? (media.kind === "pdf" ? ".pdf" : media.kind === "image" ? ".jpg" : media.kind === "doc" ? ".docx" : media.kind === "mail" ? ".eml" : media.kind === "texte" ? ".txt" : media.kind === "autre" ? ".bin" : ".mp4")).toLowerCase();
     const src = join(dir, `source${ext}`);
     writeFileSync(src, Buffer.from(await res.arrayBuffer()));
+    if (media.kind === "mail") {
+      const txt = join(dir, "texte.txt");
+      writeFileSync(txt, texteDuMail(readFileSync(src, "latin1")));
+      return `mail partagé « ${media.name} » : son texte (expéditeur, date, objet, message) dans ${txt}`;
+    }
+    if (media.kind === "texte") {
+      if (!/\.html?$/i.test(src)) return `texte partagé « ${media.name} » enregistré : ${src}`;
+      const txt = join(dir, "texte.txt");
+      const conv = await run("textutil", ["-convert", "txt", "-output", txt, src]).then(() => true, () => false);
+      return conv ? `page partagée « ${media.name} » : son texte dans ${txt}` : `page partagée « ${media.name} » enregistrée : ${src}`;
+    }
+    if (media.kind === "autre") return `fichier « ${media.name} » enregistré (${src}), mais tu ne sais pas lire ce type : dis-le à Marc et demande-le en PDF, en capture ou en texte`;
     if (media.kind === "doc") {
       const txt = join(dir, "texte.txt");
       const conv = await run("textutil", ["-convert", "txt", "-output", txt, src]).then(() => true, () => false);
