@@ -32,6 +32,7 @@ import { BOX_LABEL, BOX_STYLE, readDraft, readDraftRaw, replyDraftKey, scheduleS
 import { ForwardDialog, MailSettingsDialog, NewMailDialog, ReplyBox, useDeviceDraftKeys, type ForwardReopen } from "@/components/mail-tools";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
+import { CreatorBoxMails, useCreatorBoxes } from "@/components/creator-box-mails";
 import { useCreators } from "@/lib/useCreators";
 import { useCreatorMailCounts } from "@/lib/creatorMailCounts";
 import { connect as connectGoogle, consumeOAuthReturn } from "@/lib/googleCalendar";
@@ -322,13 +323,15 @@ const hasTokens = (p: PageTokens | null | undefined, box: "all" | MailBox) =>
  * Mise en page façon client mail : barre d'icônes (dossiers), liste avec son
  * en-tête (titre, boîtes, recherche), lecture.
  */
-type Mode = "inbox" | "sent" | "drafts" | "contacts" | "creators";
+type Mode = "inbox" | "sent" | "drafts" | "contacts" | "creators" | "boxes";
 const MODES: { id: Mode; label: string; short: string; wide: string; icon: LucideIcon; shortcut?: string }[] = [
   { id: "inbox", label: "Boîte de réception", short: "Reçus", wide: "Réception", icon: Inbox, shortcut: "g puis i" },
   { id: "sent", label: "Envoyés", short: "Envoyés", wide: "Envoyés", icon: Send, shortcut: "g puis s" },
   { id: "drafts", label: "Brouillons", short: "Brouillons", wide: "Brouillons", icon: FilePen, shortcut: "g puis d" },
   { id: "contacts", label: "Contacts", short: "Contacts", wide: "Contacts", icon: BookUser },
   { id: "creators", label: "Par créateur", short: "Créateurs", wide: "Suivi créateurs", icon: UsersRound },
+  // Boîtes Gmail des créateurs reliées (ex. Léna) : visible seulement s'il y en a (fondateurs).
+  { id: "boxes", label: "Boîtes des créateurs", short: "Leurs boîtes", wide: "Boîtes créateurs", icon: Mail },
 ];
 const BOX_FILTERS: { id: "all" | MailBox; label: string }[] = [
   { id: "all", label: "Les deux boîtes" },
@@ -744,6 +747,10 @@ export function Mails() {
   // ── Dossier et boîte ─────────────────────────────────────────────────────
   const [mode, setModeState] = useState<Mode>(() => readPref("ttp:mails-mode", MODES.map((m) => m.id), "inbox"));
   const folder: Folder = mode === "sent" ? "sent" : "inbox";
+  // Boîtes Gmail des créateurs reliées : l'onglet n'apparaît que s'il y en a (fondateurs).
+  const creatorBoxes = useCreatorBoxes();
+  const boxesOn = mode === "boxes" && creatorBoxes.length > 0;
+  const modes = creatorBoxes.length ? MODES : MODES.filter((m) => m.id !== "boxes");
   // Boîte affichée : un simple filtre (les deux boîtes sont chargées ensemble).
   const [box, setBoxState] = useState<"all" | MailBox>(() => readPref("ttp:mails-box", ["all", "partnerships", "talent"] as const, "all"));
   const setBox = (v: "all" | MailBox) => {
@@ -1922,7 +1929,7 @@ export function Mails() {
       }
       return;
     }
-    if (mode === "creators") return;
+    if (mode === "creators" || boxesOn) return;
     if (k === "/") {
       e.preventDefault();
       (mode === "contacts" ? contactSearchRef : searchRef).current?.focus();
@@ -2052,7 +2059,7 @@ export function Mails() {
         <span className="text-[10.5px] font-medium leading-none">Nouveau</span>
         <Tip>Nouveau mail <Kbd>c</Kbd></Tip>
       </button>
-      {MODES.map((m) => (
+      {modes.map((m) => (
         <RailButton
           key={m.id}
           label={m.label}
@@ -2103,7 +2110,7 @@ export function Mails() {
       <button type="button" onClick={openNewMail} className={cn(pillCls, "bg-primary px-3 text-primary-foreground hover:opacity-90")}>
         <PenLine className="h-3.5 w-3.5" /> Nouveau
       </button>
-      {MODES.map((m) => {
+      {modes.map((m) => {
         const on = mode === m.id;
         const n = m.id === "inbox" ? unreadShown : m.id === "creators" ? mailTotal : m.id === "drafts" ? draftsCount : 0;
         return (
@@ -2932,14 +2939,16 @@ export function Mails() {
           "flex min-w-0 flex-col overflow-clip rounded-2xl border border-border bg-surface lg:grid lg:min-h-[560px] lg:grid-rows-[minmax(0,1fr)] lg:overflow-hidden",
           // Téléphone : une discussion ouverte occupe tout l'écran, sans cadre (façon app Mail).
           thread && "max-lg:rounded-none max-lg:border-0 max-lg:bg-transparent",
-          mode === "creators"
+          mode === "creators" || boxesOn
             ? "lg:grid-cols-[72px_minmax(0,1fr)]"
             : "lg:grid-cols-[72px_minmax(320px,360px)_minmax(0,1fr)] 2xl:grid-cols-[72px_minmax(340px,400px)_minmax(0,1fr)]",
         )}
       >
         {rail}
         {mobileNav}
-        {mode === "creators" ? (
+        {boxesOn ? (
+          <CreatorBoxMails boxes={creatorBoxes} />
+        ) : mode === "creators" ? (
           creatorsCol
         ) : (
           <>

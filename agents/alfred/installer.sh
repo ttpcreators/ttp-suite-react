@@ -29,7 +29,7 @@ if [[ "$1" == "--bot" ]]; then
   exit 0
 fi
 
-cp "$SRC/CLAUDE.md" "$SRC/alfred.sh" "$SRC/ecoute.sh" "$SRC/installer-whatsapp.sh" "$SRC/telegram.mjs" "$SRC/whatsapp.mjs" "$SRC/spark.mjs" "$SRC/passage.mjs" "$SRC/contrats.mjs" "$SRC/texte.mjs" "$SRC/mise-a-jour.sh" "$DEST/"
+cp "$SRC/CLAUDE.md" "$SRC/alfred.sh" "$SRC/ecoute.sh" "$SRC/installer-whatsapp.sh" "$SRC/telegram.mjs" "$SRC/whatsapp.mjs" "$SRC/spark.mjs" "$SRC/passage.mjs" "$SRC/contrats.mjs" "$SRC/texte.mjs" "$SRC/araignee.mjs" "$SRC/mise-a-jour.sh" "$DEST/"
 chmod +x "$DEST/alfred.sh" "$DEST/ecoute.sh" "$DEST/mise-a-jour.sh"
 # Ses fiches (consignes détaillées par sujet, lues à la demande) : toujours la version du dépôt.
 [ -d "$SRC/fiches" ] && rsync -a --delete "$SRC/fiches/" "$DEST/fiches/"
@@ -39,6 +39,29 @@ if [ -d "$SRC/skills" ]; then
   mkdir -p "$DEST/.claude/skills"
   for d in "$SRC"/skills/*(/N); do rsync -a --delete "$d/" "$DEST/.claude/skills/${d:t}/"; done
 fi
+# La salle de l'araignée (choix de Marc le 2026-11-16) : chaque passage d'Alfred y apparaît. Alfred ne
+# charge pas les réglages globaux du Mac (--setting-sources project,local) : le hook de l'araignée est
+# donc branché dans .claude/settings.json de son dossier. Il ne fait rien tant que l'araignée n'est pas
+# installée sur ce Mac (iCloud Drive › Araignée › « Installer l'araignée sur ce Mac »).
+/usr/bin/python3 - "$DEST/.claude/settings.json" <<'PY'
+import json, os, sys
+p = sys.argv[1]
+os.makedirs(os.path.dirname(p), exist_ok=True)
+try:
+    d = json.load(open(p))
+except (OSError, ValueError):
+    d = {}
+cmd = 'f="$HOME/.claude/skills/web-crawler/scripts/araignee_hook.py"; [ -f "$f" ] && python3 "$f"; exit 0'
+h = d.setdefault("hooks", {})
+for ev, matcher in (("PostToolUse", "*"), ("UserPromptSubmit", None), ("Notification", None), ("Stop", None)):
+    lst = h.setdefault(ev, [])
+    if not any("araignee_hook.py" in json.dumps(e) for e in lst):
+        e = {"hooks": [{"type": "command", "command": cmd, "timeout": 5}]}
+        if matcher:
+            e["matcher"] = matcher
+        lst.append(e)
+json.dump(d, open(p, "w"), indent=2, ensure_ascii=False)
+PY
 if ! grep -q '^ALFRED_BOT_TOKEN=' "$DEST/config.env" 2>/dev/null; then
   echo "Il manque le bot d'Alfred : ./installer.sh --bot <chat_id>" >&2
   exit 1

@@ -2731,3 +2731,22 @@ with (security_invoker = false) as
   where l.public;
 grant select on public.public_creator_lists to anon, authenticated;
 revoke insert, update, delete, truncate on public.public_creator_lists from anon, authenticated, public;
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- Boîtes Gmail des créateurs reliées à TTP Suite (2026-11-16, sql/2026-11-16-boites-createurs.sql).
+-- Jetons lus seulement par le serveur : RLS activée, aucune règle.
+-- ════════════════════════════════════════════════════════════════════════════
+create table if not exists public.creator_mail_boxes (
+  email         text primary key check (email = lower(email)),
+  creator       text not null,
+  refresh_token text,
+  access_token  text,
+  expires_at    timestamptz,
+  scope         text,
+  connected     boolean not null default false,
+  connected_at  timestamptz,
+  last_error    text,
+  created_at    timestamptz not null default now()
+);
+alter table public.creator_mail_boxes enable row level security;
+revoke all on public.creator_mail_boxes from anon, authenticated;

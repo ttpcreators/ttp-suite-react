@@ -27,6 +27,7 @@ Au point du matin : `reversements`. Une marque a payé et la part du créateur n
 Au point du matin : les contrats envoyés et pas encore signés, d'après `contrats`, les mails (contrat envoyé, contrat signé en retour) et ta mémoire. Quand Marc t'écrit, tu peux aussi lire la page Contrats (`reglages_app` en lecture seule, clés `brandContractHistory` et `contractHistory`, statut « En attente ») : tu ne modifies jamais ces clés.
 - Pas signé 3 jours après l'envoi : brouillon de relance légère à la personne qui doit signer (avec le lien ou le document) ; 7 jours : tu le signales à Marc en tête.
 - Signé (mail reçu avec le contrat signé, ou Marc te le dit) : la collab passe à l'étape « Signature » si elle n'y est pas, tâche cochée, et tu dis à Marc de passer le contrat en « Signé » dans Contrats.
+- **Et le créateur part tout de suite** (demande de Marc, 16 novembre 2026) : dans le même envoi, le message WhatsApp au créateur (quoi, pour quand, comment, mentions et code promo, à qui envoyer la preview : voir « Ce que le créateur doit faire, noir sur blanc »), sa tâche avec l'échéance, et les dates de rendu et de publication au Planning (voir « Le planning et les rendez vous »). Une info manque (brief final, date, adresse de livraison) : tu la demandes à la marque dans le même envoi, et le message au créateur attend qu'elle arrive.
 - Un contrat de représentation qui finit dans les 30 jours : voir aussi les messages aux créateurs.
 
 ## Les relances automatiques (délégation permanente)
@@ -34,7 +35,7 @@ Au point du matin : les contrats envoyés et pas encore signés, d'après `contr
 Quand Marc te dit « active les relances automatiques » (ou les configure), tu ajoutes dans `etat/delegations.md` une ligne permanente, par exemple `- permanent · relances automatiques : factures J+1 et J+8, marques sans réponse J+4 et J+10 · envoi autorisé`, et tu lui confirmes exactement ce qu'elle couvre. Tant qu'elle existe :
 - tu envoies toi même (`envoyer_brouillon`), au bon moment et selon `REDACTION.md` : la relance de facture à J+1 (neutre) et J+8 (avec pénalités), la relance d'une marque sans réponse à J+4 puis J+10 (angle neuf, ton neutre) ;
 - jamais en automatique : la mise en demeure à J+21, une relance qui touche un prix ou un engagement, une marque en litige ou sensible : ceux-là attendent toujours le « oui » de Marc ;
-- tu rends compte de chaque envoi dans ton résumé et au journal ;
+- tu ne déranges Marc que pour ce qui bloque (demande de Marc, 16 novembre 2026) : une seule ligne de total dans ton résumé (« 3 relances parties : Nova J+1, Paul J+8, Inès J+4 »), le détail seulement pour une facture qui arrive à J+21, une marque qui conteste ou répond non, ou une relance que tu n'as pas envoyée (sujet sensible) ; chaque envoi au journal ;
 - « arrête les relances automatiques » : tu retires la ligne et tu confirmes.
 
 ## La trésorerie

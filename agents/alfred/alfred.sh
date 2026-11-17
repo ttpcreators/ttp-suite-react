@@ -200,7 +200,7 @@ done < etat/delegations.md
 # Quand Marc écrit : tous les outils de TTP Suite, pour faire ce qu'il demande. Envoyer un brouillon et retenir une leçon :
 # seulement quand Marc vient d'écrire, ou pendant une délégation avec envoi autorisé.
 ttp="mcp__claude_ai_TTP_Suite__"
-lire="base_createurs droits_usage posts_createur brouillons_claude journal_agents stats_collab compta lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
+lire="base_createurs boites_createurs lien_boite_createur droits_usage posts_createur brouillons_claude journal_agents stats_collab compta lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
 agir="brouillon_post_instagram noter_droits noter_journal creer_meet ajouter_au_scouting changer_statut_scouting creer_brouillon_mail supprimer_brouillon preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
 sur_oui="envoyer_brouillon noter_lecon maj_chiffres_mediakit"
 interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture ecarter_proposition proposer_action preparer_reponse_mail resumer_brief"
@@ -211,6 +211,9 @@ interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_factu
 # 2026-11-10) : lire les boîtes des créateurs gérées dans Spark Desktop et y préparer des brouillons,
 # seulement par spark.mjs, qui refuse toute boîte hors de TTP Creators (ALFRED_SPARK_BOITES dans config.env).
 # Jamais d'envoi, de suppression ni d'action.
+# L'araignée (choix de Marc le 2026-11-16) : son outil de scraping, installé sur le Mac par iCloud
+# (« Installer l'araignée sur ce Mac »). Alfred ne s'en sert que par araignee.mjs : pages publiques,
+# résultats dans etat/araignee/, et tout se voit en direct dans la salle de l'araignée.
 # Cloisonnement (choix de Marc le 2026-11-11 : Alfred reste dans TTP, rien d'un autre projet) :
 # il ne lit que son dossier (Read sur son dossier), n'appelle jamais `spark` directement, et ne
 # charge pas les réglages, skills et consignes globaux du Mac (--setting-sources plus bas).
@@ -218,8 +221,8 @@ interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_factu
 # « cd etat » d'Alfred elle visait etat/etat, d'où « écriture refusée » et des réponses perdues
 # (trouvé le 2026-11-12). En plus, chaque commande Bash le ramène dans son dossier (plus bas).
 ici="/$PWD"
-allowed=("Read($ici/**)" "Edit($ici/etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)" "Bash(node telegram.mjs joindre:*)" "Bash(node telegram.mjs raccourcis)"
-  "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)")
+allowed=("Read($ici/**)" "Edit($ici/etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)" "Bash(node telegram.mjs joindre:*)" "Bash(node telegram.mjs raccourcis)" "Bash(node telegram.mjs preparer:*)"
+  "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)" "Bash(node araignee.mjs:*)")
 denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash(spark:*)"
   "Edit($ici/etat/whatsapp-autorises.txt)" "Edit($ici/etat/whatsapp-a-envoyer/**)" "Edit($ici/etat/whatsapp-envoyes/**)")
 # Envoi WhatsApp (choix de Marc le 2026-11-15) : `whatsapp.mjs envoyer` ne fait partir que le texte
@@ -301,7 +304,7 @@ lancer() {
   [ -f "$ENVOI/.deja-cite" ] && deja=1
 }
 
-rm -f "$ENVOI"/* "$ENVOI"/.deja-cite
+rm -f "$ENVOI"/* "$ENVOI"/.deja-cite "$ENVOI"/.silence
 lancer
 # Raté sans avoir rien envoyé, pour une raison passagère (Claude surchargé, coupure) : un nouvel
 # essai 20 secondes plus tard, sans déranger Marc.
@@ -312,7 +315,9 @@ if [[ "$etat" == (surcharge|autre) ]] && (( ${#envois} == 0 && ! deja )); then
 fi
 # Claude a répondu sans déposer de fichier : sa réponse part quand même, telle quelle (sauf pour
 # la veille, silencieuse quand rien d'important n'est arrivé).
-if [[ "$etat" == ok ]] && [[ "$mode" != "la veille" ]] && (( ${#envois} == 0 && ! deja )); then
+# Sauf un silence voulu (fichier .silence) : un envoi confirmé par bouton, déjà affiché « Envoyé ✓ »
+# (demande de Marc le 2026-11-16 : pas de message en double).
+if [[ "$etat" == ok ]] && [[ "$mode" != "la veille" ]] && [ ! -f "$ENVOI/.silence" ] && (( ${#envois} == 0 && ! deja )); then
   node passage.mjs texte "$SORTIE" > "$ENVOI/01-resume.txt" 2>> "$LOG"
   [ -s "$ENVOI/01-resume.txt" ] || rm -f "$ENVOI/01-resume.txt"
   envois=("$ENVOI"/*)
@@ -335,6 +340,9 @@ elif [[ "$etat" == ok && "$mode" == "la veille" ]]; then
   node passage.mjs reussi 2>> "$LOG"
   echo "$now" > etat/derniere-veille
   for r in "${rdv_dus[@]}"; do print -r -- "$r" >> etat/rdv-prepares.txt; done
+elif [[ "$etat" == ok ]] && [ -f "$ENVOI/.silence" ]; then
+  # Silence voulu : tout est fait, rien à dire à Marc.
+  node passage.mjs reussi 2>> "$LOG"
 elif (( deja )); then
   # Claude s'est arrêté après avoir déjà répondu en partie : on envoie ce qui reste, sans remettre
   # les messages de Marc en file (il aurait sa réponse deux fois), et on lui dit pourquoi.

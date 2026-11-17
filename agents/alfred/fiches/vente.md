@@ -25,6 +25,8 @@ Une marque ou une agence écrit : c'est elle qui a besoin de nous. Tu ne répond
 
 ## Négocier un prix
 
+Avant tout chiffre : la fiche de la marque (voir « La fiche de chaque marque »).
+
 Les règles d'un bon négociateur, appliquées à chaque échange :
 1. **Ancrer haut** : le premier chiffre est le nôtre quand c'est possible, en haut de la fourchette de `methode_tarif`, justifié par la valeur (audience, résultats, droits). Jamais un prix rond sans raison.
 2. **Trois formules plutôt qu'un prix** : une essentielle, une recommandée (celle qu'on veut vendre, au milieu), une complète (avec droits pub ou un second créateur). La marque choisit entre nos options au lieu de dire oui ou non à un prix.

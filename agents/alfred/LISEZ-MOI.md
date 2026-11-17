@@ -65,6 +65,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Délégation | « Gère les relances jusqu'à vendredi, tu peux envoyer » : il agit dans ce périmètre et rend compte |
 | Mémoire commune avec Gianni | Tout ce qui compte va dans l'app (collabs, contacts, planning, tâches, mémoire des créateurs) et dans le journal des agents (`noter_journal`), repris par `point_du_jour` et `journal_agents` : l'assistant de Gianni voit la même chose que Marc |
 | Questions | Contrats, briefs, collabs, factures : il cherche dans TTP Suite et répond avec la source |
+| L'araignée | « Scrape tel site », « fais le tour du site de la marque » : il lance l'araignée de Marc (`araignee.mjs`, pages publiques), lit le rapport et résume ; ses recherches à la main se voient aussi dans la fenêtre de l'araignée. Chaque passage d'Alfred apparaît dans la salle de l'araignée |
 
 **Alfred reste dans TTP Creators** (choix de Marc, 11 novembre 2026). Sur l'iMac, il ne lit que son dossier `~/Code/TTPAlfred`, ne charge pas les réglages, skills et consignes globaux de Claude sur ce Mac (`--setting-sources project,local`), et ne touche Spark que par `spark.mjs`, qui refuse toute boîte hors de TTP Creators : les adresses en @ttpcreators.pro, plus celles listées dans `config.env` :
 
@@ -78,7 +79,7 @@ Alfred ne peut pas modifier `config.env` ni sa liste WhatsApp. Côté connecteur
 
 ## Les fichiers
 
-Dans le dépôt (`agents/alfred/`, public, aucun secret) : `CLAUDE.md` (ses consignes), `skills/` (ses skills, sous licence libre, copiées dans `.claude/skills`), `alfred.sh` (un passage), `ecoute.sh` et `telegram.mjs` (Telegram), `whatsapp.mjs` (lecture de WhatsApp Desktop), `spark.mjs` (sa seule porte vers Spark), `passage.mjs` (le bilan de chaque passage : nouvel essai, limite de l'abonnement, raison d'un échec), deux réglages launchd, `installer.sh`.
+Dans le dépôt (`agents/alfred/`, public, aucun secret) : `CLAUDE.md` (ses consignes), `skills/` (ses skills, sous licence libre, copiées dans `.claude/skills`), `alfred.sh` (un passage), `ecoute.sh` et `telegram.mjs` (Telegram), `whatsapp.mjs` (lecture de WhatsApp Desktop), `spark.mjs` (sa seule porte vers Spark), `araignee.mjs` (sa seule porte vers l'araignée), `passage.mjs` (le bilan de chaque passage : nouvel essai, limite de l'abonnement, raison d'un échec), deux réglages launchd, `installer.sh`.
 
 Sur le Mac seulement (`~/Code/TTPAlfred/`) :
 - `config.env` : jeton du bot d'Alfred, identifiant Telegram de Marc et `ALFRED_SPARK_BOITES` (les boîtes Spark des créateurs qu'Alfred peut lire) ;
@@ -93,6 +94,7 @@ Ses consignes de fond et les leçons apprises se règlent aussi dans l'app : Age
 2. `./agents/alfred/installer.sh --bot <chat_id_de_Marc>` (le jeton est demandé, caché).
 3. Dans Telegram, ouvrir le bot d'Alfred et appuyer sur « Démarrer ».
 4. `./agents/alfred/installer.sh` : copie et programme l'écoute et les passages. À relancer après chaque changement de ces fichiers.
+5. L'araignée (facultatif) : sur l'iMac, double-cliquer « Installer l'araignée sur ce Mac » dans iCloud Drive › Araignée. L'installeur d'Alfred branche déjà la salle dans son dossier (`.claude/settings.json`) ; elle s'allume dès que l'araignée est là. `node araignee.mjs etat`, dans `~/Code/TTPAlfred`, dit s'il manque quelque chose (`uv`, ou le navigateur de l'araignée).
 
 ## Mises à jour
 
