@@ -16,7 +16,7 @@ import { doublonPlanning, type Candidat, type PlanEvent } from "../_shared/plann
 import { readAppState } from "../_shared/appState.ts";
 import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
 import type { Ctx } from "./oauth.ts";
-import { boxAddress, boxesFor, createDraft, parseMailBox, deleteClaudeDraft, draftRefs, listClaudeDrafts, listSendAs, readThread, resolveSender, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
+import { boxAddress, boxesFor, createDraft, parseMailBox, deleteClaudeDraft, draftRefs, listClaudeDrafts, listSendAs, PARTOUT, readThread, resolveSender, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { findSendAs, type SendAs } from "../_shared/sendAs.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
 import { addressList, mailHtml, sparkLink } from "../_shared/mcpAdmin.ts";
@@ -28,6 +28,7 @@ import { amountOf, contractList, invoiceTotals, owesMoney, pctOf, reversementRow
 import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/audience.ts";
 import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCartonnent, type DroitUsage, type PostCourt } from "../_shared/alfredSuivi.ts";
 import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
+import { ciblesEchange, requeteEchange, texteEchanges } from "../_shared/dejaEchange.ts";
 import { CREE_PAR_CLAUDE, preparerBrouillonPost } from "../_shared/igDraft.ts";
 import { appliquerChiffres } from "../_shared/mediakitChiffres.ts";
 import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
@@ -555,12 +556,12 @@ const verifierExclusivite: Tool = {
 const rechercherMails: Tool = {
   name: "rechercher_mails",
   title: "Rechercher dans les mails",
-  description: "Cherche dans les boîtes Gmail de l'agence (partnerships@ et talent@), spams compris avec « in:spam ». La requête suit la syntaxe Gmail : « from:nike », « is:unread », « newer_than:7d », « subject:contrat », « in:sent », etc. Vide = derniers mails de la boîte de réception. Non lus comptés comme l'app et le point du jour : « in:inbox is:unread -category:promotions -category:social » avec max 25. Renvoie l'id du fil pour lire_mail.",
+  description: "Cherche dans les boîtes Gmail de l'agence (partnerships@ et talent@), spams compris avec « in:spam ». Avec boite « partout » : aussi les boîtes des créateurs connectées (à utiliser pour vérifier qu'un mail, une facture ou une relance n'est pas déjà partie : Marc envoie souvent depuis la boîte du créateur). La requête suit la syntaxe Gmail : « from:nike », « is:unread », « newer_than:7d », « subject:contrat », « in:sent », etc. Vide = derniers mails de la boîte de réception. Non lus comptés comme l'app et le point du jour : « in:inbox is:unread -category:promotions -category:social » avec max 25. Renvoie l'id du fil pour lire_mail.",
   inputSchema: {
     type: "object",
     properties: {
       requete: { type: "string", description: "Recherche Gmail (vide = boîte de réception)" },
-      boite: { type: "string", description: "toutes (défaut : partnerships@ et talent@), partnerships, talent, ou l'adresse d'une boîte de créateur connectée (voir boites_createurs)" },
+      boite: { type: "string", description: "toutes (défaut : partnerships@ et talent@), partout (l'agence ET les boîtes des créateurs connectées), partnerships, talent, ou l'adresse d'une boîte de créateur connectée (voir boites_createurs)" },
       max: { type: "number", description: "Nombre de fils (1 à 25, défaut 10)" },
     },
     additionalProperties: false,
@@ -568,7 +569,7 @@ const rechercherMails: Tool = {
   run: async (sb, _c, a) => {
     const q = str(a.requete, 200) || "in:inbox";
     const demande = str(a.boite).toLowerCase();
-    if (demande && demande !== "toutes") {
+    if (demande && demande !== "toutes" && demande !== PARTOUT) {
       const p = await parseMailBox(sb, demande);
       if ("error" in p) return fail(p.error);
     }
@@ -1219,7 +1220,7 @@ const brouillonsClaude: Tool = {
   inputSchema: { type: "object", properties: { boite: { type: "string", description: "toutes (défaut : partnerships@ et talent@), partnerships, talent, ou l'adresse d'une boîte de créateur connectée" } }, additionalProperties: false },
   run: async (sb, _c, a) => {
     const demande = str(a.boite).toLowerCase();
-    if (demande && demande !== "toutes") {
+    if (demande && demande !== "toutes" && demande !== PARTOUT) {
       const p = await parseMailBox(sb, demande);
       if ("error" in p) return fail(p.error);
     }
@@ -1371,6 +1372,12 @@ const brouillonMail: Tool = {
         }
         if (sig.trim()) html = mailHtml(str(a.message, 20000), sig);
       }
+      // Garde-fou anti doublon (cas Prison Island, 17/11/2026) : derniers échanges avec ce destinataire
+      // dans TOUTES les boîtes, celles des créateurs comprises, cherchés AVANT le brouillon.
+      const cibles = ciblesEchange(to);
+      const dejaVu = cibles.length
+        ? texteEchanges(cibles, (await searchThreads(sb, PARTOUT, requeteEchange(cibles), 6).catch(() => ({ threads: [] }))).threads)
+        : "";
       const r = await createDraft(sb, box, to, str(a.objet, 300), str(a.message, 20000), /^[A-Za-z0-9]+$/.test(fil) ? fil : undefined, html, cci, from);
       const de = from ? ` (de ${from.email}${from.name ? `, « ${from.name} »` : ""})` : "";
       const how = r.replaced
@@ -1385,7 +1392,7 @@ const brouillonMail: Tool = {
         // Boîte d'un créateur : pas encore dans la page Mails de l'app, seulement Spark.
         liens = `${spark ? `\nOuvrir dans Spark : ${spark}` : ""}${thread && !box.includes("@") ? `\nOuvrir dans l'app : https://app.ttpcreators.pro/?open=mails&thread=${thread}&box=${box}` : ""}`;
       }
-      return ok(`${how}${cci.length ? ` (en copie cachée : ${cci.join(", ")})` : ""} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail, Spark ou l'app (Mails, dossier Brouillons).${r.id ? ` Id du brouillon : ${r.id}.` : ""}${liens}`);
+      return ok(`${how}${cci.length ? ` (en copie cachée : ${cci.join(", ")})` : ""} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail, Spark ou l'app (Mails, dossier Brouillons).${r.id ? ` Id du brouillon : ${r.id}.` : ""}${liens}${dejaVu}`);
     } catch (e) {
       return fail(`Brouillon non créé : ${(e as Error).message}`);
     }

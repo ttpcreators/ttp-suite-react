@@ -7,7 +7,7 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { getAccessToken } from "../_shared/google.ts";
 import { boxToken, talentAddress } from "../_shared/gmailBox.ts";
-import { connectedCreatorBox, creatorBoxToken, isCreatorBox, normEmail } from "../_shared/creatorBox.ts";
+import { connectedCreatorBox, creatorBoxToken, isCreatorBox, listCreatorBoxes, normEmail } from "../_shared/creatorBox.ts";
 import { gfetch, decodeGmailBody, charsetOf, mapPool } from "../_shared/gfetch.ts";
 import { addressOf, findSendAs, fromHeader, refusSendAs, usableSendAs, type RawSendAs, type SendAs } from "../_shared/sendAs.ts";
 
@@ -46,10 +46,18 @@ const frDate = (ms: number) => new Date(ms).toLocaleString("fr-FR", { timeZone: 
 export type ThreadSummary = { box: MailBox; threadId: string; subject: string; from: string; date: string; ts: number; messages: number; unread: boolean; snippet: string };
 
 /** Recherche Gmail (même syntaxe que la barre Gmail) dans une ou deux boîtes. */
+/** « partout » : les boîtes de l'agence ET les boîtes de créateurs connectées. Pour vérifier qu'une
+ *  chose n'a pas déjà été faite : Marc envoie souvent depuis la boîte du créateur (cas Prison Island,
+ *  17 novembre 2026 : facture déjà partagée depuis la boîte de Léna, Alfred ne l'a pas vue). */
+export const PARTOUT = "partout";
+
 export async function searchThreads(sb: SupabaseClient, box: string | undefined, q: string, max: number): Promise<{ threads: ThreadSummary[]; errors: string[] }> {
   const out: ThreadSummary[] = [];
   const errors: string[] = [];
-  for (const b of boxesFor(box)) {
+  const boxes = box === PARTOUT
+    ? [...boxesFor(undefined), ...(await listCreatorBoxes(sb)).filter((r) => r.connected && r.refresh_token).map((r) => r.email)]
+    : boxesFor(box);
+  for (const b of boxes) {
     try {
       const token = await tokenFor(sb, b, "read");
       // « in:spam » ou « in:trash » : Gmail ne les cherche que si on le demande explicitement.
@@ -78,7 +86,7 @@ export async function searchThreads(sb: SupabaseClient, box: string | undefined,
       });
       out.push(...rows.filter((r): r is ThreadSummary => !!r));
     } catch (e) {
-      errors.push(`${b}@ : ${(e as Error).message}`);
+      errors.push(`${isCreatorBox(b) ? b : `${b}@`} : ${(e as Error).message}`);
     }
   }
   out.sort((a, b) => b.ts - a.ts);
@@ -364,7 +372,7 @@ export async function listClaudeDrafts(sb: SupabaseClient, box: string | undefin
       });
       drafts.push(...rows.filter((r): r is ClaudeDraft => !!r));
     } catch (e) {
-      errors.push(`${b}@ : ${(e as Error).message}`);
+      errors.push(`${isCreatorBox(b) ? b : `${b}@`} : ${(e as Error).message}`);
     }
   }
   return { drafts: drafts.sort((a, z) => z.ts - a.ts), errors };
