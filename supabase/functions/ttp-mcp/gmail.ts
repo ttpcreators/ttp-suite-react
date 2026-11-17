@@ -7,8 +7,9 @@
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { getAccessToken } from "../_shared/google.ts";
 import { boxToken, talentAddress } from "../_shared/gmailBox.ts";
-import { connectedCreatorBox, creatorBoxToken, isCreatorBox, normEmail } from "../_shared/creatorBox.ts";
+import { connectedCreatorBox, creatorBoxToken, isCreatorBox, listCreatorBoxes, normEmail } from "../_shared/creatorBox.ts";
 import { gfetch, decodeGmailBody, charsetOf, mapPool } from "../_shared/gfetch.ts";
+import { partsDuBudget, sansCitation } from "../_shared/mailFil.ts";
 import { addressOf, findSendAs, fromHeader, refusSendAs, usableSendAs, type RawSendAs, type SendAs } from "../_shared/sendAs.ts";
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
@@ -46,10 +47,18 @@ const frDate = (ms: number) => new Date(ms).toLocaleString("fr-FR", { timeZone: 
 export type ThreadSummary = { box: MailBox; threadId: string; subject: string; from: string; date: string; ts: number; messages: number; unread: boolean; snippet: string };
 
 /** Recherche Gmail (même syntaxe que la barre Gmail) dans une ou deux boîtes. */
+/** « partout » : les boîtes de l'agence ET les boîtes de créateurs connectées. Pour vérifier qu'une
+ *  chose n'a pas déjà été faite : Marc envoie souvent depuis la boîte du créateur (cas Prison Island,
+ *  17 novembre 2026 : facture déjà partagée depuis la boîte de Léna, Alfred ne l'a pas vue). */
+export const PARTOUT = "partout";
+
 export async function searchThreads(sb: SupabaseClient, box: string | undefined, q: string, max: number): Promise<{ threads: ThreadSummary[]; errors: string[] }> {
   const out: ThreadSummary[] = [];
   const errors: string[] = [];
-  for (const b of boxesFor(box)) {
+  const boxes = box === PARTOUT
+    ? [...boxesFor(undefined), ...(await listCreatorBoxes(sb)).filter((r) => r.connected && r.refresh_token).map((r) => r.email)]
+    : boxesFor(box);
+  for (const b of boxes) {
     try {
       const token = await tokenFor(sb, b, "read");
       // « in:spam » ou « in:trash » : Gmail ne les cherche que si on le demande explicitement.
@@ -78,7 +87,7 @@ export async function searchThreads(sb: SupabaseClient, box: string | undefined,
       });
       out.push(...rows.filter((r): r is ThreadSummary => !!r));
     } catch (e) {
-      errors.push(`${b}@ : ${(e as Error).message}`);
+      errors.push(`${isCreatorBox(b) ? b : `${b}@`} : ${(e as Error).message}`);
     }
   }
   out.sort((a, b) => b.ts - a.ts);
@@ -135,23 +144,22 @@ export async function readThread(sb: SupabaseClient, box: MailBox, threadId: str
   const msgs = (t.messages as Msg[] | undefined) ?? [];
   if (!msgs.length) return "Fil vide.";
   const subject = header(msgs[0].payload?.headers, "subject") || "(sans objet)";
-  let budget = 24_000;
-  const parts: string[] = [`# ${subject}`, `Boîte : ${box}@ · ${msgs.length} message(s) · fil ${threadId}`];
-  for (const m of msgs) {
-    const h = m.payload?.headers;
+  // Les plus récents d'abord dans le budget, citations retirées, aucun message sauté (voir mailFil.ts).
+  const lus = msgs.map((m) => {
     const { text, files } = textOf(m.payload);
-    const body = text.slice(0, Math.max(0, Math.min(6000, budget)));
-    budget -= body.length;
+    return { m, files, text: sansCitation(text) };
+  });
+  const budgets = partsDuBudget(lus.map((x) => x.text.length));
+  const parts: string[] = [`# ${subject}`, `Boîte : ${box.includes("@") ? box : `${box}@`} · ${msgs.length} message(s), du plus ancien au plus récent · fil ${threadId}`];
+  lus.forEach(({ m, files, text }, i) => {
+    const h = m.payload?.headers;
+    const body = text.slice(0, budgets[i]);
     parts.push(
-      `\n---\nDe : ${header(h, "from")}\nÀ : ${header(h, "to")}${header(h, "cc") ? `\nCc : ${header(h, "cc")}` : ""}\nDate : ${frDate(Number(m.internalDate ?? 0))}` +
+      `\n---\n${i === lus.length - 1 ? "DERNIER MESSAGE\n" : ""}De : ${header(h, "from")}\nÀ : ${header(h, "to")}${header(h, "cc") ? `\nCc : ${header(h, "cc")}` : ""}\nDate : ${frDate(Number(m.internalDate ?? 0))}` +
         (files.length ? `\nPièces jointes : ${files.join(", ")}` : "") +
-        `\n\n${body || "(message vide)"}${text.length > body.length ? "\n[…coupé]" : ""}`,
+        `\n\n${body || "(message vide)"}${text.length > body.length ? "\n[…raccourci : message ancien]" : ""}`,
     );
-    if (budget <= 0) {
-      parts.push("\n[Suite du fil coupée : trop long]");
-      break;
-    }
-  }
+  });
   return parts.join("\n");
 }
 
@@ -364,7 +372,7 @@ export async function listClaudeDrafts(sb: SupabaseClient, box: string | undefin
       });
       drafts.push(...rows.filter((r): r is ClaudeDraft => !!r));
     } catch (e) {
-      errors.push(`${b}@ : ${(e as Error).message}`);
+      errors.push(`${isCreatorBox(b) ? b : `${b}@`} : ${(e as Error).message}`);
     }
   }
   return { drafts: drafts.sort((a, z) => z.ts - a.ts), errors };
