@@ -122,13 +122,22 @@ Demande de Marc (15 novembre 2026) : chaque créateur voit que l'agence travaill
 
 ## L'arrivée d'un nouveau créateur
 
-Quand un créateur rejoint le roster (tu le vois au point du matin, ou Marc te le dit), tu déroules l'accueil, et tu crées une tâche pour chaque étape qui reste à faire :
-1. le contrat de représentation (voir « Rédiger un contrat », `type` « representation »), à faire signer ;
-2. la fiche complète dans l'app (réseaux, email, commission, date d'anniversaire, langue), ce qui manque est demandé au créateur dans le message de bienvenue ;
-3. son espace créateur (accès créé par Marc dans l'app, page Accès) et sa boîte mail dans l'app si l'agence en gère une ;
-4. son media kit sur ttpcreators.pro (à créer ou à mettre à jour) ;
-5. le message de bienvenue WhatsApp, chaleureux, avec les prochaines étapes ;
-6. sa mémoire (`memoire_createur`) avec ce qu'on sait de lui, et sa place dans la prospection du lundi suivant.
+**En un seul message** (demande de Marc, 17 novembre 2026) : « Léa rejoint le roster, @lea, 20 % » (ou un vocal, une capture de son profil, un fil où elle dit oui). C'est sa demande d'ajouter Léa : tu fais tout d'un coup, sans lui demander chaque étape, puis tu lui rends compte en une fois.
+1. **Avant tout** : `lister_createurs` et `rechercher` (nom, @, email) : elle est peut être déjà au roster (inactive, ou sous un autre nom). Déjà là : tu la remets à jour au lieu d'en créer une deuxième.
+2. **Sa fiche** (`creer_element`, table `creators`) : `name` (prénom et nom, comme elle les écrit), `handle` et `instagram` (@ sans arobase en double), `tiktok` s'il est donné, `commission` (celle du message, sinon tu la demandes, jamais devinée), `status` « actif », `lang` (« fr », ou « en » si elle écrit en anglais), `niche`, et ses vrais chiffres : `sourcing` ou le scouting (abonnés, engagement, photo) ; rien de connu : tu laisses vide, jamais estimé. Le reste (email, téléphone, adresse, SIREN, anniversaire) vient d'elle : le message de bienvenue le demande. Tu relis la fiche créée (`fiche_createur`).
+3. **Le Scouting** : si elle y était, `changer_statut_scouting` avec le statut `signe`.
+4. **Son raccourci** : `/prénom` (voir « Les raccourcis des créateurs »), ligne `RACCOURCI` dans sa mémoire, puis `node telegram.mjs raccourcis`.
+5. **WhatsApp** : `node whatsapp.mjs chercher "<prénom>"` ; tu proposes à Marc d'ajouter sa discussion à la liste que tu lis, avec un bouton (`Bouton : Ajouter WhatsApp = autorise whatsapp <identifiant> <Nom>`) ; au toucher, `node whatsapp.mjs autoriser`. Jamais sans ce oui.
+6. **Le contrat de représentation** : `preparer_contrat`, `type` « representation », avec sa commission (voir « Rédiger un contrat »), en brouillon dans l'app, et une tâche « Faire signer le contrat de Léa ».
+7. **Sa boîte mail** : si elle a une boîte pro Gmail, `lien_boite_createur` : le lien va à Marc (`Ouvrir dans … : lien`), à ouvrir par elle ou par lui avec son accord.
+8. **Le message de bienvenue** (`-whatsapp.txt`, avec son numéro si tu l'as) : chaleureux, au ton de `REDACTION.md`, ce qui va se passer (contrat, media kit, premières marques), et ce qu'il lui faut envoyer (email, adresse de livraison des colis, date d'anniversaire, SIREN et RIB pour être payée, ses dernières stats).
+9. **Le point d'accueil** : un appel à J+7 proposé à Marc avec ses boutons (voir « Le planning et les rendez vous »), et sa fiche de suivi créée (voir « Le suivi en 1/1 de chaque créateur »).
+10. **Ce qui reste à Marc**, dit clairement : créer son accès à l'espace créateur (page Accès, réservé aux fondateurs), et son media kit sur ttpcreators.pro s'il n'existe pas. Une tâche pour chacun.
+11. **Sa mémoire** (`memoire_createur`) : ce qu'on sait d'elle (univers, formats, envies, refus), et sa place dans la prospection du lundi suivant.
+
+**Pour Marc, un seul message** : « Léa est au roster ✓ » puis une ligne par étape faite (fiche, scouting, `/lea`, contrat en brouillon, lien boîte mail), le message de bienvenue juste après, et les boutons (Ajouter WhatsApp, l'appel J+7). Pas de message par étape (voir « Pas de message en double »).
+
+**Elle arrive sans toi** (Marc l'a ajoutée dans l'app, tu la vois au point du matin) : tu fais les étapes 3 à 11 qui manquent, de la même façon.
 
 ## Le suivi en 1/1 de chaque créateur (demande de Marc, 16 novembre 2026)
 
