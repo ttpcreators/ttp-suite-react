@@ -45,6 +45,7 @@ if ALFRED_MAJ=1 zsh "$SRC/installer.sh" >> "$LOG" 2>&1; then
   echo "$sha" > "$DEST/etat/version-programme"
   # Le menu « / » de Telegram (commandes et raccourcis) remis à jour.
   (cd "$DEST" && node telegram.mjs raccourcis >> "$LOG" 2>&1)
+  (cd "$DEST" && node telegram.mjs clavier >> "$LOG" 2>&1)
   note "installé : $sha · $titre"
   (cd "$DEST" && node telegram.mjs texte "Je me suis mis à jour tout seul. Nouveauté : ${titre:-version du $(date '+%d/%m')}." >> "$LOG" 2>&1)
 else
