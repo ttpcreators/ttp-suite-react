@@ -9,6 +9,7 @@ import { getAccessToken } from "../_shared/google.ts";
 import { boxToken, talentAddress } from "../_shared/gmailBox.ts";
 import { connectedCreatorBox, creatorBoxToken, isCreatorBox, listCreatorBoxes, normEmail } from "../_shared/creatorBox.ts";
 import { gfetch, decodeGmailBody, charsetOf, mapPool } from "../_shared/gfetch.ts";
+import { partsDuBudget, sansCitation } from "../_shared/mailFil.ts";
 import { addressOf, findSendAs, fromHeader, refusSendAs, usableSendAs, type RawSendAs, type SendAs } from "../_shared/sendAs.ts";
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
@@ -143,23 +144,22 @@ export async function readThread(sb: SupabaseClient, box: MailBox, threadId: str
   const msgs = (t.messages as Msg[] | undefined) ?? [];
   if (!msgs.length) return "Fil vide.";
   const subject = header(msgs[0].payload?.headers, "subject") || "(sans objet)";
-  let budget = 24_000;
-  const parts: string[] = [`# ${subject}`, `Boîte : ${box}@ · ${msgs.length} message(s) · fil ${threadId}`];
-  for (const m of msgs) {
-    const h = m.payload?.headers;
+  // Les plus récents d'abord dans le budget, citations retirées, aucun message sauté (voir mailFil.ts).
+  const lus = msgs.map((m) => {
     const { text, files } = textOf(m.payload);
-    const body = text.slice(0, Math.max(0, Math.min(6000, budget)));
-    budget -= body.length;
+    return { m, files, text: sansCitation(text) };
+  });
+  const budgets = partsDuBudget(lus.map((x) => x.text.length));
+  const parts: string[] = [`# ${subject}`, `Boîte : ${box.includes("@") ? box : `${box}@`} · ${msgs.length} message(s), du plus ancien au plus récent · fil ${threadId}`];
+  lus.forEach(({ m, files, text }, i) => {
+    const h = m.payload?.headers;
+    const body = text.slice(0, budgets[i]);
     parts.push(
-      `\n---\nDe : ${header(h, "from")}\nÀ : ${header(h, "to")}${header(h, "cc") ? `\nCc : ${header(h, "cc")}` : ""}\nDate : ${frDate(Number(m.internalDate ?? 0))}` +
+      `\n---\n${i === lus.length - 1 ? "DERNIER MESSAGE\n" : ""}De : ${header(h, "from")}\nÀ : ${header(h, "to")}${header(h, "cc") ? `\nCc : ${header(h, "cc")}` : ""}\nDate : ${frDate(Number(m.internalDate ?? 0))}` +
         (files.length ? `\nPièces jointes : ${files.join(", ")}` : "") +
-        `\n\n${body || "(message vide)"}${text.length > body.length ? "\n[…coupé]" : ""}`,
+        `\n\n${body || "(message vide)"}${text.length > body.length ? "\n[…raccourci : message ancien]" : ""}`,
     );
-    if (budget <= 0) {
-      parts.push("\n[Suite du fil coupée : trop long]");
-      break;
-    }
-  }
+  });
   return parts.join("\n");
 }
 

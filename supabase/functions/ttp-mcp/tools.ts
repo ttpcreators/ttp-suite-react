@@ -593,11 +593,18 @@ const lireMail: Tool = {
     const box = p.box;
     const id = str(a.fil, 40);
     if (!/^[A-Za-z0-9]+$/.test(id)) return fail("Id de fil invalide.");
-    try {
-      return ok(await readThread(sb, box, id));
-    } catch (e) {
-      return fail(`Lecture impossible : ${(e as Error).message}`);
+    // Un raté passager de Google (délai, 429, 5xx) : on réessaie deux fois avant d'abandonner.
+    let derniere = "";
+    for (let essai = 0; essai < 3; essai++) {
+      try {
+        return ok(await readThread(sb, box, id));
+      } catch (e) {
+        derniere = (e as Error).message ?? "";
+        if (/non_connectee|invalid|404|not found/i.test(derniere)) break;
+        await new Promise((r) => setTimeout(r, 1500 * (essai + 1)));
+      }
     }
+    return fail(`Lecture impossible : ${derniere}. Essaie l'autre chemin : rechercher_mails avec boite « partout » et l'objet du fil (le fil peut être dans une autre boîte), ou Spark pour la boîte d'un créateur.`);
   },
 };
 
