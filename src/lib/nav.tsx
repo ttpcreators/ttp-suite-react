@@ -2,7 +2,7 @@ import type { LucideIcon } from "@/components/icons";
 import {
   TtpBell, TtpBrief, TtpChecklist, TtpCollabs, TtpContacts, TtpContract, TtpDeadline, TtpExclu, TtpDm, TtpEngagement, TtpEvolution,
   TtpFiles, TtpFolder, TtpHistory, TtpIdea, TtpInvoice, TtpLock, TtpMail, TtpMediakit, TtpPerson, TtpPipeline,
-  TtpPlanning, TtpPulse, TtpReport, TtpScouting, TtpSend, TtpSliders, TtpSourcing, TtpSpider, TtpSpark, TtpStar, TtpStats, TtpTag,
+  TtpPlanning, TtpPulse, TtpReport, TtpScouting, TtpSend, TtpSliders, TtpSourcing, TtpSearch, TtpSpider, TtpSpark, TtpStar, TtpStats, TtpTag,
   TtpTarget, TtpTemplate, TtpToday, TtpTodo, TtpTransfer, TtpGains,
 } from "@/components/icons/ttp-icons";
 
@@ -24,6 +24,7 @@ export type ViewId =
   | "vivier"
   | "sourcing"
   | "araignee"
+  | "base"
   | "collabs"
   | "mediakit"
   | "briefs"
@@ -154,6 +155,7 @@ export const NAV: NavFamily[] = [
       },
       { id: "prospection", label: "Pipeline", icon: TtpPipeline },
       { id: "sourcing", label: "Sourcing", icon: TtpSourcing },
+      { id: "base", label: "Base créateurs", icon: TtpSearch },
       { id: "araignee", label: "Araignée", icon: TtpSpider },
     ],
   },
