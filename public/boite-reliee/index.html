@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Boîte Gmail · TTP Creators</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
+         font-family: Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif; background: #f6f6f7; color: #111; }
+  main { background: #fff; border-radius: 16px; padding: 28px; max-width: 440px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  p { line-height: 1.5; margin: 0 0 10px; color: #333; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #111; color: #eee; }
+    main { background: #1c1c1e; box-shadow: none; }
+    p { color: #ccc; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="titre">Boîte Gmail</h1>
+  <div id="texte"></div>
+</main>
+<script>
+  // Fin de la liaison d'une boîte Gmail de créateur (fonction creator-box-callback).
+  // ?ok=<adresse> : c'est fait. ?erreur=<texte> : ce qui a coincé.
+  // Tout passe par textContent : rien de ce qui vient de l'adresse n'est interprété comme du HTML.
+  var q = new URLSearchParams(location.search);
+  var titre = document.getElementById("titre");
+  var texte = document.getElementById("texte");
+  function para(parts) {
+    var p = document.createElement("p");
+    parts.forEach(function (x) {
+      if (typeof x === "string") p.appendChild(document.createTextNode(x));
+      else { var b = document.createElement("b"); b.textContent = x.b; p.appendChild(b); }
+    });
+    texte.appendChild(p);
+  }
+  // Seuls ces messages peuvent s'afficher : la fonction envoie un code, jamais un texte.
+  var MESSAGES = {
+    lien: "Ce lien n'est pas valide.",
+    agence: "La connexion des boîtes n'est pas encore réglée côté agence.",
+    expire: "Ce lien a expiré (il reste valable 7 jours).",
+    refus: "Tu n'as pas donné l'accord sur l'écran de Google : rien n'a été connecté.",
+    retour: "Le retour de Google n'a pas été reconnu. Rouvre le lien et recommence.",
+    delai: "La connexion a pris plus de 10 minutes : rouvre le lien et recommence.",
+    google: "Google a refusé la connexion. Rouvre le lien et recommence.",
+    adresse: "Tu t'es connecté avec une autre adresse que celle prévue par le lien. Rouvre le lien et choisis la bonne adresse Gmail.",
+    droits: "Il faut cocher les deux autorisations Gmail (lire et préparer les brouillons) sur l'écran de Google. Rouvre le lien et coche les deux cases.",
+    enregistrement: "La connexion a marché, mais l'enregistrement a échoué. Préviens TTP Creators.",
+    durable: "Google n'a pas donné d'accès durable. Rouvre le lien et recommence."
+  };
+  var ok = q.get("ok");
+  var code = q.get("erreur");
+  if (ok !== null) {
+    titre.textContent = "C'est fait ✓";
+    if (/^[^\s@<>]{1,64}@[a-z0-9.-]{1,190}\.[a-z]{2,}$/i.test(ok)) para(["Ta boîte ", { b: ok }, " est reliée à TTP Creators."]);
+    else para(["Ta boîte est reliée à TTP Creators."]);
+    para(["L'agence peut maintenant préparer tes réponses aux marques directement dans ta boîte. Rien ne part sans validation de Marc, et tu peux retirer l'accès quand tu veux dans ton compte Google (Sécurité › Applications tierces)."]);
+  } else {
+    titre.textContent = "Connexion impossible";
+    para([Object.prototype.hasOwnProperty.call(MESSAGES, code) ? MESSAGES[code] : MESSAGES.lien]);
+    para(["Écris à TTP Creators pour recevoir un nouveau lien."]);
+  }
+</script>
+</body>
+</html>

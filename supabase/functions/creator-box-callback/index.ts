@@ -17,17 +17,14 @@ import {
   droitsComplets, emailDuJeton, normEmail, urlAutorisation,
 } from "../_shared/creatorBox.ts";
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c);
-
-function page(titre: string, texte: string, status = 200): Response {
-  const body = `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TTP Creators</title><style>body{font-family:-apple-system,BlinkMacSystemFont,Inter,sans-serif;background:#f6f6f7;color:#111;margin:0;display:flex;min-height:100vh;align-items:center;justify-content:center;padding:16px}
-main{background:#fff;border-radius:16px;padding:28px;max-width:440px;box-shadow:0 1px 3px rgba(0,0,0,.08)}h1{font-size:20px;margin:0 0 12px}p{line-height:1.5;margin:0 0 10px;color:#333}</style></head>
-<body><main><h1>${esc(titre)}</h1>${texte}</main></body></html>`;
-  return new Response(body, { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
-}
-
-const erreur = (texte: string, status = 400) => page("Connexion impossible", `<p>${esc(texte)}</p><p>Écris à TTP Creators pour recevoir un nouveau lien.</p>`, status);
+// Les pages de fin vivent sur app.ttpcreators.pro/boite-reliee/ : Supabase affiche le HTML
+// renvoyé par une fonction comme du texte brut (code visible, accents cassés).
+const PAGE_FIN = "https://app.ttpcreators.pro/boite-reliee/";
+const fin = (params: Record<string, string>) => Response.redirect(`${PAGE_FIN}?${new URLSearchParams(params)}`, 302);
+// Un code, pas un texte : la page n'affiche que ses propres messages (personne ne peut lui
+// faire dire autre chose en bricolant l'adresse).
+type CodeErreur = "lien" | "agence" | "expire" | "refus" | "retour" | "delai" | "google" | "adresse" | "droits" | "enregistrement" | "durable";
+const erreur = (code: CodeErreur) => fin({ erreur: code });
 
 /** sub du state : « adresse|créateur ». */
 function lireSub(sub: string | undefined): { email: string; creator: string } | null {
@@ -38,8 +35,8 @@ function lireSub(sub: string | undefined): { email: string; creator: string } | 
 }
 
 Deno.serve(async (req: Request): Promise<Response> => {
-  if (req.method !== "GET") return erreur("Méthode non autorisée.", 405);
-  if (!creatorBoxReady()) return erreur("La connexion des boîtes n'est pas encore réglée côté agence.", 500);
+  if (req.method !== "GET") return erreur("lien");
+  if (!creatorBoxReady()) return erreur("agence");
   const url = new URL(req.url);
 
   // 1. Le lien envoyé au créateur : on part chez Google.
@@ -50,27 +47,27 @@ Deno.serve(async (req: Request): Promise<Response> => {
       const p = await verifyState(lien, LIEN_TTL_MS);
       if (p.origin === "lien-boite") qui = lireSub(p.sub);
     } catch (e) {
-      return erreur((e as Error).message === "state_expired" ? "Ce lien a expiré (il reste valable 7 jours)." : "Ce lien n'est pas valide.");
+      return erreur((e as Error).message === "state_expired" ? "expire" : "lien");
     }
-    if (!qui) return erreur("Ce lien n'est pas valide.");
+    if (!qui) return erreur("lien");
     const state = await signState({ origin: "google-boite", nonce: genNonce(), sub: `${qui.email}|${qui.creator}` });
     return Response.redirect(urlAutorisation(creatorBoxClientId(), state, qui.email), 302);
   }
 
   // 2. Retour de Google.
   const oauthError = url.searchParams.get("error");
-  if (oauthError) return erreur("Tu n'as pas donné l'accord sur l'écran de Google : rien n'a été connecté.");
+  if (oauthError) return erreur("refus");
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
-  if (!code || !state) return erreur("Il manque des informations dans le retour de Google.");
+  if (!code || !state) return erreur("retour");
   let qui: { email: string; creator: string } | null = null;
   try {
     const p = await verifyState(state);
     if (p.origin === "google-boite") qui = lireSub(p.sub);
   } catch {
-    return erreur("La connexion a pris plus de 10 minutes : rouvre le lien et recommence.");
+    return erreur("delai");
   }
-  if (!qui) return erreur("Retour de Google non reconnu.");
+  if (!qui) return erreur("retour");
 
   const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -82,14 +79,14 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }),
   });
   const tok = await tokenRes.json().catch(() => ({}));
-  if (!tokenRes.ok || !tok.access_token) return erreur("Google a refusé la connexion. Rouvre le lien et recommence.", 502);
+  if (!tokenRes.ok || !tok.access_token) return erreur("google");
 
   const email = tok.id_token ? emailDuJeton(String(tok.id_token)) : null;
   if (email !== qui.email) {
-    return erreur(`Tu t'es connecté avec ${email ?? "une autre adresse"}, alors que le lien est prévu pour ${qui.email}. Rouvre le lien et choisis la bonne adresse.`);
+    return erreur("adresse");
   }
   if (!droitsComplets(String(tok.scope ?? ""))) {
-    return erreur("Il faut cocher les deux autorisations Gmail (lire et préparer les brouillons) sur l'écran de Google. Rouvre le lien et coche les deux cases.");
+    return erreur("droits");
   }
 
   const sb = createClient(Deno.env.get("SUPABASE_URL") ?? "", Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "", { auth: { persistSession: false } });
@@ -100,12 +97,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
   };
   if (tok.refresh_token) row.refresh_token = tok.refresh_token;
   const { error } = await sb.from("creator_mail_boxes").upsert(row, { onConflict: "email" });
-  if (error) return erreur("La connexion a marché, mais l'enregistrement a échoué. Préviens TTP Creators.", 500);
+  if (error) return erreur("enregistrement");
   const { data } = await sb.from("creator_mail_boxes").select("refresh_token").eq("email", email).maybeSingle();
   if (!data?.refresh_token) {
     await sb.from("creator_mail_boxes").update({ connected: false, last_error: "no_refresh_token" }).eq("email", email);
-    return erreur("Google n'a pas donné d'accès durable. Rouvre le lien et recommence.", 502);
+    return erreur("durable");
   }
 
-  return page("C'est fait ✓", `<p>Ta boîte <b>${esc(email)}</b> est reliée à TTP Creators.</p><p>L'agence peut maintenant préparer tes réponses aux marques directement dans ta boîte. Rien ne part sans validation de Marc, et tu peux retirer l'accès quand tu veux dans ton compte Google (Sécurité › Applications tierces).</p>`);
+  return fin({ ok: email });
 });
