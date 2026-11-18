@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isUnread, rowsNowRead } from "./mailLu.ts";
+import { isUnread, rowsNowRead, threadsToClose } from "./mailLu.ts";
 
 describe("isUnread", () => {
   it("lit le libellé UNREAD de Gmail", () => {
@@ -31,5 +31,14 @@ describe("rowsNowRead", () => {
   it("ancienne ligne sans boîte : lue seulement si aucune boîte ne l'a en non lu", () => {
     expect(rowsNowRead(rows, { partnerships: new Set(["a", "b"]), talent: new Set(["c", "d"]) }, ["partnerships", "talent"])).toEqual([]);
     expect(rowsNowRead(rows, { partnerships: new Set(["a", "b"]) }, ["partnerships"])).toEqual(["r4"]);
+  });
+});
+
+describe("threadsToClose", () => {
+  it("garde les fils valides, sans doublon ni fil notifié maintenant", () => {
+    expect(threadsToClose(["a1", "a1", null, "b2", "mauvais id!", "c3"], ["c3"])).toEqual(["a1", "b2"]);
+  });
+  it("borne la liste", () => {
+    expect(threadsToClose(["a", "b", "c"], [], 2)).toEqual(["a", "b"]);
   });
 });

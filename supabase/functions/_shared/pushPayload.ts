@@ -33,6 +33,8 @@ export type PushPayload = {
   lang?: "fr" | "en";
   /** Nom de l'expéditeur (mails) : sert au résumé regroupé du service worker. */
   sender?: string;
+  /** Fils lus ailleurs (Gmail, Spark) : le service worker ferme leurs notifications. */
+  close?: string[];
   ts: number;
 };
 
@@ -93,6 +95,7 @@ export function makePayload(p: PayloadInput, opts: { capitalize?: boolean } = {}
   if (p.image && /^https:\/\//.test(p.image)) out.image = p.image;
   if (p.lang) out.lang = p.lang;
   if (p.sender) out.sender = clip(tidyText(p.sender), 40);
+  if (p.close?.length) out.close = p.close.filter((t) => THREAD_RE.test(t)).slice(0, 40);
   return out;
 }
 

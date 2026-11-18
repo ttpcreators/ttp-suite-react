@@ -42,3 +42,20 @@ export function rowsNowRead(rows: readonly MailRow[], unread: UnreadByBox, boxes
   }
   return out;
 }
+
+const THREAD_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * Fils dont la notification doit se fermer sur les téléphones (mails lus ailleurs),
+ * sans ceux qu'on notifie en ce moment, sans doublon, au plus `cap` (charge push ≤ 4 Ko).
+ */
+export function threadsToClose(readThreads: readonly (string | null | undefined)[], pushed: readonly string[] = [], cap = 40): string[] {
+  const skip = new Set(pushed);
+  const out: string[] = [];
+  for (const t of readThreads) {
+    if (!t || !THREAD_RE.test(t) || skip.has(t) || out.includes(t)) continue;
+    out.push(t);
+    if (out.length >= cap) break;
+  }
+  return out;
+}
