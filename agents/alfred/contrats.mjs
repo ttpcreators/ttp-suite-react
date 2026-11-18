@@ -1028,14 +1028,14 @@ const RC_ARTICLES = [
 		number: "Article 1",
 		title: "Objet du contrat",
 		variant: "exclusif",
-		body: "Le Talent confie à l'Agence, qui l'accepte, un mandat de représentation de manière EXCLUSIVE aux fins de :\n• représenter le Talent auprès de toutes marques, annonceurs et tiers, pour toute collaboration commerciale ;\n• assurer la gestion et le traitement des demandes entrantes via la boîte mail professionnelle du Talent (qualification, réponses, transfert, suivi) ;\n• négocier et sécuriser les contrats (volets financier, juridique, logistique) ;\n• gérer les encaissements et paiements au nom et pour le compte du Talent (mandat d'encaissement) ;\n• accompagner le développement stratégique du Talent (conseil éditorial, positionnement, diversification).\n\nCaractère exclusif — Pendant toute la durée du présent contrat, le Talent s'interdit de conclure, directement ou par l'intermédiaire d'un tiers, toute collaboration commerciale sans intervention préalable de l'Agence, sous réserve des exceptions prévues à l'article 4."
+		body: "Le Talent confie à l'Agence, qui l'accepte, un mandat de représentation de manière EXCLUSIVE aux fins de :\n• représenter le Talent auprès de toutes marques, annonceurs et tiers, pour toute collaboration commerciale ;\n{puceBoiteMail}• négocier et sécuriser les contrats (volets financier, juridique, logistique) ;\n• gérer les encaissements et paiements au nom et pour le compte du Talent (mandat d'encaissement) ;\n• accompagner le développement stratégique du Talent (conseil éditorial, positionnement, diversification).\n\nCaractère exclusif — Pendant toute la durée du présent contrat, le Talent s'interdit de conclure, directement ou par l'intermédiaire d'un tiers, toute collaboration commerciale sans intervention préalable de l'Agence, sous réserve des exceptions prévues à l'article 4."
 	},
 	{
 		id: "art1_objet_nonexclusif",
 		number: "Article 1",
 		title: "Objet du contrat",
 		variant: "nonexclusif",
-		body: "Le Talent confie à l'Agence, qui l'accepte, un mandat de représentation à caractère NON EXCLUSIF aux fins de :\n• représenter le Talent pour les collaborations apportées ou gérées par l'Agence ;\n• assurer la gestion et le traitement des demandes entrantes via la boîte mail professionnelle du Talent (qualification, réponses, transfert, suivi) ;\n• négocier et sécuriser les contrats (volets financier, juridique, logistique) ;\n• gérer les encaissements et paiements dans le cadre des deals où l'Agence est impliquée (mandat d'encaissement) ;\n• accompagner le développement stratégique du Talent (conseil éditorial, positionnement, diversification).\n\nCaractère non exclusif — Le Talent conserve la liberté de conclure directement des collaborations sans passer par l'Agence, sans obligation de tout confier à cette dernière."
+		body: "Le Talent confie à l'Agence, qui l'accepte, un mandat de représentation à caractère NON EXCLUSIF aux fins de :\n• représenter le Talent pour les collaborations apportées ou gérées par l'Agence ;\n{puceBoiteMail}• négocier et sécuriser les contrats (volets financier, juridique, logistique) ;\n• gérer les encaissements et paiements dans le cadre des deals où l'Agence est impliquée (mandat d'encaissement) ;\n• accompagner le développement stratégique du Talent (conseil éditorial, positionnement, diversification).\n\nCaractère non exclusif — Le Talent conserve la liberté de conclure directement des collaborations sans passer par l'Agence, sans obligation de tout confier à cette dernière."
 	},
 	{
 		id: "art2_champ_exclusif",
@@ -1049,7 +1049,7 @@ const RC_ARTICLES = [
 		number: "Article 2",
 		title: "Champ d'application",
 		variant: "nonexclusif",
-		body: "Le présent contrat couvre les activités monétisables pour lesquelles le Talent fait appel à l'Agence : partenariats sponsorisés, contenus UGC, événements, rémunérations diverses, ainsi que les demandes entrantes via la boîte mail professionnelle traitées par l'Agence.\nLe Talent n'a aucune obligation de tout confier à l'Agence."
+		body: "Le présent contrat couvre les activités monétisables pour lesquelles le Talent fait appel à l'Agence : partenariats sponsorisés, contenus UGC, événements, rémunérations diverses{mentionBoiteMailChamp}.\nLe Talent n'a aucune obligation de tout confier à l'Agence."
 	},
 	{
 		id: "art3_missions",
@@ -1096,7 +1096,7 @@ const RC_ARTICLES = [
 		title: "Rémunération de l'Agence",
 		variant: "both",
 		includeIf: "modeCommissionParOrigine",
-		body: "4.1 Principe — La commission de l'Agence est déterminée selon l'origine du deal et calculée sur {assietteCommission}. Elle s'entend {regimeFiscalComm}.\nSeuil — Aucune commission n'est due si la rémunération brute est inférieure à {seuil} €{seuilAvantages} ; les taux s'appliquent à compter de {seuil} €.\n\n4.2 Barème —\n• Deal apporté ET géré par l'Agence : {commApportee} % {regimeFiscalComm}.\n• Deal initié par le Talent, géré par l'Agence : {commInitiee} % {regimeFiscalComm}.\n• Collaboration autonome (article 4.3) : {commAutonome} %.\n\nCes conditions particulières, individuellement négociées, dérogent le cas échéant aux conditions générales.\n\n4.3 Collaborations autonomes (exception stricte) — À titre exceptionnel et sous réserve de l'accord écrit préalable de l'Agence, le Talent peut conclure directement, sans commission, des partenariats non commerciaux ou des échanges entre pairs. Toute collaboration commerciale conclue hors de ce cadre, sans accord préalable, constitue une violation de l'exclusivité et entraîne l'application de la clause pénale prévue à l'article Fin et résiliation.\n\n{art44}"
+		body: "4.1 Principe — La commission de l'Agence est déterminée selon l'origine du deal et calculée sur {assietteCommission}. Elle s'entend {regimeFiscalComm}.\nSeuil — Aucune commission n'est due si la rémunération brute est inférieure à {seuil} €{seuilAvantages} ; les taux s'appliquent à compter de {seuil} €.\n\n4.2 Barème —\n• Deal apporté ET géré par l'Agence : {commApportee} % {regimeFiscalComm}.\n• Deal initié par le Talent, géré par l'Agence : {commInitiee} % {regimeFiscalComm}.\n• Collaboration autonome (article 4.3) : {commAutonome} %.\n\nCes conditions particulières, individuellement négociées, dérogent le cas échéant aux conditions générales.\n\n{art43}\n\n{art44}"
 	},
 	{
 		id: "art4_remuneration_uniforme",
@@ -1332,6 +1332,11 @@ function ph(key, c) {
 		case "effetResiliationLibre": return preavisLibre(c) === 1 ? "le lendemain de la notification" : "à l'expiration de ce préavis";
 		case "preavisSouple": return joursEnLettres(preavisLibre(c));
 		case "essaiSouple": return is(c, "essaiActif") ? `\n\n6.2 Période d'essai — Les Parties conviennent d'une période d'essai réciproque correspondant aux ${c.essaiJours || "15"} premiers jours du contrat, durant laquelle chaque Partie peut y mettre fin sans motif, par simple e-mail, avec effet immédiat.` : "";
+		case "puceBoiteMail": return is(c, "gestionMail") ? "• assurer la gestion et le traitement des demandes entrantes via la boîte mail professionnelle du Talent (qualification, réponses, transfert, suivi) ;\n" : "";
+		case "mentionBoiteMailChamp": return is(c, "gestionMail") ? ", ainsi que les demandes entrantes via la boîte mail professionnelle traitées par l'Agence" : "";
+		case "art43":
+			if (c.variante === "nonexclusif") return `4.3 Collaborations autonomes — Le présent mandat étant non exclusif, le Talent peut conclure directement, sans l'intervention de l'Agence, les collaborations qu'il obtient et gère lui même ; elles n'ouvrent droit à aucune commission${approches(c) ? ", le Talent en informant l'Agence conformément à l'article 7" : ""}.`;
+			return `4.3 Collaborations autonomes (exception stricte) — À titre exceptionnel et sous réserve de l'accord écrit préalable de l'Agence, le Talent peut conclure directement, sans commission, des partenariats non commerciaux ou des échanges entre pairs. Toute collaboration commerciale conclue hors de ce cadre, sans accord préalable, constitue une violation de l'exclusivité${is(c, "clausePenaleActive") ? " et entraîne l'application de la clause pénale prévue à l'article Fin et résiliation" : ""}.`;
 		case "puceApproches": return approches(c) ? `• informer l'Agence de toute approche directe de marque dans un délai de ${c.approcheDirecteHeures || "48"} heures ;\n` : "";
 		case "mentionInformeAgence": return approches(c) ? " (le Talent en informe néanmoins l'Agence)" : "";
 		case "assietteCommission": return avantages(c) ? "la rémunération brute perçue par le Talent (numéraire + valeur des avantages en nature)" : "la seule rémunération en numéraire perçue par le Talent, hors avantages en nature";
