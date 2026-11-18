@@ -6,7 +6,7 @@ import { contextPrompt, threadTranscript } from "@/lib/mailThreadContext";
 import { Suspense, lazy, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ExpandableActionBar } from "@/components/ui/expandable-action-bar";
 import { Loader, Spin } from "@/components/ui/loader";
-import { Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, PenLine, Reply, Forward, Settings2, RefreshCw, Send, Copy, MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X, FilePen, Smartphone, type LucideIcon } from "@/components/icons";
+import { Mail, MailOpen, ArrowDownLeft, ArrowUpRight, ArrowLeft, Archive, Inbox, Search, PenLine, Reply, Forward, Settings2, RefreshCw, Send, Copy, MessageSquareText, Trash2, Undo2, BookUser, UsersRound, ChevronLeft, ChevronRight, ChevronDown, CircleAlert, Keyboard, RotateCw, X, FilePen, Smartphone, CircleSlash, type LucideIcon } from "@/components/icons";
 import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import {
   deleteGmailDraft, draftBodyText, draftDeleteErrText, gmailDraftLocalKey, isReplyDraft, parseDraftsRes, parseReplyDraftKey, seedReplyDraft,
@@ -45,6 +45,8 @@ import { canReact, reactionErrorText, reactionRecipients, splitReactions, type R
 import { myDisplayName } from "@/lib/team";
 import { useIntent } from "@/lib/openIntent";
 import { addrOf, addrsOf, replyPlan } from "@/lib/mailReply";
+import { ignoreSender, unignoreSender, useIgnoredSenders } from "@/lib/mailIgnored";
+import { isIgnoredSender, type IgnoredSenders } from "../../supabase/functions/_shared/mailIgnore.ts";
 
 // Espace mails d'un créateur (statuts, remarques, suivi), chargé seulement à la demande.
 const CreatorMailsAgency = lazy(lazyImport(() => import("@/views/CreatorMails").then((m) => ({ default: m.CreatorMailsAgency }))));
@@ -93,8 +95,9 @@ type InboxThread = {
 };
 /** Étiquette des fils qui n'attendent pas de réponse. */
 const KIND_LABEL: Record<NonNullable<InboxThread["kind"]>, string> = { auto: "Réponse auto", notif: "Notification", newsletter: "Newsletter", forward: "Transféré" };
-/** « À traiter » : le dernier message vient de l'extérieur ET attend une réponse. */
-const needsReply = (t: InboxThread) => t.direction !== "out" && !t.kind;
+/** « À traiter » : le dernier message vient de l'extérieur ET attend une réponse, d'un
+ *  expéditeur que l'équipe n'a pas marqué « Pas à traiter » (réglages des mails). */
+const needsReply = (t: InboxThread, ignored: IgnoredSenders) => t.direction !== "out" && !t.kind && !isIgnoredSender(t.email, ignored);
 type Folder = "inbox" | "sent";
 type PageTokens = Partial<Record<MailBox, string>>;
 type ListRes = { ok?: boolean; threads?: InboxThread[]; nextPageTokens?: PageTokens; partial?: boolean; failedBoxes?: string[]; error?: string };
@@ -118,7 +121,10 @@ type Override = {
   reply?: { ts: number; snippet: string };
 };
 type SearchState = { q: string; folder: Folder; threads: InboxThread[]; busy: boolean; err: string | null; off: boolean };
-type UndoState = { kind: "trash" | "archive"; t: Target; row: InboxThread | null; folder: Folder; done: Promise<boolean>; at: number };
+type UndoState =
+  | { kind: "trash" | "archive"; t: Target; row: InboxThread | null; folder: Folder; done: Promise<boolean>; at: number }
+  /** « Pas à traiter » : l'expéditeur retenu, oublié par « Annuler ». */
+  | { kind: "ignore"; email: string; at: number };
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const AGENCY_DOMAIN = "@ttpcreators.pro";
@@ -464,15 +470,18 @@ function RowAction({ icon: Icon, label, shortcut, onClick, danger, side = "botto
 }
 
 /** Une conversation de la liste : expéditeur et heure, objet, une ligne d'extrait. */
-function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhoto, tags, onOpen, onArchive, onTrash, onToggleRead }: {
+function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhoto, tags, onOpen, onArchive, onTrash, onToggleRead, onNotTodo }: {
   t: InboxThread; folder: Folder; on: boolean; cursor: boolean; showBox: boolean; draft: boolean;
   creator: string | null; creatorPhoto: string | null;
   /** Étiquettes de statut (collab liée, suivi créateur, relance), seulement si elles existent. */
   tags?: MailTag[];
   onOpen: () => void; onArchive: () => void; onTrash: () => void; onToggleRead: () => void;
+  /** Fil de « À traiter » : retire l'expéditeur de « À traiter » (absent sinon). */
+  onNotTodo?: () => void;
 }) {
   const name = prettyName(t.name) || t.email;
   const swipe: SwipeAction[] = [
+    ...(onNotTodo ? [{ key: "nottodo", label: "Pas à traiter", icon: CircleSlash, tone: "gray" as const, onClick: onNotTodo }] : []),
     ...(folder === "inbox" ? [{ key: "archive", label: "Archiver", icon: Archive, tone: "blue" as const, onClick: onArchive }] : []),
     { key: "trash", label: "Corbeille", icon: Trash2, tone: "red", onClick: onTrash },
   ];
@@ -533,6 +542,7 @@ function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhot
         </button>
       </SwipeRow>
       <div className="pointer-events-none absolute right-3 top-2.5 z-[2] hidden items-center gap-0.5 rounded-lg bg-surface p-0.5 opacity-0 shadow-sm ring-1 ring-border transition-opacity lg:flex lg:group-focus-within:pointer-events-auto lg:group-focus-within:opacity-100 lg:group-hover:pointer-events-auto lg:group-hover:opacity-100">
+        {onNotTodo && <RowAction icon={CircleSlash} label="Pas à traiter" onClick={onNotTodo} />}
         {folder === "inbox" && !t.archived && <RowAction icon={Archive} label="Archiver" shortcut="e" onClick={onArchive} />}
         <RowAction icon={Trash2} label="Corbeille" shortcut="#" onClick={onTrash} danger />
         <RowAction icon={t.unread ? MailOpen : Mail} label={t.unread ? "Marquer comme lu" : "Marquer non lu"} shortcut={t.unread ? undefined : "⇧U"} onClick={onToggleRead} />
@@ -1250,6 +1260,8 @@ export function Mails() {
     writePref("ttp:mails-vue", v ? "todo" : "all");
   };
   const openKey = thread ? keyOf(thread) : null;
+  // Expéditeurs « Pas à traiter » (liste de l'équipe) : leurs mails restent dans la boîte.
+  const ignored = useIgnoredSenders();
   const boxAll = useMemo(
     () => folderList.filter((t) => (box === "all" || t.box === box) && (!creatorKey || rowCreators(t).includes(creatorKey))),
     [folderList, box, creatorKey, rowCreators],
@@ -1259,15 +1271,15 @@ export function Mails() {
   const [unreadExtra, setUnreadExtra] = useState<InboxThread[]>([]);
   const boxThreads = useMemo(() => {
     if (!(unreadOnly && folder === "inbox")) {
-      if (todoOnly && folder === "inbox") return boxAll.filter((t) => needsReply(t) || keyOf(t) === openKey);
+      if (todoOnly && folder === "inbox") return boxAll.filter((t) => needsReply(t, ignored) || keyOf(t) === openKey);
       return boxAll;
     }
     const here = boxAll.filter((t) => t.unread || unreadOnly.has(keyOf(t)));
     const seen = new Set(here.map(keyOf));
     const more = unreadExtra.filter((t) => !seen.has(keyOf(t)) && (box === "all" || t.box === box) && (!creatorKey || rowCreators(t).includes(creatorKey)));
     return [...here, ...more];
-  }, [boxAll, unreadOnly, todoOnly, openKey, folder, unreadExtra, box, creatorKey, rowCreators]);
-  const todoCount = useMemo(() => boxAll.filter(needsReply).length, [boxAll]);
+  }, [boxAll, unreadOnly, todoOnly, openKey, folder, unreadExtra, box, creatorKey, rowCreators, ignored]);
+  const todoCount = useMemo(() => boxAll.filter((t) => needsReply(t, ignored)).length, [boxAll, ignored]);
   const unreadLoaded = useMemo(() => boxAll.filter((t) => t.unread).length, [boxAll]);
   // Même chiffre que la pastille de la boîte (compte du serveur), sauf filtre par créateur.
   const unreadHere = creatorKey ? unreadLoaded : Math.max(unreadLoaded, unreadShown);
@@ -1394,10 +1406,21 @@ export function Mails() {
     });
     setUndo({ kind: "trash", t, row, folder, done, at });
   };
+  /** « Pas à traiter » : l'expéditeur sort de « À traiter » (ses mails restent dans la boîte). */
+  const notTodo = (t: InboxThread) => {
+    const email = ignoreSender(t.email);
+    if (!email) return;
+    setUndo({ kind: "ignore", email, at: Date.now() });
+  };
   const undoLast = async () => {
     const u = undo;
     if (!u) return;
     setUndo(null);
+    if (u.kind === "ignore") {
+      unignoreSender(u.email);
+      toast("Remis dans « À traiter » ✓");
+      return;
+    }
     if (!(await u.done)) return;
     let ok = false;
     let err: string | undefined;
@@ -2202,6 +2225,7 @@ export function Mails() {
         onArchive={() => archive(target)}
         onTrash={() => trash(target)}
         onToggleRead={() => void setRead(target, !t.unread)}
+        onNotTodo={folder === "inbox" && needsReply(t, ignored) ? () => notTodo(t) : undefined}
       />
     );
   };
@@ -2532,6 +2556,9 @@ export function Mails() {
     if (thread && threadCreator) openCreator(threadCreator.creator, thread.threadId);
   };
   const tgt: Target | null = thread ? { threadId: thread.threadId, box: thread.box, subject: thread.subject } : null;
+  // Fil ouvert qui est dans « À traiter » : « Pas à traiter » proposé dans la barre du lecteur.
+  const tgtRow = tgt ? findRow(keyOf(tgt)) : null;
+  const tgtTodo = tgtRow && needsReply(tgtRow, ignored) ? tgtRow : null;
   const loaded = !!threadMsgs && readerMsgs.length > 0;
   const draftKey = thread ? replyDraftKey(thread.box, thread.threadId) : "";
   // Réponse en brouillon dans Gmail pour ce fil, pas encore reprise dans la zone de réponse.
@@ -2572,6 +2599,7 @@ export function Mails() {
             { key: "reply", label: "Répondre", icon: Reply, onClick: () => focusReply("reply") },
             { key: "forward", label: "Transférer", icon: Forward, onClick: forwardLast },
             { key: "archive", label: "Archiver", icon: Archive, onClick: () => archive(tgt) },
+            ...(tgtTodo ? [{ key: "nottodo", label: "Pas à traiter", icon: CircleSlash, onClick: () => notTodo(tgtTodo) }] : []),
             { key: "unread", label: "Marquer non lu", icon: Mail, onClick: () => void setRead(tgt, true) },
             { key: "copy", label: "Copier le fil pour Claude", icon: Copy, onClick: () => void copyThread() },
             ...(threadCreator ? [{ key: "creator", label: `Ce que voit ${firstName(threadCreator.creator)}`, icon: MessageSquareText, onClick: openThreadCreator }] : []),
@@ -2590,6 +2618,7 @@ export function Mails() {
             { id: "archive", label: "Archiver", icon: <Archive className="h-full w-full" />, shortcut: "e", onClick: () => archive(tgt) },
             { id: "trash", label: "Corbeille", icon: <Trash2 className="h-full w-full" />, shortcut: "#", onClick: () => trash(tgt) },
             { id: "unread", label: "Non lu", icon: <Mail className="h-full w-full" />, shortcut: "⇧U", onClick: () => void setRead(tgt, true) },
+            ...(tgtTodo ? [{ id: "nottodo", label: "Pas à traiter", icon: <CircleSlash className="h-full w-full" />, onClick: () => notTodo(tgtTodo) }] : []),
             ...(threadCreator ? [{ id: "creator", label: `Ce que voit ${firstName(threadCreator.creator)}`, icon: <MessageSquareText className="h-full w-full" />, onClick: openThreadCreator }] : []),
           ]}
         />
@@ -2958,14 +2987,25 @@ export function Mails() {
         )}
       </div>
 
-      {/* Archivé / mis à la corbeille : « Annuler » pendant 10 s. */}
+      {/* Archivé / mis à la corbeille / pas à traiter : « Annuler » pendant 10 s. */}
       {undo && (
         <div className="pointer-events-none fixed inset-x-0 bottom-[calc(10rem+env(safe-area-inset-bottom))] z-[1301] flex justify-center px-4 md:bottom-24">
           <div role="status" className="pointer-events-auto flex w-full max-w-[440px] items-center gap-3 rounded-xl border border-border bg-surface px-4 py-2.5 shadow-lg shadow-black/5">
-            {undo.kind === "trash" ? <Trash2 className="h-4 w-4 shrink-0 text-muted-foreground" /> : <Archive className="h-4 w-4 shrink-0 text-muted-foreground" />}
-            <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">
-              « {undo.t.subject || "(sans objet)"} » {undo.kind === "trash" ? "mis à la corbeille" : "archivé"}
-            </span>
+            {undo.kind === "ignore" ? (
+              <>
+                <CircleSlash className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate text-[13px] text-foreground" title={`Les mails de ${undo.email} restent dans la boîte de réception`}>
+                  Retiré de À traiter <span className="text-muted-foreground">· {undo.email}</span>
+                </span>
+              </>
+            ) : (
+              <>
+                {undo.kind === "trash" ? <Trash2 className="h-4 w-4 shrink-0 text-muted-foreground" /> : <Archive className="h-4 w-4 shrink-0 text-muted-foreground" />}
+                <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">
+                  « {undo.t.subject || "(sans objet)"} » {undo.kind === "trash" ? "mis à la corbeille" : "archivé"}
+                </span>
+              </>
+            )}
             <button type="button" onClick={() => void undoLast()}
               className="flex shrink-0 items-center gap-1 rounded-full px-2 py-1 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover">
               <Undo2 className="h-3.5 w-3.5" /> Annuler
