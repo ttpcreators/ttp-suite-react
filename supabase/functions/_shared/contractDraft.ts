@@ -52,7 +52,15 @@ export const REPR_KEYS = [
   "modeCommission", "regimeFiscalComm", "commApportee", "commInitiee", "commUniforme", "commAutonome", "seuil",
   "avantagesNatureInclus", "giftingSeuilStrict", "mandatEncaissement", "reversJours", "contestationVirementJours",
   "gestionMail", "mailChangementAccesHeures", "mailRevocationHeures", "visibiliteEmail",
+  "art6Souple", "declarationApproches", "approcheDirecteHeures", "collabAutonomeRegime", "exclusivite",
+  "clausePenaleActive", "clausePenaleMois", "conditionsParticulieres",
 ] as const;
+
+/** Texte libre des conditions particulières : retours à la ligne gardés (6 000 caractères au plus). */
+const CONDITIONS_MAX = 6000;
+function texteLibre(v: unknown): string {
+  return typeof v === "string" ? v.replace(/\r\n?/g, "\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, CONDITIONS_MAX) : "";
+}
 
 export type ContractDraft = {
   id: string;
@@ -159,9 +167,18 @@ function brouillonRepresentation(
   if (inconnues.length) return { erreur: `Réglage inconnu du contrat de représentation : ${inconnues.join(", ")}. Permis : ${REPR_KEYS.join(", ")}.` };
   const config: Record<string, string> = {};
   for (const k of REPR_KEYS) {
-    const v = reglage(r[k]);
+    const v = k === "conditionsParticulieres" ? texteLibre(r[k]) : reglage(r[k]);
     if (v) config[k] = v;
   }
+  // Les clauses envoyées à part (`clauses`) rejoignent les conditions particulières :
+  // elles sont imprimées dans l'encadré de fin de contrat, au lieu d'être perdues.
+  const clauses = (Array.isArray(a.clauses) ? (a.clauses as unknown[]) : [])
+    .map((c) => (c && typeof c === "object" ? (c as Json) : {}))
+    .map((o) => ({ l: txt(o.titre, 120), v: texteLibre(o.texte) }))
+    .filter((c) => c.v)
+    .slice(0, 6)
+    .map((c) => (c.l ? `${c.l} — ${c.v}` : c.v));
+  if (clauses.length) config.conditionsParticulieres = texteLibre([config.conditionsParticulieres ?? "", ...clauses].filter(Boolean).join("\n\n"));
   config.variante = config.variante === "nonexclusif" ? "nonexclusif" : "exclusif";
   if (!config.talentNom) config.talentNom = ctName;
   return {
@@ -188,7 +205,8 @@ export function resumeBrouillon(d: ContractDraft): string {
     const c = d.config ?? {};
     return [
       `Brouillon de contrat prêt dans l'app : représentation de ${d.ctName} (${c.variante === "nonexclusif" ? "non exclusif" : "exclusif"})${d.externe ? ", pas encore dans le roster" : ""} · id ${d.id}`,
-      `Réglages repris : ${Object.keys(c).filter((k) => k !== "variante").join(", ") || "ceux par défaut"}`,
+      `Réglages repris : ${Object.keys(c).filter((k) => k !== "variante" && k !== "conditionsParticulieres").join(", ") || "ceux par défaut"}`,
+      c.conditionsParticulieres ? `Conditions particulières enregistrées (${c.conditionsParticulieres.length} caractères), imprimées en encadré en fin de contrat. Relis le texte complet avec lire_contrat.` : "Pas de conditions particulières.",
       "Marc l'ouvre dans Contrats (en haut, « Brouillons à relire »), vérifie, puis l'enregistre : le brouillon disparaît alors tout seul.",
     ].join("\n");
   }

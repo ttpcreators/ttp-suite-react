@@ -5,7 +5,7 @@ import { cn, titleCase } from "@/lib/utils";
 import { useCreators } from "@/lib/useCreators";
 import { printHtml } from "@/lib/printPdf";
 import { useAppState, saveAppStateKey, listAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
-import { TextField, SelectField } from "@/components/ui/form";
+import { TextField, SelectField, TextAreaField } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
 import { toast } from "@/components/ui/toast";
 import { Select, SelectTrigger, SelectContent, SelectItem } from "@/components/ui/select";
@@ -21,7 +21,7 @@ import { Overlay } from "@/components/mobile/ios-sheet";
 import { fmtDay, todayISO } from "@/lib/dates";
 import { viewableUrl } from "@/lib/openLater";
 import { dbTrash } from "@/lib/trash";
-import { CONTRACT_DRAFTS_KEY } from "../../supabase/functions/_shared/contractDraft.ts";
+import { CONTRACT_DRAFTS_KEY, lireBrouillons, type ContractDraft } from "../../supabase/functions/_shared/contractDraft.ts";
 import { CasesBar, ContractDocument, FoldSection, HistoryPanel, PanelSection, SettingsPanel, SwitchRow, docBtn, docIconBtn, docPrimaryBtn } from "@/components/contracts/contract-ui";
 
 type Cfg = Record<string, string>;
@@ -92,7 +92,7 @@ export function RepresentationContract({ initial = null, draftId }: { initial?: 
   const skipPrefillRef = useRef(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Général: true, Talent: true });
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({ Général: true, Talent: true, "Conditions particulières": !!initial?.config?.conditionsParticulieres?.trim() });
 
   // Historique des contrats enregistrés (blob agence ; le fichier va aussi dans documents).
   const { data: histData } = useAppState<ContractHist[]>((s: AppState) => (s["contractHistory"] as ContractHist[]) ?? []);
@@ -145,6 +145,31 @@ export function RepresentationContract({ initial = null, draftId }: { initial?: 
       alive = false;
     };
   }, [draftId, initial?.creator]);
+
+  // Brouillon ouvert : chaque modification y est gardée (Alfred relit ainsi la dernière version
+  // avec lire_contrat, et rien n'est perdu en fermant la page avant d'enregistrer).
+  const draftCfgRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!draftId) return;
+    const json = JSON.stringify(config);
+    if (draftCfgRef.current === null) {
+      draftCfgRef.current = json; // état de départ : rien à écrire
+      return;
+    }
+    if (draftCfgRef.current === json) return;
+    const t = setTimeout(async () => {
+      try {
+        invalidateAppState();
+        const d = lireBrouillons((await getAppState())[CONTRACT_DRAFTS_KEY]).find((x) => x.id === draftId);
+        if (!d) return; // déjà enregistré (brouillon retiré) : on ne le recrée pas
+        const next: ContractDraft = { ...d, config, ts: Date.now() };
+        if (await listAppStateKey(CONTRACT_DRAFTS_KEY, [next], [])) draftCfgRef.current = json;
+      } catch {
+        /* réseau : réessayé à la prochaine modification */
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [config, draftId]);
 
   useEffect(() => {
     if (!ctName) return;
@@ -441,6 +466,14 @@ export function RepresentationContract({ initial = null, draftId }: { initial?: 
         </div>
       );
     }
+    if (f.type === "textarea") {
+      return (
+        <div key={f.key} className="min-w-0 sm:col-span-2">
+          <TextAreaField label={f.label} value={val} onChange={(v) => set(f.key, v)} rows={8} placeholder="Ex. Par dérogation à l'article 4, aucune commission n'est due sur…" />
+          {f.help && <p className="mt-1 text-[11.5px] text-faint">{f.help}</p>}
+        </div>
+      );
+    }
     const field =
       f.type === "select" ? (
         <SelectField label={f.label} value={val} onChange={(v) => set(f.key, v)} options={f.options ?? []} />
@@ -466,6 +499,7 @@ export function RepresentationContract({ initial = null, draftId }: { initial?: 
     if (g === "Général") return [optLabel("variante"), config.lieuSignature].filter(Boolean).join(" · ");
     if (g === "Durée") return [config.dureeMois ? `${config.dureeMois} mois` : "", optLabel("modeDuree")].filter(Boolean).join(" · ");
     if (g === "Commission") return optLabel("modeCommission");
+    if (g === "Conditions particulières") return config.conditionsParticulieres?.trim() ? "Ajoutées" : "Aucune";
     const bools = RC_FIELDS.filter((f) => f.group === g && f.type === "bool");
     if (!bools.length) return "";
     const on = bools.filter((f) => (config[f.key] ?? f.default) === "true").length;

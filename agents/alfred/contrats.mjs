@@ -84,8 +84,21 @@ const REPR_KEYS = [
 	"gestionMail",
 	"mailChangementAccesHeures",
 	"mailRevocationHeures",
-	"visibiliteEmail"
+	"visibiliteEmail",
+	"art6Souple",
+	"declarationApproches",
+	"approcheDirecteHeures",
+	"collabAutonomeRegime",
+	"exclusivite",
+	"clausePenaleActive",
+	"clausePenaleMois",
+	"conditionsParticulieres"
 ];
+/** Texte libre des conditions particulières : retours à la ligne gardés (6 000 caractères au plus). */
+const CONDITIONS_MAX$1 = 6e3;
+function texteLibre(v) {
+	return typeof v === "string" ? v.replace(/\r\n?/g, "\n").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, CONDITIONS_MAX$1) : "";
+}
 const txt = (v, max = 300) => typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "";
 const fold = (s) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 /** L'outil demande un contrat de représentation (type « representation » ou « repr »). */
@@ -175,9 +188,14 @@ function brouillonRepresentation(a, { id, ts, ctName, by = "Claude", externe = f
 	if (inconnues.length) return { erreur: `Réglage inconnu du contrat de représentation : ${inconnues.join(", ")}. Permis : ${REPR_KEYS.join(", ")}.` };
 	const config = {};
 	for (const k of REPR_KEYS) {
-		const v = reglage(r[k]);
+		const v = k === "conditionsParticulieres" ? texteLibre(r[k]) : reglage(r[k]);
 		if (v) config[k] = v;
 	}
+	const clauses = (Array.isArray(a.clauses) ? a.clauses : []).map((c) => c && typeof c === "object" ? c : {}).map((o) => ({
+		l: txt(o.titre, 120),
+		v: texteLibre(o.texte)
+	})).filter((c) => c.v).slice(0, 6).map((c) => c.l ? `${c.l} — ${c.v}` : c.v);
+	if (clauses.length) config.conditionsParticulieres = texteLibre([config.conditionsParticulieres ?? "", ...clauses].filter(Boolean).join("\n\n"));
 	config.variante = config.variante === "nonexclusif" ? "nonexclusif" : "exclusif";
 	if (!config.talentNom) config.talentNom = ctName;
 	return { brouillon: {
@@ -417,7 +435,7 @@ function contractTitle(title, sub) {
 function sigImgHtml() {
 	return "";
 }
-// src/lib/representationContract.ts
+// supabase/functions/_shared/representation.ts
 const RC_META = {
 	brandTitle: "TTP AGENCY",
 	brandSubtitle: "Talent Management & Influence Commerciale",
@@ -616,6 +634,14 @@ const RC_FIELDS = [
 		group: "Durée"
 	},
 	{
+		key: "art6Souple",
+		label: "Article 6 simplifié : fin à tout moment par e-mail",
+		type: "bool",
+		default: "false",
+		group: "Durée",
+		help: "Durée indéterminée, résiliation libre par e-mail avec le préavis de dénonciation ci-dessus (30 jours par défaut), sans recommandé ni périodes de reconduction. Remplace aussi l'article 10.1."
+	},
+	{
 		key: "modeCommission",
 		label: "Barème de commission",
 		type: "select",
@@ -683,10 +709,11 @@ const RC_FIELDS = [
 	},
 	{
 		key: "avantagesNatureInclus",
-		label: "Avantages en nature dans l'assiette",
+		label: "Commission sur les avantages en nature et les collabs en cadeaux seuls (art. 4.1 et 4.4)",
 		type: "bool",
 		default: "true",
-		group: "Commission"
+		group: "Commission",
+		help: "Désactivé : commission sur le numéraire seulement, aucune commission sur une collab payée uniquement en produits."
 	},
 	{
 		key: "giftingSeuilStrict",
@@ -788,6 +815,14 @@ const RC_FIELDS = [
 		help: "Si le Talent démarche lui-même une marque / relance un ancien client : doit-il informer l'Agence, ou peut-il gérer entièrement de son côté ?"
 	},
 	{
+		key: "declarationApproches",
+		label: "Déclaration des approches de marques à l'Agence (art. 7)",
+		type: "bool",
+		default: "true",
+		group: "Options",
+		help: "Désactivé : le Talent n'a pas à signaler les marques qui le contactent directement, ni les collaborations qu'il gère seul."
+	},
+	{
 		key: "charteEthique",
 		label: "Charte éthique TTP / ARPP",
 		type: "bool",
@@ -796,7 +831,7 @@ const RC_FIELDS = [
 	},
 	{
 		key: "clausePenaleActive",
-		label: "Clause pénale",
+		label: "Clause pénale (pénalité de l'article 10)",
 		type: "bool",
 		default: "true",
 		group: "Juridique"
@@ -879,8 +914,18 @@ const RC_FIELDS = [
 		type: "bool",
 		default: "true",
 		group: "Juridique"
+	},
+	{
+		key: "conditionsParticulieres",
+		label: "Conditions particulières (texte libre)",
+		type: "textarea",
+		default: "",
+		group: "Conditions particulières",
+		help: "Imprimé dans un encadré en fin de contrat, avec la mention qu'il prévaut sur toute stipulation contraire."
 	}
 ];
+const CONDITIONS_MENTION = "Les présentes conditions particulières prévalent sur toute stipulation contraire du contrat.";
+const CONDITIONS_MAX = 6e3;
 const RC_VARIANTS = [{
 	key: "exclusif",
 	label: "Exclusif — Contrat test (durée déterminée)",
@@ -1051,7 +1096,7 @@ const RC_ARTICLES = [
 		title: "Rémunération de l'Agence",
 		variant: "both",
 		includeIf: "modeCommissionParOrigine",
-		body: "4.1 Principe — La commission de l'Agence est déterminée selon l'origine du deal et calculée sur la rémunération brute perçue par le Talent (numéraire + valeur des avantages en nature). Elle s'entend {regimeFiscalComm}.\nSeuil — Aucune commission n'est due si la rémunération brute est inférieure à {seuil} € (avantages inclus) ; les taux s'appliquent à compter de {seuil} €.\n\n4.2 Barème —\n• Deal apporté ET géré par l'Agence : {commApportee} % {regimeFiscalComm}.\n• Deal initié par le Talent, géré par l'Agence : {commInitiee} % {regimeFiscalComm}.\n• Collaboration autonome (article 4.3) : {commAutonome} %.\n\nCes conditions particulières, individuellement négociées, dérogent le cas échéant aux conditions générales.\n\n4.3 Collaborations autonomes (exception stricte) — À titre exceptionnel et sous réserve de l'accord écrit préalable de l'Agence, le Talent peut conclure directement, sans commission, des partenariats non commerciaux ou des échanges entre pairs. Toute collaboration commerciale conclue hors de ce cadre, sans accord préalable, constitue une violation de l'exclusivité et entraîne l'application de la clause pénale prévue à l'article Fin et résiliation.\n\n4.4 Avantages en nature — Les dotations ne sont pas réductrices du numéraire. Leur valeur n'est intégrée à l'assiette de la commission que si la contrepartie est à 100 % en gifting et que la valeur est supérieure à {seuil} €."
+		body: "4.1 Principe — La commission de l'Agence est déterminée selon l'origine du deal et calculée sur {assietteCommission}. Elle s'entend {regimeFiscalComm}.\nSeuil — Aucune commission n'est due si la rémunération brute est inférieure à {seuil} €{seuilAvantages} ; les taux s'appliquent à compter de {seuil} €.\n\n4.2 Barème —\n• Deal apporté ET géré par l'Agence : {commApportee} % {regimeFiscalComm}.\n• Deal initié par le Talent, géré par l'Agence : {commInitiee} % {regimeFiscalComm}.\n• Collaboration autonome (article 4.3) : {commAutonome} %.\n\nCes conditions particulières, individuellement négociées, dérogent le cas échéant aux conditions générales.\n\n4.3 Collaborations autonomes (exception stricte) — À titre exceptionnel et sous réserve de l'accord écrit préalable de l'Agence, le Talent peut conclure directement, sans commission, des partenariats non commerciaux ou des échanges entre pairs. Toute collaboration commerciale conclue hors de ce cadre, sans accord préalable, constitue une violation de l'exclusivité et entraîne l'application de la clause pénale prévue à l'article Fin et résiliation.\n\n{art44}"
 	},
 	{
 		id: "art4_remuneration_uniforme",
@@ -1059,7 +1104,7 @@ const RC_ARTICLES = [
 		title: "Rémunération de l'Agence",
 		variant: "both",
 		includeIf: "modeCommissionUniforme",
-		body: "4.1 Principe — La commission de l'Agence est calculée sur la rémunération brute perçue par le Talent (numéraire + valeur des avantages en nature) et s'élève à {commUniforme} % {regimeFiscalComm}.\nSeuil — Aucune commission n'est due si la rémunération brute est inférieure à {seuil} € (avantages inclus) ; les taux s'appliquent à compter de {seuil} €.\n\n4.2 Barème —\n• Deal apporté par l'Agence, géré par l'Agence : {commUniforme} % {regimeFiscalComm}.\n• Deal apporté par le Talent, géré / négocié par l'Agence à sa demande : {commUniforme} % {regimeFiscalComm}.\n• Deal apporté ET géré intégralement par le Talent : {commAutonome} % (le Talent en informe néanmoins l'Agence).\n\nLes conditions particulières, individuellement négociées, dérogent le cas échéant aux conditions générales.\n\n4.3 Régime fiscal de la commission — La commission s'entend {regimeFiscalComm}. Lorsqu'elle s'entend TTC, le prélèvement s'opère net du taux applicable quelle que soit la situation fiscale du Talent.{mentionFranchiseTva}\n\n4.4 Avantages en nature — Les dotations ne sont pas réductrices du numéraire. Leur valeur n'est intégrée à l'assiette de la commission que si la contrepartie est à 100 % en gifting et que la valeur est supérieure à {seuil} €."
+		body: "4.1 Principe — La commission de l'Agence est calculée sur {assietteCommission} et s'élève à {commUniforme} % {regimeFiscalComm}.\nSeuil — Aucune commission n'est due si la rémunération brute est inférieure à {seuil} €{seuilAvantages} ; les taux s'appliquent à compter de {seuil} €.\n\n4.2 Barème —\n• Deal apporté par l'Agence, géré par l'Agence : {commUniforme} % {regimeFiscalComm}.\n• Deal apporté par le Talent, géré / négocié par l'Agence à sa demande : {commUniforme} % {regimeFiscalComm}.\n• Deal apporté ET géré intégralement par le Talent : {commAutonome} %{mentionInformeAgence}.\n\nLes conditions particulières, individuellement négociées, dérogent le cas échéant aux conditions générales.\n\n4.3 Régime fiscal de la commission — La commission s'entend {regimeFiscalComm}. Lorsqu'elle s'entend TTC, le prélèvement s'opère net du taux applicable quelle que soit la situation fiscale du Talent.{mentionFranchiseTva}\n\n{art44}"
 	},
 	{
 		id: "art5_mandat_encaissement",
@@ -1094,11 +1139,19 @@ const RC_ARTICLES = [
 		body: "6.1 Le présent contrat est conclu pour une durée initiale de {dureeMois} mois à compter de la signature. Il est TACITEMENT reconductible par périodes successives de {periodeReconductionMois} mois, sauf dénonciation par lettre recommandée avec accusé de réception moyennant un préavis de {preavisJours} jours.\n\n6.2 Période d'essai — Les Parties conviennent d'une période d'essai réciproque correspondant aux {essaiJours} premiers jours du contrat, durant laquelle chaque Partie peut résilier sans motif, par lettre recommandée avec accusé de réception, avec effet immédiat.{mentionEssaiEmail}"
 	},
 	{
+		id: "art6_souple",
+		number: "Article 6",
+		title: "Durée et fin du contrat",
+		variant: "both",
+		includeIf: "art6Souple",
+		body: "6.1 Le présent contrat prend effet le {dateDebut} pour une durée indéterminée, sans période de reconduction. Chaque Partie peut y mettre fin à tout moment, sans motif, par simple e-mail, moyennant un préavis de {preavisSouple}, dans les conditions de l'article 10.1.{essaiSouple}"
+	},
+	{
 		id: "art7_obligations",
 		number: "Article 7",
 		title: "Obligations du Talent",
 		variant: "both",
-		body: "Le Talent s'engage à :\n• fournir mensuellement ses insights analytics (plateformes, données démographiques, performances) ;\n• respecter les briefs, livrables et échéances convenus ;\n• informer l'Agence de toute approche directe de marque dans un délai de {approcheDirecteHeures} heures ;\n• respecter la charte éthique TTP (aucun contenu illégal, haineux, discriminatoire ou contraire aux recommandations de l'ARPP) ;\n• assumer la responsabilité de ses contenus et indemniser l'Agence en cas de litige lié à ceux-ci.\n\n{art7Collab}"
+		body: "Le Talent s'engage à :\n• fournir mensuellement ses insights analytics (plateformes, données démographiques, performances) ;\n• respecter les briefs, livrables et échéances convenus ;\n{puceApproches}• respecter la charte éthique TTP (aucun contenu illégal, haineux, discriminatoire ou contraire aux recommandations de l'ARPP) ;\n• assumer la responsabilité de ses contenus et indemniser l'Agence en cas de litige lié à ceux-ci.\n\n{art7Collab}"
 	},
 	{
 		id: "art7_obligations_mail",
@@ -1190,6 +1243,14 @@ const RC_ARTICLES = [
 		title: "Litiges et loi applicable",
 		variant: "both",
 		body: "Le présent contrat est régi par le droit français. En cas de différend, les Parties s'engagent à rechercher une solution amiable préalable, au besoin par la médiation {organeMediation}. À défaut d'accord dans un délai de {mediationDelaiJours} jours, le {tribunal} sera seul compétent."
+	},
+	{
+		id: "conditions_particulieres",
+		number: "Article 13",
+		title: "Conditions particulières",
+		variant: "both",
+		includeIf: "conditionsParticulieres",
+		body: ""
 	}
 ];
 const MONTHS = [
@@ -1229,6 +1290,14 @@ function addMonthsMinusDay(iso, months) {
 	return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 const is = (c, k) => c[k] === "true";
+/** Réglages absents (anciens contrats) : comme avant, la clause est là. */
+const approches = (c) => c.declarationApproches !== "false";
+const avantages = (c) => c.avantagesNatureInclus !== "false";
+/** Préavis de la résiliation libre : celui de l'article 6 simplifié (30 j par défaut), sinon le sien. */
+function preavisLibre(c) {
+	const n = is(c, "art6Souple") ? Number(c.preavisJours || "30") || 30 : Number(c.resiliationLibreJours || "1");
+	return Number.isFinite(n) && n > 0 ? Math.round(n) : 1;
+}
 /** Valeur d'un placeholder (config / champ créateur / figé / calculé). */
 function ph(key, c) {
 	switch (key) {
@@ -1253,16 +1322,24 @@ function ph(key, c) {
 		case "mentionExclusiviteFaute": return c.variante === "exclusif" && is(c, "exclusivite") ? " ou de l'exclusivité" : "";
 		case "mentionMailFaute": return is(c, "gestionMail") ? ", utilisation abusive des accès à la boîte mail" : "";
 		case "art7Collab": {
-			const regime = c.collabAutonomeRegime || (c.variante === "exclusif" ? "viaAgence" : "informer");
+			let regime = c.collabAutonomeRegime || (c.variante === "exclusif" ? "viaAgence" : "informer");
+			if (regime === "informer" && !approches(c)) regime = "libre";
 			if (regime === "libre") return "Collaborations initiées par le Talent — Le Talent demeure libre d'initier, de négocier et de gérer intégralement, par ses propres moyens (démarchage direct d'une marque, relance d'anciens partenaires, contacts personnels), les collaborations qu'il obtient de son propre chef. Ces collaborations, menées de bout en bout par le Talent, sont hors du périmètre du présent mandat : elles n'ouvrent droit à aucune commission au profit de l'Agence, et le Talent n'est pas tenu d'en informer cette dernière.";
 			if (regime === "informer") return "Collaborations initiées par le Talent — Le Talent peut initier et gérer lui-même des collaborations qu'il obtient par ses propres moyens (démarchage direct d'une marque, relance d'anciens partenaires). Il s'engage toutefois à en informer l'Agence, à des fins de transparence, de suivi et de cohérence de son image ; la commission éventuellement applicable est celle prévue à l'article 4.";
 			return "Collaborations initiées par le Talent — Toute opportunité de collaboration commerciale que le Talent viendrait à initier lui-même (démarchage direct d'une marque, relance d'anciens partenaires) est portée à la connaissance de l'Agence, qui en assure la gestion, la négociation et la conclusion. Le Talent s'interdit de conclure directement une collaboration commerciale sans l'intervention préalable de l'Agence.";
 		}
-		case "preavisResiliationLibre": return joursEnLettres(Number(c.resiliationLibreJours || "1"));
-		case "effetResiliationLibre": return Number(c.resiliationLibreJours || "1") === 1 ? "le lendemain de la notification" : "à l'expiration de ce préavis";
+		case "preavisResiliationLibre": return joursEnLettres(preavisLibre(c));
+		case "effetResiliationLibre": return preavisLibre(c) === 1 ? "le lendemain de la notification" : "à l'expiration de ce préavis";
+		case "preavisSouple": return joursEnLettres(preavisLibre(c));
+		case "essaiSouple": return is(c, "essaiActif") ? `\n\n6.2 Période d'essai — Les Parties conviennent d'une période d'essai réciproque correspondant aux ${c.essaiJours || "15"} premiers jours du contrat, durant laquelle chaque Partie peut y mettre fin sans motif, par simple e-mail, avec effet immédiat.` : "";
+		case "puceApproches": return approches(c) ? `• informer l'Agence de toute approche directe de marque dans un délai de ${c.approcheDirecteHeures || "48"} heures ;\n` : "";
+		case "mentionInformeAgence": return approches(c) ? " (le Talent en informe néanmoins l'Agence)" : "";
+		case "assietteCommission": return avantages(c) ? "la rémunération brute perçue par le Talent (numéraire + valeur des avantages en nature)" : "la seule rémunération en numéraire perçue par le Talent, hors avantages en nature";
+		case "seuilAvantages": return avantages(c) ? " (avantages inclus)" : "";
+		case "art44": return avantages(c) ? `4.4 Avantages en nature — Les dotations ne sont pas réductrices du numéraire. Leur valeur n'est intégrée à l'assiette de la commission que si la contrepartie est à 100 % en gifting et que la valeur est supérieure à ${c.seuil || "100"} €.` : "4.4 Avantages en nature — Les dotations, produits offerts et avantages en nature n'entrent pas dans l'assiette de la commission. Une collaboration rémunérée uniquement en produits ou en avantages en nature (gifting) ne donne lieu à aucune commission au profit de l'Agence.";
 		case "mentionJusquauTerme": return c.modeDuree === "determinee" ? " jusqu'à leur terme" : "";
 		case "numClausePenale": return is(c, "gestionMail") ? "5" : "4";
-		case "libelleClausePenale": return c.variante === "exclusif" ? "Toute violation avérée de l'exclusivité (collaboration conclue sans l'Agence, contournement)" : "Toute violation avérée des obligations du Talent ayant causé un préjudice à l'Agence (non-déclaration d'une collaboration manageable, contournement)";
+		case "libelleClausePenale": return c.variante === "exclusif" ? "Toute violation avérée de l'exclusivité (collaboration conclue sans l'Agence, contournement)" : `Toute violation avérée des obligations du Talent ayant causé un préjudice à l'Agence (${approches(c) ? "non-déclaration d'une collaboration manageable, " : ""}contournement)`;
 		case "organeMediation": return c.mediationOrg === "mediateurInfluence" ? "(médiateur spécialisé en influence commerciale)" : "(CCI de Lyon)";
 		default: return c[key] ?? "";
 	}
@@ -1302,16 +1379,23 @@ function nbspFr(text) {
 function resolve(text, c) {
 	return nbspFr(text.replace(/\{(\w+)\}/g, (_, k) => ph(k, c)));
 }
+const libre = (c) => is(c, "resiliationLibre") || is(c, "art6Souple");
+/** Conditions particulières telles que saisies (retours à la ligne gardés), bornées. */
+function conditionsText(c) {
+	return String(c.conditionsParticulieres ?? "").replace(/\r\n?/g, "\n").replace(/\n{3,}/g, "\n\n").trim().slice(0, CONDITIONS_MAX);
+}
 function includeOk(token, c) {
 	if (!token) return true;
 	switch (token) {
 		case "modeCommissionParOrigine": return c.modeCommission === "parOrigine";
 		case "modeCommissionUniforme": return c.modeCommission === "uniforme";
 		case "mandatEncaissementFalse": return !is(c, "mandatEncaissement");
-		case "modeDureeDeterminee": return c.modeDuree === "determinee";
-		case "modeDureeReconductible": return c.modeDuree === "reconductible";
-		case "finAuTerme": return c.modeDuree === "determinee" && !is(c, "resiliationLibre");
-		case "finAmiable": return c.modeDuree === "reconductible" && !is(c, "resiliationLibre");
+		case "modeDureeDeterminee": return c.modeDuree === "determinee" && !is(c, "art6Souple");
+		case "modeDureeReconductible": return c.modeDuree === "reconductible" && !is(c, "art6Souple");
+		case "finAuTerme": return c.modeDuree === "determinee" && !libre(c);
+		case "finAmiable": return c.modeDuree === "reconductible" && !libre(c);
+		case "resiliationLibre": return libre(c);
+		case "conditionsParticulieres": return !!conditionsText(c);
 		default: return is(c, token);
 	}
 }
@@ -1322,6 +1406,11 @@ function buildRepresentation(config) {
 	const articles = RC_ARTICLES.filter((a) => (a.variant === "both" || a.variant === variante) && includeOk(a.includeIf, config)).map((a) => {
 		let number = a.number;
 		if (a.id === "art_visibilite") number = variante === "exclusif" ? "Article 7 bis" : "Article 3 ter";
+		if (a.id === "conditions_particulieres") return {
+			number,
+			title: a.title,
+			body: `${nbspFr(conditionsText(config))}\n\n${CONDITIONS_MENTION}`
+		};
 		return {
 			number,
 			title: a.title,
@@ -1338,6 +1427,17 @@ function buildRepresentation(config) {
 		signatures: resolve(RC_META.signatures, config)
 	};
 }
+/** Réglages par défaut d'une variante (« exclusif » ou « nonexclusif ») : champs puis valeurs de la variante. */
+function rcDefaultConfig(variant) {
+	const base = {};
+	for (const f of RC_FIELDS) base[f.key] = f.default;
+	const v = RC_VARIANTS.find((x) => x.key === variant) ?? RC_VARIANTS[0];
+	return {
+		...base,
+		...v.defaults
+	};
+}
+// src/lib/representationContract.ts
 const esc$1 = (s) => String(s ?? "").replace(/[<>&]/g, (ch) => ({
 	"<": "&lt;",
 	">": "&gt;",
@@ -1408,7 +1508,9 @@ function representationHTML(config) {
 	}
 	const articles = groups.map((g) => {
 		const first = g.parts[0]?.body.trim() ?? "";
-		return `<section class="ct-art">${!g.number && first.toLowerCase().startsWith(g.title.toLowerCase()) ? "" : `<h2>${g.number ? `${esc$1(g.number)}. ` : ""}${esc$1(g.title)}</h2>`}${g.parts.map((p) => `${p.sub ? `<h3>${esc$1(sentence(p.sub))}</h3>` : ""}${htmlBody(p.body)}`).join("")}</section>`;
+		const h = !g.number && first.toLowerCase().startsWith(g.title.toLowerCase()) ? "" : `<h2>${g.number ? `${esc$1(g.number)}. ` : ""}${esc$1(g.title)}</h2>`;
+		if (g.title === "Conditions particulières") return `<section class="ct-art" style="border:1px solid #1a1a1a;border-radius:2mm;padding:4mm 5mm;margin-top:6mm;break-inside:avoid">${h}${g.parts.map((p) => htmlBody(p.body)).join("")}</section>`;
+		return `<section class="ct-art">${h}${g.parts.map((p) => `${p.sub ? `<h3>${esc$1(sentence(p.sub))}</h3>` : ""}${htmlBody(p.body)}`).join("")}</section>`;
 	}).join("");
 	const [headTitle, ...more] = c.title.split(/\s+—\s+/);
 	const details = [...more.map(sentence), c.subtitle].filter(Boolean).join(" · ");
@@ -1424,16 +1526,6 @@ ${articles}
 ${signaturesHTML(c.signatures)}
 <div class="ct-legal">${esc$1(RC_META.footer)}</div>
 </div></body></html>`;
-}
-/** Réglages par défaut d'une variante (« exclusif » ou « nonexclusif ») : champs puis valeurs de la variante. */
-function rcDefaultConfig(variant) {
-	const base = {};
-	for (const f of RC_FIELDS) base[f.key] = f.default;
-	const v = RC_VARIANTS.find((x) => x.key === variant) ?? RC_VARIANTS[0];
-	return {
-		...base,
-		...v.defaults
-	};
 }
 // src/lib/money.ts
 /**
