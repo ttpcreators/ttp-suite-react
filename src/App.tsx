@@ -789,6 +789,8 @@ export default function App() {
       if (l.open === "view") {
         // Du nouveau d'un créateur (tâche, idée, brief) : la page, sur l'objet si possible.
         if (l.view === "todo" && l.item) requestIntent("todo:open", l.item);
+        // Un lien d'Alfred (« Ouvrir dans l'app ») sur une collab : la fiche de la collab.
+        if (l.view === "collabs" && l.item) requestIntent("collab:open", l.item);
         navigateCurrentTab(l.view as ViewId);
       } else {
         requestIntent("mail:open", JSON.stringify({ thread: l.thread, box: l.box }));

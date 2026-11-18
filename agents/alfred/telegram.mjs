@@ -29,7 +29,7 @@
 
 import { execFile, spawn } from "node:child_process";
 import { homedir, tmpdir } from "node:os";
-import { appendFileSync, closeSync, copyFileSync, createWriteStream, openSync, readSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, copyFileSync, createWriteStream, openSync, readSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { dirname, join, resolve, sep } from "node:path";
@@ -384,11 +384,12 @@ export const cleSujet = (s) =>
  * réponse à ce qu'il vient d'écrire, une VIGILANCE ou un URGENT, un rappel, la liste à valider de
  * 17 h, et le premier message d'un point. Le reste arrive en silence.
  */
-export function doitSonner({ texte = "", nom = "", mode = "", premier = false }) {
+export function doitSonner({ texte = "", nom = "", mode = "", premier = false, sonner = {} }) {
   if (/\b(VIGILANCE|URGENT)\b|🔴/.test(texte)) return true;
   if (mode === "la réponse à Marc") return true;
-  if (/-valider\.txt$/.test(nom)) return true;
-  if (premier && /^le point du (matin|soir)$/.test(mode)) return true;
+  // Réglages d'Alfred dans l'app (page Agents) : Marc peut couper la sonnerie de la liste ou des points.
+  if (/-valider\.txt$/.test(nom)) return sonner.valider !== false;
+  if (premier && /^le point du (matin|soir)$/.test(mode)) return sonner.points !== false;
   return false;
 }
 
@@ -1050,6 +1051,12 @@ async function envoyerFichiers({ token, chatId, here, dir, names, fil, supprimer
   const waActif = readEnv(join(here, "config.env")).ALFRED_WA_ENVOI === "1";
   const mode = String(process.env.ALFRED_MODE ?? "");
   const sujets = lireSujets(here);
+  let sonner = {};
+  try {
+    sonner = JSON.parse(readFileSync(join(here, "etat/reglages.json"), "utf8")).sonner ?? {};
+  } catch {
+    sonner = {};
+  }
   let n = 0;
   for (const name of names) {
     const chemin = join(dir, name);
@@ -1096,7 +1103,7 @@ async function envoyerFichiers({ token, chatId, here, dir, names, fil, supprimer
         // Contrat fabriqué ici : son HTML et son PDF ne restent pas dans le dossier d'envoi.
         if (m.temporaire) for (const f of [m.temporaire, m.file]) rmSync(f, { force: true });
       } else {
-        const silence = !doitSonner({ texte: String(m.plain ?? m.text), nom: name, mode, premier: n === 0 });
+        const silence = !doitSonner({ texte: String(m.plain ?? m.text), nom: name, mode, premier: n === 0, sonner });
         const cite = replyTo ?? (cle && sujets[cle]?.id) ?? null;
         const id = await send(token, chatId, m, cite, { silence });
         if (cle && id) sujets[cle] = { id, at: Date.now() };
@@ -1243,6 +1250,96 @@ function lireSujets(here) {
   }
 }
 
+// ── Le pont avec l'app (demande de Marc, 17 novembre 2026) ──────────────────
+const PONT = "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/alfred-pont";
+
+/** Appelle alfred-pont avec le secret de config.env (ALFRED_PONT_SECRET). null sans secret ou en cas d'échec. */
+async function pont(env, body) {
+  const secret = env.ALFRED_PONT_SECRET;
+  if (!secret) return null;
+  try {
+    const r = await fetch(PONT, { method: "POST", headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(20_000) });
+    return r.ok ? await r.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Une nouvelle de l'app, en une ligne pour Alfred (une information, jamais un ordre). */
+export function ligneEvenement(e) {
+  const quand = new Date(e.cree_le ?? Date.now()).toLocaleString("fr-FR", { timeZone: "Europe/Paris", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+  const quoi = {
+    tache_cochee: "tâche cochée",
+    piece_deposee: "pièce déposée sur une tâche",
+    facture_payee: "facture passée en payée",
+    valide_dans_app: "validé dans la page Agents",
+    action_equipe: "action dans l'app",
+  }[e.type] ?? e.type;
+  const lien = e.lien ? ` · Ouvrir dans l'app : https://app.ttpcreators.pro${String(e.lien).startsWith("/") ? "" : "/"}${e.lien}` : "";
+  return `[${quand}] ${quoi}${e.auteur ? ` par ${e.auteur}` : ""}${e.cible ? ` · ${e.cible}` : ""}${e.detail ? ` · ${String(e.detail).replace(/\s+/g, " ").slice(0, 300)}` : ""}${lien}`;
+}
+
+/** Une demande écrite dans l'app (« Demander à Alfred »), rangée comme un message de Marc. */
+export function messageDemande(d) {
+  const deMarc = /^marc/i.test(String(d.auteur ?? ""));
+  const qui = deMarc ? "(demande écrite dans l'app)" : `(demande écrite dans l'app par ${d.auteur ?? "un membre de l'équipe"} : l'associé de Marc ; rien ne part sans le « oui » de Marc)`;
+  const ou = [d.contexte, d.lien ? `Ouvrir dans l'app : https://app.ttpcreators.pro${String(d.lien).startsWith("/") ? "" : "/"}${d.lien}` : ""].filter(Boolean).join(" · ");
+  return `${qui}${ou ? ` [${ou}]` : ""}\n${String(d.texte ?? "").trim()}`;
+}
+
+/** Ce qu'Alfred a envoyé à Marc depuis une position du fil (etat/conversation.md) : sa réponse. */
+export function reponseDepuis(fil, debut) {
+  const neuf = String(fil ?? "").slice(debut);
+  return neuf
+    .split(/\n(?=### )/)
+    .filter((b) => /^### [^\n]*· Alfred/.test(b.trim()))
+    .map((b) => b.trim().replace(/^### [^\n]*\n/, "").trim())
+    .filter(Boolean)
+    .join("\n\n")
+    .slice(0, 8000);
+}
+
+/** Met les commandes et raccourcis dans le menu « / » de Telegram. */
+async function mettreMenu(token, chatId, here) {
+  const file = join(here, "etat/raccourcis.txt");
+  const fichierCommandes = join(here, "etat/commandes.txt");
+  if (!existsSync(fichierCommandes)) writeFileSync(fichierCommandes, `${COMMANDES_DE_BASE}\n`);
+  // Les commandes ajoutées depuis (/valider, /createurs) : une seule fois, Marc peut les retirer ensuite.
+  const fichierAjouts = join(here, "etat/commandes-ajoutees.txt");
+  const { texte: avecAjouts, nouvelles } = ajouterCommandes(readFileSync(fichierCommandes, "utf8"), existsSync(fichierAjouts) ? readFileSync(fichierAjouts, "utf8") : "");
+  if (nouvelles.length) {
+    writeFileSync(fichierCommandes, avecAjouts);
+    appendFileSync(fichierAjouts, `${nouvelles.join("\n")}\n`);
+  }
+  const { commandes, refus } = menuDepuis(readFileSync(fichierCommandes, "utf8"), existsSync(file) ? readFileSync(file, "utf8") : "");
+  const res = await api(token, "setMyCommands", { commands: commandes, scope: { type: "chat", chat_id: Number(chatId) } });
+  if (!res.ok) throw new Error(`Telegram a refusé le menu : ${res.description ?? "erreur inconnue"}`);
+  return { commandes, refus };
+}
+
+/** Le pouls : signe de vie, nouvelles de l'app, demandes, réglages et commandes. Renvoie { demandes, evenements }. */
+async function prendrePouls(env, token, chatId, here, fil) {
+  const fichierCommandes = join(here, "etat/commandes.txt");
+  const local = existsSync(fichierCommandes) ? { texte: readFileSync(fichierCommandes, "utf8"), maj_le: statSync(fichierCommandes).mtime.toISOString() } : undefined;
+  const r = await pont(env, { action: "pouls", commandes: local });
+  if (!r) return { demandes: [], evenements: [] };
+  const fr = join(here, "etat/reglages.json");
+  const neuf = JSON.stringify(r.reglages ?? {}, null, 1);
+  if (r.reglages && (!existsSync(fr) || readFileSync(fr, "utf8") !== neuf)) writeFileSync(fr, neuf);
+  // Commandes changées dans l'app : le fichier de l'iMac et le menu « / » suivent.
+  if (r.commandes?.texte && r.commandes.texte !== local?.texte) {
+    writeFileSync(fichierCommandes, r.commandes.texte.endsWith("\n") ? r.commandes.texte : `${r.commandes.texte}\n`);
+    const t = new Date(r.commandes.maj_le);
+    if (!Number.isNaN(t.getTime())) utimesSync(fichierCommandes, t, t);
+    await mettreMenu(token, chatId, here).catch(() => {});
+  }
+  if (r.etait_hors_ligne) {
+    await send(token, chatId, { text: "Je suis de nouveau en ligne. Ce que tu m'as écrit pendant la coupure, je le traite maintenant.", md: false }).catch(() => {});
+    appendFileSync(fil, `\n### ${stamp()} · Alfred\nDe nouveau en ligne.\n`);
+  }
+  return { demandes: Array.isArray(r.demandes) ? r.demandes : [], evenements: Array.isArray(r.evenements) ? r.evenements : [] };
+}
+
 async function main() {
   const [mode, arg] = process.argv.slice(2);
   const here = fileURLToPath(new URL(".", import.meta.url));
@@ -1277,20 +1374,14 @@ async function main() {
 
   // Les raccourcis des créateurs dans le menu « / » de Telegram (seulement dans la discussion de Marc).
   if (mode === "raccourcis") {
-    const file = join(here, "etat/raccourcis.txt");
-    const fichierCommandes = join(here, "etat/commandes.txt");
-    if (!existsSync(fichierCommandes)) writeFileSync(fichierCommandes, `${COMMANDES_DE_BASE}\n`);
-    // Les commandes ajoutées depuis (/valider, /createurs) : une seule fois, Marc peut les retirer ensuite.
-    const fichierAjouts = join(here, "etat/commandes-ajoutees.txt");
-    const { texte: avecAjouts, nouvelles } = ajouterCommandes(readFileSync(fichierCommandes, "utf8"), existsSync(fichierAjouts) ? readFileSync(fichierAjouts, "utf8") : "");
-    if (nouvelles.length) {
-      writeFileSync(fichierCommandes, avecAjouts);
-      appendFileSync(fichierAjouts, `${nouvelles.join("\n")}\n`);
-    }
-    const { commandes, refus } = menuDepuis(readFileSync(fichierCommandes, "utf8"), existsSync(file) ? readFileSync(file, "utf8") : "");
-    const res = await api(token, "setMyCommands", { commands: commandes, scope: { type: "chat", chat_id: Number(chatId) } });
-    if (!res.ok) throw new Error(`Telegram a refusé le menu : ${res.description ?? "erreur inconnue"}`);
+    const { commandes, refus } = await mettreMenu(token, chatId, here);
     console.log(`Menu à jour : ${commandes.length} commande(s) et raccourci(s)${refus.length ? ` ; ignoré(s) (lettres minuscules, chiffres et _ seulement, sans doublon) : ${refus.join(" | ")}` : ""}.`);
+    return;
+  }
+
+  // Fin d'un passage (alfred.sh) : l'app affiche « dernier passage : point du soir à 17 h 02 ».
+  if (mode === "passage") {
+    await pont(env, { action: "passage", passage: String(arg ?? "") });
     return;
   }
 
@@ -1494,31 +1585,74 @@ async function main() {
   // Écoute en continu (launchd, com.ttp.alfred.ecoute) : dès que Marc écrit, Alfred répond.
   if (mode === "ecoute") {
     const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    // Le pouls (demande de Marc, 17 novembre 2026) : chaque minute, l'iMac dit à l'app qu'il est
+    // là, et reçoit les nouvelles de l'app et les demandes écrites dans « Demander à Alfred ».
+    let dernierPouls = 0;
+    const lancer = (args) =>
+      new Promise((resolve) => {
+        const p = spawn("/bin/zsh", [join(here, "alfred.sh"), ...args], { stdio: "ignore" });
+        p.on("exit", (c) => resolve(c));
+        p.on("error", () => resolve(1));
+      });
+    // Pendant un passage, l'écoute attend : un signe de vie par minute, pour que l'app ne le croie pas tombé.
+    const vivant = () => pont(env, { action: "vivant" });
+    const fichierEv = join(here, "etat/evenements.txt");
     for (;;) {
       let n = 0;
       let recus = [];
       try {
-        recus = await ranger(50);
+        recus = await ranger(dernierPouls ? 45 : 0);
         n = recus.length;
       } catch (e) {
         console.error(`${new Date().toISOString()} ${e.message}`);
         await sleep(e.code === 409 ? 30_000 : 5_000);
         continue;
       }
+      let demandes = [];
+      if (Date.now() - dernierPouls >= 45_000) {
+        dernierPouls = Date.now();
+        const p = await prendrePouls(env, token, chatId, here, fil).catch(() => ({ demandes: [], evenements: [] }));
+        demandes = p.demandes;
+        if (p.evenements.length) appendFileSync(fichierEv, `${p.evenements.map(ligneEvenement).join("\n")}\n`);
+      }
+      // Une demande écrite dans l'app : rangée comme un message de Marc (avec qui l'a écrite).
+      for (const d of demandes) {
+        const texte = messageDemande(d);
+        appendFileSync(join(here, "etat/file-recue.txt"), `[${stamp(new Date(d.cree_le ?? Date.now()))}] ${texte}\n\n`);
+        appendFileSync(fil, `\n### ${stamp(new Date(d.cree_le ?? Date.now()))} · Marc (depuis l'app)\n${texte}\n`);
+      }
+      n += demandes.length;
       // Une réponse remise à plus tard (limite de l'abonnement Claude, Claude surchargé) : relancée
       // toute seule à l'heure prévue, tant que des messages de Marc attendent (passage.mjs).
       const reprise = n ? null : repriseDue(here);
-      if (!n && !reprise) continue;
+      if (!n && !reprise) {
+        // Seulement des nouvelles de l'app : un passage court et silencieux (rien à dire, rien n'arrive à Marc).
+        if (existsSync(fichierEv) && readFileSync(fichierEv, "utf8").trim()) {
+          const lu = join(here, "etat/evenements-lus.txt");
+          writeFileSync(lu, readFileSync(fichierEv, "utf8"));
+          rmSync(fichierEv, { force: true });
+          const coeur = setInterval(vivant, 60_000);
+          const c = await lancer(["--evenements"]);
+          clearInterval(coeur);
+          // Raté : les nouvelles reviennent dans la file pour le prochain essai.
+          if (c !== 0) appendFileSync(fichierEv, readFileSync(lu, "utf8"));
+        }
+        continue;
+      }
+      const debutFil = existsSync(fil) ? readFileSync(fil, "utf8").length : 0;
       // « Alfred est en train d'écrire… » pendant tout le passage.
       const typing = () => api(token, "sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
       typing();
       const tick = setInterval(typing, 4_000);
-      const code = await new Promise((resolve) => {
-        const p = spawn("/bin/zsh", [join(here, "alfred.sh"), "--reponse", ...(reprise ? ["reprise"] : [])], { stdio: "ignore" });
-        p.on("exit", (c) => resolve(c));
-        p.on("error", () => resolve(1));
-      });
+      const coeur = setInterval(vivant, 60_000);
+      const code = await lancer(["--reponse", ...(reprise ? ["reprise"] : [])]);
       clearInterval(tick);
+      clearInterval(coeur);
+      // Les demandes de l'app reçoivent la réponse d'Alfred, visible aussi dans l'app.
+      if (demandes.length) {
+        const texte = reponseDepuis(readFileSync(fil, "utf8"), debutFil) || (code === 0 ? "" : "Alfred n'a pas pu répondre : il réessaie, ou redemande sur Telegram.");
+        await pont(env, { action: "reponse", demandes: demandes.map((d) => d.id), texte });
+      }
       // 👌 sur les messages de Marc traités (Telegram n'a pas de ✅ parmi ses réactions).
       if (code === 0) for (const m of recus) if (!m.toucher && m.id) api(token, "setMessageReaction", { chat_id: chatId, message_id: m.id, reaction: [{ type: "emoji", emoji: "👌" }] }).catch(() => {});
       // Le passage relancé n'a pas pu se faire (il n'a pas touché à la reprise) : on l'oublie, pour ne pas boucler.

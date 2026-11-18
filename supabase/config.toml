@@ -221,3 +221,6 @@ verify_jwt = false
 
 [functions.agent-watchdog]
 verify_jwt = false
+
+[functions.alfred-pont]
+verify_jwt = false

@@ -34,6 +34,7 @@ import { FolderTabs, type FolderTabItem } from "@/components/ui/folder-tabs";
 import { COLLAB_TABS, normalizeCollabTab, type CollabTab } from "@/lib/collabTabs";
 import { Gifting } from "@/views/Gifting";
 import { Prospection } from "@/views/Prospection";
+import { AlfredSurCollab } from "@/components/alfred-app";
 import { requestIntent, useIntent } from "@/lib/openIntent";
 import { PlatformIcon } from "@/components/ui/platform-icon";
 import { fmtCompact } from "@/lib/timeSeries";
@@ -1090,6 +1091,8 @@ export function Collabs() {
         />
         {/* Exclusivité signée avec cette marque (points clés) ou exclusivité qui la bloque. */}
         <CollabExcluPanel creator={row.creator} brand={row.brand} />
+        {/* Alfred sur ce dossier : sa demande et l'historique complet (demande de Marc, 17/11/2026). */}
+        <AlfredSurCollab collab={{ id: row.id, brand: row.brand, creator: row.creator }} />
       </div>
     );
   };
