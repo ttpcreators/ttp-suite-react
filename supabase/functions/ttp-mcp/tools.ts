@@ -35,6 +35,7 @@ import { CREE_PAR_CLAUDE, preparerBrouillonPost } from "../_shared/igDraft.ts";
 import { appliquerChiffres } from "../_shared/mediakitChiffres.ts";
 import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
 import { CONTRACT_DRAFTS_KEY, DRAFT_OPTS, choisirCreateur, estRepresentation, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "../_shared/contractDraft.ts";
+import { ligneContrat, texteContrat, trouverContrats } from "../_shared/contractLecture.ts";
 import { cleanUser, construireBase, filtrerBase, ligneBase, type BaseMeta, type BaseRow } from "../_shared/baseCreateurs.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
@@ -2606,7 +2607,7 @@ const preparerContrat: Tool = {
       representation: {
         type: "object",
         description:
-          "Représentation seulement : les réglages du générateur de l'app, en texte (« true » / « false » pour oui / non, dates AAAA-MM-JJ). variante : exclusif ou nonexclusif. Ex. talentNom, talentDateNaissance, talentAdresse, talentSiret, talentEmailPro, dateSignature, dateDebut, dureeMois, modeDuree (determinee ou reconductible), modeCommission (parOrigine ou uniforme), commApportee, commInitiee, commUniforme, gestionMail, contratTest.",
+          "Représentation seulement : les réglages du générateur de l'app, en texte (« true » / « false » pour oui / non, dates AAAA-MM-JJ). variante : exclusif ou nonexclusif. Ex. talentNom, talentDateNaissance, talentAdresse, talentSiret, talentEmailPro, dateSignature, dateDebut, dureeMois, modeDuree (determinee ou reconductible), modeCommission (parOrigine ou uniforme), commApportee, commInitiee, commUniforme, gestionMail, contratTest. Options d'articles : declarationApproches « false » retire la déclaration des approches de marques (art. 7) ; clausePenaleActive « false » retire la pénalité de l'article 10 ; avantagesNatureInclus « false » = aucune commission sur les avantages en nature ni sur les collabs en cadeaux seuls (art. 4.1 et 4.4) ; art6Souple « true » = article 6 simplifié (fin à tout moment par e-mail avec preavisJours, 30 par défaut, sans recommandé ni périodes de reconduction). conditionsParticulieres : texte libre sur plusieurs lignes, imprimé dans un encadré en fin de contrat (il prévaut sur toute stipulation contraire).",
         additionalProperties: { type: ["string", "number", "boolean"] },
       },
       montant: { type: "string", description: "Ex. « 400 € HT »" },
@@ -2623,7 +2624,7 @@ const preparerContrat: Tool = {
       defraiement: { type: "boolean", description: "Frais et produits pris en charge par la marque" },
       clauses: {
         type: "array",
-        description: "Clauses en plus des clauses de l'agence (6 au plus)",
+        description: "Clauses en plus des clauses de l'agence (6 au plus). Pour une représentation, elles s'ajoutent aux conditions particulières (encadré de fin de contrat).",
         items: { type: "object", properties: { titre: { type: "string" }, texte: { type: "string" } }, required: ["titre", "texte"], additionalProperties: false },
       },
       note: { type: "string", description: "Ce que Marc doit vérifier avant de générer, avec la source (mail du …)" },
@@ -2655,11 +2656,39 @@ const preparerContrat: Tool = {
   },
 };
 
+const lireContrat: Tool = {
+  name: "lire_contrat",
+  title: "Relire le texte d'un contrat",
+  description:
+    "Le texte COMPLET d'un contrat de représentation, exactement comme l'app l'imprime (articles, options, conditions particulières), pour relire avant signature : un brouillon (avec les modifications faites dans l'app par Marc) ou un contrat enregistré. Avec `id` (rendu par preparer_contrat ou par la liste) : ce contrat. Avec `createur` : la liste de ses brouillons et contrats, et le texte du plus récent. Lecture seule.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      id: { type: "string", description: "Id du brouillon (preparer_contrat) ou du contrat enregistré" },
+      createur: { type: "string", description: "Nom du créateur (sans accents ni majuscules, une partie suffit)" },
+    },
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const id = str(a.id, 64);
+    const createur = str(a.createur, 80);
+    if (!id && !createur) return fail("Donne `id` ou `createur`.");
+    const st = await appState(sb);
+    const list = trouverContrats(st[CONTRACT_DRAFTS_KEY], st.contractHistory, { id, createur });
+    if (!list.length) return fail(id ? `Contrat introuvable (${id}) : il a peut être été enregistré, cherche par créateur.` : `Aucun brouillon ni contrat enregistré pour « ${createur} ».`);
+    const first = list[0];
+    return ok([
+      ...(list.length > 1 ? [`# Contrats · ${list.length}`, ...list.map(ligneContrat), "", `Texte du plus récent (${first.kind === "brouillon" ? "brouillon" : "enregistré"}, id ${first.id}) :`] : [ligneContrat(first), ""]),
+      texteContrat(first),
+    ].join("\n"));
+  },
+};
+
 export const TOOLS: Tool[] = [
   pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
   creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
-  lireBrief, resumerBrief,
+  lireBrief, resumerBrief, lireContrat,
   compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, baseCreateurs, notifications,
   droitsUsage, noterDroits, postsCreateur, preparerContrat,
   ...ADMIN_TOOLS,

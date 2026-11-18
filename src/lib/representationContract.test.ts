@@ -43,3 +43,16 @@ describe("fin du contrat calculée (audit 2026-11-11)", () => {
     expect(addMonthsMinusDay("2026-03-01", 1)).toBe("2026-03-31");
   });
 });
+
+describe("conditions particulières dans le PDF", () => {
+  it("encadré en fin de contrat, avant les signatures, avec la mention", async () => {
+    const { representationHTML, rcDefaultConfig, CONDITIONS_MENTION } = await import("./representationContract");
+    const html = representationHTML({ ...rcDefaultConfig("nonexclusif"), talentNom: "Adelina", conditionsParticulieres: "Aucune commission sur <les cadeaux>." });
+    const i = html.indexOf("Conditions particulières</h2>");
+    expect(i).toBeGreaterThan(html.indexOf("Litiges et loi applicable"));
+    expect(i).toBeLessThan(html.indexOf("class=\"ct-sign\""));
+    expect(html).toContain("border:1px solid");
+    expect(html).toContain("&lt;les cadeaux&gt;");
+    expect(html).toContain(CONDITIONS_MENTION);
+  });
+});
