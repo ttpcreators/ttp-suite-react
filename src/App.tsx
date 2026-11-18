@@ -770,7 +770,7 @@ export default function App() {
   // l'espace créateur qui la tient.
   const isAgency = profile?.role === "agency";
   const notifLocal = useNotifLocal();
-  useAppBadge(unreadCount(notifs.map((n) => n.id), notifLocal.read, notifLocal.archived), isAgency);
+  useAppBadge(unreadCount(notifs.filter((n) => !n.read).map((n) => n.id), notifLocal.read, notifLocal.archived), isAgency);
 
   // Notifications de mails : ouvrir Mails les retire (comme Gmail) ; le service worker
   // demande où l'on est pour ne pas afficher un mail qu'on a déjà sous les yeux.

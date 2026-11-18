@@ -57,7 +57,10 @@ export function useNavBadges(uid: string | undefined, notifs: NotificationItem[]
       rows("ideas", supabase.from("ideas").select("created_at").eq("source", "creator").gte("created_at", since).limit(200)),
       rows("planning", supabase.from("events").select("created_at").eq("source", "creator").or("deleted.is.null,deleted.eq.false").gte("created_at", since).limit(200)),
       rows("gifting", supabase.from("gifting").select("created_at").eq("source", "creator").gte("created_at", since).limit(200)),
-      rows("mails", supabase.from("email_activity").select("created_at").eq("direction", "in").gte("created_at", since).limit(300)),
+      // Mails déjà ouverts dans Gmail ou Spark : pas comptés (« * » : marche avant la colonne read_at).
+      Promise.resolve(supabase.from("email_activity").select("*").eq("direction", "in").gte("created_at", since).limit(300)).then(({ data, error }) =>
+        error ? [] : ((data ?? []) as (Row & { read_at?: string | null })[]).filter((r) => !r.read_at).map((r) => ({ page: "mails", at: Date.parse(r.created_at) })),
+      ),
       rows("mails", supabase.from("creator_mail_status_log").select("created_at").eq("by_role", "creator").gte("created_at", since).limit(200)),
       rows("mails", supabase.from("creator_mail_notes").select("created_at").eq("by_role", "creator").gte("created_at", since).limit(200)),
     ]).then((lists) => {
