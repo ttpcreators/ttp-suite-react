@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { ligneEvenement, messageDemande, reponseDepuis, origineTransfert, texteDuMail, ajouterCommandes, carteDepuis, cleSujet, commandeFixe, doitSonner, enHtml, extraireSujet, graphiqueHtml, ligneRemise, messageMail, aEnvoyerWhatsApp, boutonsLiens, chunks, clavier, commandesDepuis, COMMANDES_DE_BASE, menuDepuis, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
+import { ecrireSkill, ligneEvenement, messageDemande, reponseDepuis, origineTransfert, texteDuMail, ajouterCommandes, carteDepuis, cleSujet, commandeFixe, doitSonner, enHtml, extraireSujet, graphiqueHtml, ligneRemise, messageMail, aEnvoyerWhatsApp, boutonsLiens, chunks, clavier, commandesDepuis, COMMANDES_DE_BASE, menuDepuis, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -445,5 +445,18 @@ describe("raccourcis des créateurs", () => {
       const fil = `${avant}\n### mar. 18 nov. · Marc (depuis l'app)\nRelance Nova\n\n### mar. 18 nov. · Alfred\nJe prépare la relance.\n\n### mar. 18 nov. · Alfred\nMail à Nova prêt.\n`;
       expect(reponseDepuis(fil, avant.length)).toBe("Je prépare la relance.\n\nMail à Nova prêt.");
     });
+  });
+
+  it("écrit une skill reçue du pont, jamais hors de son dossier", () => {
+    const ici = mkdtempSync(join(tmpdir(), "alfred-skill-"));
+    try {
+      expect(ecrireSkill(ici, { nom: "conseil", fichiers: { "SKILL.md": "# Conseil", "references/prompt.md": "texte", "../evil.md": "non" } })).toBe(true);
+      expect(readFileSync(join(ici, ".claude/skills/conseil/SKILL.md"), "utf8")).toBe("# Conseil");
+      expect(readFileSync(join(ici, ".claude/skills/conseil/references/prompt.md"), "utf8")).toBe("texte");
+      expect(ecrireSkill(ici, { nom: "../x", fichiers: { "SKILL.md": "a" } })).toBe(false);
+      expect(ecrireSkill(ici, { nom: "sans-skill", fichiers: { "a.md": "a" } })).toBe(false);
+    } finally {
+      rmSync(ici, { recursive: true, force: true });
+    }
   });
 });
