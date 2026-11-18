@@ -253,7 +253,7 @@ done < etat/delegations.md
 # seulement quand Marc vient d'écrire, ou pendant une délégation avec envoi autorisé.
 ttp="mcp__claude_ai_TTP_Suite__"
 lire="objectifs modeles_mails base_createurs boites_createurs lien_boite_createur droits_usage posts_createur brouillons_claude journal_agents stats_collab compta lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
-agir="ajouter_modele proposer_action ecarter_proposition noter_reversement brouillon_post_instagram noter_droits noter_journal creer_meet ajouter_au_scouting changer_statut_scouting creer_brouillon_mail supprimer_brouillon preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
+agir="marquer_lu ajouter_modele proposer_action ecarter_proposition noter_reversement brouillon_post_instagram noter_droits noter_journal creer_meet ajouter_au_scouting changer_statut_scouting creer_brouillon_mail supprimer_brouillon preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
 sur_oui="envoyer_brouillon noter_lecon maj_chiffres_mediakit"
 interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture preparer_reponse_mail resumer_brief"
 # Seule commande permise : télécharger et découper une vidéo dont le lien est dans un mail.
