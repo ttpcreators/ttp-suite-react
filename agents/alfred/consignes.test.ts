@@ -40,4 +40,14 @@ describe("Alfred : le tronc et les fiches", () => {
   it("pas de tiret long dans les consignes", () => {
     for (const t of textes) expect(t).not.toMatch(/[—–]/);
   });
+
+  it("l'examen : une réponse attendue pour chaque question, des noms fictifs", () => {
+    const q = readFileSync(join(ici, "examen", "questions.md"), "utf8");
+    const r = readFileSync(join(ici, "examen", "attendu.md"), "utf8");
+    const titres = (t: string) => [...t.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+    expect(titres(q).length).toBeGreaterThanOrEqual(8);
+    expect(titres(r)).toEqual(titres(q));
+    for (const t of [q, r]) expect(t).not.toMatch(/[—–]|Prison Island|Fitaya|Léna|Pasquale/);
+  });
 });
+

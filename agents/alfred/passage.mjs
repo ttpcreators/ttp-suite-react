@@ -31,6 +31,9 @@ export const VIGIE = "la vigie des réseaux";
 export const BILAN_SOIR = "le bilan du soir";
 /** Les nouvelles de l'app (pont alfred-pont) : un raté reste silencieux, l'écoute réessaie. */
 export const NOUVELLES = "les nouvelles de l'app";
+/** L'examen du dimanche et sa correction : un raté ne dérange pas Marc. */
+export const EXAMEN = "l'examen de la semaine";
+export const CORRECTION = "la correction de l'examen";
 const MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 
 const court = (s, max = 160) => {
@@ -161,7 +164,7 @@ export function messageEchec({ type, raison = "", mode = REPONSE, garder = false
     return `Je me suis arrêté avant la fin de ma réponse${pourquoi}. Redemande-moi ce qui manque.`;
   }
   // La veille ratée ne dérange pas Marc (la suivante ou le point la rattrape), sauf si Claude est déconnecté.
-  if ((mode === VEILLE || mode === VIGIE || mode === BILAN_SOIR || mode === NOUVELLES) && type !== "connexion") return "";
+  if ((mode === VEILLE || mode === VIGIE || mode === BILAN_SOIR || mode === NOUVELLES || mode === EXAMEN || mode === CORRECTION) && type !== "connexion") return "";
   const action = reponse ? "te répondre" : `faire ${mode}`;
   if (type === "limite") {
     const suite = garde ? ` Ton message est gardé : je te réponds tout seul ${fin ? "à ce moment-là" : "dès que ça repart"}.` : ` ${relance(mode, fin)}`;
@@ -190,7 +193,7 @@ export function messageAttente({ reprise, mode = REPONSE, origine = "marc", main
     if (origine !== "marc") return "";
     return `Toujours à la limite de ton abonnement Claude${fin ? `, jusqu'à ${fin}` : ""} : ton message est gardé, je te réponds tout seul ${fin ? "à ce moment-là" : "dès que ça repart"}.`;
   }
-  if (mode === "la préparation des rendez-vous" || mode === VEILLE || mode === VIGIE || mode === BILAN_SOIR || mode === NOUVELLES) return "";
+  if (mode === "la préparation des rendez-vous" || mode === VEILLE || mode === VIGIE || mode === BILAN_SOIR || mode === NOUVELLES || mode === EXAMEN || mode === CORRECTION) return "";
   return `Pas de ${mode.replace(/^(le |la )/, "")} pour l'instant : limite de ton abonnement Claude${fin ? `, jusqu'à ${fin}` : ""}. ${relance(mode, fin)}`;
 }
 
