@@ -25,6 +25,7 @@
 // Envoi : boîte partnerships@ (connexion Google de l'app, droit gmail.send).
 // verify_jwt = false (config.toml) : l'appel du cron n'est pas un JWT.
 // Sortie : { ok, month, files, bytes, attached, recipients } ou { error }.
+// État : chaque passage écrit `backupStatus` dans le blob agence (_shared/backupStatus.ts).
 // ============================================================================
 
 import { zipSync, strToU8 } from "npm:fflate@0.8.2";
@@ -32,6 +33,7 @@ import { CRON_SECRET, corsHeaders, getAccessToken, getServiceClient, timingSafeE
 import { readAppState } from "../_shared/appState.ts";
 import { backupMonth, mediakitPages, mediakitSlug, mimeMessage, pdfLinksIn, safeAppState, toCsv } from "../_shared/backup.ts";
 import { DriveFail, ensureFolder, putFile, type DriveError } from "../_shared/drive.ts";
+import { BACKUP_STATUS_KEY, statusFromResult, type BackupResult, type BackupStatus } from "../_shared/backupStatus.ts";
 
 const SITE = "https://ttpcreators.pro";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
@@ -82,6 +84,22 @@ async function authorize(req: Request, sb: Sb): Promise<"cron" | "founder" | nul
   return prof?.role === "agency" && prof.agency_role === "founder" ? "founder" : null;
 }
 
+/**
+ * État du passage dans le blob agence (clé `backupStatus`, lue par Paramètres). UNE clé
+ * via app_state_set (jsonb_set sous verrou de ligne), jamais le blob entier : si la
+ * fonction SQL manque ou que l'écriture rate, la sauvegarde continue sans état.
+ */
+async function recordStatus(sb: Sb, status: BackupStatus): Promise<void> {
+  try {
+    const { error } = await sb.rpc("app_state_set", { p_key: BACKUP_STATUS_KEY, p_value: status });
+    if (error) console.error("monthly-backup app_state_set", error.message);
+  } catch (e) {
+    console.error("monthly-backup app_state_set", String(e).slice(0, 200));
+  }
+}
+
+type Out = { status: number; body: BackupResult & Record<string, unknown> };
+
 Deno.serve(async (req: Request) => {
   const cors = corsHeaders(req.headers.get("Origin"));
   const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...cors, "Content-Type": "application/json" } });
@@ -89,9 +107,27 @@ Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
   const sb = getServiceClient();
-  if (!(await authorize(req, sb))) return json({ error: "unauthorized" }, 401);
+  const who = await authorize(req, sb);
+  if (!who) return json({ error: "unauthorized" }, 401);
 
-  const now = new Date();
+  // Chaque passage (cron ou bouton) laisse son état : « en cours » au départ, puis le
+  // résultat. Un passage coupé net (limite de temps) reste « en cours » : Paramètres
+  // l'affiche comme interrompu au bout de 15 minutes.
+  const source = who === "cron" ? "cron" : "manuel";
+  const startedAt = new Date();
+  await recordStatus(sb, { at: startedAt.toISOString(), running: true, source });
+  let out: Out;
+  try {
+    out = await runBackup(sb, startedAt);
+  } catch (e) {
+    console.error("monthly-backup", String(e).slice(0, 300));
+    out = { status: 500, body: { error: "erreur_inattendue" } };
+  }
+  await recordStatus(sb, statusFromResult(startedAt, new Date(), source, out.body));
+  return json(out.body, out.status);
+});
+
+async function runBackup(sb: Sb, now: Date): Promise<Out> {
   const month = backupMonth(now);
   const files: Record<string, Uint8Array> = {};
   const counts: { name: string; n: string }[] = [];
@@ -199,7 +235,7 @@ Deno.serve(async (req: Request) => {
   const founders = (await founderEmails(sb)).map((x) => x.trim().toLowerCase());
   const chosen = listed.filter((x) => founders.includes(x));
   const to = chosen.length ? chosen : founders;
-  if (!to.length) return json({ error: "aucun_destinataire" }, 409);
+  if (!to.length) return { status: 409, body: { error: "aucun_destinataire", drive } };
   const attach = zip.length <= ATTACH_MAX;
   const mb = (zip.length / 1024 / 1024).toFixed(1).replace(".", ",");
   const html =
@@ -218,7 +254,7 @@ Deno.serve(async (req: Request) => {
     html,
     attachments: attach ? [{ filename: name, mimeType: "application/zip", bytes: zip }] : [],
   });
-  if (!token) return json({ error: "google_non_connecte", stored: !up.error }, 409);
+  if (!token) return { status: 409, body: { error: "google_non_connecte", stored: !up.error, drive } };
   // Envoi « media » : accepte un mail jusqu'à 35 Mo (le format JSON raw s'arrête à 5 Mo).
   const sent = await fetch("https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media", {
     method: "POST",
@@ -228,7 +264,7 @@ Deno.serve(async (req: Request) => {
   });
   if (!sent.ok) {
     console.error("monthly-backup send", sent.status, (await sent.text()).slice(0, 300));
-    return json({ error: "envoi_echoue", stored: !up.error }, 502);
+    return { status: 502, body: { error: "envoi_echoue", stored: !up.error, drive } };
   }
-  return json({ ok: true, month, files: Object.keys(files).length, bytes: zip.length, attached: attach, recipients: to.length, missing, drive });
-});
+  return { status: 200, body: { ok: true, month, files: Object.keys(files).length, bytes: zip.length, attached: attach, recipients: to.length, missing, drive } };
+}

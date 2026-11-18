@@ -10,7 +10,8 @@ import { supabase } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
 import { ACCENT_PRESETS, ACCENT_GRADIENTS, getAccent, setAccent, isHex, parseGradient, THEME_CHOICES, type ThemeChoice } from "@/lib/accent";
 import { NOTIF_TEXTS_CREATOR, NOTIF_TEXTS_AGENCY, type NotifTextField } from "@/lib/notifTexts";
-import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { useAppState, saveAppStateKey, getAppState, invalidateAppState, refreshAppState, type AppState } from "@/lib/appState";
+import { BACKUP_STATUS_KEY, backupStatusLine, latestStatus } from "../../supabase/functions/_shared/backupStatus.ts";
 import { RELANCE_DAYS, type ProspectSettings, type WaMode } from "@/lib/touches";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
@@ -184,10 +185,15 @@ function PrefRow({
 /**
  * Sauvegarde mensuelle par mail (fonction monthly-backup, cron le 1er du mois) : les
  * fondateurs reçoivent une archive avec les CSV, les réglages (sans le coffre) et les
- * media kits. Bouton pour l'envoyer tout de suite.
+ * media kits. Bouton pour l'envoyer tout de suite. Sous le titre : l'état du dernier
+ * passage (clé `backupStatus` du blob, écrite par la fonction à chaque passage).
  */
 function BackupCard() {
   const [busy, setBusy] = useState(false);
+  const { data: saved } = useAppState((s) => s[BACKUP_STATUS_KEY]);
+  // État relu juste après « Envoyer maintenant » (sans attendre le prochain tick).
+  const [fresh, setFresh] = useState<unknown>(null);
+  const line = backupStatusLine(latestStatus(saved, fresh));
   const run = async () => {
     setBusy(true);
     try {
@@ -209,6 +215,10 @@ function BackupCard() {
       toast(`Sauvegarde envoyée ✓ (${mb} Mo${d.attached ? ", jointe au mail" : ", lien dans le mail"})`);
     } finally {
       setBusy(false);
+      // Succès ou échec, la fonction a laissé son état : on le relit tout de suite.
+      void refreshAppState()
+        .then((s) => setFresh(s[BACKUP_STATUS_KEY] ?? null))
+        .catch(() => {});
     }
   };
   return (
@@ -225,7 +235,9 @@ function BackupCard() {
           {busy ? "Envoi en cours…" : "Envoyer maintenant"}
         </button>
       }
-    />
+    >
+      <p className={cn("text-[12px] leading-snug", line.tone === "fail" ? "text-danger" : "text-muted-foreground")}>{line.text}</p>
+    </Card>
   );
 }
 
