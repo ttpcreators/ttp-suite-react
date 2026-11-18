@@ -35,7 +35,7 @@ zsh -n "$neuf/alfred.sh" && zsh -n "$neuf/installer.sh" && node --check "$neuf/t
 
 # On attend qu'Alfred ait fini son passage en cours, point ou réponse rapide (30 minutes au plus).
 for i in {1..180}; do
-  [ -d "$DEST/etat/verrou" ] || [ -d "$DEST/etat/verrou-reponse" ] || break
+  [ -d "$DEST/etat/verrou" ] || [ -d "$DEST/etat/verrou-reponse" ] || [ -d "$DEST/etat/verrou-nouvelles" ] || break
   sleep 10
 done
 

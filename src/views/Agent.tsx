@@ -18,6 +18,7 @@ import { EMPTY, fmtDayAny, fmtDayTime } from "@/lib/dates";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { AgentEditor, type AgentDraft, type AgentRow } from "@/components/AgentEditor";
 import { AgentAvatar } from "@/components/agent-avatar";
+import { AlfredStatut, DemanderAlfred, ReglagesAlfredCarte, useAlfred } from "@/components/alfred-app";
 import { assignFigurines, figurineSrc, type AgentFigurine } from "@/lib/agentAvatars";
 import { mergeAppStateKey, useAppState as useAgentAppState } from "@/lib/appState";
 
@@ -190,6 +191,8 @@ function sortByOrder<T extends { value: string }>(items: T[], order: string[]): 
 }
 
 export function AgentView() {
+  // Alfred relié à l'app (demande de Marc, 17 novembre 2026) : voyant, demandes, réglages.
+  const { alfred, recharger: rechargerAlfred } = useAlfred();
   const live = useLiveKey();
   const [notExposed, setNotExposed] = useState(false);
   const [error, setError] = useState(false);
@@ -341,15 +344,15 @@ export function AgentView() {
       toast("Copie impossible, sélectionne le texte à la main");
     }
   };
-  const traiter = async (a: Action, statut: "envoye" | "ecarte") => {
+  const traiter = async (a: Action, statut: "envoye" | "ecarte" | "valide") => {
     const patch = { statut, traite_le: new Date().toISOString() };
     setActions((xs) => xs.map((x) => (x.id === a.id ? { ...x, ...patch } : x)));
     if (!(await upd("actions", a.id, patch))) {
       setActions((xs) => xs.map((x) => (x.id === a.id ? a : x)));
       return;
     }
-    log(statut === "envoye" ? "marc_envoye" : "marc_ecarte", `${ACTION_META[a.type]?.label ?? a.type} · ${a.cible ?? ""}`);
-    toast(statut === "envoye" ? "Marqué envoyé ✓" : "Écarté ✓");
+    log(statut === "envoye" ? "marc_envoye" : statut === "valide" ? "marc_valide" : "marc_ecarte", `${ACTION_META[a.type]?.label ?? a.type} · ${a.cible ?? ""}`);
+    toast(statut === "envoye" ? "Marqué envoyé ✓" : statut === "valide" ? "Validé ✓ Alfred l'envoie dans la minute." : "Écarté ✓");
   };
   const deciderProspect = async (p: Prospect, statut: "valide" | "ecarte") => {
     setProspects((xs) => xs.map((x) => (x.id === p.id ? { ...x, statut } : x)));
@@ -566,6 +569,15 @@ export function AgentView() {
 
       {tab === "apercu" && (
         <>
+          {alfred && (
+            <div className="mb-3 flex flex-col gap-3">
+              <AlfredStatut alfred={alfred} />
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                <DemanderAlfred />
+                <ReglagesAlfredCarte alfred={alfred} onSaved={rechargerAlfred} />
+              </div>
+            </div>
+          )}
           {agentsMissing ? (
             <div className="rounded-2xl border border-dashed border-border px-5 py-6 text-center text-[13px] text-muted-foreground">
               La configuration des agents n'est pas encore activée : une mise à jour est en attente.
@@ -656,10 +668,19 @@ export function AgentView() {
                         className="flex h-[34px] items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
                         <X className="h-3.5 w-3.5" /> Écarter
                       </button>
-                      <button type="button" onClick={() => traiter(a, "envoye")}
-                        className="flex h-[34px] items-center gap-1.5 rounded-full bg-primary px-4 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
-                        <Check className="h-3.5 w-3.5" /> Marquer envoyé
-                      </button>
+                      {/* Un mail d'Alfred : « Valider » vaut le « oui » de Marc ; Alfred l'envoie dans la minute
+                          et la liste de 17 h sur Telegram le retire (une seule liste, demande de Marc le 17/11/2026). */}
+                      {a.type === "brouillon_mail" && alfred && a.agent_id === alfred.id ? (
+                        <button type="button" onClick={() => traiter(a, "valide")}
+                          className="flex h-[34px] items-center gap-1.5 rounded-full bg-primary px-4 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+                          <Send className="h-3.5 w-3.5" /> Valider, Alfred l'envoie
+                        </button>
+                      ) : (
+                        <button type="button" onClick={() => traiter(a, "envoye")}
+                          className="flex h-[34px] items-center gap-1.5 rounded-full bg-primary px-4 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+                          <Check className="h-3.5 w-3.5" /> Marquer envoyé
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

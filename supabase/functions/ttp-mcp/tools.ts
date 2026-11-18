@@ -527,7 +527,7 @@ const aValider: Tool = {
   run: async (sb, _c, a) => {
     const db = sb.schema("agent");
     const [{ data, error }, { data: ags }] = await Promise.all([
-      db.from("actions").select("id, type, cible, contexte, contenu, cree_le, agent_id").eq("statut", "a_valider").order("cree_le", { ascending: false }).limit(200),
+      db.from("actions").select("id, type, cible, contexte, contenu, cree_le, agent_id, statut").in("statut", ["a_valider", "valide"]).order("cree_le", { ascending: false }).limit(200),
       db.from("agents").select("id, nom, slug"),
     ]);
     if (error) return fail(`Lecture de la file impossible : ${error.message}`);
@@ -535,11 +535,14 @@ const aValider: Tool = {
     const nameOf = (r: Json) => String((r.agent_id ? agents.get(String(r.agent_id))?.nom : [...agents.values()].find((x) => x.slug === "megan")?.nom) ?? "Agent");
     const want = str(a.agent, 60).toLowerCase();
     const rows = ((data as Json[] | null) ?? []).filter((r) => !want || nameOf(r).toLowerCase().includes(want));
-    const live = rows.filter((r) => !isStale(r));
-    const stale = rows.filter(isStale);
+    // Validé dans la page Agents (bouton « Valider ») : Marc a dit oui depuis l'app, l'agent l'envoie.
+    const valides = rows.filter((r) => r.statut === "valide");
+    const live = rows.filter((r) => r.statut !== "valide" && !isStale(r));
+    const stale = rows.filter((r) => r.statut !== "valide" && isStale(r));
     const line = (r: Json) => `- [${r.type}] ${r.cible ?? ""} · ${nameOf(r)} · ${frDay(String(r.cree_le))} [proposition ${r.id}]${r.contexte ? `\n  Contexte : ${String(r.contexte).slice(0, 300)}` : ""}${r.contenu ? `\n  Message : ${String(r.contenu).slice(0, 500)}` : ""}`;
     return ok([
       `# À valider · ${live.length} proposition(s)${stale.length ? ` (+ ${stale.length} périmée(s) à écarter)` : ""}`,
+      ...(valides.length ? [`\n## Validées dans l'app, à envoyer maintenant (puis ecarter_proposition avec statut « envoye »)\n${valides.map(line).join("\n")}\n`] : []),
       lines(live.map(line), "Rien à valider."),
       stale.length ? `\n## Périmées (l'agent les a remplacées : à écarter)\n${stale.map(line).join("\n")}` : "",
     ].filter(Boolean).join("\n"));
@@ -549,20 +552,21 @@ const aValider: Tool = {
 const ecarterProposition: Tool = {
   name: "ecarter_proposition",
   title: "Écarter une proposition d'agent",
-  description: "Retire une proposition de la file « À valider » (statut Écarté), par exemple une proposition périmée ou remplacée par une plus récente. Donner l'id (a_valider).",
-  inputSchema: { type: "object", properties: { proposition: { type: "string", description: "Id de la proposition" } }, required: ["proposition"], additionalProperties: false },
+  description: "Retire une proposition de la file « À valider » : statut « ecarte » (périmée, remplacée, refusée) ou « envoye » (c'est parti : sur le oui de Marc, ou déjà fait ailleurs). La liste de l'app et celle de Telegram restent ainsi la même. Donner l'id (a_valider).",
+  inputSchema: { type: "object", properties: { proposition: { type: "string", description: "Id de la proposition" }, statut: { type: "string", enum: ["ecarte", "envoye"], description: "ecarte (défaut) ou envoye" } }, required: ["proposition"], additionalProperties: false },
   write: true,
   founder: true,
   run: async (sb, _c, a) => {
     const id = str(a.proposition, 40);
     if (!/^[0-9a-f-]{36}$/i.test(id)) return fail("Id de proposition invalide.");
     const db = sb.schema("agent");
-    const { data, error } = await db.from("actions").update({ statut: "ecarte", traite_le: new Date().toISOString() }).eq("id", id).eq("statut", "a_valider").select("type, cible");
-    if (error) return fail(`Proposition non écartée : ${error.message}`);
+    const statut = str(a.statut) === "envoye" ? "envoye" : "ecarte";
+    const { data, error } = await db.from("actions").update({ statut, traite_le: new Date().toISOString() }).eq("id", id).in("statut", ["a_valider", "valide"]).select("type, cible");
+    if (error) return fail(`Proposition non mise à jour : ${error.message}`);
     const row = (data as Json[] | null)?.[0];
     if (!row) return fail("Proposition introuvable ou déjà traitée.");
-    await db.from("journal").insert({ action: "marc_ecarte", detail: `${row.type} · ${row.cible ?? ""} (via Claude)` }).then(() => {}, () => {});
-    return ok(`Proposition écartée : ${row.type} · ${row.cible ?? ""}.`);
+    await db.from("journal").insert({ action: statut === "envoye" ? "marc_envoye" : "marc_ecarte", detail: `${row.type} · ${row.cible ?? ""} (via Claude)` }).then(() => {}, () => {});
+    return ok(`Proposition ${statut === "envoye" ? "marquée envoyée" : "écartée"} : ${row.type} · ${row.cible ?? ""}. Elle disparaît de la liste de l'app.`);
   },
 };
 
@@ -635,6 +639,10 @@ const rechercherMails: Tool = {
     return ok(out.join("\n"));
   },
 };
+
+/** « Ouvrir dans l'app : … » : un bouton sous le message d'Alfred, qui ouvre la bonne page (demande de Marc, 17/11/2026). */
+const lienApp = (view: string, item?: string) =>
+  `Ouvrir dans l'app : https://app.ttpcreators.pro/?open=view&view=${view}${item && /^[A-Za-z0-9_-]{1,64}$/.test(item) ? `&item=${item}` : ""}`;
 
 const lireMail: Tool = {
   name: "lire_mail",
@@ -1039,7 +1047,7 @@ const cocherTache: Tool = {
     let { error: e } = await sb.from("todos").update(traced).eq("id", String(t.id));
     if (e && /done_at|done_by/i.test(e.message)) ({ error: e } = await sb.from("todos").update({ status, done }).eq("id", String(t.id)));
     if (e) return fail(`Tâche non modifiée : ${e.message}`);
-    return ok(`✓ Tâche ${done ? "cochée" : "rouverte"} : ${t.text}`);
+    return ok(`✓ Tâche ${done ? "cochée" : "rouverte"} : ${t.text}\n${lienApp("todo", String(t.id))}`);
   },
 };
 
@@ -1092,16 +1100,16 @@ const creerTache: Tool = {
       priority: ["haute", "moyenne", "basse"].includes(str(a.priorite)) ? str(a.priorite) : "moyenne",
       source: "agency", status: "À faire", sort_order: order, tag: ctx.name ? `Claude · ${ctx.name}` : "Claude",
     };
-    let { error } = await sb.from("todos").insert({ ...row, creators: names });
+    let { data: cree, error } = await sb.from("todos").insert({ ...row, creators: names }).select("id").maybeSingle();
     // Colonne `creators` absente (SQL pas encore lancé) : seul le premier créateur est enregistré.
     let onlyFirst = false;
     if (error && /creators/i.test(error.message)) {
-      ({ error } = await sb.from("todos").insert(row));
+      ({ data: cree, error } = await sb.from("todos").insert(row).select("id").maybeSingle());
       onlyFirst = names.length > 1;
     }
     if (error) return fail(`Tâche non créée : ${error.message}`);
     const pour = names.length ? ` pour ${names.map((n) => titleCase(n)).join(", ")}` : "";
-    return ok(`Tâche créée : « ${titre} »${pour}${due ? `, échéance le ${frDay(due)}` : ""}.${onlyFirst ? ` (Seul ${titleCase(names[0])} est enregistré : la base n'a pas encore la mise à jour « plusieurs créateurs ».)` : ""}`);
+    return ok(`Tâche créée : « ${titre} »${pour}${due ? `, échéance le ${frDay(due)}` : ""}.${(cree as Json | null)?.id ? `\n${lienApp("todo", String((cree as Json).id))}` : ""}${onlyFirst ? ` (Seul ${titleCase(names[0])} est enregistré : la base n'a pas encore la mise à jour « plusieurs créateurs ».)` : ""}`);
   },
 };
 
@@ -1618,7 +1626,7 @@ const avancerCollab: Tool = {
     if (!step) return fail("Étape entre 1 et 11.");
     const { data, error } = await sb.from("collabs").update({ step, updated_at: new Date().toISOString() }).eq("id", id).select("brand, creator").maybeSingle<{ brand: string; creator: string | null }>();
     if (error || !data) return fail("Collab introuvable ou non modifiée.");
-    return ok(`${data.brand} × ${titleCase(data.creator)} : étape ${step} « ${COLLAB_STEPS[step - 1]} ».`);
+    return ok(`${data.brand} × ${titleCase(data.creator)} : étape ${step} « ${COLLAB_STEPS[step - 1]} ».\n${lienApp("collabs", id)}`);
   },
 };
 
@@ -1756,12 +1764,12 @@ const proposerAction: Tool = {
     const ag = await findAgent(sb, str(a.agent, 80));
     const type = ["whatsapp", "instagram", "linkedin", "brouillon_mail", "alerte"].includes(str(a.type)) ? str(a.type) : "alerte";
     const lien = /^https?:\/\//i.test(str(a.lien, 500)) ? str(a.lien, 500) : null;
-    const { error } = await sb.schema("agent").from("actions").insert({
+    const { data, error } = await sb.schema("agent").from("actions").insert({
       type, cible: str(a.cible, 200) || null, contexte: str(a.contexte, 1000) || null, contenu: str(a.contenu, 6000), lien_spark: lien, statut: "a_valider", agent_id: ag?.id ?? null,
-    });
+    }).select("id").single();
     if (error) return fail(`Proposition non déposée : ${error.message}`);
     await agentJournal(sb, ag?.id ?? null, "proposition", `${type} · ${str(a.cible, 120)}`);
-    return ok(`Déposé dans « À valider » (${type}${str(a.cible) ? ` pour ${str(a.cible, 120)}` : ""}). Marc le verra dans l'app, section Agents.`);
+    return ok(`Déposé dans « À valider » (${type}${str(a.cible) ? ` pour ${str(a.cible, 120)}` : ""}) [proposition ${(data as Json)?.id}]. Marc le verra dans l'app, section Agents, et dans la liste de 17 h.`);
   },
 };
 
