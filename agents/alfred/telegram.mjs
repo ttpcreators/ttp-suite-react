@@ -28,6 +28,7 @@
 // Tout ce qui part et tout ce qui arrive est ajouté à etat/conversation.md (le fil).
 
 import { execFile, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { homedir, tmpdir } from "node:os";
 import { appendFileSync, closeSync, copyFileSync, createWriteStream, openSync, readSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { Readable } from "node:stream";
@@ -1255,7 +1256,8 @@ const PONT = "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/alfred-pont"
 
 /** Appelle alfred-pont avec le secret de config.env (ALFRED_PONT_SECRET). null sans secret ou en cas d'échec. */
 async function pont(env, body) {
-  const secret = env.ALFRED_PONT_SECRET;
+  // Le secret du pont, ou l'empreinte du jeton du bot (déjà dans config.env) : rien à poser à la main.
+  const secret = env.ALFRED_PONT_SECRET || (env.ALFRED_BOT_TOKEN ? `tg:${createHash("sha256").update(env.ALFRED_BOT_TOKEN).digest("hex")}` : "");
   if (!secret) return null;
   try {
     const r = await fetch(PONT, { method: "POST", headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(20_000) });

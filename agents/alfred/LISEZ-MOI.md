@@ -82,7 +82,7 @@ Alfred ne peut pas modifier `config.env` ni sa liste WhatsApp. Côté connecteur
 Dans le dépôt (`agents/alfred/`, public, aucun secret) : `CLAUDE.md` (ses consignes), `skills/` (ses skills, sous licence libre, copiées dans `.claude/skills`), `alfred.sh` (un passage), `ecoute.sh` et `telegram.mjs` (Telegram), `whatsapp.mjs` (lecture de WhatsApp Desktop), `spark.mjs` (sa seule porte vers Spark), `araignee.mjs` (sa seule porte vers l'araignée), `passage.mjs` (le bilan de chaque passage : nouvel essai, limite de l'abonnement, raison d'un échec), deux réglages launchd, `installer.sh`.
 
 Sur le Mac seulement (`~/Code/TTPAlfred/`) :
-- `config.env` : jeton du bot d'Alfred, identifiant Telegram de Marc, `ALFRED_SPARK_BOITES` (les boîtes Spark des créateurs qu'Alfred peut lire) et `ALFRED_PONT_SECRET` (le pont avec l'app, fonction `alfred-pont` : pouls chaque minute, nouvelles de l'app, demandes « Demander à Alfred », réglages ; le même secret est posé côté Supabase) ;
+- `config.env` : jeton du bot d'Alfred, identifiant Telegram de Marc, `ALFRED_SPARK_BOITES` (les boîtes Spark des créateurs qu'Alfred peut lire) et, au besoin, `ALFRED_PONT_SECRET` (le pont avec l'app, fonction `alfred-pont` : pouls chaque minute, nouvelles de l'app, demandes « Demander à Alfred », réglages). Sans lui, le pont reconnaît Alfred à l'empreinte du jeton de son bot, posé aussi côté Supabase (`ALFRED_BOT_TOKEN`) ;
 - `REDACTION.md` : les consignes de rédaction de Marc (son dossier « bras droit » sur Claude) ;
 - `etat/` : sa mémoire (`memoire.md`, 150 lignes au plus), son suivi, ses rappels, ses délégations, le fil des échanges et les journaux. Les fichiers qui grossissent sont raccourcis à chaque passage.
 

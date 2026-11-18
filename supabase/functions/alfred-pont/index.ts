@@ -10,19 +10,29 @@
 //   { action: "vivant" }                  → signe de vie pendant un passage
 //   { action: "passage", passage }        → fin d'un passage d'Alfred (point du matin…)
 //   { action: "reponse", demandes, texte } → la réponse d'Alfred à des demandes de l'app
-// AUTH : verify_jwt = false (config.toml) + secret ALFRED_PONT_SECRET (aussi dans config.env de l'iMac).
+// AUTH : verify_jwt = false (config.toml) + secret ALFRED_PONT_SECRET (aussi dans config.env de l'iMac),
+// ou, sans ce secret, « tg:<empreinte SHA-256 du jeton du bot d'Alfred> » : l'iMac a déjà ce jeton
+// (ALFRED_BOT_TOKEN), le même est posé côté Supabase ; le jeton lui-même ne circule jamais.
 // ============================================================================
 
 import { getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { commandesGagnantes, reglagesPropres } from "../_shared/alfredPont.ts";
 
 const SECRET = Deno.env.get("ALFRED_PONT_SECRET") ?? "";
+const BOT = Deno.env.get("ALFRED_BOT_TOKEN") ?? "";
+
+async function empreinte(texte: string): Promise<string> {
+  const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texte));
+  return [...new Uint8Array(h)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
 const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { "Content-Type": "application/json" } });
 
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") return json({ error: "method" }, 405);
   const bearer = (req.headers.get("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
-  if (!SECRET || !timingSafeEqualStr(bearer, SECRET)) return json({ error: "unauthorized" }, 401);
+  const parSecret = !!SECRET && timingSafeEqualStr(bearer, SECRET);
+  const parBot = !!BOT && bearer.startsWith("tg:") && timingSafeEqualStr(bearer, `tg:${await empreinte(BOT)}`);
+  if (!parSecret && !parBot) return json({ error: "unauthorized" }, 401);
   const body = await req.json().catch(() => ({})) as Record<string, any>;
 
   const db = getServiceClient().schema("agent");
