@@ -8,6 +8,7 @@
 // titre court, échéance, phrase du mail en description, lien « Voir le mail ».
 // Dédoublonnage : clé fil + sujet dans le blob (`mailTaskKeys`, 120 jours), et pas de
 // tâche si la même est déjà ouverte. Réglage : `notifPrefs.mailTasks === false` coupe tout.
+// Expéditeur marqué « Pas à traiter » dans l'app (`mailIgnoredSenders`) : aucune tâche.
 // ============================================================================
 
 import type { getServiceClient } from "../_shared/google.ts";
@@ -15,6 +16,7 @@ import { gfetch } from "../_shared/gfetch.ts";
 import { brandMatcher, norm } from "../_shared/brandmatch.ts";
 import { creatorsForMail, type CreatorMailSetting, type NewMail } from "../_shared/mailNotif.ts";
 import { brandFromEmail, ignoredSender, kindOfTitle, mailTasks, replyThatDoes, taskKey } from "../_shared/mailTasks.ts";
+import { IGNORED_SENDERS_KEY, isIgnoredSender, readIgnoredSenders } from "../_shared/mailIgnore.ts";
 
 type Sb = ReturnType<typeof getServiceClient>;
 type Box = NewMail["box"];
@@ -79,9 +81,11 @@ export async function tasksFromMails(
   agencyDomain: string,
   settings: CreatorMailSetting[],
 ): Promise<number> {
+  const notTodo = readIgnoredSenders(blob[IGNORED_SENDERS_KEY]);
   const candidates = mails.filter((m) => {
     const email = addr(m.from);
     if (!email.includes("@") || email.endsWith("@" + agencyDomain) || ignoredSender(email) || m.listUnsub) return false;
+    if (isIgnoredSender(email, notTodo)) return false;
     return !(m.labelIds ?? []).some((l) => SKIP_LABELS.includes(l));
   }).slice(0, MAX_MAILS);
   if (!candidates.length) return 0;

@@ -7,6 +7,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { useMailSettings } from "@/lib/useMailSettings";
+import { unignoreSender, useIgnoredSenders } from "@/lib/mailIgnored";
+import { ignoredList } from "../../supabase/functions/_shared/mailIgnore.ts";
 import {
   BOX_LABEL, DELAYS, buildHtml, clearSentDraft, draftKeys, getDraftFiles, markDraftSending, parseEmails, readDraft, readDraftRaw,
   restoreDraft, saveMailSettings, scheduleSend, sendFailText, sendGmail, setDraftFiles, subscribeDrafts, writeDraft,
@@ -132,6 +134,7 @@ export function MailSettingsDialog({ open, onClose }: { open: boolean; onClose: 
               items={DELAYS.map((d) => ({ value: String(d), label: d === 0 ? "Aucun" : `${d} s` }))}
             />
           </section>
+          <IgnoredSendersSection />
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
           <button type="button" onClick={onClose} className="h-9 rounded-lg px-3 text-[13px] text-muted-foreground hover:text-foreground">Annuler</button>
@@ -141,6 +144,46 @@ export function MailSettingsDialog({ open, onClose }: { open: boolean; onClose: 
         </div>
       </div>
     </Overlay>
+  );
+}
+
+/**
+ * Expéditeurs « Pas à traiter » (liste de l'équipe) : leurs mails restent dans la boîte
+ * mais pas dans « À traiter », et ne créent plus de tâche. « Retirer » s'applique tout de
+ * suite (pas besoin d'« Enregistrer »).
+ */
+function IgnoredSendersSection() {
+  const ignored = useIgnoredSenders();
+  const list = useMemo(() => ignoredList(ignored), [ignored]);
+  return (
+    <section>
+      <div className="mb-1 text-[13px] font-semibold text-foreground">Pas à traiter</div>
+      <p className="mb-2 text-[12px] text-muted-foreground">
+        Les mails de ces adresses restent dans la boîte de réception, mais pas dans « À traiter », et ne créent pas de tâche. Liste commune à toute l'équipe.
+      </p>
+      {list.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-border px-3 py-2.5 text-[12px] text-faint">
+          Aucune adresse. Sur un mail de « À traiter », clique sur « Pas à traiter ».
+        </p>
+      ) : (
+        <ul className="max-h-56 divide-y divide-border overflow-y-auto rounded-xl border border-border">
+          {list.map((x) => (
+            <li key={x.email} className="flex items-center gap-2 px-3 py-1.5">
+              <span className="min-w-0 flex-1 truncate text-[13px] text-foreground">{x.email}</span>
+              {x.at > 0 && <span className="shrink-0 text-[11.5px] tabular-nums text-faint">{fmtDay(new Date(x.at))}</span>}
+              <button
+                type="button"
+                onClick={() => unignoreSender(x.email)}
+                aria-label={`Remettre ${x.email} dans « À traiter »`}
+                className="shrink-0 rounded-full px-2 py-1 text-[12px] font-medium text-muted-foreground hover:bg-rowhover hover:text-foreground"
+              >
+                Retirer
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 
