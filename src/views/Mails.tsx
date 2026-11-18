@@ -1715,7 +1715,7 @@ export function Mails() {
 
   // Répondre : envoie via Gmail dans le MÊME fil (threadId), depuis la boîte du fil.
   // Appelé à l'envoi réel (après le délai d'annulation de ReplyBox).
-  const sendReply = async ({ cc, bcc, html, attachments, draftKey }: { cc: string[]; bcc: string[]; html: string; attachments: OutAttachment[]; draftKey?: string }): Promise<boolean> => {
+  const sendReply = async ({ cc, bcc, html, attachments, draftKey, from }: { cc: string[]; bcc: string[]; html: string; attachments: OutAttachment[]; draftKey?: string; from?: string }): Promise<boolean> => {
     if (!thread) return false;
     const t = thread;
     const p = plan;
@@ -1729,13 +1729,14 @@ export function Mails() {
     const res = await sendGmail(
       {
         to: p.to, cc, subject: `Re: ${subject}`, html, threadId: t.threadId, source: "manual", box: t.box, bcc, attachments,
+        ...(from ? { from } : {}),
         ...(p.inReplyTo ? { inReplyTo: p.inReplyTo } : {}),
         ...(p.references ? { references: p.references } : {}),
       },
       { label: `Réponse à ${p.to}`, draftKey },
     );
     if (!res.ok) {
-      toast(sendFailText(res.error));
+      toast(sendFailText(res.error, res.detail));
       return false;
     }
     if (gd) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressOf, findSendAs, fromHeader, refusSendAs, usableSendAs } from "./sendAs.ts";
+import { addressOf, findSendAs, fromHeader, pickSender, refusSendAs, sendAsFromJson, senderSignature, usableSendAs } from "./sendAs.ts";
 
 const raw = [
   { sendAsEmail: "talent@ttpcreators.pro", displayName: "TTP Talent", isPrimary: true },
@@ -47,5 +47,51 @@ describe("addressOf et refusSendAs", () => {
   it("dit quelle boîte a l'alias, ou liste les alias", () => {
     expect(refusSendAs("x@ttpcreators.pro", "partnerships", [], { box: "talent", found: true })).toMatch(/boite « talent »/);
     expect(refusSendAs("x@ttpcreators.pro", "talent", usableSendAs(raw))).toMatch(/anamilanovic@ttpcreators\.pro, lunivana@ttpcreators\.pro/);
+  });
+});
+
+describe("pickSender (page Mails)", () => {
+  const l = usableSendAs(raw);
+  it("sans adresse ou avec l'adresse principale : la boîte, sans en-tête From", () => {
+    expect(pickSender(l, "", "talent")).toEqual({ from: null });
+    expect(pickSender(l, undefined, "talent")).toEqual({ from: null });
+    expect(pickSender(l, "Talent@ttpcreators.pro", "talent")).toEqual({ from: null });
+  });
+  it("alias validé : l'alias avec son nom et sa signature", () => {
+    const r = pickSender(l, "anamilanovic@ttpcreators.pro", "talent");
+    expect("from" in r && r.from?.name).toBe("Ana Milanović");
+  });
+  it("alias absent ou en attente : refus clair, rien ne part", () => {
+    const r = pickSender(l, "candice@ttpcreators.pro", "talent");
+    expect("refus" in r && r.refus).toMatch(/^candice@ttpcreators\.pro n'est pas dans les adresses .* de talent@.*rien n'est parti/);
+    const r2 = pickSender([], "x@y.fr", "partnerships");
+    expect("refus" in r2 && r2.refus).toMatch(/Aucun alias n'est réglé/);
+  });
+});
+
+describe("sendAsFromJson", () => {
+  it("relit la liste renvoyée par gmail-send, principale en premier", () => {
+    const l = sendAsFromJson([
+      { email: "a@ttpcreators.pro", name: "Ana", signature: "<b>A</b>", primary: false },
+      { email: "Talent@ttpcreators.pro", name: "TTP", signature: "", primary: true },
+      { email: "pas une adresse" },
+      null,
+      "x",
+    ]);
+    expect(l.map((x) => x.email)).toEqual(["talent@ttpcreators.pro", "a@ttpcreators.pro"]);
+    expect(l[1].signature).toBe("<b>A</b>");
+  });
+  it("réponse inattendue (ancienne version) : liste vide", () => {
+    expect(sendAsFromJson(undefined)).toEqual([]);
+    expect(sendAsFromJson({ error: "destinataire_invalide" })).toEqual([]);
+  });
+});
+
+describe("senderSignature", () => {
+  it("alias : sa signature Gmail ; sinon celle de l'agence", () => {
+    const [primary, ana] = usableSendAs(raw);
+    expect(senderSignature(ana, "AGENCE")).toBe("<b>Ana</b>");
+    expect(senderSignature(primary, "AGENCE")).toBe("AGENCE");
+    expect(senderSignature(null, "AGENCE")).toBe("AGENCE");
   });
 });

@@ -66,3 +66,39 @@ export function refusSendAs(address: string, box: string, list: readonly SendAs[
     (aliases.length ? `Alias disponibles : ${aliases.join(", ")}.` : "Aucun alias n'est réglé dans cette boîte.") +
     " Pour en ajouter un : Gmail → Paramètres → Comptes → Envoyer des e-mails en tant que.";
 }
+
+// ── Page Mails de l'app : menu « De : » du composeur (gmail-send) ───────────
+
+/** Conseil affiché quand la boîte n'a aucun alias réglé dans Gmail. */
+export const SEND_AS_HINT = "Pour écrire au nom d'une créatrice : Gmail › Paramètres › Comptes › Envoyer des e-mails en tant que";
+
+/**
+ * Expéditeur demandé à l'envoi, vérifié contre la liste de Gmail (jamais celle du client).
+ * Vide ou adresse principale → `from: null` (le mail part de la boîte, comme avant).
+ * Alias validé → `from` (en-tête From + nom affiché). Sinon → `refus` (rien ne part).
+ */
+export function pickSender(list: readonly SendAs[], requested: unknown, box: string): { from: SendAs | null } | { refus: string } {
+  const want = String(requested ?? "").trim();
+  if (!want) return { from: null };
+  const hit = findSendAs(list, want);
+  if (hit) return { from: hit.primary ? null : hit };
+  return { refus: refusSendAs(addressOf(want) || want.toLowerCase().slice(0, 200), box, list) };
+}
+
+/** Réponse JSON de gmail-send (action « sendas ») relue côté app : mêmes règles que Gmail. */
+export function sendAsFromJson(v: unknown): SendAs[] {
+  if (!Array.isArray(v)) return [];
+  return usableSendAs(
+    v.filter((x): x is Record<string, unknown> => !!x && typeof x === "object").map((x) => ({
+      sendAsEmail: typeof x.email === "string" ? x.email : "",
+      displayName: typeof x.name === "string" ? x.name : "",
+      signature: typeof x.signature === "string" ? x.signature : "",
+      isPrimary: x.primary === true,
+    })),
+  );
+}
+
+/** Signature à ajouter : celle de l'alias choisi (comme Gmail), sinon celle de l'agence. */
+export function senderSignature(from: SendAs | null | undefined, agencySignature: string): string {
+  return from && !from.primary ? from.signature : agencySignature;
+}
