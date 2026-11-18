@@ -10,4 +10,4 @@ Copiées dans `~/Code/TTPAlfred/.claude/skills/` par `installer.sh`, donc charg�
 
 Le dépôt est public : n'ajouter ici qu'une skill dont la licence permet la publication et qui ne contient aucune donnée personnelle ni secret.
 
-Les skills faites pour Marc (hooks-viraux, structure-script, conseil) ne sont PAS dans ce dépôt public : elles sont rangées dans la base (table `agent.skills_privees`, lisible du seul serveur) et le pont `alfred-pont` les remet à l'iMac, qui les écrit dans `.claude/skills/`.
+Les skills faites pour Marc (hooks-viraux, structure-script, conseil, et ses métiers écrits sur mesure le 18 novembre 2026 : talent-manager, ceo-agence, prix-influence-france, loi-influence, marketing-agence, chef-de-cabinet) ne sont PAS dans ce dépôt public : elles sont rangées dans la base (table `agent.skills_privees`, lisible du seul serveur) et le pont `alfred-pont` les remet à l'iMac, qui les écrit dans `.claude/skills/`.
