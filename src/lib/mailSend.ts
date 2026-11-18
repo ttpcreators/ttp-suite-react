@@ -131,6 +131,8 @@ export type SendParams = {
   forward?: { box: MailBox; messageId: string };
   /** Réaction emoji au message `inReplyTo` (gmail-send 2026-10-23) ; `html` est alors vide. */
   reaction?: { emoji: string; name?: string };
+  /** Menu « De : » : alias « Envoyer en tant que » de la boîte (revérifié par gmail-send). Absent = adresse de la boîte. */
+  from?: string;
 };
 
 /** Taille totale max des pièces jointes d'un envoi (18 Mo bruts, comme côté serveur). */
@@ -149,7 +151,11 @@ export function readAttachment(file: File): Promise<OutAttachment> {
     r.readAsDataURL(file);
   });
 }
-export type SendResult = { ok?: boolean; error?: string; id?: string; threadId?: string; /** Écho d'une réaction envoyée (absent avec une ancienne version). */ reaction?: string };
+export type SendResult = {
+  ok?: boolean; error?: string; id?: string; threadId?: string;
+  /** Écho d'une réaction envoyée (absent avec une ancienne version). */ reaction?: string;
+  /** Explication du serveur (ex. alias refusé). */ detail?: string;
+};
 
 /** Délai max d'un envoi (pièces jointes comprises) avant d'abandonner l'attente. */
 const SEND_TIMEOUT_MS = 60_000;
@@ -174,7 +180,9 @@ export async function sendGmail(p: SendParams, track?: { label: string; draftKey
   return res;
 }
 
-export function sendErrorText(code?: string): string {
+export function sendErrorText(code?: string, detail?: string): string {
+  if (code === "alias_refuse") return detail || "Cette adresse n'est pas dans « Envoyer en tant que » de la boîte dans Gmail, rien n'est parti.";
+  if (code === "alias_verif_impossible") return "Adresse d'envoi non vérifiée (Gmail injoignable), rien n'est parti.";
   if (code === "google_non_connecte" || code === "gmail_scope_manquant") return "Reconnecte Google (droits Gmail) dans l'app.";
   if (code === "talent_droit_manquant") return "Envoi depuis talent@ pas encore autorisé (admin.google.com).";
   if (code === "copie_invalide") return "Une adresse en copie est invalide.";
@@ -188,8 +196,8 @@ export function sendErrorText(code?: string): string {
 }
 
 /** Échec d'envoi quand le texte a été gardé (brouillon) : message court et rassurant. */
-export function sendFailText(code?: string): string {
-  const base = sendErrorText(code);
+export function sendFailText(code?: string, detail?: string): string {
+  const base = sendErrorText(code, detail);
   return base === "Envoi échoué, réessaie" ? "Envoi échoué, brouillon conservé" : `${base} Brouillon conservé.`;
 }
 

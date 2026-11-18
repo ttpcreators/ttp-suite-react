@@ -22,7 +22,13 @@
 //    (texte + JSON de réaction + HTML de repli) est construit ici (_shared/emailReaction.ts).
 //    Pas de pièce jointe ni de transfert. Sortie : { ok, id, threadId, box, reaction: emoji }
 //    (l'écho prouve que la version déployée sait réagir).
-// Sortie : { ok, id, threadId }.
+//  - from (2026-11-18) : adresse « Envoyer en tant que » choisie dans le menu « De : » (alias
+//    d'une créatrice). Revérifiée ici dans la liste Gmail de la boîte (_shared/sendAs.ts) :
+//    absente → alias_refuse (400, rien ne part) ; adresse principale ou vide → envoi normal.
+//    Alias → en-tête From avec son nom affiché (la signature de l'alias est mise par l'app).
+//  - action « sendas » (2026-11-18) : { action: "sendas", box } → { ok, box, list: SendAs[] },
+//    les adresses de la boîte pour le menu « De : » (principale en premier, alias validés).
+// Sortie : { ok, id, threadId, box, from? } (from = alias utilisé, absent pour la boîte).
 // Erreurs : limite_gmail (429), pieces_trop_lourdes (413), google_non_connecte (401 /
 //           invalid_grant), gmail_scope_manquant (403), envoi_echoue.
 // Journalise dans email_activity (best-effort).
@@ -32,6 +38,7 @@ import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 import { boxToken, boxError, parseBox } from "../_shared/gmailBox.ts";
 import { gfetch, classifyGmail, gmailMessage, GfetchError } from "../_shared/gfetch.ts";
 import { isSingleEmoji, reactionBody, reactionFallback, reactionSubject } from "../_shared/emailReaction.ts";
+import { fromHeader, pickSender, usableSendAs, type RawSendAs, type SendAs } from "../_shared/sendAs.ts";
 
 const GMAIL_SEND = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 const GMAIL_UPLOAD = "https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=multipart";
@@ -74,6 +81,14 @@ async function originalAttachments(token: string, messageId: string): Promise<At
     out.push({ filename: a.filename, mimeType: a.mimeType, contentBase64: d.data.replace(/-/g, "+").replace(/_/g, "/") });
   }
   return out;
+}
+
+/** Adresses « Envoyer en tant que » de la boîte, lues dans Gmail (jamais celles du client). */
+async function boxSendAs(token: string): Promise<SendAs[]> {
+  const r = await gfetch(`${GMAIL}/settings/sendAs`, { headers: { Authorization: `Bearer ${token}` } }, { timeoutMs: 12_000 });
+  const d = await r.json().catch(() => ({})) as { sendAs?: RawSendAs[] };
+  if (!r.ok) throw new Error(`sendas_${r.status}`);
+  return usableSendAs(d.sendAs ?? []);
 }
 
 async function isAgency(req: Request, sb: ReturnType<typeof getServiceClient>): Promise<boolean> {
@@ -167,11 +182,27 @@ Deno.serve(async (req: Request) => {
     threadId?: string; inReplyTo?: string; references?: string; source?: string; contactName?: string; box?: string;
     attachments?: Att[]; forward?: { box?: string; messageId?: string };
     reaction?: { emoji?: unknown; name?: unknown };
+    from?: string; action?: string;
   } = {};
   try {
     body = await req.json();
   } catch {
     return jsonRes({ error: "bad_request" }, 400);
+  }
+
+  // Menu « De : » de l'app : adresses de la boîte (lecture seule, rien n'est envoyé).
+  if (body.action === "sendas") {
+    const b = parseBox(body.box);
+    try {
+      const list = await boxSendAs(await boxToken(sb, b, "read"));
+      return jsonRes({ ok: true, box: b, list });
+    } catch (e) {
+      if (e instanceof GfetchError) return jsonRes({ error: "gmail_injoignable" }, 502);
+      const msg = (e as Error)?.message ?? "";
+      if (msg.startsWith("sendas_")) return jsonRes({ error: "sendas_illisible", detail: msg }, 502);
+      const be = boxError(e);
+      return jsonRes({ error: be.error }, be.status);
+    }
   }
 
   const to = String(body.to ?? "").trim().toLowerCase();
@@ -205,6 +236,21 @@ Deno.serve(async (req: Request) => {
     return jsonRes({ error: be.error, detail }, be.status);
   }
 
+  // Expéditeur choisi (« De : ») : revérifié dans la liste Gmail de la boîte. Fail-closed :
+  // si la liste ne peut pas être lue, rien ne part (jamais un alias non vérifié).
+  let from: SendAs | null = null;
+  if (String(body.from ?? "").trim()) {
+    let list: SendAs[];
+    try {
+      list = await boxSendAs(await boxToken(sb, box, "read"));
+    } catch {
+      return jsonRes({ error: "alias_verif_impossible", detail: "Adresse d'envoi non vérifiée (Gmail injoignable), rien n'est parti." }, 502);
+    }
+    const pick = pickSender(list, body.from, box);
+    if ("refus" in pick) return jsonRes({ error: "alias_refuse", detail: pick.refus }, 400);
+    from = pick.from;
+  }
+
   // Pièces jointes : fichiers envoyés par l'app + celles du message transféré.
   const attachments = (Array.isArray(body.attachments) ? body.attachments : []).filter((a) => a?.contentBase64);
   if (body.forward?.messageId) {
@@ -225,7 +271,7 @@ Deno.serve(async (req: Request) => {
   if (attBytes > ATTACH_TOTAL_MAX) return jsonRes({ error: "pieces_trop_lourdes" }, 413);
 
   // Construit le message MIME. Entêtes de base + threading éventuel.
-  const base = [`To: ${to}`, `Subject: ${encSubject(subject)}`, "MIME-Version: 1.0"];
+  const base = [...(from ? [fromHeader(from)] : []), `To: ${to}`, `Subject: ${encSubject(subject)}`, "MIME-Version: 1.0"];
   if (ccList.length) base.push(`Cc: ${ccList.join(", ")}`);
   // Gmail retire l'entête Bcc du message livré : les destinataires ne la voient pas.
   if (bccList.length) base.push(`Bcc: ${bccList.join(", ")}`);
@@ -351,5 +397,5 @@ Deno.serve(async (req: Request) => {
     if (logError) console.error("gmail-send journal", logError.message);
   } catch { /* table absente / RLS : on ignore */ }
 
-  return jsonRes({ ok: true, id, threadId, box, ...(reaction != null ? { reaction } : {}) });
+  return jsonRes({ ok: true, id, threadId, box, ...(from ? { from: from.email } : {}), ...(reaction != null ? { reaction } : {}) });
 });

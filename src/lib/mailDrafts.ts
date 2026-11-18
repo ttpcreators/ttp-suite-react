@@ -25,6 +25,8 @@ export type GmailDraftRef = { id: string; box: MailBox };
 /** Brouillon de réponse gardé sur l'appareil (clé `replyDraftKey(boîte, fil)`). */
 export type ReplyDraft = DraftBase & {
   text: string; cc: string; bcc: string; replyAll: boolean;
+  /** Alias choisi dans « De : » (absent = la boîte). */
+  from?: string;
   /** Repris d'un brouillon Gmail : supprimé de Gmail après l'envoi. */
   gdraft?: GmailDraftRef;
   /** Pour l'afficher dans « Brouillons » sans recharger le fil. */

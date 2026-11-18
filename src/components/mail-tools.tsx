@@ -24,6 +24,12 @@ import { ModelPicker } from "@/components/mail-models";
 import { AddressInput } from "@/components/mail-address-input";
 import { brandFromEmail, insertModel, type ModelVars } from "@/lib/mailModels";
 import { composerPrefill, deleteGmailDraft, gmailDraftLocalKey, type GmailDraftRow, type ReplyDraft } from "@/lib/mailDrafts";
+import { SenderLine } from "@/components/mail-sender";
+import { useSender } from "@/lib/useSendAs";
+import { senderSignature } from "../../supabase/functions/_shared/sendAs.ts";
+
+/** Alias repris d'un brouillon mais pas encore vérifié dans Gmail : on n'envoie pas. */
+const UNVERIFIED_FROM = "Adresse d'envoi pas encore vérifiée dans Gmail : réessaie, ou repasse sur l'adresse de la boîte.";
 
 /*
  * Outils d'écriture des mails (agence) : réglages (signature collée, délai
@@ -146,7 +152,7 @@ export function MailSettingsDialog({ open, onClose }: { open: boolean; onClose: 
 
 // ── Brouillons ──────────────────────────────────────────────────────────────
 type FwdDraft = DraftBase & { to: string; cc: string; bcc: string; note: string; box: MailBox; keepOriginal: boolean; sig: boolean };
-type NewDraft = DraftBase & { to: string; cc: string; bcc: string; subject: string; body: string; box: MailBox; sig: boolean };
+type NewDraft = DraftBase & { to: string; cc: string; bcc: string; subject: string; body: string; box: MailBox; sig: boolean; /** Alias choisi dans « De : » ("" = la boîte). */ from?: string };
 
 /**
  * Brouillons gardés sur cet appareil, mis à jour en direct : réponses (clés
@@ -231,7 +237,7 @@ export function ReplyBox({
   /** Mode demandé avec le focus (raccourcis r / a). */
   focusMode?: "reply" | "all";
   /** Appelé au moment de l'envoi réel (après le délai d'annulation). */
-  onSend: (p: { text: string; cc: string[]; bcc: string[]; html: string; attachments: OutAttachment[]; replyAll: boolean; draftKey?: string }) => Promise<boolean>;
+  onSend: (p: { text: string; cc: string[]; bcc: string[]; html: string; attachments: OutAttachment[]; replyAll: boolean; draftKey?: string; /** Alias choisi dans « De : » (absent = la boîte). */ from?: string }) => Promise<boolean>;
   /** « card » : cadre complet façon client mail (destinataire, zone haute, bouton Envoyer). */
   variant?: "bar" | "card";
   /** Destinataire affiché en tête du cadre (variante « card »). */
@@ -254,8 +260,13 @@ export function ReplyBox({
   const [bcc, setBcc] = useState(initial?.bcc ?? "");
   const [replyAll, setReplyAll] = useState(!!initial?.replyAll && replyAllCc.length > 0);
   const att = useAttachments();
-  // Signature : celle des Réglages Mails, ajoutée d'office (plus de case à cocher).
+  // Signature : celle des Réglages Mails, ajoutée d'office (plus de case à cocher) ;
+  // celle de l'alias si un alias est choisi dans « De : » (comme Gmail).
   const sig = settings.signatureOn;
+  const sender = useSender(box, initial?.from ?? "");
+  const from = sender.from;
+  // Menu « De : » dans la réponse seulement s'il y a un alias (sinon, rien de plus à l'écran).
+  const showSender = sender.aliases.length > 0 || (sender.unverified && !sender.loading);
   const ref = useRef<HTMLTextAreaElement>(null);
   const textRef = useRef(text);
   textRef.current = text;
@@ -302,12 +313,12 @@ export function ReplyBox({
   useEffect(() => {
     if (!draftKey) return;
     if (text.trim()) {
-      writeDraft(draftKey, { ...draftExtra(draftKey), text, cc, bcc, replyAll, at: Date.now() } satisfies ReplyDraft);
+      writeDraft(draftKey, { ...draftExtra(draftKey), text, cc, bcc, replyAll, ...(from ? { from } : {}), at: Date.now() } satisfies ReplyDraft);
       return;
     }
     const cur = readDraftRaw<ReplyDraft>(draftKey);
     if (cur && !cur.sendingAt) writeDraft(draftKey, null);
-  }, [draftKey, text, cc, bcc, replyAll]);
+  }, [draftKey, text, cc, bcc, replyAll, from]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!draftKey) return;
     // Envoi en cours (zone vidée) : on garde les fichiers envoyés, rendus en cas d'échec.
@@ -328,6 +339,7 @@ export function ReplyBox({
       setBcc(d.bcc);
       setBccOpen(!!d.bcc);
       setReplyAll(!!d.replyAll);
+      sender.setFrom(d.from ?? "");
       const files = getDraftFiles(k);
       if (files.length) att.setFiles(files);
     });
@@ -358,9 +370,11 @@ export function ReplyBox({
     const hidden = parseEmails(bcc);
     if (copy.bad.length) return toast(`Adresse en copie invalide : ${copy.bad[0]}`);
     if (hidden.bad.length) return toast(`Adresse en copie cachée invalide : ${hidden.bad[0]}`);
-    const html = buildHtml(body, { signature: sig ? settings.signatureHtml : "" });
+    if (sender.unverified) return toast(UNVERIFIED_FROM);
+    const alias = sender.sender;
+    const html = buildHtml(body, { signature: sig ? senderSignature(alias, settings.signatureHtml) : "" });
     const files = att.files;
-    const snap = { text, cc, bcc, replyAll };
+    const snap = { text, cc, bcc, replyAll, ...(alias ? { from: alias.email } : {}) };
     if (draftKey) {
       writeDraft(draftKey, { ...draftExtra(draftKey), ...snap, at: Date.now() } satisfies ReplyDraft);
       setDraftFiles(draftKey, files);
@@ -380,8 +394,8 @@ export function ReplyBox({
         att.setFiles((cur) => (cur.length ? cur : files));
       }
     };
-    scheduleSend(sendLabel ?? `Réponse depuis ${BOX_LABEL[box]}`, settings.delaySec, async () => {
-      const done = await onSend({ text: body, cc: copy.ok, bcc: hidden.ok, html, attachments: files, replyAll: snap.replyAll, draftKey });
+    scheduleSend(sendLabel ?? `Réponse depuis ${alias?.email ?? BOX_LABEL[box]}`, settings.delaySec, async () => {
+      const done = await onSend({ text: body, cc: copy.ok, bcc: hidden.ok, html, attachments: files, replyAll: snap.replyAll, draftKey, ...(alias ? { from: alias.email } : {}) });
       if (!done) restore();
       else if (draftKey) clearSentDraft(draftKey);
     }, { onCancel: restore });
@@ -422,6 +436,7 @@ export function ReplyBox({
             <AddressInput value={bcc} onChange={setBcc} placeholder="Invisible pour les autres : adresse@exemple.com" className={addr} autoFocus inputMode="email" aria-label="Copie cachée" />
           </div>
         )}
+        {showSender && <SenderLine s={sender} className={line} labelClassName="w-8 text-[12px]" />}
         {ai.ready && <ClaudeReadyBanner onInsert={ai.insert} onDismiss={ai.dismiss} />}
         <textarea
           ref={ref}
@@ -472,6 +487,7 @@ export function ReplyBox({
       {bccOpen && (
         <AddressInput value={bcc} onChange={setBcc} placeholder="Cci (invisible pour les autres) : adresse@exemple.com" className={field} autoFocus inputMode="email" />
       )}
+      {showSender && <SenderLine s={sender} className="px-1" />}
       <AttachChips files={att.files} onRemove={att.remove} />
       <div className="flex items-end gap-2 rounded-xl border border-border bg-surface p-1.5 pl-3.5 focus-within:border-primary">
         <textarea
@@ -759,7 +775,9 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
   const [subject, setSubject] = useState(d?.subject ?? "");
   const [body, setBody] = useState(d?.body ?? "");
   const [box, setBox] = useState<MailBox>(() => d?.box ?? lastBox() ?? defaultBox);
-  const sig = settings.signatureOn; // celle des Réglages Mails, d'office
+  const sig = settings.signatureOn; // celle des Réglages Mails, d'office (ou celle de l'alias choisi)
+  const sender = useSender(box, local?.from ?? "");
+  const from = sender.from;
   const [ask, setAsk] = useState(false);
   const att = useAttachments();
   useEffect(() => {
@@ -770,14 +788,14 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
 
   const hasContent = !!(to.trim() || cc.trim() || bcc.trim() || subject.trim() || body.trim() || att.files.length);
   // Brouillon Gmail : une copie locale n'est gardée que s'il a été modifié sur cet appareil.
-  const changed = !seed || to !== seed.to || cc !== seed.cc || bcc !== seed.bcc || subject !== seed.subject || body !== seed.body || box !== seed.box || att.files.length > 0;
+  const changed = !seed || to !== seed.to || cc !== seed.cc || bcc !== seed.bcc || subject !== seed.subject || body !== seed.body || box !== seed.box || !!from || att.files.length > 0;
   const keepLocal = hasContent && changed;
   // Brouillon gardé tant que la fenêtre est ouverte.
   useEffect(() => {
-    if (keepLocal) writeDraft(dkey, { to, cc, bcc, subject, body, box, sig, at: Date.now() } satisfies NewDraft);
+    if (keepLocal) writeDraft(dkey, { to, cc, bcc, subject, body, box, sig, from, at: Date.now() } satisfies NewDraft);
     else if (readDraftRaw<NewDraft>(dkey) && !readDraftRaw<NewDraft>(dkey)?.sendingAt) writeDraft(dkey, null);
     setDraftFiles(dkey, att.files);
-  }, [keepLocal, to, cc, bcc, subject, body, box, sig, att.files]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [keepLocal, to, cc, bcc, subject, body, box, sig, from, att.files]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Fenêtre flottante (pas sur téléphone) : réductible, Cc / Cci repliés par défaut.
   const phone = useIosPhone();
@@ -815,12 +833,16 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
     if (copy.bad.length) return toast(`Adresse en copie invalide : ${copy.bad[0]}`);
     if (hidden.bad.length) return toast(`Adresse en copie cachée invalide : ${hidden.bad[0]}`);
     if (!subject.trim() || !body.trim()) return toast("Objet et message requis");
-    const html = buildHtml(body, { signature: sig ? settings.signatureHtml : "" });
+    if (sender.unverified) return toast(UNVERIFIED_FROM);
+    // Alias choisi : sa signature Gmail (comme Gmail), sinon celle des Réglages Mails.
+    const alias = sender.sender;
+    const html = buildHtml(body, { signature: sig ? senderSignature(alias, settings.signatureHtml) : "" });
     const params = {
       to: dest.ok[0], cc: copy.ok, bcc: hidden.ok, subject: subject.trim(), html, box,
-      attachments: att.files, source: "manual",
+      attachments: att.files, source: "manual", ...(alias ? { from: alias.email } : {}),
     };
-    writeDraft(dkey, { to, cc, bcc, subject, body, box, sig, at: Date.now() } satisfies NewDraft);
+    const fromLabel = alias?.email ?? BOX_LABEL[box];
+    writeDraft(dkey, { to, cc, bcc, subject, body, box, sig, from, at: Date.now() } satisfies NewDraft);
     setDraftFiles(dkey, att.files);
     markDraftSending(dkey);
     rememberBox(box);
@@ -832,16 +854,16 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
     scheduleSend(label, settings.delaySec, async () => {
       const r = await sendGmail(params, { label });
       if (!r.ok) {
-        toast(sendFailText(r.error));
+        toast(sendFailText(r.error, r.detail));
         return reopen();
       }
       clearSentDraft(dkey);
       onSent?.({ to: params.to, cc: params.cc });
-      if (!gmailDraft) return toast(`Mail envoyé depuis ${BOX_LABEL[box]} ✓`);
+      if (!gmailDraft) return toast(`Mail envoyé depuis ${fromLabel} ✓`);
       // Envoyé : le brouillon Gmail part de Brouillons (un échec ne touche pas au mail envoyé).
       const del = await deleteGmailDraft({ id: gmailDraft.draftId, box: gmailDraft.box });
       toast(del.ok
-        ? `Mail envoyé depuis ${BOX_LABEL[box]} ✓`
+        ? `Mail envoyé depuis ${fromLabel} ✓`
         : "Mail envoyé ✓ Le brouillon Gmail n'a pas pu être supprimé : retire-le depuis Brouillons.");
       onGmailDraftDone?.(gmailDraft, del.ok);
     }, { onCancel: reopen });
@@ -901,6 +923,7 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
           <>
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
               {gmailNote}
+              <SenderLine s={sender} className={cn(row, "gap-3")} labelClassName="w-10" />
               <div className={row}>
                 <span aria-hidden className="w-10 shrink-0 text-[12.5px] text-muted-foreground">À</span>
                 <AddressInput value={to} onChange={setTo} placeholder="adresse@exemple.com ou @nom" className={bare} autoFocus={!prefill} inputMode="email" aria-label="Destinataire" />
@@ -978,6 +1001,7 @@ function NewMailPanel({ draftKey: dkey, gmailDraft, onGmailDraftDone, defaultBox
             <span>Envoyer depuis</span>
             <BoxPicker value={box} onChange={setBox} />
           </div>
+          <SenderLine s={sender} />
           <AddressInput value={to} onChange={setTo} placeholder="À : adresse@exemple.com ou @nom" className={field} autoFocus={!prefill} inputMode="email" aria-label="Destinataire" />
           <div className="grid gap-2.5 sm:grid-cols-2">
             <AddressInput value={cc} onChange={setCc} placeholder="Cc (facultatif) : @nom pour chercher" className={field} inputMode="email" aria-label="Copie" />
