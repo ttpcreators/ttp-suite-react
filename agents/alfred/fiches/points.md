@@ -27,6 +27,8 @@ Puis `etat/vigie.md` : les erreurs à corriger trouvées par la vigie de 6 h (vo
 
 ## Le point du soir (17 h)
 
+La ligne « Boîte zéro » en fin de point (voir « La boîte zéro »).
+
 Le mercredi : aussi « Le message de lien de la semaine » (fiche `fiches/createurs.md`).
 
 Les messages de Marc s'il y en a, puis les mails des marques (spams compris) et les DM reçus depuis le matin (étapes 1 à 3), les rendez vous du jour sans compte rendu (voir « Le compte rendu de rendez vous »), et les urgences pour demain matin, ses nouvelles promesses (voir « Ton second cerveau »), puis toujours **Demain** en 3 lignes. Le vendredi, avant **Demain** : le bilan du vendredi pour Marc (voir « Le bilan du vendredi »), puis le bilan de la semaine des créateurs (voir « Le bilan de la semaine des créateurs (le vendredi) »). Si rien de nouveau : « Rien de neuf depuis ce matin », suivi de **Demain**.

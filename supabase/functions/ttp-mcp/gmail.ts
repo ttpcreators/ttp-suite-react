@@ -138,6 +138,21 @@ export async function readThreadMessages(sb: SupabaseClient, box: MailBox, threa
   };
 }
 
+/**
+ * Marque un fil comme lu (boîte zéro, demande de Marc le 18 novembre 2026) : partnerships@ et
+ * talent@ seulement (droit « modify », comme le bouton de l'app). Les boîtes des créateurs n'ont
+ * que la lecture et les brouillons : refus.
+ */
+export async function markThreadRead(sb: SupabaseClient, box: MailBox, threadId: string): Promise<void> {
+  if (isCreatorBox(box)) throw new Error("boite_createur_sans_droit_lu");
+  const token = await tokenFor(sb, box, "modify");
+  await gjson(token, `${GMAIL}/threads/${encodeURIComponent(threadId)}/modify`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ removeLabelIds: ["UNREAD"] }),
+  });
+}
+
 export async function readThread(sb: SupabaseClient, box: MailBox, threadId: string): Promise<string> {
   const token = await tokenFor(sb, box, "read");
   const t = await gjson(token, `${GMAIL}/threads/${encodeURIComponent(threadId)}?format=full`);

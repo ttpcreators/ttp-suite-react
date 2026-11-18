@@ -16,7 +16,7 @@ import { doublonPlanning, type Candidat, type PlanEvent } from "../_shared/plann
 import { readAppState } from "../_shared/appState.ts";
 import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
 import type { Ctx } from "./oauth.ts";
-import { boxAddress, boxesFor, createDraft, parseMailBox, deleteClaudeDraft, draftRefs, listClaudeDrafts, listSendAs, PARTOUT, readThread, resolveSender, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
+import { boxAddress, boxesFor, createDraft, parseMailBox, deleteClaudeDraft, draftRefs, listClaudeDrafts, listSendAs, PARTOUT, markThreadRead, readThread, resolveSender, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { findSendAs, type SendAs } from "../_shared/sendAs.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
 import { addressList, mailHtml, sparkLink } from "../_shared/mcpAdmin.ts";
@@ -744,6 +744,31 @@ const lireMail: Tool = {
       }
     }
     return fail(`Lecture impossible : ${derniere}. Essaie l'autre chemin : rechercher_mails avec boite « partout » et l'objet du fil (le fil peut être dans une autre boîte), ou Spark pour la boîte d'un créateur.`);
+  },
+};
+
+const marquerLu: Tool = {
+  name: "marquer_lu",
+  title: "Marquer un fil comme lu",
+  description: "Marque un fil Gmail comme lu, une fois traité (boîte zéro) : réponse préparée, tâche créée, ou rien à répondre (merci, confirmation, notification, newsletter). partnerships@ et talent@ seulement ; jamais un mail pas encore lu en entier ni traité. Les boîtes des créateurs ne le permettent pas.",
+  write: true,
+  inputSchema: {
+    type: "object",
+    properties: { fil: { type: "string", description: "Id du fil" }, boite: { type: "string", enum: ["partnerships", "talent"] } },
+    required: ["fil", "boite"],
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const id = str(a.fil, 40);
+    if (!/^[A-Za-z0-9]+$/.test(id)) return fail("Id de fil invalide.");
+    const box = str(a.boite) === "talent" ? "talent" : "partnerships";
+    try {
+      await markThreadRead(sb, box, id);
+      return ok(`✓ Fil ${id} marqué lu dans ${box}@.`);
+    } catch (e) {
+      const m = (e as Error).message ?? "";
+      return fail(/403|insufficient|scope/i.test(m) ? `${box}@ ne permet pas encore de marquer lu (droit « modify » à accorder) : laisse-le, et dis-le à Marc.` : `Fil non marqué lu : ${m}`);
+    }
   },
 };
 
@@ -2631,7 +2656,7 @@ const preparerContrat: Tool = {
 };
 
 export const TOOLS: Tool[] = [
-  pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
+  pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
   creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief,
