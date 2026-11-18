@@ -11,6 +11,8 @@
 //
 // Appelé par pg_cron (Bearer CRON_SECRET) OU par l'agence (JWT) pour un check manuel.
 // Les demandes de ces mails deviennent des tâches de la To-do (tasks.ts, sans IA).
+// Mail ouvert dans Gmail ou Spark : marqué lu dans la cloche (email_activity.read_at,
+// vérifié à chaque passage, _shared/mailLu.ts) et pas de push s'il l'était déjà à l'arrivée.
 // État du dernier passage : blob __app_state__ clé `emailPollState` =
 //   { lastTs (partnerships@, ms), talentLastTs (talent@, ms) }, écrit par la fonction
 //   SQL app_state_set (une seule clé, jamais tout le blob : les réglages ne sont pas écrasés).
@@ -27,6 +29,7 @@ import { sendTo } from "../_shared/push.ts";
 import { agencyMailPayloads, creatorMailPayloads, creatorsForMail, type CreatorMailSetting, type Lang, type NewMail } from "../_shared/mailNotif.ts";
 import { closeAnsweredTasks, tasksFromMails } from "./tasks.ts";
 import { excluFromMails } from "./exclu.ts";
+import { isUnread, rowsNowRead, type UnreadByBox } from "../_shared/mailLu.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
@@ -137,6 +140,56 @@ async function scanBox(box: Box, token: string, cursor: number): Promise<{ fresh
   const failed = metas.includes("fail");
   const next = failed ? cursor : Math.max(cursor, ...fresh.map((f) => f.ts));
   return { fresh, next, failed, more: ids.length > PER_RUN };
+}
+
+/**
+ * Non lus récents d'une boîte (ids). null si la liste échoue ou dépasse le plafond :
+ * dans le doute, rien n'est marqué lu.
+ */
+async function unreadIds(token: string): Promise<Set<string> | null> {
+  const auth = { headers: { Authorization: `Bearer ${token}` } };
+  const ids = new Set<string>();
+  let pageToken = "";
+  let pages = 0;
+  do {
+    const params = new URLSearchParams({ q: "is:unread newer_than:7d", maxResults: "500", fields: "messages/id,nextPageToken" });
+    if (pageToken) params.set("pageToken", pageToken);
+    const r = await gfetch(`${GMAIL}/messages?${params}`, auth, { timeoutMs: 10_000 });
+    if (!r.ok) return null;
+    const d = await r.json().catch(() => null) as { messages?: { id: string }[]; nextPageToken?: string } | null;
+    if (!d) return null;
+    for (const m of d.messages ?? []) ids.add(m.id);
+    pageToken = d.nextPageToken ?? "";
+  } while (pageToken && ++pages < 4);
+  return pageToken ? null : ids;
+}
+
+/**
+ * Mails de la cloche (3 derniers jours) encore non lus dans l'app : ceux qui ne sont
+ * plus non lus dans Gmail (ouverts dans Gmail, Spark ou sur le téléphone) passent lus.
+ */
+async function syncRead(sb: Sb, tokens: Partial<Record<Box, string>>, boxes: Box[]): Promise<number> {
+  const since = new Date(Date.now() - 3 * 86400000).toISOString();
+  const { data, error } = await sb.from("email_activity").select("id, gmail_message_id, box")
+    .eq("direction", "in").is("read_at", null).not("gmail_message_id", "is", null)
+    .gte("created_at", since).limit(500);
+  if (error || !data?.length) return 0; // colonnes absentes (base pas migrée) ou rien à vérifier
+  const unread: UnreadByBox = {};
+  await Promise.all(boxes.map(async (b) => {
+    try {
+      unread[b] = await unreadIds(tokens[b]!);
+    } catch {
+      unread[b] = null;
+    }
+  }));
+  const ids = rowsNowRead(data as { id: string; gmail_message_id: string | null; box: string | null }[], unread, boxes);
+  if (!ids.length) return 0;
+  const { error: upErr } = await sb.from("email_activity").update({ read_at: new Date().toISOString() }).in("id", ids);
+  if (upErr) {
+    console.error("gmail-poll lus", upErr.message);
+    return 0;
+  }
+  return ids.length;
 }
 
 function parseFrom(from: string): { email: string; name: string } {
@@ -261,11 +314,19 @@ Deno.serve(async (req: Request) => {
     if (selError) console.error("gmail-poll lecture journal", selError.message);
     if (exists && exists.length) continue;
     // Le constructeur de requête Supabase n'a pas de .catch : on lit { error }.
-    const { error } = await sb.from("email_activity").insert({
+    const row = {
       contact_email: email, contact_name: name, direction: "in",
       subject: f.subject, snippet: f.snippet.slice(0, 180), source: "inbox",
       thread_id: f.threadId, gmail_message_id: f.id,
+    };
+    // Boîte + déjà lu (ouvert dans Gmail ou Spark avant ce passage). Base pas encore
+    // migrée (colonnes absentes) : on enregistre sans, comme avant.
+    let { error } = await sb.from("email_activity").insert({
+      ...row, box: f.box, read_at: isUnread(f.labelIds) ? null : new Date().toISOString(),
     });
+    if (error && (error.code === "42703" || error.code === "PGRST204")) {
+      ({ error } = await sb.from("email_activity").insert(row));
+    }
     if (error) {
       // 23505 = déjà enregistré par un passage simultané (index unique) : pas de nouvelle alerte.
       if (error.code === "23505") continue;
@@ -285,7 +346,9 @@ Deno.serve(async (req: Request) => {
   let pushed = 0;
   if (added.length && prefs.emailReceivedPush !== false) {
     // Agence uniquement (rôle 'agency') : une notification par fil, au-delà de 3 fils un résumé.
-    pushed = (await sendTo(sb, { agency: true }, agencyMailPayloads(added))).sent;
+    // Un mail déjà ouvert dans Gmail ou Spark ne sonne pas sur le téléphone.
+    const toPush = added.filter((f) => isUnread(f.labelIds));
+    if (toPush.length) pushed = (await sendTo(sb, { agency: true }, agencyMailPayloads(toPush))).sent;
   }
 
   // Créateurs : la copie du mail dans la boîte que lit leur section Mail (talent@ si
@@ -338,8 +401,16 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Cloche : les mails ouverts entre-temps dans Gmail ou Spark passent en lus.
+  let read = 0;
+  try {
+    read = await syncRead(sb, tokens, boxes);
+  } catch (e) {
+    console.error("gmail-poll lus", (e as Error)?.message);
+  }
+
   return jsonRes({
-    ok: true, new: added.length, pushed, creatorPushed, tasks, tasksDone, exclu,
+    ok: true, new: added.length, pushed, read, creatorPushed, tasks, tasksDone, exclu,
     ...(baseline ? { baseline: true } : {}),
     ...(more ? { more: true } : {}),
     ...(failedBoxes.length ? { partial: true, failedBoxes } : {}),

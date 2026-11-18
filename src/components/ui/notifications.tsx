@@ -19,6 +19,8 @@ export interface NotificationItem {
   kind?: NotifKind;
   /** Page concernée (id du menu). Les choses à traiter (briefs, factures, contrats, bugs) comptent dans sa pastille. */
   page?: string;
+  /** Déjà lue ailleurs (mail ouvert dans Gmail ou Spark) : jamais comptée comme non lue. */
+  read?: boolean;
 }
 
 /** Types de notifications (ordre d'affichage des filtres). */
@@ -156,13 +158,13 @@ export function Notifications({
       initials: kind === "team" ? actorInitials(n.title) || undefined : undefined,
       icon: meta.icon,
       tone: meta.tone,
-      unread: !read.has(n.id),
+      unread: !n.read && !read.has(n.id),
       archived: archived.has(n.id),
       actionable: !!action,
       actions: action && n.page && onOpenPage ? [{ id: "open", label: action, tone: "primary" }] : undefined,
     };
   });
-  const unreadCount = countUnread(items.map((n) => n.id), read, archived);
+  const unreadCount = countUnread(items.filter((n) => !n.read).map((n) => n.id), read, archived);
   const go = (id: string) => {
     const page = items.find((n) => n.id === id)?.page;
     if (page && onOpenPage) {

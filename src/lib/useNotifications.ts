@@ -70,7 +70,8 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       supabase.from("todos").select("text,creator,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
       supabase.from("ideas").select("text,creator,created_at").eq("source", "creator").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
       supabase.from("events").select("title,who,created_at").eq("source", "creator").or("deleted.is.null,deleted.eq.false").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(8),
-      supabase.from("email_activity").select("subject,contact_name,contact_email,created_at,gmail_message_id").eq("direction", "in").gte("created_at", emailSince).order("created_at", { ascending: false }).limit(8),
+      // « * » : marche avant/après la colonne read_at (mail ouvert dans Gmail ou Spark).
+      supabase.from("email_activity").select("*").eq("direction", "in").gte("created_at", emailSince).order("created_at", { ascending: false }).limit(8),
       // Bugs remontés par l'app (agence uniquement via RLS). « * » : marche avant/après la colonne resolved_at.
       supabase.from("error_log").select("*").gte("created_at", weekAgo).order("created_at", { ascending: false }).limit(100),
       // Mails créatrices : leurs avis (En cours / Validé / Refusé) et leurs messages non lus.
@@ -197,7 +198,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       // Emails reçus sur la boîte agence (remplis par gmail-poll) — désactivable.
       const bellEmail = prefs.emailReceivedBell !== false;
       if (bellEmail && mailIn && !mailIn.error) {
-        ((mailIn.data as { subject: string | null; contact_name: string | null; contact_email: string | null; created_at: string | null; gmail_message_id: string | null }[]) ?? []).forEach((e) =>
+        ((mailIn.data as { subject: string | null; contact_name: string | null; contact_email: string | null; created_at: string | null; gmail_message_id: string | null; read_at?: string | null }[]) ?? []).forEach((e) =>
           out.push({
             id: `mail:${e.gmail_message_id ?? e.created_at}`,
             title: "Nouvel email reçu",
@@ -205,6 +206,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
             description: `${e.contact_name || e.contact_email || "Contact"} · ${e.subject || "(sans objet)"}`,
             time: agoLabel(e.created_at),
             kind: "email",
+            read: !!e.read_at,
           }),
         );
       }
