@@ -8,6 +8,7 @@ import { toast } from "@/components/ui/toast";
 import { viewTitle } from "@/lib/nav";
 import { actorInitials, toggleIds, unreadCount as countUnread, useNotifLocal, writeIds } from "@/lib/notifLocal";
 import type { StatusTone } from "@/lib/statusTone";
+import { syncMailsRead, type MailRef } from "@/lib/mailReadSync";
 
 export type NotifKind = "team" | "creator" | "email" | "facture" | "brief" | "event" | "contrat" | "bug";
 
@@ -21,6 +22,8 @@ export interface NotificationItem {
   page?: string;
   /** Déjà lue ailleurs (mail ouvert dans Gmail ou Spark) : jamais comptée comme non lue. */
   read?: boolean;
+  /** Mail reçu : la lire ici la marque lue dans Gmail (et Spark). */
+  mail?: MailRef;
 }
 
 /** Types de notifications (ordre d'affichage des filtres). */
@@ -142,7 +145,17 @@ export function Notifications({
   // Lue / archivée : propre à cet appareil (lib/notifLocal).
   // Partagé avec les autres cloches de l'écran et la pastille de l'icône.
   const { read, archived } = useNotifLocal();
-  const mark = (ids: string[], on: boolean) => writeIds("read", toggleIds(read, ids, on));
+  const mark = (ids: string[], on: boolean) => {
+    writeIds("read", toggleIds(read, ids, on));
+    // Mails : même état dans Gmail et Spark (lue ici → lue là-bas, et inversement).
+    const want = new Set(ids);
+    const refs = items.filter((n) => want.has(n.id) && n.mail && (on ? !n.read : true)).map((n) => n.mail!);
+    if (refs.length) {
+      void syncMailsRead(refs, on).then((done) => {
+        if (done.length < new Set(refs.map((r) => r.threadId)).size) toast(on ? "Pas pu marquer lu dans Gmail, réessaie" : "Pas pu remettre en non lu dans Gmail");
+      });
+    }
+  };
   const archive = (ids: string[], on: boolean) => writeIds("archived", toggleIds(archived, ids, on));
 
   const panelItems: PanelItem[] = items.map((n) => {

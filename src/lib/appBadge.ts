@@ -65,3 +65,16 @@ export function useCloseMailNotifications(active: boolean): void {
     return () => document.removeEventListener("visibilitychange", run);
   }, [active]);
 }
+
+/** Ferme les notifications de ces fils seulement (mails lus dans Gmail, Spark ou l'app). */
+export async function closeMailThreadNotifications(threads: string[]): Promise<void> {
+  if (!threads.length) return;
+  try {
+    if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    const tags = new Set(threads.map((t) => `mail:${t}`));
+    for (const n of (await reg?.getNotifications()) ?? []) if (tags.has(n.tag)) n.close();
+  } catch {
+    /* notifications non prises en charge */
+  }
+}

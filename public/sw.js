@@ -156,7 +156,15 @@ async function viewingMails(kind) {
   return false;
 }
 
+// Mails lus ailleurs (Gmail, Spark, l'app) : leurs notifications se ferment.
+async function closeMailNotes(threads) {
+  if (!Array.isArray(threads) || !threads.length) return;
+  const tags = new Set(threads.map((t) => `mail:${t}`));
+  for (const n of await self.registration.getNotifications()) if (tags.has(n.tag)) n.close();
+}
+
 async function showPush(data) {
+  await closeMailNotes(data.close).catch(() => {});
   const kind = data.kind || "info";
   const lang = data.lang === "en" ? "en" : "fr";
   const isMail = MAIL_KINDS.includes(kind);

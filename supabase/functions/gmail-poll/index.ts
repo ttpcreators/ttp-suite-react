@@ -29,7 +29,7 @@ import { sendTo } from "../_shared/push.ts";
 import { agencyMailPayloads, creatorMailPayloads, creatorsForMail, type CreatorMailSetting, type Lang, type NewMail } from "../_shared/mailNotif.ts";
 import { closeAnsweredTasks, tasksFromMails } from "./tasks.ts";
 import { excluFromMails } from "./exclu.ts";
-import { isUnread, rowsNowRead, type UnreadByBox } from "../_shared/mailLu.ts";
+import { isUnread, rowsNowRead, threadsToClose, type UnreadByBox } from "../_shared/mailLu.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
@@ -192,6 +192,16 @@ async function syncRead(sb: Sb, tokens: Partial<Record<Box, string>>, boxes: Box
   return ids.length;
 }
 
+/** Fils des mails lus (dans l'app, Gmail ou Spark) ces dernières 24 h, les plus récents d'abord. */
+async function recentlyReadThreads(sb: Sb): Promise<string[]> {
+  const { data, error } = await sb.from("email_activity").select("thread_id")
+    .eq("direction", "in").not("read_at", "is", null)
+    .gte("read_at", new Date(Date.now() - 86400000).toISOString())
+    .order("read_at", { ascending: false }).limit(80);
+  if (error) return [];
+  return ((data ?? []) as { thread_id: string | null }[]).map((r) => r.thread_id ?? "");
+}
+
 function parseFrom(from: string): { email: string; name: string } {
   const m = /<([^>]+)>/.exec(from);
   const email = (m ? m[1] : from).trim().toLowerCase();
@@ -348,7 +358,12 @@ Deno.serve(async (req: Request) => {
     // Agence uniquement (rôle 'agency') : une notification par fil, au-delà de 3 fils un résumé.
     // Un mail déjà ouvert dans Gmail ou Spark ne sonne pas sur le téléphone.
     const toPush = added.filter((f) => isUnread(f.labelIds));
-    if (toPush.length) pushed = (await sendTo(sb, { agency: true }, agencyMailPayloads(toPush))).sent;
+    if (toPush.length) {
+      // Au passage, les téléphones ferment les notifications des mails lus ailleurs depuis.
+      const close = threadsToClose(await recentlyReadThreads(sb), toPush.map((f) => f.threadId));
+      const payloads = agencyMailPayloads(toPush).map((p) => (close.length ? { ...p, close } : p));
+      pushed = (await sendTo(sb, { agency: true }, payloads)).sent;
+    }
   }
 
   // Créateurs : la copie du mail dans la boîte que lit leur section Mail (talent@ si

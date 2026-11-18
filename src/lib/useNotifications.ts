@@ -7,6 +7,7 @@ import { titleCase } from "./utils";
 import { toast } from "@/components/ui/toast";
 import type { NotificationItem } from "@/components/ui/notifications";
 import { teamNames } from "./team";
+import { closeMailThreadNotifications } from "./appBadge";
 import { activityText } from "../../supabase/functions/_shared/activityText";
 import { upcomingBirthdays } from "../../supabase/functions/_shared/birthdays";
 
@@ -198,7 +199,10 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       // Emails reçus sur la boîte agence (remplis par gmail-poll) — désactivable.
       const bellEmail = prefs.emailReceivedBell !== false;
       if (bellEmail && mailIn && !mailIn.error) {
-        ((mailIn.data as { subject: string | null; contact_name: string | null; contact_email: string | null; created_at: string | null; gmail_message_id: string | null; read_at?: string | null }[]) ?? []).forEach((e) =>
+        const rowsIn = (mailIn.data as { id: string; subject: string | null; contact_name: string | null; contact_email: string | null; created_at: string | null; gmail_message_id: string | null; thread_id: string | null; box?: string | null; read_at?: string | null }[]) ?? [];
+        // Lus dans Gmail, Spark ou ici : leurs notifications se ferment aussi sur ce téléphone.
+        void closeMailThreadNotifications(rowsIn.filter((e) => e.read_at && e.thread_id).map((e) => e.thread_id!));
+        rowsIn.forEach((e) =>
           out.push({
             id: `mail:${e.gmail_message_id ?? e.created_at}`,
             title: "Nouvel email reçu",
@@ -207,6 +211,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
             time: agoLabel(e.created_at),
             kind: "email",
             read: !!e.read_at,
+            mail: e.thread_id ? { activityId: e.id, threadId: e.thread_id, box: e.box ?? null } : undefined,
           }),
         );
       }

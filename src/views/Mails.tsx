@@ -13,6 +13,7 @@ import {
   type GmailDraftRow, type ReplyDraft,
 } from "@/lib/mailDrafts";
 import { supabase } from "@/lib/supabase";
+import { markActivity } from "@/lib/mailReadSync";
 import { allAddresses } from "@/lib/mailAddresses";
 import { cn, titleCase } from "@/lib/utils";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -1193,6 +1194,7 @@ export function Mails() {
       patchThreads((x) => (keyOf(x) === key ? { ...x, unread: false } : x));
       doneOv(key, at);
       invalidateMailUnread();
+      void markActivity([t.threadId], true); // la cloche le voit lu tout de suite
     });
   };
   const setRead = async (t: Target, unread: boolean) => {
@@ -1205,6 +1207,7 @@ export function Mails() {
     if (r === "ok") {
       patchThreads((x) => (keyOf(x) === key ? { ...x, unread } : x));
       invalidateMailUnread();
+      void markActivity([t.threadId], !unread);
       return doneOv(key, at);
     }
     dropOv(key, at);
