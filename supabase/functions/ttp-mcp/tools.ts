@@ -30,6 +30,7 @@ import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCart
 import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
 import { ciblesEchange, requeteEchange, texteEchanges } from "../_shared/dejaEchange.ts";
 import { cleDuCreateur, dateVersement, versementEnDouble } from "../_shared/versement.ts";
+import { CATEGORIES_MODELES, objectifsDuMois, problemeModele, type Objectif } from "../_shared/alfredOutils.ts";
 import { CREE_PAR_CLAUDE, preparerBrouillonPost } from "../_shared/igDraft.ts";
 import { appliquerChiffres } from "../_shared/mediakitChiffres.ts";
 import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
@@ -486,6 +487,82 @@ const noterReversement: Tool = {
     const { error } = await sb.rpc("app_state_merge", { p_key: "creatorPayouts", p_set: { [k]: [entree, ...(Array.isArray(frais[k]) ? frais[k] : [])] }, p_remove: [] });
     if (error) return fail(`Versement non noté : ${error.message}`);
     return ok(`✓ Versement noté dans Reversements : ${eur(montant)} à ${titleCase(k)} le ${frDay(date)}${note ? ` (${note})` : ""} [id ${entree.id}, pour l'annuler : retirer]. Relis le reste avec reversements.`);
+  },
+};
+
+// ── Objectifs du mois et modèles de mails (demande de Marc, 18 novembre 2026) ──
+/** Le 1er du mois suivant (« 2026-12-01 » pour « 2026-11 »), borne de fin d'un mois. */
+const moisSuivant = (mois: string) => {
+  const [a, m] = mois.split("-").map(Number);
+  return m === 12 ? `${a + 1}-01-01` : `${a}-${String(m + 1).padStart(2, "0")}-01`;
+};
+
+const objectifs: Tool = {
+  name: "objectifs",
+  title: "Objectifs du mois",
+  description: "Les objectifs de l'agence pour un mois (page Objectifs : intitulé, réalisé, cible, progression), et l'argent encaissé ce mois-là d'après les factures payées (TTC). Pour dire chaque lundi où en est l'agence et quels deals pousser. Mois au format AAAA-MM (défaut : le mois en cours).",
+  inputSchema: { type: "object", properties: { mois: { type: "string", description: "AAAA-MM (facultatif)" } }, additionalProperties: false },
+  founder: true,
+  run: async (sb, _c, a) => {
+    const courant = isoDay().slice(0, 7);
+    const mois = /^\d{4}-\d{2}$/.test(str(a.mois)) ? str(a.mois) : courant;
+    const st = await appState(sb);
+    const liste = objectifsDuMois(st.objByMonth, mois, courant);
+    const { data: inv } = await sb.from("invoices").select("ref, party, amount, paid_at, status").eq("status", "payee").gte("paid_at", `${mois}-01`).lt("paid_at", moisSuivant(mois));
+    const payees = (inv as Json[] | null) ?? [];
+    const encaisse = payees.reduce((t, f) => t + amountOf(f.amount), 0);
+    const nom = (o: Objectif) => o.name || o.label || o.creator || "Sans intitulé";
+    return ok([
+      `# Objectifs · ${mois}`,
+      lines(liste.map((o) => `- ${nom(o)} : ${o.ca ?? o.current ?? o.value ?? o.actual ?? "?"} sur ${o.target ?? "?"}${Number.isFinite(Number(o.pct)) ? ` (${Math.round(Number(o.pct))} %)` : ""}`), "Aucun objectif saisi pour ce mois dans la page Objectifs."),
+      `\nEncaissé ce mois (factures payées) : ${eur(encaisse)} TTC sur ${payees.length} facture(s).`,
+      "Ouvrir dans l'app : https://app.ttpcreators.pro/?open=view&view=objectifs",
+    ].join("\n"));
+  },
+};
+
+const modelesMails: Tool = {
+  name: "modeles_mails",
+  title: "Modèles de mails",
+  description: "Les modèles de mails de l'agence (page Templates), par catégorie : Prospection, Négociation, Suivi, Facturation. Ceux ajoutés par Alfred viennent de mails que Marc a envoyés tels quels : ils montrent son style.",
+  inputSchema: { type: "object", properties: { categorie: { type: "string" } }, additionalProperties: false },
+  run: async (sb, _c, a) => {
+    const st = await appState(sb);
+    const liste = (Array.isArray(st.customTemplates) ? st.customTemplates : []) as Json[];
+    const cat = str(a.categorie, 40).toLowerCase();
+    const vus = liste.filter((t) => !cat || String(t.category ?? "").toLowerCase() === cat);
+    return ok([`# Modèles de mails · ${vus.length}`, lines(vus.map((t) => `## ${t.category} · ${t.title}${t.id ? ` [${t.id}]` : ""}\n${String(t.body ?? "").slice(0, 1500)}`), "Aucun modèle perso.")].join("\n"));
+  },
+};
+
+const ajouterModele: Tool = {
+  name: "ajouter_modele",
+  title: "Ajouter un modèle de mail",
+  description: "Range dans la page Templates un mail que Marc a envoyé TEL QUEL (sans le corriger) : il devient un modèle de son style. Sans aucune donnée personnelle : marque, créateur, prénom et montant remplacés par {marque}, {créateur}, {contact}, {montant} ; ni adresse, ni téléphone, ni lien. Un seul modèle par sujet (vérifier modeles_mails avant).",
+  write: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      categorie: { type: "string", enum: CATEGORIES_MODELES },
+      titre: { type: "string", description: "Court : « Relance J+4 après un premier mail »" },
+      texte: { type: "string", description: "Le mail, avec {marque}, {créateur}, {contact}, {montant} à la place des données réelles" },
+    },
+    required: ["categorie", "titre", "texte"],
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const titre = str(a.titre, 120);
+    const texte = str(a.texte, 6000);
+    const categorie = CATEGORIES_MODELES.includes(str(a.categorie)) ? str(a.categorie) : "Suivi";
+    const probleme = problemeModele(titre, texte) ?? problemeTexteDestinataire(texte);
+    if (probleme) return fail(probleme);
+    const st = await appState(sb);
+    const deja = (Array.isArray(st.customTemplates) ? st.customTemplates : []) as Json[];
+    if (deja.some((t) => String(t.title ?? "").trim().toLowerCase() === titre.toLowerCase())) return fail(`Un modèle « ${titre} » existe déjà : rien ajouté.`);
+    const modele = { id: `tpl${Date.now().toString(36)}alf`, category: categorie, title: titre, body: texte };
+    const { error } = await sb.rpc("app_state_list", { p_key: "customTemplates", p_upsert: [modele], p_remove: [], p_prepend: true });
+    if (error) return fail(`Modèle non ajouté : ${error.message}`);
+    return ok(`✓ Modèle ajouté dans Templates : ${categorie} · « ${titre} ».\nOuvrir dans l'app : https://app.ttpcreators.pro/?open=view&view=templates`);
   },
 };
 
@@ -2554,7 +2631,7 @@ const preparerContrat: Tool = {
 };
 
 export const TOOLS: Tool[] = [
-  pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, methodeTarif, aValider, ecarterProposition,
+  pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
   creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief,

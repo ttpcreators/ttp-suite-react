@@ -4,7 +4,9 @@
 // ----------------------------------------------------------------------------
 // POST, Authorization: Bearer ALFRED_PONT_SECRET, corps JSON :
 //   { action: "pouls", commandes?: { texte, maj_le } }
-//       → { evenements, demandes, reglages, commandes, etait_hors_ligne }
+//       → { evenements, demandes, reglages, commandes, etait_hors_ligne, skills?, skills_version }
+//       (skills : les skills faites pour Marc, hors du dépôt public, table agent.skills_privees,
+//        envoyées seulement quand leur version change : body.skills_version)
 //       l'iMac est vu maintenant ; les nouvelles de l'app et les demandes en attente lui
 //       sont remises (et marquées remises) ; il reçoit ses réglages et ses commandes.
 //   { action: "vivant" }                  → signe de vie pendant un passage
@@ -79,7 +81,14 @@ Deno.serve(async (req: Request) => {
   const demandes = (dm as Record<string, any>[] | null) ?? [];
   if (demandes.length) await db.from("demandes").update({ statut: "recue", recue_le: maintenant }).in("id", demandes.map((d) => d.id));
 
+  // Les skills privées (hooks-viraux, structure-script, conseil) : seulement si elles ont changé.
+  const { data: sk } = await db.from("skills_privees").select("nom, fichiers, maj_le").order("nom");
+  const skills = (sk as { nom: string; fichiers: Record<string, string>; maj_le: string }[] | null) ?? [];
+  const skillsVersion = skills.map((x) => `${x.nom}@${x.maj_le}`).join(",");
+
   return json({
+    ...(skills.length && skillsVersion !== String(body.skills_version ?? "") ? { skills: skills.map(({ nom, fichiers }) => ({ nom, fichiers })) } : {}),
+    skills_version: skillsVersion,
     evenements,
     demandes,
     reglages: reglagesPropres(reglages),

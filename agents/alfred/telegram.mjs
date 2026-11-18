@@ -1319,12 +1319,40 @@ async function mettreMenu(token, chatId, here) {
   return { commandes, refus };
 }
 
+/**
+ * Écrit une skill reçue par le pont dans .claude/skills/<nom>/ (nom et chemins contrôlés : jamais
+ * hors de ce dossier). Renvoie false si elle est refusée.
+ */
+export function ecrireSkill(here, sk) {
+  const nom = String(sk?.nom ?? "");
+  if (!/^[a-z0-9-]{2,40}$/.test(nom) || !sk.fichiers || typeof sk.fichiers !== "object") return false;
+  const dossier = join(here, ".claude", "skills", nom);
+  const entrees = Object.entries(sk.fichiers).filter(([chemin, contenu]) => /^[A-Za-z0-9._/-]{1,120}$/.test(chemin) && !chemin.split("/").includes("..") && !chemin.startsWith("/") && typeof contenu === "string");
+  if (!entrees.some(([c]) => c === "SKILL.md")) return false;
+  rmSync(dossier, { recursive: true, force: true });
+  for (const [chemin, contenu] of entrees) {
+    const f = join(dossier, chemin);
+    if (!resolve(f).startsWith(resolve(dossier) + sep)) continue;
+    mkdirSync(dirname(f), { recursive: true });
+    writeFileSync(f, contenu);
+  }
+  return true;
+}
+
 /** Le pouls : signe de vie, nouvelles de l'app, demandes, réglages et commandes. Renvoie { demandes, evenements }. */
 async function prendrePouls(env, token, chatId, here, fil) {
   const fichierCommandes = join(here, "etat/commandes.txt");
   const local = existsSync(fichierCommandes) ? { texte: readFileSync(fichierCommandes, "utf8"), maj_le: statSync(fichierCommandes).mtime.toISOString() } : undefined;
-  const r = await pont(env, { action: "pouls", commandes: local });
+  const fichierSkills = join(here, "etat/skills-privees-version");
+  const skillsVersion = existsSync(fichierSkills) ? readFileSync(fichierSkills, "utf8").trim() : "";
+  const r = await pont(env, { action: "pouls", commandes: local, skills_version: skillsVersion });
   if (!r) return { demandes: [], evenements: [] };
+  // Les skills faites pour Marc (hors du dépôt public) : écrites dans .claude/skills quand elles changent.
+  if (Array.isArray(r.skills) && r.skills.length) {
+    let ok = true;
+    for (const sk of r.skills) ok = ecrireSkill(here, sk) && ok;
+    if (ok && r.skills_version) writeFileSync(fichierSkills, String(r.skills_version));
+  }
   const fr = join(here, "etat/reglages.json");
   const neuf = JSON.stringify(r.reglages ?? {}, null, 1);
   if (r.reglages && (!existsSync(fr) || readFileSync(fr, "utf8") !== neuf)) writeFileSync(fr, neuf);
