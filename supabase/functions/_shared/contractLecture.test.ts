@@ -74,3 +74,20 @@ describe("trouverContrats", () => {
     expect(trouverContrats([d], hist, { createur: "adelina" }).map((c) => c.kind)).toEqual(["brouillon", "enregistre"]);
   });
 });
+
+describe("contrat non exclusif sans boîte mail ni clause pénale", () => {
+  const cfg = { ...rcDefaultConfig("nonexclusif"), modeCommission: "parOrigine", gestionMail: "false", clausePenaleActive: "false" };
+  const t = representationText(cfg);
+  it("4.3 ne parle ni d'exclusivité ni de clause pénale", () => {
+    const a43 = t.slice(t.indexOf("4.3 "), t.indexOf("4.4 "));
+    expect(a43).toContain("non exclusif");
+    expect(a43).not.toMatch(/exclusivité|clause pénale/);
+  });
+  it("articles 1 et 2 sans gestion de la boîte mail", () => {
+    expect(t.slice(t.indexOf("Article 1"), t.indexOf("Article 3"))).not.toContain("boîte mail");
+    expect(representationText({ ...cfg, gestionMail: "true" })).toContain("via la boîte mail professionnelle du Talent");
+  });
+  it("exclusif avec clause pénale : 4.3 inchangé", () => {
+    expect(representationText(rcDefaultConfig("exclusif"))).toContain("violation de l'exclusivité et entraîne l'application de la clause pénale");
+  });
+});
