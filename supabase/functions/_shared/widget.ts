@@ -7,6 +7,8 @@
 // testées par widget.test.ts. Le script Scriptable : src/lib/widgetScript.ts.
 // ============================================================================
 
+import { isIgnoredSender, type IgnoredSenders } from "./mailIgnore.ts";
+
 /** Clé du blob agence : empreinte SHA-256 de la clé du widget (la clé elle-même n'est jamais gardée). */
 export const WIDGET_KEY = "widgetKey";
 
@@ -26,11 +28,15 @@ export type Ton = "retard" | "jour" | "bientot" | "";
 export type WidgetTache = { t: string; quand: string; ton: Ton; haute: boolean };
 /** `court` : l'étiquette d'une ligne de widget (« 17:00 », « Auj. », « Dem. 09:00 », « ven. 21 »). */
 export type WidgetEvent = { t: string; quand: string; court: string; heure: string; deadline: boolean; ton: "jour" | "demain" | "" };
+export type MailIn = { contact_name?: unknown; contact_email?: unknown; subject?: unknown; created_at?: unknown; read_at?: unknown; box?: unknown; direction?: unknown };
+/** Un mail non lu : expéditeur, objet, heure (« 14:32 », « hier », « lun. 17 »), boîte. */
+export type WidgetMail = { de: string; objet: string; quand: string; boite: "partnerships" | "talent" | "" };
 export type WidgetData = {
   v: 1;
   maj: string;
   taches: { ouvertes: number; retard: number; aujourdhui: number; liste: WidgetTache[] };
   planning: { total: number; liste: WidgetEvent[] };
+  mails: { nonLus: number; partnerships: number; talent: number; liste: WidgetMail[] };
 };
 
 const TZ = "Europe/Paris";
@@ -101,7 +107,14 @@ export function quandTache(due: string, today: string): { quand: string; ton: To
  * d'abord, puis l'ordre de la page To-do). Planning : du moment présent à J+7 ; un
  * rendez-vous du jour déjà passé n'est plus montré (sauf journée entière).
  */
-export function resumeWidget(todos: readonly TodoIn[], events: readonly EventIn[], now: Date, max = { taches: 8, planning: 8 }): WidgetData {
+export function resumeWidget(
+  todos: readonly TodoIn[],
+  events: readonly EventIn[],
+  now: Date,
+  mails: readonly MailIn[] = [],
+  ignored: IgnoredSenders = {},
+  max = { taches: 12, planning: 14, mails: 8 },
+): WidgetData {
   const { day: today, time } = parisNow(now);
   const rows = todos
     .map((t, i) => ({ t, i, due: dueIso(t.due), prio: PRIO[String(t.priority ?? "")] ?? 3, order: Number(t.sort_order) }))
@@ -144,7 +157,51 @@ export function resumeWidget(todos: readonly TodoIn[], events: readonly EventIn[
     };
   });
 
-  return { v: 1, maj: now.toISOString(), taches: { ouvertes: rows.length, retard, aujourdhui, liste }, planning: { total: evs.length, liste: planning } };
+  return {
+    v: 1,
+    maj: now.toISOString(),
+    taches: { ouvertes: rows.length, retard, aujourdhui, liste },
+    planning: { total: evs.length, liste: planning },
+    mails: resumeMails(mails, ignored, now, max.mails),
+  };
+}
+
+/** « 14:32 » aujourd'hui, « hier », sinon « lun. 17 » (heure de Paris). */
+export function quandMail(iso: string, now: Date): string {
+  const t = new Date(iso);
+  if (Number.isNaN(t.getTime())) return "";
+  const a = parisNow(t), n = parisNow(now);
+  const d = daysBetween(a.day, n.day);
+  return d <= 0 ? a.time : d === 1 ? "hier" : jourCourt(a.day).replace(/\s+\S+$/, "");
+}
+
+/**
+ * Mails reçus non lus (ni dans l'app, ni dans Gmail ou Spark : email_activity.read_at),
+ * sans les expéditeurs « Pas à traiter ». Les plus récents d'abord.
+ */
+export function resumeMails(rows: readonly MailIn[], ignored: IgnoredSenders, now: Date, max = 8): WidgetData["mails"] {
+  const keep = rows
+    .filter((r) => (r.direction == null || r.direction === "in") && !r.read_at)
+    .filter((r) => !isIgnoredSender(String(r.contact_email ?? ""), ignored))
+    .map((r) => ({ r, at: Date.parse(String(r.created_at ?? "")) }))
+    .filter((x) => Number.isFinite(x.at))
+    .sort((a, b) => b.at - a.at);
+  const boxOf = (v: unknown) => (v === "partnerships" || v === "talent" ? v : "");
+  return {
+    nonLus: keep.length,
+    partnerships: keep.filter((x) => boxOf(x.r.box) === "partnerships").length,
+    talent: keep.filter((x) => boxOf(x.r.box) === "talent").length,
+    liste: keep.slice(0, max).map(({ r }) => {
+      const nom = String(r.contact_name ?? "").trim().replace(/^"|"$/g, "");
+      const mail = String(r.contact_email ?? "").trim();
+      return {
+        de: clip(nom || mail.replace(/^.*<([^>]+)>.*$/, "$1") || "Inconnu", 40),
+        objet: clip(String(r.subject ?? "").trim().replace(/\s+/g, " ") || "(sans objet)", 90),
+        quand: quandMail(String(r.created_at), now),
+        boite: boxOf(r.box),
+      };
+    }),
+  };
 }
 
 /** État de la clé lu dans le blob, ou null s'il est absent ou abîmé. */

@@ -115,7 +115,7 @@ const ENTRIES: Entry[] = [
       { title: "Résumé de la semaine", keywords: ["lundi", "semaine"] },
       { title: "Données créateurs à jour", keywords: ["stats", "roster", "mensuel", "abonnés"] },
       { title: "Sauvegarde mensuelle", keywords: ["sauvegarde", "backup", "csv", "export", "media kit", "crash"] },
-      { title: "Widget iPhone", keywords: ["widget", "iphone", "écran d'accueil", "scriptable", "écran verrouillé"] },
+      { title: "Widget iPhone", keywords: ["widget", "iphone", "écran d'accueil", "scriptable", "écran verrouillé", "mails"] },
     ],
   },
   {
@@ -284,7 +284,7 @@ function WidgetCard() {
   return (
     <Card
       title="Widget iPhone"
-      hint="Tes tâches à faire et le planning des 7 prochains jours sur l'écran d'accueil ou l'écran verrouillé, avec l'app gratuite Scriptable. Lecture seule : le widget ne montre ni mails, ni factures, ni contacts."
+      hint="Tes tâches, le planning des 7 prochains jours et tes mails non lus sur l'écran d'accueil ou l'écran verrouillé, avec l'app gratuite Scriptable. Lecture seule : ni factures, ni contacts, ni le contenu des mails."
       right={
         script ? null : (
           <button type="button" onClick={() => void creer()} disabled={busy} className={cn(btn, etat ? "bg-muted text-foreground" : "bg-primary text-primary-foreground")}>
@@ -303,6 +303,10 @@ function WidgetCard() {
             </li>
             <li>Copie le script, puis dans Scriptable : <b>+</b> en haut à droite, colle, et touche le titre pour le nommer « TTP ».</li>
             <li>Écran d'accueil : appui long › <b>+</b> › Scriptable › choisis la taille › touche le widget › Script : TTP.</li>
+            <li>
+              Pour choisir ce qu'il montre, touche le widget en mode édition, champ <b>Parameter</b> : vide (tâches et planning), <b>mails</b>, <b>taches</b> ou{" "}
+              <b>planning</b>. Pose-en plusieurs si tu veux.
+            </li>
           </ol>
           <div className="flex flex-wrap gap-2">
             <button type="button" onClick={() => void copier()} className={cn(btn, "bg-primary text-primary-foreground")}>Copier le script</button>
