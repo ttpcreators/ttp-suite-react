@@ -459,4 +459,12 @@ describe("raccourcis des créateurs", () => {
       rmSync(ici, { recursive: true, force: true });
     }
   });
+
+  it("montre les pièces jointes sous l'adresse, jamais dans le mail", () => {
+    const m = messageMail("Mail à Ilona (Nova) · réponds « oui Nova » pour l'envoyer\nÀ : ilona@exemple.fr · Objet : Contrat\nPièces jointes : Contrat Nova.pdf\n\nBonjour Ilona,\nVoici le contrat.");
+    expect(m.text).toContain("📎 Contrat Nova.pdf");
+    expect(m.text).not.toContain("Pièces jointes");
+    expect(m.text).toContain("Voici le contrat.");
+  });
 });
+

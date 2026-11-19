@@ -18,6 +18,7 @@
 //   node telegram.mjs rappels              envoie les rappels arrivés à échéance (etat/rappels.md)
 //   node telegram.mjs raccourcis           met les raccourcis des créateurs (etat/raccourcis.txt) dans le menu « / »
 //   node telegram.mjs clavier [--forcer]   envoie les boutons fixes du bas de l'écran (une fois par version)
+//   node telegram.mjs deposer <etat/…>     dépose un fichier de l'iMac dans l'app, pour le joindre à un mail
 //   node telegram.mjs joindre <id> [ordre] copie une pièce jointe d'un mail (Spark) dans le dossier
 //                                          d'envoi du passage (ALFRED_ENVOI, sinon etat/envoi) :
 //                                          elle part à Marc avec le prochain envoi, sous son nom d'origine
@@ -185,6 +186,8 @@ export function messageMail(text) {
   const oui = /«\s*(oui [^»]+?)\s*»/i.exec(premiere)?.[1];
   const titre = premiere.split(" · ")[0].trim();
   const meta = /^À\s*:/.test(suite[0] ?? "") ? suite.shift().trim() : "";
+  // « Pièces jointes : Contrat Nova.pdf » (sur la ligne suivante) : affichée sous l'adresse, jamais dans le mail.
+  const pj = /^\s*(📎\s*)?pi[eè]ces? jointes?\s*:/i.test(suite[0] ?? "") ? suite.shift().trim().replace(/^📎\s*/, "") : "";
   const corps = [];
   const verifier = [];
   for (const l of suite) (/^À VÉRIFIER/i.test(l.trim()) ? verifier : corps).push(l);
@@ -196,7 +199,7 @@ export function messageMail(text) {
     ? `<blockquote${mail.split("\n").length > 6 ? " expandable" : ""}>${escapeHtml(mail)}</blockquote>`
     : `<pre>${escapeHtml(mail)}</pre>`;
   const html = [
-    `<b>${escapeHtml(titre)}</b>${meta ? `\n${escapeHtml(meta)}` : ""}`,
+    `<b>${escapeHtml(titre)}</b>${meta ? `\n${escapeHtml(meta)}` : ""}${pj ? `\n📎 ${escapeHtml(pj.replace(/^pi[eè]ces? jointes?\s*:\s*/i, ""))}` : ""}`,
     mail ? blocMail : null,
     ...verifier.map((v) => escapeHtml(v.trim()).replace(/^À VÉRIFIER/i, "<b>À vérifier</b>")),
   ]
@@ -1406,6 +1409,20 @@ async function main() {
   if (mode === "raccourcis") {
     const { commandes, refus } = await mettreMenu(token, chatId, here);
     console.log(`Menu à jour : ${commandes.length} commande(s) et raccourci(s)${refus.length ? ` ; ignoré(s) (lettres minuscules, chiffres et _ seulement, sans doublon) : ${refus.join(" | ")}` : ""}.`);
+    return;
+  }
+
+  // Un fichier de l'iMac à joindre à un mail (demande de Marc, 19 novembre 2026) : déposé dans le
+  // stockage de l'app par le pont ; creer_brouillon_mail le joint avec { document: <chemin> }.
+  // Seulement un fichier du dossier etat/ d'Alfred (contrat fabriqué, pièce reçue, preview).
+  if (mode === "deposer") {
+    const src = resolve(here, String(arg ?? ""));
+    if (!src.startsWith(join(here, "etat") + sep) || !existsSync(src)) return console.log("Donne un fichier de etat/ (etat/envoi/…, etat/previews/…, etat/pieces/…).");
+    const taille = statSync(src).size;
+    if (taille > 10 * 1024 * 1024) return console.log(`Fichier trop lourd (${Math.round(taille / 1048576)} Mo, 10 Mo au plus) : envoie un lien à la place.`);
+    const r = await pont(env, { action: "deposer", nom: nomAffiche(src.split(sep).pop()), contenu: readFileSync(src).toString("base64") });
+    if (!r?.path) return console.log(`Dépôt refusé${r?.error ? ` (${r.error})` : ""} : PDF, image, Word, Excel, PowerPoint ou CSV.`);
+    console.log(`Déposé : ${r.nom}. Pour le joindre : creer_brouillon_mail avec pieces_jointes [{ "document": "${r.path}" }]`);
     return;
   }
 

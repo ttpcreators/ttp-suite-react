@@ -16,7 +16,7 @@ import { doublonPlanning, type Candidat, type PlanEvent } from "../_shared/plann
 import { readAppState } from "../_shared/appState.ts";
 import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
 import type { Ctx } from "./oauth.ts";
-import { boxAddress, boxesFor, createDraft, parseMailBox, deleteClaudeDraft, draftRefs, listClaudeDrafts, listSendAs, PARTOUT, markThreadRead, readThread, resolveSender, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
+import { boxAddress, boxesFor, createDraft, parseMailBox, deleteClaudeDraft, draftRefs, listClaudeDrafts, listSendAs, PARTOUT, attachmentFromThread, markThreadRead, readThread, resolveSender, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { findSendAs, type SendAs } from "../_shared/sendAs.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
 import { addressList, mailHtml, sparkLink } from "../_shared/mcpAdmin.ts";
@@ -30,6 +30,7 @@ import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCart
 import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
 import { ciblesEchange, requeteEchange, texteEchanges } from "../_shared/dejaEchange.ts";
 import { cleDuCreateur, dateVersement, versementEnDouble } from "../_shared/versement.ts";
+import { nomPropre, problemePieces, typeDuNom, type Piece } from "../_shared/piecesJointes.ts";
 import { CATEGORIES_MODELES, objectifsDuMois, problemeModele, type Objectif } from "../_shared/alfredOutils.ts";
 import { CREE_PAR_CLAUDE, preparerBrouillonPost } from "../_shared/igDraft.ts";
 import { appliquerChiffres } from "../_shared/mediakitChiffres.ts";
@@ -1501,6 +1502,12 @@ const brouillonMail: Tool = {
       message: { type: "string", description: "Texte du mail, sans signature : la signature des Réglages Mails (avec son GIF) est ajoutée" },
       fil: { type: "string", description: "Id du fil pour répondre (facultatif)" },
       signature: { type: "boolean", description: "false pour ne pas ajouter la signature (par défaut : ajoutée)" },
+      pieces_jointes: {
+        type: "array",
+        maxItems: 5,
+        description: "Facultatif : fichiers à joindre (PDF surtout), 20 Mo en tout. Chacun : { document } (le chemin ou le nom d'un fichier de la page Documents, ou un fichier déposé par Alfred avec « node telegram.mjs deposer »), ou { fil, nom, boite } (une pièce jointe d'un mail reçu, retrouvée par son nom dans ce fil ; boite par défaut : celle du brouillon), ou { url } (un PDF public de ttpcreators.pro, comme un media kit).",
+        items: { type: "object", properties: { document: { type: "string" }, fil: { type: "string" }, nom: { type: "string" }, boite: { type: "string" }, url: { type: "string" } }, additionalProperties: false },
+      },
       envoyer_en_tant_que: { type: "string", description: "Facultatif : alias mail d'une créatrice (ex. anamilanovic@ttpcreators.pro, via alias_createurs ou fiche_createur) pour écrire EN SON NOM. Accepté seulement s'il est réglé dans « Envoyer en tant que » de la boîte dans Gmail ; les réponses de la marque reviennent sur l'alias." },
     },
     required: ["boite", "a", "objet", "message"],
@@ -1550,7 +1557,11 @@ const brouillonMail: Tool = {
       const dejaVu = cibles.length
         ? texteEchanges(cibles, (await searchThreads(sb, PARTOUT, requeteEchange(cibles), 6).catch(() => ({ threads: [] }))).threads)
         : "";
-      const r = await createDraft(sb, box, to, str(a.objet, 300), str(a.message, 20000), /^[A-Za-z0-9]+$/.test(fil) ? fil : undefined, html, cci, from);
+      // Les pièces jointes (demande de Marc, 19 novembre 2026) : récupérées AVANT le brouillon ;
+      // une pièce introuvable ou refusée : rien n'est créé, Alfred le dit à Marc.
+      const pieces = await piecesDuBrouillon(sb, box, a.pieces_jointes);
+      if ("erreur" in pieces) return fail(pieces.erreur);
+      const r = await createDraft(sb, box, to, str(a.objet, 300), str(a.message, 20000), /^[A-Za-z0-9]+$/.test(fil) ? fil : undefined, html, cci, from, pieces.liste);
       const de = from ? ` (de ${from.email}${from.name ? `, « ${from.name} »` : ""})` : "";
       const how = r.replaced
         ? `Brouillon MIS À JOUR dans ${box.includes("@") ? box : `${box}@`}${de} (il remplace celui déjà préparé pour ${to}, aucun doublon${r.removed ? `, ${r.removed} ancien${r.removed > 1 ? "s" : ""} doublon${r.removed > 1 ? "s" : ""} supprimé${r.removed > 1 ? "s" : ""}` : ""})`
@@ -1564,12 +1575,66 @@ const brouillonMail: Tool = {
         // Boîte d'un créateur : pas encore dans la page Mails de l'app, seulement Spark.
         liens = `${spark ? `\nOuvrir dans Spark : ${spark}` : ""}${thread && !box.includes("@") ? `\nOuvrir dans l'app : https://app.ttpcreators.pro/?open=mails&thread=${thread}&box=${box}` : ""}`;
       }
-      return ok(`${how}${cci.length ? ` (en copie cachée : ${cci.join(", ")})` : ""} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail, Spark ou l'app (Mails, dossier Brouillons).${r.id ? ` Id du brouillon : ${r.id}.` : ""}${liens}${dejaVu}`);
+      return ok(`${how}${cci.length ? ` (en copie cachée : ${cci.join(", ")})` : ""}${pieces.liste.length ? ` avec ${pieces.liste.length} pièce(s) jointe(s) : ${pieces.liste.map((x) => x.nom).join(", ")}` : ""} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail, Spark ou l'app (Mails, dossier Brouillons).${r.id ? ` Id du brouillon : ${r.id}.` : ""}${liens}${dejaVu}`);
     } catch (e) {
       return fail(`Brouillon non créé : ${(e as Error).message}`);
     }
   },
 };
+
+/** Les pièces jointes d'un brouillon, depuis la page Documents, un mail reçu ou ttpcreators.pro. */
+async function piecesDuBrouillon(sb: SupabaseClient, box: MailBox, v: unknown): Promise<{ liste: Piece[] } | { erreur: string }> {
+  const sources = (Array.isArray(v) ? v : []).slice(0, 5) as Json[];
+  const liste: Piece[] = [];
+  for (const src of sources) {
+    try {
+      if (str(src.document)) {
+        const d = str(src.document, 300);
+        const esc = d.replace(/[%_,()]/g, " ");
+        const { data } = await sb.from("documents").select("name, path").or(`path.eq.${JSON.stringify(d)},name.ilike.${JSON.stringify(`%${esc}%`)}`).order("created_at", { ascending: false }).limit(1);
+        const row = (data as Json[] | null)?.[0];
+        const path = String(row?.path ?? (d.startsWith("alfred/") ? d : ""));
+        if (!path) return { erreur: `Document « ${d} » introuvable dans la page Documents.` };
+        const { data: blob, error } = await sb.storage.from("documents").download(path);
+        if (error || !blob) return { erreur: `Document « ${d} » illisible : ${error?.message ?? "vide"}.` };
+        const nom = nomPropre(String(row?.name ?? path.split("/").pop() ?? "document.pdf"));
+        const type = typeDuNom(nom) ?? typeDuNom(path) ?? blob.type ?? "application/pdf";
+        liste.push({ nom: /\.[a-z0-9]{2,4}$/i.test(nom) ? nom : `${nom}.${(path.match(/\.([a-z0-9]+)$/i)?.[1] ?? "pdf")}`, type, base64: base64DesOctets(new Uint8Array(await blob.arrayBuffer())) });
+      } else if (str(src.fil) && str(src.nom)) {
+        const fil = str(src.fil, 40);
+        if (!/^[A-Za-z0-9]+$/.test(fil)) return { erreur: "Id de fil invalide pour une pièce jointe." };
+        let b: MailBox = box;
+        if (str(src.boite)) {
+          const p = await parseMailBox(sb, src.boite);
+          if ("error" in p) return { erreur: p.error };
+          b = p.box;
+        }
+        liste.push(await attachmentFromThread(sb, b, fil, str(src.nom, 200)));
+      } else if (str(src.url)) {
+        const u = new URL(str(src.url, 500));
+        if (u.protocol !== "https:" || !/^(www\.|app\.)?ttpcreators\.pro$/.test(u.hostname)) return { erreur: "Seuls les fichiers publics de ttpcreators.pro se joignent par adresse." };
+        const res = await fetch(u, { signal: AbortSignal.timeout(20_000) });
+        if (!res.ok) return { erreur: `Fichier introuvable (${res.status}) : ${u.pathname}` };
+        const nom = nomPropre(decodeURIComponent(u.pathname.split("/").pop() || "document.pdf"));
+        liste.push({ nom, type: typeDuNom(nom) ?? (res.headers.get("content-type") ?? "").split(";")[0], base64: base64DesOctets(new Uint8Array(await res.arrayBuffer())) });
+      } else {
+        return { erreur: "Pièce jointe : donner document, fil et nom, ou url." };
+      }
+    } catch (e) {
+      const m = (e as Error).message ?? "";
+      return { erreur: m.startsWith("piece_introuvable") ? `Pièce « ${str(src.nom, 200)} » introuvable dans ce fil.` : `Pièce jointe non récupérée : ${m}` };
+    }
+  }
+  const probleme = problemePieces(liste);
+  return probleme ? { erreur: probleme } : { liste };
+}
+
+/** Octets → base64 (par morceaux, pour les gros PDF). */
+function base64DesOctets(o: Uint8Array): string {
+  let bin = "";
+  for (let i = 0; i < o.length; i += 0x8000) bin += String.fromCharCode(...o.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
 
 const ajouterContact: Tool = {
   name: "ajouter_contact",
