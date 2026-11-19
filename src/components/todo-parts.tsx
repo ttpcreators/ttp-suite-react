@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Check } from "@/components/icons";
 import { cn } from "@/lib/utils";
+import { haptic } from "@/lib/haptics";
 
 /*
  * Briques communes des deux pages « À faire » (agence : src/views/Todo.tsx, créateur :
@@ -14,6 +15,7 @@ export function DoneCircle({ done, high, onToggle, size = "md", labels = ["Rouvr
       type="button"
       onClick={(e) => {
         e.stopPropagation();
+        if (!done) haptic("succes");
         onToggle();
       }}
       aria-label={done ? labels[0] : labels[1]}

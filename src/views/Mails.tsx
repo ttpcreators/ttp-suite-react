@@ -48,6 +48,7 @@ import { useIntent } from "@/lib/openIntent";
 import { addrOf, addrsOf, replyPlan } from "@/lib/mailReply";
 import { ignoreSender, unignoreSender, useIgnoredSenders } from "@/lib/mailIgnored";
 import { isIgnoredSender, type IgnoredSenders } from "../../supabase/functions/_shared/mailIgnore.ts";
+import { haptic } from "@/lib/haptics";
 
 // Espace mails d'un créateur (statuts, remarques, suivi), chargé seulement à la demande.
 const CreatorMailsAgency = lazy(lazyImport(() => import("@/views/CreatorMails").then((m) => ({ default: m.CreatorMailsAgency }))));
@@ -1368,6 +1369,7 @@ export function Mails() {
   };
   const removeRows = (key: string) => patchThreads((x) => (keyOf(x) === key ? null : x));
   const archive = (t: Target) => {
+    haptic("retrait");
     const key = keyOf(t);
     const at = Date.now();
     const row = allKnown().find((x) => keyOf(x) === key) ?? null;
@@ -1388,6 +1390,7 @@ export function Mails() {
     setUndo({ kind: "archive", t, row, folder, done, at });
   };
   const trash = (t: Target) => {
+    haptic("retrait");
     const key = keyOf(t);
     const at = Date.now();
     const row = allKnown().find((x) => keyOf(x) === key) ?? null;

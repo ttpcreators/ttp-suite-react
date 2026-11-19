@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { CircleAlert, CircleCheck, Info, TriangleAlert, X } from "@/components/icons";
 import { Alert, type AlertVariant } from "@/components/ui/alert";
 import { EN } from "@/lib/i18n/en";
+import { haptic } from "@/lib/haptics";
 
 /*
  * Notifications du bas (agence + créateur) au design « Alert » :
@@ -81,6 +82,8 @@ export function Toaster() {
       const id = ++seq;
       // 3 notifications max à l'écran : la plus ancienne laisse sa place.
       setItems((l) => [...l, { id, message, variant }].slice(-3));
+      // Double tic sec sur une erreur (sans effet hors téléphone ; voir haptics.ts).
+      if (variant === "error") haptic("erreur");
       const duration = (typeof d === "object" && d.duration) || (variant === "error" ? 5000 : 3200);
       window.setTimeout(() => setItems((l) => l.filter((i) => i.id !== id)), duration);
     };
