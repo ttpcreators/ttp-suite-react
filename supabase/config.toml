@@ -38,6 +38,11 @@ verify_jwt = false
 [functions.daily-digest]
 verify_jwt = false
 
+# widget : le widget iPhone (app Scriptable, sans session) → verify_jwt=false ;
+# l'auth est la clé du widget (empreinte dans le blob agence, clé widgetKey), lecture seule.
+[functions.widget]
+verify_jwt = false
+
 # report-error : reçoit les crashs de l'ErrorBoundary (même déconnecté, ex. écran
 # login) → verify_jwt=false. Ne fait que journaliser + notifier l'agence (anti-spam).
 [functions.report-error]

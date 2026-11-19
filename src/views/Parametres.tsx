@@ -6,12 +6,14 @@ import {
   BellRing, Smartphone, Sunrise, History, LogOut, Palette, MessageCircle, Bot, Copy, Unplug, PenLine, Sparkles,
   Search, ChevronRight, ChevronDown, X, type LucideIcon,
 } from "@/components/icons";
-import { supabase } from "@/lib/supabase";
+import { supabase, SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
 import { ACCENT_PRESETS, ACCENT_GRADIENTS, getAccent, setAccent, isHex, parseGradient, THEME_CHOICES, type ThemeChoice } from "@/lib/accent";
 import { NOTIF_TEXTS_CREATOR, NOTIF_TEXTS_AGENCY, type NotifTextField } from "@/lib/notifTexts";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, refreshAppState, type AppState } from "@/lib/appState";
 import { BACKUP_STATUS_KEY, backupStatusLine, latestStatus } from "../../supabase/functions/_shared/backupStatus.ts";
+import { WIDGET_KEY, sha256Hex, widgetKeyOf } from "../../supabase/functions/_shared/widget.ts";
+import { SCRIPTABLE_APP_STORE, nouvelleCle, widgetScript } from "@/lib/widgetScript";
 import { RELANCE_DAYS, type ProspectSettings, type WaMode } from "@/lib/touches";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
@@ -113,6 +115,7 @@ const ENTRIES: Entry[] = [
       { title: "Résumé de la semaine", keywords: ["lundi", "semaine"] },
       { title: "Données créateurs à jour", keywords: ["stats", "roster", "mensuel", "abonnés"] },
       { title: "Sauvegarde mensuelle", keywords: ["sauvegarde", "backup", "csv", "export", "media kit", "crash"] },
+      { title: "Widget iPhone", keywords: ["widget", "iphone", "écran d'accueil", "scriptable", "écran verrouillé"] },
     ],
   },
   {
@@ -237,6 +240,82 @@ function BackupCard() {
       }
     >
       <p className={cn("text-[12px] leading-snug", line.tone === "fail" ? "text-danger" : "text-muted-foreground")}>{line.text}</p>
+    </Card>
+  );
+}
+
+/**
+ * Widget iPhone (Scriptable) : crée une clé, en garde l'empreinte (blob `widgetKey`) et
+ * donne le script à coller dans Scriptable. La clé n'est montrée qu'une fois : sans elle,
+ * « Nouvelle clé » refait un script (l'ancien widget s'arrête).
+ */
+function WidgetCard() {
+  const { data: saved } = useAppState((s) => s[WIDGET_KEY]);
+  const etat = widgetKeyOf(saved);
+  const [script, setScript] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [voir, setVoir] = useState(false);
+  const creer = async () => {
+    if (etat && !window.confirm("Créer une nouvelle clé ?\n\nLe widget déjà posé sur ton iPhone s'arrêtera : il faudra recoller le nouveau script dans Scriptable.")) return;
+    setBusy(true);
+    try {
+      const cle = nouvelleCle();
+      const ok = await saveAppStateKey(WIDGET_KEY, { hash: await sha256Hex(cle), ts: Date.now() });
+      if (!ok) {
+        toast("Clé non enregistrée, réessaie dans un instant.");
+        return;
+      }
+      setScript(widgetScript({ supabaseUrl: SUPABASE_URL, anonKey: SUPABASE_KEY, cle }));
+      setVoir(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const copier = async () => {
+    try {
+      await navigator.clipboard.writeText(script);
+      toast("Script copié ✓ Colle-le dans Scriptable.");
+    } catch {
+      setVoir(true);
+      toast("Copie impossible ici : sélectionne le script ci-dessous et copie-le.");
+    }
+  };
+  const btn = "inline-flex h-9 items-center gap-1.5 rounded-full px-4 text-[13px] font-semibold transition-opacity hover:opacity-90 disabled:opacity-50";
+  return (
+    <Card
+      title="Widget iPhone"
+      hint="Tes tâches à faire et le planning des 7 prochains jours sur l'écran d'accueil ou l'écran verrouillé, avec l'app gratuite Scriptable. Lecture seule : le widget ne montre ni mails, ni factures, ni contacts."
+      right={
+        script ? null : (
+          <button type="button" onClick={() => void creer()} disabled={busy} className={cn(btn, etat ? "bg-muted text-foreground" : "bg-primary text-primary-foreground")}>
+            {busy ? "Création…" : etat ? "Nouvelle clé" : "Créer le widget"}
+          </button>
+        )
+      }
+    >
+      {script ? (
+        <div className="space-y-3">
+          <ol className="list-decimal space-y-1.5 pl-5 text-[13px] leading-snug text-foreground">
+            <li>
+              Sur ton iPhone, installe{" "}
+              <a href={SCRIPTABLE_APP_STORE} target="_blank" rel="noreferrer" className="font-medium underline underline-offset-2">Scriptable</a>{" "}
+              (gratuit).
+            </li>
+            <li>Copie le script, puis dans Scriptable : <b>+</b> en haut à droite, colle, et touche le titre pour le nommer « TTP ».</li>
+            <li>Écran d'accueil : appui long › <b>+</b> › Scriptable › choisis la taille › touche le widget › Script : TTP.</li>
+          </ol>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" onClick={() => void copier()} className={cn(btn, "bg-primary text-primary-foreground")}>Copier le script</button>
+            <button type="button" onClick={() => setVoir((v) => !v)} className={cn(btn, "bg-muted text-foreground")}>{voir ? "Masquer" : "Voir le script"}</button>
+          </div>
+          {voir && (
+            <textarea readOnly value={script} onFocus={(e) => e.currentTarget.select()} rows={8} className="w-full rounded-xl bg-muted p-3 font-mono text-[11px] leading-snug text-foreground" />
+          )}
+          <p className="text-[12px] leading-snug text-muted-foreground">Le script contient la clé du widget : ne le partage pas. Il n'est affiché qu'une fois ; en cas de perte, « Nouvelle clé » en refait un.</p>
+        </div>
+      ) : etat ? (
+        <p className="text-[12px] leading-snug text-muted-foreground">Clé créée : {fmtDayTime(new Date(etat.ts).toISOString())}. Pour le poser sur un autre téléphone ou si tu as perdu le script : « Nouvelle clé ».</p>
+      ) : null}
     </Card>
   );
 }
@@ -1257,6 +1336,7 @@ export function Parametres() {
               />
             </Card>
             <BackupCard />
+            <WidgetCard />
           </>
         );
       case "activite":
