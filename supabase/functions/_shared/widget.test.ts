@@ -78,7 +78,7 @@ describe("resumeWidget", () => {
   });
   it("borne les listes", () => {
     const many = Array.from({ length: 30 }, (_, i) => ({ text: `T${i}` }));
-    expect(resumeWidget(many, [], NOW).taches.liste).toHaveLength(8);
+    expect(resumeWidget(many, [], NOW).taches.liste).toHaveLength(12);
     expect(resumeWidget(many, [], NOW).taches.ouvertes).toBe(30);
   });
   it("rend un JSON léger (le widget le lit en entier)", () => {
@@ -98,5 +98,25 @@ describe("clé du widget", () => {
     expect(KEY_RE.test("A".repeat(42))).toBe(false);
     expect(KEY_RE.test("A".repeat(42) + "/")).toBe(false);
     expect(await sha256Hex("abc")).toBe("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+  });
+});
+
+describe("resumeMails", () => {
+  const rows = [
+    { contact_name: "Manon", contact_email: "manon@fitaya.fr", subject: "Facture", created_at: "2026-11-19T13:02:00Z", box: "partnerships", direction: "in" },
+    { contact_name: "", contact_email: "Adelina <adelina@x.fr>", subject: "  Contrat\n signé ", created_at: "2026-11-18T09:00:00Z", box: "talent", direction: "in" },
+    { contact_name: "Lu ailleurs", contact_email: "a@b.fr", subject: "x", created_at: "2026-11-19T10:00:00Z", box: "talent", read_at: "2026-11-19T11:00:00Z" },
+    { contact_name: "Newsletter", contact_email: "news@promo.fr", subject: "x", created_at: "2026-11-19T12:00:00Z", box: "partnerships" },
+    { contact_name: "Envoyé", contact_email: "c@d.fr", subject: "x", created_at: "2026-11-19T12:00:00Z", direction: "out" },
+    { contact_name: "Vieux", contact_email: "e@f.fr", subject: "x", created_at: "2026-11-16T12:00:00Z" },
+  ];
+  const m = resumeWidget([], [], NOW, rows, { "news@promo.fr": 1 }).mails;
+  it("garde les non lus reçus, sans les expéditeurs « Pas à traiter »", () => {
+    expect(m.liste.map((x) => x.de)).toEqual(["Manon", "adelina@x.fr", "Vieux"]);
+    expect(m).toMatchObject({ nonLus: 3, partnerships: 1, talent: 1 });
+  });
+  it("heure du jour, « hier », sinon le jour", () => {
+    expect(m.liste.map((x) => x.quand)).toEqual(["14:02", "hier", "lun. 16"]);
+    expect(m.liste[1]).toMatchObject({ objet: "Contrat signé", boite: "talent" });
   });
 });
