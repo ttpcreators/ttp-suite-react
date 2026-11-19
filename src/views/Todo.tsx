@@ -61,6 +61,7 @@ import { PageHeaderRow } from "@/components/ui/page-header";
 import { PhoneStrip } from "@/components/ui/phone-bar";
 import { DoneCircle, InfoRow } from "@/components/todo-parts";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { haptic } from "@/lib/haptics";
 
 type Priority = "haute" | "moyenne" | "basse";
 type Source = "agency" | "creator";
@@ -481,6 +482,7 @@ export function Todo() {
   const setStatusTo = async (id: string, status: string) => {
     const row = (rows ?? []).find((r) => r.id === id);
     if (!row) return;
+    if (status === "Fait" && !row.done) haptic("succes");
     const saved = await writeStatus(id, status);
     if (saved) {
       setRows((prev) => (prev ?? []).map((r) => (r.id === id ? { ...r, ...saved } : r)));

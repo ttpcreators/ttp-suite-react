@@ -22,6 +22,7 @@ import { useLocale, useT } from "@/lib/i18n";
 import { TONE_DOT, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
 import { agencyAwaits, appendPoint, latestPoint, parsePoints } from "@/lib/todoProgress";
 import { clip45, ctGroups, ctKpis, ctLateDays, ctMatchFilter, ctPostpone, ctStatus, type CtFilter, type CtKpi, type CtPriority } from "@/lib/creatorTodos";
+import { haptic } from "@/lib/haptics";
 
 /*
  * « À faire » de l'espace créateur, avec le design de la To-do agence (src/views/Todo.tsx) :
@@ -243,7 +244,7 @@ export function CreatorTodos(p: Props) {
           actions={[
             td.done
               ? { key: "reopen", label: t("Rouvrir"), icon: RotateCcw, tone: "gray", onClick: () => p.onToggleDone(td) }
-              : { key: "done", label: t("Fait"), icon: Check, tone: "green", onClick: () => p.onToggleDone(td) },
+              : { key: "done", label: t("Fait"), icon: Check, tone: "green", onClick: () => { haptic("succes"); p.onToggleDone(td); } },
             { key: "delete", label: t("Supprimer"), icon: Trash2, tone: "red", onClick: () => p.onDelete(td) },
           ]}
         >

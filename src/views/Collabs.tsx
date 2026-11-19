@@ -51,6 +51,7 @@ import { dealKind } from "@/lib/dealKind";
 import { DealBadge } from "@/components/ui/deal-badge";
 import { putInvoicePrefill } from "@/lib/invoicePrefill";
 import { useIsWide } from "@/lib/iosUi";
+import { haptic } from "@/lib/haptics";
 
 type Row = {
   id: string;
@@ -511,6 +512,7 @@ export function Collabs() {
     if (clamped === row.step) return;
     // Un changement d'étape à la fois par collab : un double clic sautait deux étapes.
     if (stepBusy.current.has(row.id)) return;
+    if (clamped > row.step) haptic("succes");
     stepBusy.current.add(row.id);
     const prev = row.step;
     setRows((rs) => (rs ?? []).map((r) => (r.id === row.id ? { ...r, step: clamped } : r)));
@@ -534,6 +536,7 @@ export function Collabs() {
   };
 
   const setStatus = async (row: Row, status: string) => {
+    if (status === "archivee") haptic("retrait");
     const prev = row.status;
     setRows((rs) => (rs ?? []).map((r) => (r.id === row.id ? { ...r, status } : r)));
     if (!(await dbUpdate("collabs", row.id, { status }))) {

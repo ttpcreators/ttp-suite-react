@@ -14,6 +14,7 @@ import { useAppState, saveAppStateKey, getAppState, invalidateAppState, refreshA
 import { BACKUP_STATUS_KEY, backupStatusLine, latestStatus } from "../../supabase/functions/_shared/backupStatus.ts";
 import { WIDGET_KEY, sha256Hex, widgetKeyOf } from "../../supabase/functions/_shared/widget.ts";
 import { SCRIPTABLE_APP_STORE, nouvelleCle, widgetScript } from "@/lib/widgetScript";
+import { haptic, hapticsEnabled, setHapticsEnabled } from "@/lib/haptics";
 import { RELANCE_DAYS, type ProspectSettings, type WaMode } from "@/lib/touches";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
@@ -103,7 +104,10 @@ const ENTRIES: Entry[] = [
     id: "appareil", label: "Cet appareil", group: "Notifications", icon: Smartphone, tile: TONE_SOLID.progress,
     hint: "Réception des notifications push sur l'appareil que tu utilises en ce moment.",
     keywords: ["push", "notifications", "activer", "test"],
-    sections: [{ title: "Cet appareil", keywords: ["push", "activer", "test", "téléphone"] }],
+    sections: [
+      { title: "Cet appareil", keywords: ["push", "activer", "test", "téléphone"] },
+      { title: "Vibrations", keywords: ["vibration", "vibrer", "haptique", "tic", "retour"] },
+    ],
   },
   {
     id: "resumes", label: "Résumés et rappels", group: "Notifications", icon: Sunrise, tile: TONE_SOLID.info,
@@ -181,6 +185,25 @@ function PrefRow({
       </div>
       <Toggle checked={checked} onChange={onChange} label={label} />
     </div>
+  );
+}
+
+/** Vibrations de cet appareil (haptics.ts) : réglage local, comme les notifications push. */
+function VibrationsCard() {
+  const [on, setOn] = useState(hapticsEnabled);
+  return (
+    <Card title="Vibrations" hint="Un petit tic du téléphone quand une tâche est faite, qu'une collab avance d'étape, qu'un élément est supprimé ou archivé, et un double tic sur une erreur. Sur iPhone : iOS 18 ou plus récent.">
+      <PrefRow
+        label="Vibrer sur les actions"
+        hint="Réglé pour cet appareil seulement."
+        checked={on}
+        onChange={(v) => {
+          setHapticsEnabled(v);
+          setOn(v);
+          if (v) haptic("succes");
+        }}
+      />
+    </Card>
   );
 }
 
@@ -1251,6 +1274,7 @@ export function Parametres() {
         return <ClaudePane />;
       case "appareil":
         return (
+          <>
           <Card anchor="Cet appareil">
             {state === "enabled" ? (
               <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1301,6 +1325,8 @@ export function Parametres() {
               </button>
             )}
           </Card>
+          <VibrationsCard />
+          </>
         );
       case "resumes":
         return (

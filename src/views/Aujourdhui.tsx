@@ -70,6 +70,7 @@ import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { toast } from "@/components/ui/toast";
 import { formatEuro } from "@/lib/money";
+import { haptic } from "@/lib/haptics";
 
 /**
  * « Aujourd'hui » : la journée de l'agence en une liste d'actions triées par urgence
@@ -667,6 +668,7 @@ export function Aujourdhui() {
   const finishTodo = async (it: TodayItem) => {
     const t = it.todo;
     if (!t || busy) return;
+    haptic("succes");
     setBusy(true);
     const saved = await writeTodoStatus(t.id, "Fait");
     setBusy(false);

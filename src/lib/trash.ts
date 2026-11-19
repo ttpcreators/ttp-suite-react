@@ -1,6 +1,7 @@
 import { supabase } from "./supabase";
 import { pokeTeam } from "./team";
 import { getAppState, invalidateAppState, listAppStateKey } from "./appState";
+import { haptic } from "@/lib/haptics";
 
 /**
  * Corbeille GLOBALE de l'app. Toute suppression « douce » (via dbTrash) copie la
@@ -110,6 +111,7 @@ function mutateBin(change: BinChange | ((bin: TrashEntry[]) => BinChange | null)
  * sa table. Renvoie true si la suppression en base a réussi.
  */
 export async function dbTrash(table: string, id: string, label: string, sub?: string): Promise<boolean> {
+  haptic("retrait");
   // 1) Lire la ligne COMPLÈTE. Si la lecture échoue (réseau/RLS) ou renvoie 0 ligne,
   //    on n'a rien de restaurable → on N'AVANCE PAS. Avant, on capturait une coquille
   //    { id } puis on supprimait quand même → perte de données définitive.
@@ -175,11 +177,13 @@ export async function restoreEntry(entry: TrashEntry): Promise<RestoreResult> {
 
 /** Supprime définitivement une entrée de la corbeille. Renvoie true si OK. */
 export async function purgeEntry(id: string): Promise<boolean> {
+  haptic("retrait");
   return mutateBin({ remove: [id] }).catch(() => false);
 }
 
 /** Vide toute la corbeille (les entrées relues à l'instant). Renvoie true si OK. */
 export async function emptyTrash(): Promise<boolean> {
+  haptic("retrait");
   return mutateBin((bin) => ({ remove: bin.map((e) => e.id) })).catch(() => false);
 }
 
