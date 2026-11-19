@@ -12,6 +12,9 @@
 //   { action: "vivant" }                  → signe de vie pendant un passage
 //   { action: "passage", passage }        → fin d'un passage d'Alfred (point du matin…)
 //   { action: "reponse", demandes, texte } → la réponse d'Alfred à des demandes de l'app
+//   { action: "deposer", nom, contenu }   → un fichier de l'iMac (PDF d'un contrat, pièce reçue sur
+//       Telegram) rangé dans le stockage « documents » sous alfred/, pour le joindre à un mail
+//       (creer_brouillon_mail, pieces_jointes : { document }) ; 10 Mo au plus
 // AUTH : verify_jwt = false (config.toml) + secret ALFRED_PONT_SECRET (aussi dans config.env de l'iMac),
 // ou, sans ce secret, « tg:<empreinte SHA-256 du jeton du bot d'Alfred> » : l'iMac a déjà ce jeton
 // (ALFRED_BOT_TOKEN), le même est posé côté Supabase ; le jeton lui-même ne circule jamais.
@@ -19,6 +22,7 @@
 
 import { getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { commandesGagnantes, reglagesPropres } from "../_shared/alfredPont.ts";
+import { nomPropre, tailleBase64, typeAccepte, typeDuNom } from "../_shared/piecesJointes.ts";
 
 const SECRET = Deno.env.get("ALFRED_PONT_SECRET") ?? "";
 const BOT = Deno.env.get("ALFRED_BOT_TOKEN") ?? "";
@@ -59,6 +63,18 @@ Deno.serve(async (req: Request) => {
     if (!ids.length) return json({ ok: true, n: 0 });
     const { error } = await db.from("demandes").update({ statut: "repondue", reponse: String(body.texte ?? "").slice(0, 8000) || "(réponse envoyée sur Telegram)", repondu_le: maintenant }).in("id", ids);
     return error ? json({ error: error.message }, 500) : json({ ok: true, n: ids.length });
+  }
+
+  if (body.action === "deposer") {
+    const nom = nomPropre(String(body.nom ?? ""));
+    const type = typeDuNom(nom);
+    const contenu = String(body.contenu ?? "");
+    if (!type || !typeAccepte(type)) return json({ error: "type" }, 400);
+    if (!contenu || tailleBase64(contenu) > 10 * 1024 * 1024) return json({ error: "taille" }, 400);
+    const octets = Uint8Array.from(atob(contenu), (c) => c.charCodeAt(0));
+    const path = `alfred/${maintenant.slice(0, 10)}/${crypto.randomUUID().slice(0, 8)}-${nom.replace(/[^A-Za-z0-9._ -]/g, "_")}`;
+    const { error } = await getServiceClient().storage.from("documents").upload(path, octets, { contentType: type, upsert: false });
+    return error ? json({ error: error.message }, 500) : json({ ok: true, path, nom });
   }
 
   if (body.action !== "pouls") return json({ error: "action" }, 400);

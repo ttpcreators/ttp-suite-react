@@ -273,7 +273,7 @@ interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_factu
 # « cd etat » d'Alfred elle visait etat/etat, d'où « écriture refusée » et des réponses perdues
 # (trouvé le 2026-11-12). En plus, chaque commande Bash le ramène dans son dossier (plus bas).
 ici="/$PWD"
-allowed=("Read($ici/**)" "Edit($ici/etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)" "Bash(node telegram.mjs joindre:*)" "Bash(node telegram.mjs raccourcis)" "Bash(node telegram.mjs preparer:*)"
+allowed=("Read($ici/**)" "Edit($ici/etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)" "Bash(node telegram.mjs joindre:*)" "Bash(node telegram.mjs raccourcis)" "Bash(node telegram.mjs preparer:*)" "Bash(node telegram.mjs deposer:*)"
   "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)" "Bash(node araignee.mjs:*)")
 denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash(spark:*)"
   "Edit($ici/etat/whatsapp-autorises.txt)" "Edit($ici/etat/whatsapp-a-envoyer/**)" "Edit($ici/etat/whatsapp-envoyes/**)")

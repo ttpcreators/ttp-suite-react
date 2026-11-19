@@ -10,6 +10,7 @@ import { boxToken, talentAddress } from "../_shared/gmailBox.ts";
 import { connectedCreatorBox, creatorBoxToken, isCreatorBox, listCreatorBoxes, normEmail } from "../_shared/creatorBox.ts";
 import { gfetch, decodeGmailBody, charsetOf, mapPool } from "../_shared/gfetch.ts";
 import { partsDuBudget, sansCitation } from "../_shared/mailFil.ts";
+import { construireRaw, nomPropre, type Piece } from "../_shared/piecesJointes.ts";
 import { addressOf, findSendAs, fromHeader, refusSendAs, usableSendAs, type RawSendAs, type SendAs } from "../_shared/sendAs.ts";
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
@@ -153,6 +154,32 @@ export async function markThreadRead(sb: SupabaseClient, box: MailBox, threadId:
   });
 }
 
+/**
+ * Une pièce jointe d'un mail reçu, retrouvée par son nom dans le fil (le plus récent d'abord),
+ * pour la joindre à un autre mail : un contrat, un brief, une facture envoyés par quelqu'un.
+ */
+export async function attachmentFromThread(sb: SupabaseClient, box: MailBox, threadId: string, nom: string): Promise<Piece> {
+  const token = await tokenFor(sb, box, "read");
+  const t = await gjson(token, `${GMAIL}/threads/${encodeURIComponent(threadId)}?format=full`);
+  const msgs = [...((t.messages as Msg[] | undefined) ?? [])].reverse();
+  const voulu = nom.trim().toLowerCase();
+  for (const m of msgs) {
+    const parts: Part[] = [];
+    const walk = (p?: Part) => {
+      if (!p) return;
+      if (p.filename && p.body?.attachmentId) parts.push(p);
+      for (const c of p.parts ?? []) walk(c);
+    };
+    walk(m.payload);
+    const p = parts.find((x) => String(x.filename).trim().toLowerCase() === voulu) ?? parts.find((x) => String(x.filename).toLowerCase().includes(voulu));
+    if (!p) continue;
+    const a = await gjson(token, `${GMAIL}/messages/${encodeURIComponent(m.id)}/attachments/${encodeURIComponent(String(p.body?.attachmentId))}`);
+    const data = String(a.data ?? "").replace(/-/g, "+").replace(/_/g, "/");
+    return { nom: nomPropre(String(p.filename)), type: String(p.mimeType ?? "application/octet-stream").toLowerCase(), base64: data };
+  }
+  throw new Error(`piece_introuvable: ${nom}`);
+}
+
 export async function readThread(sb: SupabaseClient, box: MailBox, threadId: string): Promise<string> {
   const token = await tokenFor(sb, box, "read");
   const t = await gjson(token, `${GMAIL}/threads/${encodeURIComponent(threadId)}?format=full`);
@@ -236,7 +263,7 @@ async function claudeTwins(token: string, to: string, subject: string, threadId?
  * la même personne et le même objet, il est MIS À JOUR au lieu d'en créer un nouveau, et
  * ses éventuels doublons plus anciens (copies du même brouillon) sont supprimés.
  */
-export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, subject: string, message: string, threadId?: string, html?: string, bcc: string[] = [], from?: SendAs): Promise<{ id: string; replaced: boolean; removed: number }> {
+export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, subject: string, message: string, threadId?: string, html?: string, bcc: string[] = [], from?: SendAs, pieces: Piece[] = []): Promise<{ id: string; replaced: boolean; removed: number }> {
   const token = await tokenFor(sb, box, "modify");
   // X-TTP-Source : la page Mails de l'app affiche « par Claude » sur ce brouillon.
   // Bcc : copie cachée (un créateur qui suit la prospection faite pour lui) ; Gmail la retire à l'envoi.
@@ -252,17 +279,9 @@ export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, 
     if (mid) headers.push(`In-Reply-To: ${clean(mid)}`, `References: ${clean(`${refs} ${mid}`).slice(0, 1900)}`);
   }
   const b64 = (v: string) => b64Utf8(v).replace(/.{76}/g, "$&\r\n");
-  let raw: string;
-  if (html) {
-    // Texte + HTML (signature de l'agence avec son GIF, comme un mail envoyé depuis l'app).
-    const boundary = `ttp_${crypto.randomUUID().replace(/-/g, "")}`;
-    headers.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
-    const part = (type: string, body: string) => `--${boundary}\r\nContent-Type: ${type}; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n${b64(body)}`;
-    raw = `${headers.join("\r\n")}\r\n\r\n${part("text/plain", message)}\r\n${part("text/html", html)}\r\n--${boundary}--`;
-  } else {
-    headers.push("Content-Type: text/plain; charset=UTF-8", "Content-Transfer-Encoding: base64");
-    raw = `${headers.join("\r\n")}\r\n\r\n${b64(message)}`;
-  }
+  // Texte seul, ou texte + HTML (signature de l'agence avec son GIF) ; avec les pièces jointes
+  // (PDF…) autour, en multipart/mixed (demande de Marc, 19 novembre 2026).
+  const raw = construireRaw(headers, { texte: message, html }, pieces, b64, () => crypto.randomUUID().replace(/-/g, ""));
   const msg = { raw: b64urlUtf8(raw), ...(threadId ? { threadId } : {}) };
 
   // Recherche des jumeaux : si elle échoue, on crée simplement le brouillon (comme avant).
