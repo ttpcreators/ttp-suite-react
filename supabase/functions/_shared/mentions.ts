@@ -62,6 +62,7 @@ const STOP = new Set([
   "friends", "home", "merci", "thanks", "thank", "amazing", "beautiful", "happy", "best", "good", "great", "nice",
   "cute", "little", "big", "small", "next", "partenariat", "sponsored", "sponsorise", "publicite", "offert", "gifted",
   "ambassador", "ambassadrice", "official", "officiel", "launch", "lancement", "nouveau", "nouvelle", "new", "edition",
+  "notamment", "surtout", "vraiment", "egalement", "également", "toujours", "jamais", "ensuite", "enfin", "pourtant",
   "series", "episode", "streaming", "premiering", "presented", "partnership", "initiative", "expedition", "planet",
   "everyone", "something", "nothing", "everything", "together", "tomorrow", "yesterday", "tonight", "always", "never",
   "really", "because", "pourquoi", "toujours", "jamais", "vraiment", "ensemble", "demain", "hier", "maintenant",

@@ -19,6 +19,7 @@ import type { Ctx } from "./oauth.ts";
 import { boxAddress, boxesFor, createDraft, parseMailBox, deleteClaudeDraft, draftRefs, listClaudeDrafts, listSendAs, PARTOUT, attachmentFromThread, markThreadRead, readThread, resolveSender, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { findSendAs, type SendAs } from "../_shared/sendAs.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
+import { adressesDe, adressesInvalides } from "./prospection.ts";
 import { addressList, mailHtml, sparkLink } from "../_shared/mcpAdmin.ts";
 import { guessEventKind } from "../_shared/eventKind.ts";
 import { comptaSummary, type ComptaInv } from "../_shared/compta.ts";
@@ -1551,6 +1552,9 @@ const brouillonMail: Tool = {
     const box = p.box;
     const to = str(a.a, 500);
     if (!/[^@\s]+@[^@\s]+\.[^@\s]+/.test(to)) return fail("Adresse du destinataire invalide.");
+    // Domaine vérifié (MX) avant de préparer : une adresse impossible est signalée sur la fiche.
+    const invalide = await adressesInvalides(sb, adressesDe(to));
+    if (invalide) return fail(invalide.replace("Rien n'est parti", "Brouillon non créé"));
     const cci = addressList(str(a.cci, 500));
     if (!cci) return fail("Adresse en copie cachée (cci) invalide.");
     const fil = str(a.fil, 40);
