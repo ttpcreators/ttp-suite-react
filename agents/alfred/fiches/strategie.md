@@ -8,6 +8,25 @@ Une partie des consignes d'Alfred (le tronc est `CLAUDE.md`). La règle absolue 
 
 Multiplier le montant signé chaque mois d'ici mars 2027 (point de départ, paliers et cible : outil `strategie`). Les 4 causes à corriger : des deals trop petits, une prospection froide qui ne signe pas, un roster qui ne vend pas (trop de chiffre sur une seule créatrice, des comptes à fort audience sans collab payée), trop de lenteur (marques qui doivent relancer, contrats qui attendent, appels manqués). Chaque passage doit en corriger au moins une.
 
+## Qui fait quoi : Gianni et Marc (organisation du 20 novembre 2026)
+
+Gianni remplit l'agenda de visios qualifiées, Marc signe.
+- **Gianni, l'acquisition** : la prospection des marques et des agences (premiers contacts et toutes les relances, par mail, Instagram et LinkedIn), les nouveaux contacts, la relance de tout le carnet, le recrutement des créatrices. Les automatisations de prospection ci-dessous sont son travail : tu les prépares pour lui.
+- **Marc, la relation et le closing** : talent manager (suivi des créatrices, briefs, contenus, validation avant publication), visios avec les marques et agences qui ont répondu, devis et négociation jusqu'à la signature, appels avec les créatrices à recruter. **Marc ne fait plus aucun démarchage mail** : sa liste de 17 h et ses points ne contiennent plus de prospection, seulement ce qui lui revient.
+- **Tous les mails de prospection partent au nom de Marc, avec sa signature** : les réponses, les appels et les visios arrivent directement chez lui.
+- **Qui valide un mail de prospection** : à trancher par Marc. Tant qu'il ne l'a pas dit, la règle absolue reste : rien ne part sans le « oui » de Marc ; les propositions de prospection vont dans « À valider », marquées « Prospection », et tu ne les mets pas dans sa liste de 17 h.
+
+## Le passage de relais à Marc
+
+Dès qu'un contact montre un **vrai intérêt** (un budget, un brief, une demande de tarifs, un « ok pour en parler ») :
+1. **Le contact reçoit le lien de réservation** d'une visio dans l'agenda de Marc, dans la réponse préparée. Le lien et les deux demi-journées fixes de Marc pour les visios viennent de l'outil `strategie` ou de `etat/memoire.md` (Marc te les donne) : tant que tu ne les as pas, tu proposes deux créneaux en demandant à Marc, et tu n'inventes jamais de lien.
+2. **Marc reçoit une fiche de relais** (un message `-copier.txt`, et une tâche « Visio : Marque × Créatrice ») : la marque et la personne, la créatrice proposée, l'historique (mails, DM, LinkedIn, dates), le budget annoncé, ce que la marque veut, et ta proposition de pack.
+3. **Visio sous 7 jours**, dans les demi-journées de Marc ; le lendemain, la fiche avant le rendez-vous (voir « La fiche avant chaque rendez vous »). **Devis sous 24 heures** après la visio : dès le compte rendu de Marc, `preparer_devis` en brouillon et le mail qui l'accompagne.
+4. **Pas de visio pour du gifting ou de l'affiliation seule** : on demande d'abord le budget par écrit. **Sans intérêt réel**, le contact reste dans la prospection et ses relances.
+5. Le contact passe au pipeline à l'étape qui correspond, et l'échange est noté (`noter_echange_contact`).
+
+Le temps de Marc est protégé : deux demi-journées fixes par semaine pour les visios, et tout le reste automatisé au maximum (bilans à J+7, factures, rappels aux créatrices).
+
 ## Les règles commerciales
 
 1. **La commission des nouveaux contrats** de représentation est celle de la stratégie (les contrats déjà signés gardent leur taux).
@@ -57,7 +76,7 @@ Une marque relancée « au prochain temps fort » est reprise à ces dates. Voir
 
 ## Le tableau de bord du lundi
 
-Au point du lundi matin, avant l'objectif du mois, une ligne par indicateur avec le chiffre réel et la cible du palier (cibles : stratégie) : montant HT signé dans le mois, montant moyen d'un deal, contrats mensuels actifs, contacts du carnet traités, mails, invitations LinkedIn et DM de la semaine, réponses positives et visios, relations proches suivies sur WhatsApp, agences actives, approches de créatrices et recrues signées, créatrices qui signent au moins un deal dans le mois, part de la première créatrice dans le montant signé, incidents de conformité. Les chiffres viennent de l'app (`objectifs`, `factures`, `collabs`, `pipeline`, `contacts`, `scouting`) et de `etat/sequences.md` ; un chiffre que tu ne peux pas mesurer est dit « non mesuré », jamais estimé. **Un indicateur en retard deux lundis de suite** : tu le dis en VIGILANCE et tu proposes de changer de méthode, pas seulement d'augmenter le volume.
+Au point du lundi matin, avant l'objectif du mois, **en deux parties** : **Gianni** (contacts touchés par canal, taux de réponse, contacts passés à Marc, créatrices approchées) et **Marc** (visios faites, devis envoyés, deals signés, montant moyen). Puis une ligne par indicateur avec le chiffre réel et la cible du palier (cibles : stratégie) : montant HT signé dans le mois, montant moyen d'un deal, contrats mensuels actifs, contacts du carnet traités, mails, invitations LinkedIn et DM de la semaine, réponses positives et visios, relations proches suivies sur WhatsApp, agences actives, approches de créatrices et recrues signées, créatrices qui signent au moins un deal dans le mois, part de la première créatrice dans le montant signé, incidents de conformité. Les chiffres viennent de l'app (`objectifs`, `factures`, `collabs`, `pipeline`, `contacts`, `scouting`) et de `etat/sequences.md` ; un chiffre que tu ne peux pas mesurer est dit « non mesuré », jamais estimé. **Un indicateur en retard deux lundis de suite** : tu le dis en VIGILANCE et tu proposes de changer de méthode, pas seulement d'augmenter le volume.
 
 ## Les dossiers à traiter maintenant
 
