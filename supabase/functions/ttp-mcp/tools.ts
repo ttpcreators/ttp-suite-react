@@ -38,6 +38,7 @@ import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
 import { CONTRACT_DRAFTS_KEY, DRAFT_OPTS, choisirCreateur, estRepresentation, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "../_shared/contractDraft.ts";
 import { ligneContrat, texteContrat, trouverContrats } from "../_shared/contractLecture.ts";
 import { cleanUser, construireBase, filtrerBase, ligneBase, type BaseMeta, type BaseRow } from "../_shared/baseCreateurs.ts";
+import { REGLES_OFFRE, STRATEGIE_VERSION, strategieTexte } from "../_shared/strategie.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
 type Json = Record<string, unknown>;
@@ -497,6 +498,16 @@ const noterReversement: Tool = {
 const moisSuivant = (mois: string) => {
   const [a, m] = mois.split("-").map(Number);
   return m === 12 ? `${a + 1}-01-01` : `${a}-${String(m + 1).padStart(2, "0")}-01`;
+};
+
+const strategie: Tool = {
+  name: "strategie",
+  title: "Stratégie de l'agence",
+  description:
+    `La stratégie commerciale de TTP Creators (version du ${STRATEGIE_VERSION}, adoptée par Marc) : qui fait quoi entre Gianni (acquisition) et Marc (closing), passage de relais vers une visio, décisions (commission 25 % des nouveaux contrats, deal minimum 500 € HT, pas de gifting seul), offre et prix (packs, budget avant le prix, droits en plus), recrutement de créatrices, séquences et volumes par canal, temps forts à pitcher maintenant, agences, closing, renouvellement, demandes entrantes, tableau de bord du lundi et limites (RGPD, LinkedIn, Instagram, WhatsApp). À lire au début de chaque passage d'agent et avant de préparer une prospection, une relance, un devis ou un point du lundi.`,
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  founder: true,
+  run: async () => ok(strategieTexte(isoDay())),
 };
 
 const objectifs: Tool = {
@@ -1080,6 +1091,7 @@ const methodeTarif: Tool = {
     const out = [
       methodText(grid),
       changed ? "Barème : valeurs réglées par l'agence (page Tarifs)." : "Barème : valeurs de départ, pas encore ajustées par l'agence. Le dire à Marc.",
+      "\n" + REGLES_OFFRE,
     ];
     const marque = str(a.marque, 80);
     const n = str(a.createur, 80);
@@ -2750,7 +2762,7 @@ const lireContrat: Tool = {
 };
 
 export const TOOLS: Tool[] = [
-  pointDuJour, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
+  pointDuJour, strategie, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
   creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief, lireContrat,
