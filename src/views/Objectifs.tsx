@@ -28,6 +28,7 @@ import {
 } from "@/lib/objectivesTrend";
 import { cn } from "@/lib/utils";
 import ObjectivesTrend from "./charts/ObjectivesTrend";
+import { MondayBoard } from "@/components/monday-board";
 
 /** Un objectif du mois : intitulé, CA réalisé, cible, progression (%) et ton. */
 type Objective = {
@@ -60,6 +61,8 @@ type ObjByMonth = Record<string, Objective[]>;
 
 const monthKeyOf = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 const CURRENT_KEY = monthKeyOf();
+/** On peut préparer les objectifs jusqu'à 6 mois à l'avance (cibles de la stratégie). */
+const MAX_KEY = monthKeyOf(new Date(new Date().getFullYear(), new Date().getMonth() + 6, 1));
 /** Valeur saisie brute ("20000") → "20 000 €" si monétaire, sinon "20 000" ; texte libre laissé tel quel. */
 const fmtAmount = (v: string, money = true) =>
   /^\s*\d+(?:[.,]\d+)?\s*$/.test(v ?? "")
@@ -359,11 +362,11 @@ export function Objectifs() {
     toast(ok ? "Supprimé" : "Erreur, réessaie");
   }
 
-  // Sélecteur de mois (‹ Octobre 2026 ›) : jamais au-delà du mois courant.
+  // Sélecteur de mois (‹ Octobre 2026 ›) : jusqu'à 6 mois à l'avance (objectifs préparés).
   const shiftMonth = (n: number) => {
     const [y, m] = selectedMonth.split("-").map(Number);
     const next = monthKeyOf(new Date(y, m - 1 + n, 1));
-    if (next <= CURRENT_KEY) setSelectedMonth(next);
+    if (next <= MAX_KEY) setSelectedMonth(next);
   };
   const stepBtn =
     "grid h-7 w-7 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-30 disabled:hover:bg-transparent";
@@ -385,7 +388,7 @@ export function Objectifs() {
             <button
               type="button"
               onClick={() => shiftMonth(1)}
-              disabled={selectedMonth >= CURRENT_KEY}
+              disabled={selectedMonth >= MAX_KEY}
               aria-label="Mois suivant"
               className={stepBtn}
             >
@@ -395,6 +398,8 @@ export function Objectifs() {
           <AddButton label="Objectif" onClick={openAdd} />
         </div>
       </PageHeaderRow>
+
+      {selectedMonth === CURRENT_KEY && <MondayBoard />}
 
       <InlineForm
         open={formOpen}

@@ -39,6 +39,7 @@ import { CONTRACT_DRAFTS_KEY, DRAFT_OPTS, choisirCreateur, estRepresentation, li
 import { ligneContrat, texteContrat, trouverContrats } from "../_shared/contractLecture.ts";
 import { cleanUser, construireBase, filtrerBase, ligneBase, type BaseMeta, type BaseRow } from "../_shared/baseCreateurs.ts";
 import { REGLES_OFFRE, STRATEGIE_VERSION, strategieTexte } from "../_shared/strategie.ts";
+import { chargerTableau, tableauLundi, tableauTexte } from "../_shared/tableauLundi.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
 type Json = Record<string, unknown>;
@@ -508,6 +509,25 @@ const strategie: Tool = {
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   founder: true,
   run: async () => ok(strategieTexte(isoDay())),
+};
+
+const tableauLundiTool: Tool = {
+  name: "tableau_lundi",
+  title: "Tableau de bord du lundi",
+  description:
+    "Le tableau de bord du lundi de la stratégie, en deux parties : Gianni (contacts touchés par canal d'après le journal de contact des fiches, taux de réponse, contacts passés à Marc = tâches « Visio : … », créatrices approchées) et Marc (visios faites, devis envoyés, deals signés, montant moyen), pour la semaine dernière et la semaine en cours, puis le mois face aux cibles (montant HT signé, deal moyen, part de Léna, carnet traité, agences actives). À lire pour le point du lundi ; un chiffre « non mesuré » ne s'estime pas.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  founder: true,
+  run: async (sb) => {
+    const st = await appState(sb);
+    const quotes = Array.isArray(st.quotes) ? (st.quotes as Json[]) : null;
+    try {
+      const now = new Date();
+      return ok(tableauTexte(tableauLundi(await chargerTableau(sb, now, quotes), now)));
+    } catch (e) {
+      return fail(`Tableau illisible : ${(e as Error).message}`);
+    }
+  },
 };
 
 const objectifs: Tool = {
@@ -2762,7 +2782,7 @@ const lireContrat: Tool = {
 };
 
 export const TOOLS: Tool[] = [
-  pointDuJour, strategie, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
+  pointDuJour, strategie, tableauLundiTool, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
   creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief, lireContrat,
