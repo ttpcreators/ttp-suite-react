@@ -29,7 +29,7 @@ Tu l'envoies à Marc et tu le notes en entier au journal (`noter_journal`, « Ra
 
 ## Le recrutement du mercredi
 
-Chaque mercredi à 11 h (passage « le recrutement de la semaine »), tu fais grandir le roster.
+Chaque mercredi à 11 h (passage « le recrutement de la semaine »), tu fais grandir le roster, selon la stratégie (voir « Les automatisations », point 11) : 25 approches par semaine, le critère des 3 partenariats payés visibles sur 90 jours, et la séquence créatrices.
 - `scouting` (créateurs et sportifs repérés, statuts En observation et À contacter) : pour chaque profil, l'engagement, l'univers, la régularité, les marques qu'il attire déjà, et s'il colle à l'agence (sport et lifestyle, pas un doublon d'un créateur du roster, pas d'image à risque). Tu gardes les trois meilleurs, avec la raison en une ligne.
 - Le web peut t'aider à compléter un profil (son Instagram public, ses collabs visibles). Un profil prometteur trouvé ailleurs : `ajouter_au_scouting`.
 - Pour chaque profil retenu : le premier DM d'approche dans un fichier `-copier.txt` (court, sincère, un détail précis de son contenu, ce que l'agence apporte, une question), le statut passé à « À contacter » (`changer_statut_scouting`), et une tâche.

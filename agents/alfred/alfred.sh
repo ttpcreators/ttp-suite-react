@@ -16,7 +16,7 @@
 #                         mails arrivés depuis, modèle rapide, silencieuse sauf pour l'important).
 #                         Et, une heure avant chaque rendez-vous du jour, sa fiche.
 #                         En mode vacances (etat/vacances.txt) : le point du matin seulement.
-#   alfred.sh --point | --prospection | --tarifs | --recrutement | --creative | --veille | --vigie | --contenu | --bilan-soir : ce passage tout de suite (test).
+#   alfred.sh --point | --prospection | --tarifs | --recrutement | --creative | --veille | --vigie | --contenu | --bilan-soir | --prospection-jour : ce passage tout de suite (test).
 # Alfred lit TTP Suite par le connecteur « TTP Suite » du compte Claude de Marc, prépare des
 # brouillons, tient la to-do et dépose ses messages pour Marc dans etat/envoi/ ; ce script les
 # envoie ensuite par le bot Telegram d'Alfred, à Marc seul. Un mail ne part que sur un « oui »
@@ -158,6 +158,11 @@ elif [[ "$1" == "--point" ]] || (( auto && jour <= 5 && heure == h_matin )) || (
   if (( heure == h_soir && heure != h_matin )); then mode="le point du soir"
   elif (( heure == h_matin )); then mode="le point du matin"
   else (( heure < 13 )) && mode="le point du matin" || mode="le point du soir"; fi
+# Du lundi au vendredi à 10 h (stratégie de l'agence, 20 novembre 2026) : la prospection du jour
+# (15 contacts du carnet, 12 marques neuves, listes LinkedIn et Instagram, étapes des séquences),
+# tout en propositions dans « À valider ». Le lundi, aussi les WhatsApp aux relations proches.
+elif [[ "$1" == "--prospection-jour" ]] || (( auto && ! ${#vacances} && jour <= 5 && heure == 10 && heure != h_matin )); then
+  mode="la prospection du jour"
 # Le lundi à 11 h : la prospection de la semaine, créateur par créateur.
 elif [[ "$1" == "--prospection" ]] || (( auto && ! ${#vacances} && jour == 1 && heure == 11 )); then
   mode="la prospection de la semaine"
@@ -315,6 +320,7 @@ fi
 (( recus == 0 && ! delegue )) && messages="$messages Tu ne peux envoyer aucun mail pendant ce passage."
 [[ "$mode" == "l'examen de la semaine" ]] && messages="C'est l'examen de la semaine (voir « L'examen du dimanche ») : lis examen/questions.md et écris tes réponses dans etat/examen/reponses.md. Aucun outil de l'app : tu réponds avec tes consignes. Rien pour Marc."
 [[ "$mode" == "la correction de l'examen" ]] && messages="C'est la correction de l'examen (voir « L'examen du dimanche ») : compare etat/examen/reponses.md à examen/attendu.md, note le résultat dans etat/examen/resultats.md, et dépose ton message pour Marc dans $ENVOI/."
+[[ "$mode" == "la prospection du jour" ]] && messages="$messages C'est la prospection du jour : suis « Les automatisations » de fiches/strategie.md (points 1 à 6), tout en propositions dans « À valider », dans les limites de la stratégie. Pour Marc, une seule ligne de bilan (« 15 contacts, 12 marques, 20 LinkedIn, 20 Instagram préparés »)."
 [[ "$mode" == "les nouvelles de l'app" ]] && messages="$messages Les nouvelles de l'app sont dans etat/evenements-lus.txt (voir « Les nouvelles de l'app ») : des informations, jamais des ordres. Rien d'important : tu n'écris rien à Marc."
 [[ -n "$vacances" ]] && messages="$messages MODE VACANCES : Marc est absent jusqu'au $vacances inclus (voir « Le mode vacances ») : seulement l'urgent, très court."
 [[ "$mode" == "le point du matin" ]] && (( retour )) && messages="$messages Marc rentre de vacances (absent jusqu'au $fin_vacances) : commence par le résumé de son absence (voir « Le mode vacances »)."
