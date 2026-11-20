@@ -28,6 +28,7 @@ import { gfetch, mapPool } from "../_shared/gfetch.ts";
 import { sendTo } from "../_shared/push.ts";
 import { agencyMailPayloads, creatorMailPayloads, creatorsForMail, type CreatorMailSetting, type Lang, type NewMail } from "../_shared/mailNotif.ts";
 import { closeAnsweredTasks, tasksFromMails } from "./tasks.ts";
+import { suivreReponses } from "./sequences.ts";
 import { excluFromMails } from "./exclu.ts";
 import { isUnread, rowsNowRead, threadsToClose, type UnreadByBox } from "../_shared/mailLu.ts";
 
@@ -40,7 +41,7 @@ const LIST_CAP = 500; // ids listés au plus par boîte et par passage
 const PER_RUN = 100; // messages traités au plus par boîte et par passage
 // En-têtes lus : la notification (expéditeur, objet), les destinataires (mails des créateurs)
 // et List-Unsubscribe (newsletter : jamais de tâche tirée de ce mail).
-const META_HEADERS = ["From", "Subject", "Message-ID", "To", "Cc", "Delivered-To", "X-Original-To", "List-Unsubscribe"]
+const META_HEADERS = ["From", "Subject", "Message-ID", "To", "Cc", "Delivered-To", "X-Original-To", "List-Unsubscribe", "X-Failed-Recipients"]
   .map((h) => `metadataHeaders=${h}`).join("&");
 type Sb = ReturnType<typeof getServiceClient>;
 type Header = { name: string; value: string };
@@ -88,7 +89,7 @@ async function saveStateKey(sb: Sb, key: string, value: unknown) {
   else await sb.from("module_rows").insert({ module: "__app_state__", a: json });
 }
 
-type Fresh = NewMail & { rfcId: string; listUnsub?: boolean };
+type Fresh = NewMail & { rfcId: string; listUnsub?: boolean; failed?: string };
 
 /**
  * Nouveaux messages d'une boîte depuis `cursor` (ms). Liste paginée (Gmail : du plus
@@ -131,6 +132,7 @@ async function scanBox(box: Box, token: string, cursor: number): Promise<{ fresh
         to: h("to"), cc: h("cc"), deliveredTo: all("delivered-to"), originalTo: all("x-original-to"),
         labelIds: Array.isArray(m.labelIds) ? m.labelIds : [],
         listUnsub: !!h("list-unsubscribe"),
+        failed: h("x-failed-recipients"),
       };
     } catch {
       return "fail";
@@ -396,6 +398,17 @@ Deno.serve(async (req: Request) => {
     }
   }
 
+  // Prospection : une réponse arrête la séquence du contact (tâche « Visio » pour Marc),
+  // un rebond marque l'adresse en erreur (voir sequences.ts).
+  let sequences = { reponses: 0, rebonds: 0 };
+  if (added.length) {
+    try {
+      sequences = await suivreReponses(sb, added, AGENCY_DOMAIN);
+    } catch (e) {
+      console.error("gmail-poll séquences", (e as Error)?.message);
+    }
+  }
+
   // Contrats PDF reçus : exclusivité lue toute seule, à confirmer (voir exclu.ts).
   let exclu = 0;
   if (added.length && prefs.mailExclu !== false) {
@@ -425,7 +438,7 @@ Deno.serve(async (req: Request) => {
   }
 
   return jsonRes({
-    ok: true, new: added.length, pushed, read, creatorPushed, tasks, tasksDone, exclu,
+    ok: true, new: added.length, pushed, read, creatorPushed, tasks, tasksDone, exclu, ...sequences,
     ...(baseline ? { baseline: true } : {}),
     ...(more ? { more: true } : {}),
     ...(failedBoxes.length ? { partial: true, failedBoxes } : {}),

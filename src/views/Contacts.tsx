@@ -57,6 +57,7 @@ import { Overlay } from "@/components/mobile/ios-sheet";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { BrandIgInline, BrandIgPanel } from "@/components/BrandInstagram";
 import type { IgBrand } from "@/lib/instagram";
+import { lireEmailCheck, lireSequence } from "../../supabase/functions/_shared/sequence.ts";
 
 type Row = {
   id: string;
@@ -76,8 +77,42 @@ type Row = {
   creator?: string | null; // renseigné = contact ajouté par ce créateur
   last_contacted?: string | null; // dernier email SORTANT vers ce contact (ISO)
   touches?: unknown; // journal de contact multi-canal (jsonb, cf. src/lib/touches.ts)
+  sequence?: unknown; // séquence de prospection (SQL 2026-11-20-sequences-contacts, _shared/sequence.ts)
+  email_check?: unknown; // adresse en erreur (rebond, domaine sans serveur mail)
   ig?: IgBrand | null; // chiffres Instagram de la marque (ig-sync, migration 2026-10-13)
 };
+
+/** Séquence de prospection de la fiche : étapes faites, prochaine étape, réponse ; adresse en erreur. */
+function SequenceBlock({ sequence, emailCheck }: { sequence: unknown; emailCheck: unknown }) {
+  const seq = lireSequence(sequence);
+  const check = lireEmailCheck(emailCheck);
+  if (!seq && check?.statut !== "erreur") return null;
+  const jour = (iso: string) => new Date(iso + "T12:00:00Z").toLocaleDateString("fr-FR", { timeZone: "UTC", day: "numeric", month: "short" });
+  const etat = !seq
+    ? null
+    : seq.statut === "en_cours"
+      ? `Prochaine étape ${seq.etape} (${seq.canal === "email" ? "mail" : seq.canal === "linkedin" ? "LinkedIn" : seq.canal === "instagram" ? "Instagram" : "WhatsApp"}) le ${jour(seq.prochaine!)}`
+      : seq.statut === "finie"
+        ? "Séquence terminée sans réponse"
+        : seq.reponse === "positive" ? "Réponse positive" : seq.reponse === "negative" ? "Réponse négative" : seq.reponse === "a_repondu" ? "A répondu : visio à caler" : `Arrêtée (${seq.raison ?? "à la main"})`;
+  return (
+    <section>
+      {check?.statut === "erreur" && (
+        <p className={cn("mb-2 text-[12px] font-medium leading-snug", TONE_TEXT.late)}>Adresse en erreur : {check.raison}. Les mails ne partent plus vers elle.</p>
+      )}
+      {seq && (
+        <>
+          <h3 className="text-[13px] font-semibold text-foreground">Séquence de prospection</h3>
+          <p className="mt-1 text-[13px] text-foreground">{etat}</p>
+          <p className="mt-0.5 text-[12px] text-muted-foreground">
+            Commencée le {jour(seq.debut)} · faites : {seq.faites.join(", ") || "—"}
+            {seq.createur ? ` · créatrice : ${seq.createur}` : ""}
+          </p>
+        </>
+      )}
+    </section>
+  );
+}
 
 // Suivi du sur-contact : en-deçà de ce seuil (jours), on alerte de ne pas relancer.
 const RECENT_DAYS = 30;
@@ -1395,6 +1430,9 @@ export function Contacts() {
               </div>
             )}
           </div>
+
+          {/* Séquence de prospection (Alfred / Gianni) et adresse en erreur */}
+          <SequenceBlock sequence={row.sequence} emailCheck={row.email_check} />
 
           {/* Prochaine relance : avancement du cycle de recontact */}
           <section>

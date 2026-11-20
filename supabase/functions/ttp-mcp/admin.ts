@@ -24,6 +24,7 @@ import { listSendAs, parseMailBox, resolveSender, sendDraft, sendMail, type Mail
 import { LIEN_TTL_MS, PROJECT_URL, creatorBoxReady, listCreatorBoxes, normEmail } from "../_shared/creatorBox.ts";
 import { genNonce, signState } from "../_shared/state.ts";
 import type { Ctx } from "./oauth.ts";
+import { PROSPECTION_TOOLS, adressesDe, adressesInvalides, suiviApresEnvoi } from "./prospection.ts";
 
 type Json = Record<string, unknown>;
 type Args = Record<string, unknown>;
@@ -474,6 +475,8 @@ const envoyerMail: AdminTool = {
       fil: { type: "string", description: "Id du fil Gmail pour répondre dedans" },
       signature: { type: "boolean", description: "false pour ne pas ajouter la signature (par défaut : ajoutée)" },
       envoyer_en_tant_que: { type: "string", description: "Facultatif : alias mail d'une créatrice (ex. anamilanovic@ttpcreators.pro, via alias_createurs ou fiche_createur) pour envoyer EN SON NOM. Accepté seulement s'il est réglé dans « Envoyer en tant que » de la boîte dans Gmail ; les réponses de la marque reviennent sur l'alias." },
+      demarrer_sequence: { type: "boolean", description: "true : premier mail de prospection, la séquence du contact commence (J0). Sinon, la séquence avance toute seule si sa prochaine étape est un mail." },
+      createur: { type: "string", description: "Avec demarrer_sequence : la créatrice proposée" },
     },
     required: ["boite", "a", "message"],
     additionalProperties: false,
@@ -493,6 +496,9 @@ const envoyerMail: AdminTool = {
     if (!text) return fail("Message vide.");
     if (!str(a.objet) && !str(a.fil)) return fail("Indique l'objet du mail.");
     const alias = str(a.envoyer_en_tant_que, 200);
+    // Domaine du destinataire vérifié (MX) : une adresse impossible ne part pas, la fiche est marquée.
+    const invalide = await adressesInvalides(sb, to);
+    if (invalide) return fail(invalide);
     try {
       // Alias : vérifié dans les « Envoyer en tant que » de la boîte AVANT tout envoi.
       const from = alias ? await resolveSender(sb, box, alias) : undefined;
@@ -507,7 +513,8 @@ const envoyerMail: AdminTool = {
         }
       }
       const r = await sendMail(sb, box, { to, cc, bcc, subject: str(a.objet, 300), html: mailHtml(text, sig), threadId: str(a.fil, 64) || undefined, from });
-      return ok(`✓ Mail envoyé ${from ? `de ${from.email}${from.name ? ` (${from.name})` : ""} via ${box}` : `depuis ${box.includes("@") ? box : `${box}@`}`} à ${to.join(", ")}${cc.length ? ` (cc ${cc.join(", ")})` : ""} · objet « ${r.subject} ».`);
+      const suivi = await suiviApresEnvoi(sb, to, { demarrer: a.demarrer_sequence === true, createur: str(a.createur, 80) || undefined }).catch(() => "");
+      return ok(`✓ Mail envoyé ${from ? `de ${from.email}${from.name ? ` (${from.name})` : ""} via ${box}` : `depuis ${box.includes("@") ? box : `${box}@`}`} à ${to.join(", ")}${cc.length ? ` (cc ${cc.join(", ")})` : ""} · objet « ${r.subject} ».` + suivi);
     } catch (e) {
       const m = (e as Error).message ?? "";
       if (m.startsWith("alias_refuse: ")) return fail(m.slice(14));
@@ -530,6 +537,8 @@ const envoyerBrouillon: AdminTool = {
       boite: { type: "string", description: "partnerships, talent, ou l'adresse d'une boîte de créateur connectée (voir boites_createurs)" },
       brouillon: { type: "string", description: "Id du brouillon Gmail (donné par creer_brouillon_mail)" },
       envoyer_en_tant_que: { type: "string", description: "Facultatif : alias mail d'une créatrice (ex. anamilanovic@ttpcreators.pro, via alias_createurs ou fiche_createur) pour envoyer EN SON NOM. Accepté seulement s'il est réglé dans « Envoyer en tant que » de la boîte dans Gmail ; les réponses de la marque reviennent sur l'alias." },
+      demarrer_sequence: { type: "boolean", description: "true : premier mail de prospection, la séquence du contact commence (J0). Sinon, la séquence avance toute seule si sa prochaine étape est un mail." },
+      createur: { type: "string", description: "Avec demarrer_sequence : la créatrice proposée" },
     },
     required: ["boite", "brouillon"],
     additionalProperties: false,
@@ -546,7 +555,8 @@ const envoyerBrouillon: AdminTool = {
     try {
       if (alias) await resolveSender(sb, box, alias);
       const r = await sendDraft(sb, box, id, alias || undefined);
-      return ok(`✓ Brouillon envoyé de ${r.from || `${box}@`} à ${r.to} · objet « ${r.subject} ».`);
+      const suivi = await suiviApresEnvoi(sb, adressesDe(r.to), { demarrer: a.demarrer_sequence === true, createur: str(a.createur, 80) || undefined }).catch(() => "");
+      return ok(`✓ Brouillon envoyé de ${r.from || `${box}@`} à ${r.to} · objet « ${r.subject} ».${suivi}`);
     } catch (e) {
       const m = (e as Error).message ?? "";
       if (m.startsWith("alias_refuse: ")) return fail(m.slice(14));
@@ -555,6 +565,61 @@ const envoyerBrouillon: AdminTool = {
       if (/gmail_404/.test(m)) return fail("Brouillon introuvable : déjà envoyé ou supprimé.");
       return fail(/not_connected|invalid_grant/.test(m) ? "La boîte n'est pas connectée à l'app (Planning → Google Agenda → Connecter)." : /403|insufficient/i.test(m) ? "Gmail refuse l'envoi : le droit d'envoi manque pour cette boîte." : `Envoi impossible : ${m}`);
     }
+  },
+};
+
+// ── 7 bis. Envoi par lots (liste de Gianni, point 3) ─────────────────────────
+// Marc relit les brouillons préparés et répond « oui » pour une liste précise : elle part
+// en une fois, avec un compte rendu par brouillon. Même règle que envoyer_brouillon.
+const envoyerBrouillonsValides: AdminTool = {
+  name: "envoyer_brouillons_valides",
+  title: "Envoyer des brouillons validés",
+  description:
+    "ENVOIE en une fois une liste de brouillons Gmail préparés par Claude (ids de creer_brouillon_mail), chacun exactement tel qu'il est dans Gmail. À n'appeler qu'après le « oui » explicite de Marc pour CETTE liste d'ids (jamais « tout », jamais un id qu'il n'a pas vu). Un brouillon écrit à la main, introuvable ou refusé est sauté, les autres partent. La séquence de chaque destinataire avance (ou commence avec demarrer_sequence). Compte rendu brouillon par brouillon. 25 au plus.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      boite: { type: "string", description: "partnerships, talent, ou l'adresse d'une boîte de créateur connectée" },
+      brouillons: { type: "array", items: { type: "string" }, description: "Ids des brouillons validés par Marc" },
+      envoyer_en_tant_que: { type: "string", description: "Facultatif : alias d'une créatrice, commun à toute la liste (vérifié dans « Envoyer en tant que »)" },
+      demarrer_sequence: { type: "boolean", description: "true : premiers mails de prospection, chaque séquence commence (J0)" },
+    },
+    required: ["boite", "brouillons"],
+    additionalProperties: false,
+  },
+  write: true,
+  founder: true,
+  run: async (sb, _c, a) => {
+    const pb = await parseMailBox(sb, a.boite);
+    if ("error" in pb) return fail(pb.error);
+    const box: MailBox = pb.box;
+    const ids = [...new Set((Array.isArray(a.brouillons) ? a.brouillons : []).map((x) => str(x, 64)).filter((x) => /^[A-Za-z0-9_-]+$/.test(x)))];
+    if (!ids.length) return fail("Aucun id de brouillon valable.");
+    if (ids.length > 25) return fail("25 brouillons au plus par envoi : coupe la liste en deux.");
+    const alias = str(a.envoyer_en_tant_que, 200);
+    if (alias) {
+      try {
+        await resolveSender(sb, box, alias);
+      } catch (e) {
+        const m = (e as Error).message ?? "";
+        return fail(m.startsWith("alias_refuse: ") ? m.slice(14) : `Alias impossible à vérifier : ${m.slice(0, 120)}`);
+      }
+    }
+    const lignes: string[] = [];
+    let partis = 0;
+    for (const id of ids) {
+      try {
+        const r = await sendDraft(sb, box, id, alias || undefined);
+        partis++;
+        const suivi = await suiviApresEnvoi(sb, adressesDe(r.to), { demarrer: a.demarrer_sequence === true }).catch(() => "");
+        lignes.push(`✓ ${id} → ${r.to} · « ${r.subject} »${suivi.replace(/^\nSuivi : /, " · ")}`);
+      } catch (e) {
+        const m = (e as Error).message ?? "";
+        const why = m === "not_claude" ? "pas préparé par Claude" : /gmail_404/.test(m) ? "introuvable (déjà envoyé ou supprimé)" : m.startsWith("from_mismatch: ") ? `part de ${m.slice(15)}, pas de ${alias}` : /not_connected|invalid_grant/.test(m) ? "boîte non connectée" : m.slice(0, 120);
+        lignes.push(`✗ ${id} : ${why}, rien n'est parti`);
+      }
+    }
+    return ok([`${partis} envoyé(s) sur ${ids.length} depuis ${box.includes("@") ? box : `${box}@`}${alias ? ` en tant que ${alias}` : ""} :`, ...lignes].join("\n"));
   },
 };
 
@@ -639,4 +704,4 @@ const envoyerDm: AdminTool = {
   },
 };
 
-export const ADMIN_TOOLS: AdminTool[] = [lireDonnees, creerElement, modifierElement, supprimerElement, reglagesApp, preparerFacture, preparerDevis, envoyerMail, envoyerBrouillon, lienBoiteCreateur, boitesCreateurs, envoyerDm];
+export const ADMIN_TOOLS: AdminTool[] = [lireDonnees, creerElement, modifierElement, supprimerElement, reglagesApp, preparerFacture, preparerDevis, envoyerMail, envoyerBrouillon, envoyerBrouillonsValides, ...PROSPECTION_TOOLS, lienBoiteCreateur, boitesCreateurs, envoyerDm];
