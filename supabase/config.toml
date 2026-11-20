@@ -43,6 +43,11 @@ verify_jwt = false
 [functions.widget]
 verify_jwt = false
 
+# site-lead : formulaire « Recevoir le roster » du site public → verify_jwt=false ;
+# CORS ttpcreators.pro, piège à robots, 30 demandes par heure, push sans texte du visiteur.
+[functions.site-lead]
+verify_jwt = false
+
 # report-error : reçoit les crashs de l'ErrorBoundary (même déconnecté, ex. écran
 # login) → verify_jwt=false. Ne fait que journaliser + notifier l'agence (anti-spam).
 [functions.report-error]
