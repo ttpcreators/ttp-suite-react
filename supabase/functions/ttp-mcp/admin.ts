@@ -11,6 +11,7 @@
 
 import { DEFAULT_MAIL_MODELS } from "../_shared/mailModels.ts";
 import { readTarifGrid } from "../_shared/tarif.ts";
+import { alerteDealMinimum } from "../_shared/strategie.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { readAppState } from "../_shared/appState.ts";
 import { pageAccess, postGraph } from "../_shared/instagram.ts";
@@ -378,7 +379,7 @@ const preparerDevis: AdminTool = {
   name: "preparer_devis",
   title: "Préparer un devis",
   description:
-    "Crée ou met à jour un DEVIS en brouillon dans Facturation → Devis (fondateurs), mêmes règles que l'app : lignes HT, TVA selon le régime réglé dans Compta (franchise par défaut ; avec TVA seulement si `tva` ou `franchise: false` est donné), commission du créateur (fiche roster, sinon 20 %), numéro « D-AAAA-NNN » automatique, valable 30 jours. Rien n'est envoyé : Marc vérifie le devis, en fait le PDF et l'envoie depuis l'app. Sans `ref` : nouveau devis. Avec `ref` : modifie ce devis (seuls les champs donnés changent ; `lignes` remplace toutes les lignes). Prix : toujours la méthode de l'agence (methode_tarif) et le flag « À vérifier ».",
+    "Crée ou met à jour un DEVIS en brouillon dans Facturation → Devis (fondateurs), mêmes règles que l'app : lignes HT, TVA selon le régime réglé dans Compta (franchise par défaut ; avec TVA seulement si `tva` ou `franchise: false` est donné), commission du créateur (fiche roster, sinon 20 %), numéro « D-AAAA-NNN » automatique, valable 30 jours. Rien n'est envoyé : Marc vérifie le devis, en fait le PDF et l'envoie depuis l'app. Sans `ref` : nouveau devis. Avec `ref` : modifie ce devis (seuls les champs donnés changent ; `lignes` remplace toutes les lignes). Prix : toujours la méthode de l'agence (methode_tarif) et le flag « À vérifier ». Deal minimum 500 € HT (stratégie de l'agence) : en dessous, l'outil le signale.",
   inputSchema: {
     type: "object",
     properties: {
@@ -450,6 +451,7 @@ const preparerDevis: AdminTool = {
       `✓ Devis ${quote.ref} ${prev ? "mis à jour" : "créé"} (brouillon) : ${invoiceParty(brand, creator)}`,
       ...items.map((l) => `- ${l.label} : ${l.qty} × ${fmt(l.unit)}`),
       `HT ${fmt(tot.ht)} · TVA ${quote.franchise ? "franchise" : `${quote.vatRate} %`} ${fmt(tot.tva)} · TTC ${fmt(tot.ttc)} · valable jusqu'au ${quote.dueDate}`,
+      ...[alerteDealMinimum(tot.ht)].filter((x): x is string => !!x),
       "À vérifier dans Facturation → Devis, puis à envoyer depuis l'app (le PDF est fait par l'app).",
     ].join("\n"));
   },

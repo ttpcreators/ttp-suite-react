@@ -689,7 +689,7 @@ const RC_FIELDS = [
 		key: "commUniforme",
 		label: "Taux uniforme (%)",
 		type: "number",
-		default: "20",
+		default: "25",
 		group: "Commission",
 		help: "Mode uniforme."
 	},
@@ -996,7 +996,7 @@ const RC_VARIANTS = [{
 		reportingMensuel: "true",
 		modeCommission: "uniforme",
 		regimeFiscalComm: "TTC",
-		commUniforme: "20",
+		commUniforme: "25",
 		commAutonome: "0",
 		seuil: "100",
 		avantagesNatureInclus: "true",
