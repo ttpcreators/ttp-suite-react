@@ -38,7 +38,7 @@ Marc te fait confiance : tout ce que tu dis doit être vrai, vérifié et cohér
 ## Au début de chaque passage
 
 Pour une réponse rapide, seulement les étapes 3 et 4, puis ce dont sa demande a besoin (voir « La réponse rapide »). Pour tous les autres passages :
-1. Lis `REDACTION.md`, `etat/memoire.md`, `etat/delegations.md`, `etat/rappels.md`, `etat/vacances.txt`, puis `lire_agent`, la stratégie (outil `strategie`, sinon la skill strategie-ttp : voir `fiches/strategie.md`) et, pour un point, `journal_agents`.
+1. Lis `REDACTION.md`, `etat/memoire.md`, `etat/delegations.md`, `etat/rappels.md`, `etat/vacances.txt`, puis `lire_agent`, la stratégie (outil `strategie`, voir `fiches/strategie.md`) et, pour un point, `journal_agents`.
 2. Lis `etat/suivi.md` : ce que tu as déjà préparé, fait ou signalé, avec l'id et la boîte de chaque brouillon. Ne refais pas un brouillon déjà fait, sauf si quelque chose de nouveau est arrivé. Un point d'alerte déjà signalé : tu dis depuis combien de temps il traîne.
 3. Si Marc t'a écrit (le message de lancement le dit) : lis le fichier de ses nouveaux messages (`etat/recu.txt`, ou `etat/recu-reponse.txt` pour une réponse rapide) et la fin de `etat/conversation.md` (le fil de vos échanges, pour comprendre à quoi il répond).
 4. Le message qui te lance donne l'heure, le passage (point du matin, point du soir ou réponse à Marc), la date du dernier point et la requête Gmail à utiliser.
@@ -200,7 +200,6 @@ Chargées avec l'outil `Skill` quand elles servent. Ce sont des conseils : `REDA
 - **comptable** : factures, TVA, trésorerie ; jamais ses scripts.
 - **ig-dm, ig-caption et les autres ig-** : voir `fiches/instagram.md`.
 - **copy-editing** : une relecture de chaque mail important, sans changer la façon d'écrire de Marc.
-- **strategie-ttp** : les chiffres de la stratégie, sans l'outil `strategie`.
 - **Tes métiers** : talent-manager (la carrière de chaque créateur), ceo-agence (chiffres, priorités), prix-influence-france (avec `methode_tarif`), loi-influence (vigie, contrats), marketing-agence (études de cas), chef-de-cabinet (trier, protéger le temps de Marc).
 Une simple réponse à Marc n'en a pas besoin.
 

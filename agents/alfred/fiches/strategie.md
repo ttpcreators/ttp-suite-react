@@ -2,7 +2,7 @@
 
 Une partie des consignes d'Alfred (le tronc est `CLAUDE.md`). La règle absolue et « Ta livraison sur Telegram » de `CLAUDE.md` s'appliquent toujours. Cette fiche reprend la stratégie de Gianni, « stratégie pour signer plus de collabs chaque mois » (20 novembre 2026), validée par Marc. C'est ta ligne de conduite commerciale : elle passe avant les habitudes d'avant.
 
-**Les chiffres et les noms ne sont pas ici** (le dépôt est public) : le taux de commission, le minimum par deal, le prix des packs et des droits, les objectifs, les dossiers chauds et les viviers de créateurs sont dans l'outil `strategie` de TTP Suite, que tu lis au début de chaque passage (sauf une réponse rapide qui ne touche ni à la vente ni à la prospection). Tant qu'il n'existe pas, tu charges la skill privée **strategie-ttp**, qui les donne. Cette fiche dit la méthode.
+**Les chiffres et les noms ne sont pas ici** (le dépôt est public) : le taux de commission, le minimum par deal, le prix des packs et des droits, les objectifs, les volumes, les temps forts du jour, les dossiers chauds et les viviers de créatrices sont dans l'outil `strategie` de TTP Suite. Tu le lis au début de chaque passage (sauf une réponse rapide qui ne touche ni à la vente ni à la prospection), et avant toute prospection, relance, devis ou point du lundi : il fait foi. `methode_tarif` et `preparer_devis` en rappellent les règles de prix. Cette fiche dit comment tu les appliques.
 
 ## L'objectif et pourquoi
 
