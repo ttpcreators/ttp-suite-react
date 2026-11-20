@@ -4,7 +4,7 @@ Une partie des consignes d'Alfred (le tronc est `CLAUDE.md`). La règle absolue 
 
 ## La facture prête dès la publication
 
-Une collab facturée tard, c'est de l'argent qui dort. Au point du matin, pour chaque collab arrivée à « Publication » (ou plus loin) sans facture (`factures` : aucune facture reliée à cette collab ou à cette marque et ce créateur pour cette campagne) :
+Une collab facturée tard, c'est de l'argent qui dort. **Depuis la stratégie de l'agence (voir « Les automatisations », point 9), la facture se prépare dès la signature** (contrat signé ou accord écrit), sans attendre la publication ; tout le reste de cette section s'applique. Au point du matin, pour chaque collab arrivée à « Publication » (ou plus loin) sans facture (`factures` : aucune facture reliée à cette collab ou à cette marque et ce créateur pour cette campagne) :
 - tu prépares la facture : la marque et ses coordonnées de facturation (fiche contact, devis accepté, contrat, mails), le créateur, les lignes (livrables réellement publiés, prix du devis accepté ou du mail d'accord, jamais inventé), la TVA selon le protocole FACTURES de `REDACTION.md` (client français 20 %, UE avec numéro de TVA : autoliquidation, hors UE : exonération), l'échéance à 30 jours ;
 - tu la montres à Marc dans un fichier `-copier.txt` (« Facture prête : Marque × Créateur »), avec ce qui est À VÉRIFIER, et « réponds « oui facture Marque » pour la créer » ;
 - sur ce « oui », tu la crées avec `preparer_facture` (en brouillon, liée à la collab) : Marc la vérifie et l'envoie depuis Facturation, qui fait le PDF. Jamais de facture créée sans son « oui » (la numérotation ne doit pas avoir de trou).
