@@ -28,7 +28,7 @@
 
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { discover, engagementRate, igUser, metaReady, ownAccount, postsPerWeek, quotaPct, saveUsage, type IgProfile } from "../_shared/instagram.ts";
-import { handleCandidates, isCommonWord } from "../_shared/mentions.ts";
+import { brandAccountOk, handleCandidates, isCommonWord, isPlainWord, proseWords } from "../_shared/mentions.ts";
 import { agencyHint, emailsIn, isPaid } from "../_shared/signals.ts";
 import { brandSummary, postEr, postKind, type CollabPost } from "../_shared/creatorCollabs.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -48,14 +48,18 @@ const DISCOVER_PER_SCAN = 40; // créatrices hors agence lues par passage (déco
 const age = (iso: string | null | undefined) => (iso ? Date.now() - Date.parse(iso) : Infinity);
 
 
-/** Comptes cités dans un texte (Meta retire les @ : voir _shared/mentions.ts), poids ≥ `min`. */
+/**
+ * Comptes cités dans un texte (Meta retire les @ : voir _shared/mentions.ts), poids ≥ `min`.
+ * `prose` = mots de la langue d'après les légendes lues ensemble (proseWords) : un mot
+ * ordinaire (« attention », « every ») n'y est pas pris pour un compte sans indice fort.
+ */
 const KNOWN = new Set<string>(); // marques déjà connues : contacts, radar (rempli par loadKnown)
-function cited(caption: string, min = 2): { u: string; w: number }[] {
-  return handleCandidates(caption, KNOWN, isPaid(caption)).filter((c) => c.w >= min);
+function cited(caption: string, min = 2, prose?: Set<string>): { u: string; w: number }[] {
+  return handleCandidates(caption, KNOWN, isPaid(caption), prose).filter((c) => c.w >= min);
 }
 /** Poids d'un compte dans un texte (0 = pas cité). */
-function citedAll(caption: string): Map<string, number> {
-  return new Map(handleCandidates(caption, KNOWN, isPaid(caption)).map((c) => [c.u, c.w]));
+function citedAll(caption: string, prose?: Set<string>): Map<string, number> {
+  return new Map(handleCandidates(caption, KNOWN, isPaid(caption), prose).map((c) => [c.u, c.w]));
 }
 
 const LINK_IN_BIO = /(linktr\.ee|beacons\.ai|linkin\.bio|lnk\.bio|solo\.to|campsite\.bio|bio\.site|tap\.bio|msha\.ke|hoo\.be|snipfeed|stan\.store|allmylinks|linkbio|later\.com|flowcode|komi\.io|direct\.me|instabio)/i;
@@ -142,8 +146,9 @@ async function toData(p: IgProfile): Promise<Json> {
   const me = p.username.toLowerCase();
   const deals = new Set<string>();
   const cites = new Set<string>();
+  const prose = proseWords(p.media.map((m) => m.caption));
   for (const m of p.media) {
-    for (const { u } of cited(m.caption, 3)) {
+    for (const { u } of cited(m.caption, 3, prose)) {
       if (u === me) continue;
       cites.add(u);
       if (isPaid(m.caption)) deals.add(u);
@@ -156,7 +161,9 @@ async function toData(p: IgProfile): Promise<Json> {
     perWeek: last12.length ? postsPerWeek(last12) : null,
     lastPost: p.media[0]?.at ?? null,
     bio: p.bio.slice(0, 300), website: p.website, email, emailFrom, agency,
-    picture: p.picture, brandScore: score, isBrand: score >= 2,
+    // Une marque : bio, site et abonnés le disent (brandScore), et un @ fait d'un simple
+    // mot (« every », « attention ») doit en plus porter ce nom (voir brandAccountOk).
+    picture: p.picture, brandScore: score, isBrand: score >= 2 && brandAccountOk(p.username, p),
   };
 }
 
@@ -218,8 +225,8 @@ async function loadCache(ctx: Ctx, users: string[]) {
 /**
  * Marques déjà connues, reconnues même sans @ dans un texte : contacts avec un @ et
  * marques que l'agence a mises au Pipeline depuis le radar (validées à la main, pour
- * qu'une erreur du radar ne s'auto-entretienne pas). Nettoie au passage le radar des
- * mots courants pris à tort pour une marque (« notre » → @notre).
+ * qu'une erreur du radar ne s'auto-entretienne pas). Passe au passage en « ignorée »
+ * les mots courants pris à tort pour une marque (« notre » → @notre).
  */
 async function loadKnown(ctx: Ctx) {
   if (KNOWN.size) return;
@@ -234,14 +241,16 @@ async function loadKnown(ctx: Ctx) {
   const rows = (rd.data as { brand: string; status: string }[] | null) ?? [];
   for (const r of rows) if (r.status === "pipeline" && !isCommonWord(r.brand)) KNOWN.add(r.brand);
   const junk = rows.filter((r) => r.status === "nouveau" && isCommonWord(r.brand)).map((r) => r.brand);
-  if (junk.length) await ctx.sb.from("ig_radar").delete().in("brand", junk);
+  // Passées en « ignorée » (rien n'est supprimé : l'agence peut les remettre).
+  if (junk.length) await ctx.sb.from("ig_radar").update({ status: "ignore" }).in("brand", junk);
 }
 
 /** Additionne les poids d'un compte sur plusieurs textes : garde ceux qui atteignent 2. */
 function tally(captions: { text: string; at?: string; url?: string }[], skip: Set<string>) {
   const seen = new Map<string, { count: number; weight: number; lastAt: string; url: string }>();
+  const prose = proseWords(captions.map((p) => p.text));
   for (const p of captions) {
-    for (const [u, w] of citedAll(p.text)) {
+    for (const [u, w] of citedAll(p.text, prose)) {
       if (skip.has(u)) continue;
       const cur = seen.get(u);
       if (cur) {
@@ -294,11 +303,12 @@ async function collabs(ctx: Ctx, creator: string) {
   const r = await discover(c, 50);
   if (!r.ok) return { error: r.why };
   const followers = r.profile.followers;
+  const prose = proseWords(r.profile.media.map((p) => p.caption));
   const posts: CollabPost[] = r.profile.media
     .map((p) => ({
       id: p.id, url: p.url, at: p.at, kind: postKind(p.type, p.product), likes: p.likes, comments: p.comments,
       er: postEr(p.likes, p.comments, followers), paid: isPaid(p.caption),
-      brands: cited(p.caption, 2).map((x) => x.u).filter((u) => u !== c).slice(0, 5),
+      brands: cited(p.caption, 2, prose).map((x) => x.u).filter((u) => u !== c).slice(0, 5),
       caption: p.caption.replace(/\s+/g, " ").trim().slice(0, 400),
     }))
     .filter((p) => p.brands.length || p.paid);
@@ -319,8 +329,9 @@ async function similar(ctx: Ctx, creator: string) {
   if (!media) return { error: row.why ?? "erreur" };
   // Ses marques : citées dans ses posts (les posts payés comptent double).
   const weight = new Map<string, number>();
+  const prose = proseWords(media.map((p) => p.caption));
   for (const p of media) {
-    for (const [m, w] of citedAll(p.caption)) if (m !== c) weight.set(m, (weight.get(m) ?? 0) + w * (isPaid(p.caption) ? 2 : 1));
+    for (const [m, w] of citedAll(p.caption, prose)) if (m !== c) weight.set(m, (weight.get(m) ?? 0) + w * (isPaid(p.caption) ? 2 : 1));
   }
   const brands = [...weight.entries()].filter(([, w]) => w >= 2).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([b]) => b);
   const via = new Map<string, Set<string>>();
@@ -416,7 +427,8 @@ async function refreshRival(ctx: Ctx, u: string, self: boolean) {
   const { data: cur } = await ctx.sb.from("ig_rivals").select("history").eq("username", u).maybeSingle<{ history: unknown }>();
   const history = pushDay(cur?.history, p.followers, p.posts);
   const paidOf = new Map<string, number>();
-  for (const m of p.media) if (isPaid(m.caption)) for (const [x] of citedAll(m.caption)) paidOf.set(x, (paidOf.get(x) ?? 0) + 1);
+  const prose = proseWords(p.media.map((m) => m.caption));
+  for (const m of p.media) if (isPaid(m.caption)) for (const [x] of citedAll(m.caption, prose)) paidOf.set(x, (paidOf.get(x) ?? 0) + 1);
   // Comptes cités dans ses posts (sans @ : voir cited), les plus cités d'abord.
   const seen = tally(p.media.map((m) => ({ text: m.caption, at: m.at, url: m.url })), new Set([u]));
   const users = [...seen.entries()].sort((a, b) => b[1].weight - a[1].weight || b[1].count - a[1].count).slice(0, self ? 0 : 30).map(([x]) => x);
@@ -550,6 +562,9 @@ async function scan(ctx: Ctx) {
   // Compteurs pour comprendre un radar vide : posts reçus, avec texte, avec un @.
   const diag = { posts: 0, withText: 0, withAt: 0, withName: 0 };
   const weightOf = new Map<string, number>();
+  const strongOf = new Map<string, number>(); // meilleur poids dans un seul post
+  const citedBy = new Map<string, Set<string>>(); // créatrices qui citent ce nom
+  const read: { u: string; media: IgProfile["media"] }[] = [];
   await each(ctx, [...new Set(roster), ...poolTodo, ...discoveredSet], async (u) => {
     const { row, media } = await profile(ctx, u, 25, true);
     if (!media) return;
@@ -558,27 +573,45 @@ async function scan(ctx: Ctx) {
       if (row.data?.isBrand) return; // une marque, pas une créatrice
       discoveredRead++;
     }
+    read.push({ u, media });
+  });
+  // Mots de la langue d'après toutes les légendes lues (« Attention », « Every » avec une
+  // majuscule) : sans indice fort, ils ne sont pas pris pour un compte.
+  const prose = proseWords(read.flatMap((r) => r.media.map((p) => p.caption)));
+  // Ni les créatrices lues (roster, Scouting, découvertes) ni l'agence ne sont des marques.
+  const notBrands = new Set([...ours, ...read.map((r) => r.u)]);
+  for (const { u, media } of read) {
     for (const p of media) {
       diag.posts++;
       if (p.caption.trim()) diag.withText++;
       if (p.caption.includes("@")) diag.withAt++;
-      const names = citedAll(p.caption);
+      const names = citedAll(p.caption, prose);
       if ([...names.values()].some((w) => w >= 2)) diag.withName++;
       for (const [m, w] of names) {
-        if (ours.has(m) || m === u) continue;
+        if (notBrands.has(m) || m === u) continue;
         weightOf.set(m, (weightOf.get(m) ?? 0) + w);
+        strongOf.set(m, Math.max(strongOf.get(m) ?? 0, w));
+        const by = citedBy.get(m) ?? new Set<string>();
+        by.add(u);
+        citedBy.set(m, by);
         const list = found.get(m) ?? [];
         list.push({ c: u, roster: rosterSet.has(u), url: p.url, at: p.at, paid: isPaid(p.caption), likes: p.likes, comments: p.comments, cap: p.caption.slice(0, 300) });
         found.set(m, list);
       }
     }
-  });
+  }
   const now = new Date().toISOString();
   if (scanned.length) await ctx.sb.from("ig_profiles").update({ scanned_at: now }).in("username", scanned);
 
-  // Fusion avec le radar existant (un post n'est compté qu'une fois). Un nom vu une
-  // seule fois avec un indice faible (poids < 2) n'est pas gardé, sauf s'il est déjà au radar.
-  const brands = [...found.keys()].filter((b) => (weightOf.get(b) ?? 0) >= 2 || KNOWN.has(b));
+  // Fusion avec le radar existant (un post n'est compté qu'une fois). Un nom n'est gardé
+  // que si ses indices atteignent 2 ; un simple mot vu seulement avec des indices faibles
+  // (préposition, mot long, hashtag) doit en plus être cité par deux créatrices.
+  const keep = (b: string) => {
+    if (KNOWN.has(b)) return true;
+    if ((weightOf.get(b) ?? 0) < 2) return false;
+    return !isPlainWord(b) || (strongOf.get(b) ?? 0) >= 2 || (citedBy.get(b)?.size ?? 0) >= 2;
+  };
+  const brands = [...found.keys()].filter(keep);
   const existing = new Map<string, { posts: RadarPost[] }>();
   for (let i = 0; i < brands.length; i += 200) {
     const { data } = await ctx.sb.from("ig_radar").select("brand, posts").in("brand", brands.slice(i, i + 200));
