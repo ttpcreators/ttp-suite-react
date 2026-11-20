@@ -257,9 +257,9 @@ done < etat/delegations.md
 # Quand Marc écrit : tous les outils de TTP Suite, pour faire ce qu'il demande. Envoyer un brouillon et retenir une leçon :
 # seulement quand Marc vient d'écrire, ou pendant une délégation avec envoi autorisé.
 ttp="mcp__claude_ai_TTP_Suite__"
-lire="strategie objectifs modeles_mails base_createurs boites_createurs lien_boite_createur droits_usage posts_createur brouillons_claude journal_agents stats_collab compta lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
-agir="marquer_lu ajouter_modele proposer_action ecarter_proposition noter_reversement brouillon_post_instagram noter_droits noter_journal creer_meet ajouter_au_scouting changer_statut_scouting creer_brouillon_mail supprimer_brouillon preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
-sur_oui="envoyer_brouillon noter_lecon maj_chiffres_mediakit"
+lire="contacts_a_relancer strategie objectifs modeles_mails base_createurs boites_createurs lien_boite_createur droits_usage posts_createur brouillons_claude journal_agents stats_collab compta lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
+agir="sequence_contact marquer_lu ajouter_modele proposer_action ecarter_proposition noter_reversement brouillon_post_instagram noter_droits noter_journal creer_meet ajouter_au_scouting changer_statut_scouting creer_brouillon_mail supprimer_brouillon preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
+sur_oui="envoyer_brouillon envoyer_brouillons_valides noter_lecon maj_chiffres_mediakit"
 interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture preparer_reponse_mail resumer_brief"
 # Seule commande permise : télécharger et découper une vidéo dont le lien est dans un mail.
 # Skill : ses skills (.claude/skills, voir skills/LISEZ-MOI.md du dépôt), des consignes à lire.
@@ -287,6 +287,10 @@ denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash(spark:*)"
 # et seulement pendant un passage où Marc a écrit : ses consignes exigent son « oui » pour CE texte.
 # Même règle pour ajouter une discussion à la liste autorisée (`autoriser`).
 (( recus > 0 )) || denied+=("Bash(node whatsapp.mjs envoyer:*)" "Bash(node whatsapp.mjs autoriser:*)")
+# Les nouvelles de l'app contiennent une validation faite dans la page Agents : l'envoi est permis
+# pour ce passage (voir « La liste à valider de 17 h », point 5, et « Qui fait quoi »).
+envoi_valide=0
+[[ "$mode" == "les nouvelles de l'app" ]] && grep -q "validé dans la page Agents" etat/evenements-lus.txt 2>/dev/null && envoi_valide=1
 if (( recus > 0 )); then
   # Marc vient d'écrire : Alfred gère toute l'app sur sa demande (choix de Marc le 2026-11-06).
   # Ses consignes gardent la règle : un mail ou un DM ne part que sur un « oui » explicite.
@@ -296,6 +300,13 @@ else
   for t in ${=interdits}; do denied+=("$ttp$t"); done
   if (( delegue )); then
     for t in ${=sur_oui}; do allowed+=("$ttp$t"); done
+  elif (( envoi_valide )); then
+    # Un mail validé dans la page Agents (par Marc, ou par Gianni pour la prospection) : c'est un
+    # oui écrit par l'app elle-même (déclencheur en base, auteur tiré de la session), pas un texte
+    # qu'on pourrait glisser à Alfred. Seuls les outils d'envoi de brouillons sont ouverts.
+    for t in ${=sur_oui}; do
+      [[ "$t" == envoyer_brouillon || "$t" == envoyer_brouillons_valides ]] && allowed+=("$ttp$t") || denied+=("$ttp$t")
+    done
   else
     for t in ${=sur_oui}; do denied+=("$ttp$t"); done
   fi
@@ -317,7 +328,8 @@ else
 fi
 (( delegue )) && messages="$messages Une délégation avec envoi autorisé est en cours (etat/delegations.md) : tu peux envoyer ce qu'elle couvre, et seulement ça."
 (( ${#rdv_dus} > 0 )) && messages="$messages Rendez-vous dans environ une heure, à préparer (voir « La fiche avant chaque rendez-vous ») : ${(j:; :)rdv_dus}."
-(( recus == 0 && ! delegue )) && messages="$messages Tu ne peux envoyer aucun mail pendant ce passage."
+(( recus == 0 && ! delegue && ! envoi_valide )) && messages="$messages Tu ne peux envoyer aucun mail pendant ce passage."
+(( envoi_valide )) && messages="$messages Tu peux envoyer seulement les brouillons validés dans la page Agents (voir « La liste à valider de 17 h », point 5)."
 [[ "$mode" == "l'examen de la semaine" ]] && messages="C'est l'examen de la semaine (voir « L'examen du dimanche ») : lis examen/questions.md et écris tes réponses dans etat/examen/reponses.md. Aucun outil de l'app : tu réponds avec tes consignes. Rien pour Marc."
 [[ "$mode" == "la correction de l'examen" ]] && messages="C'est la correction de l'examen (voir « L'examen du dimanche ») : compare etat/examen/reponses.md à examen/attendu.md, note le résultat dans etat/examen/resultats.md, et dépose ton message pour Marc dans $ENVOI/."
 [[ "$mode" == "la prospection du jour" ]] && messages="$messages C'est la prospection du jour : suis « Les automatisations » de fiches/strategie.md (points 1 à 6), tout en propositions dans « À valider », dans les limites de la stratégie. Pour Marc, une seule ligne de bilan (« 15 contacts, 12 marques, 20 LinkedIn, 20 Instagram préparés »)."
