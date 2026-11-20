@@ -227,11 +227,14 @@ function num(s: unknown): number {
 function qtyNum(s: unknown): number {
   return /^\s*\d+,\d+\s*$/.test(String(s ?? "")) ? (parseDecimal(s) ?? 0) : num(s);
 }
-/** Prochain numéro de facture à partir des réfs existantes (« AAAA-NNN »). */
-function nextRefFrom(refs: string[]): string {
-  const max = refs.reduce((m, ref) => Math.max(m, Number(String(ref).split("-").pop()) || 0), 180);
-  return `${new Date().getFullYear()}-${String(max + 1).padStart(3, "0")}`;
-}
+/**
+ * Numéro d'une facture tel qu'affiché. Un brouillon n'en a pas : la base le donne à
+ * l'émission (supabase/sql/2026-11-13-factures-numero-a-lemission.sql), à la suite de la
+ * dernière facture émise, sans trou. Le 1er janvier, la suite repart à AAAA-001.
+ */
+const numLabel = (ref: string | null | undefined) => (ref ?? "").trim() || "brouillon";
+/** Statuts d'une facture émise (numérotée). */
+const issuedStatus = (s: string | null | undefined) => !!s && s !== "brouillon" && s !== "annulee";
 /** Montant fr-FR à 2 décimales avec séparateur de milliers (« 1 273,00 € »).
  *  Les espaces fines insécables (U+202F) sont normalisées en U+00A0 : certaines
  *  polices/moteurs mobiles ne les affichent pas et collaient les milliers. */
@@ -312,7 +315,9 @@ function invoiceHTML(o: {
   /** « devis » : même document, titré Devis, avec la date de validité et le « Bon pour accord ». */
   doc?: "devis";
 }): string {
-  const { issuer, details: d, ref, brand, creator, totals } = o;
+  const { issuer, details: d, brand, creator, totals } = o;
+  // Brouillon : pas encore de numéro (il est donné à l'émission).
+  const ref = (o.ref ?? "").trim() || "Brouillon";
   const quote = o.doc === "devis";
   // Un devis ne se règle pas : pas de coordonnées bancaires.
   const bank = quote ? null : o.bank;
@@ -613,10 +618,10 @@ function detailPartOf(draft: Draft): Details {
  * modifiable par facture). Échéance : 30 jours après l'émission, jamais le jour même (une
  * facture préparée d'avance passait « en retard » avant même la livraison).
  */
-function blankDraft(refs: string[], bankId: string, franchise = true): Draft {
+function blankDraft(_refs: string[], bankId: string, franchise = true): Draft {
   return {
     id: null,
-    ref: nextRefFrom(refs),
+    ref: "", // numéro donné par la base à l'émission
     brand: "",
     creator: "",
     status: "brouillon",
@@ -1081,8 +1086,12 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
     const isNew = !draft.id;
     const t = totalsOf(draft.items, draft.franchise, draft.vatRate, draft.commissionRate);
     const party = draft.creator ? `${draft.brand.trim()} × ${firstName(draft.creator)}` : draft.brand.trim();
+    // Brouillon qui devient une facture émise : elle est datée du jour d'émission (les
+    // numéros et les dates suivent alors le même ordre).
+    const wasDraft = !draft.id || invoices.find((x) => x.id === draft.id)?.status === "brouillon";
+    if (wasDraft && issuedStatus(draft.status)) draft = { ...draft, issueDate: todayISO() };
+    // Pas de numéro envoyé : la base le donne à l'émission et le fige ensuite.
     const summary = {
-      ref: draft.ref,
       party,
       // Montant enregistré EN EUROS (facture en devise : convertie au taux de la facture).
       amount: euro2(t.ttc * (eurRateOf(draft) ?? 1)),
@@ -1092,23 +1101,21 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
     };
 
     let id = draft.id;
-    if (!id) {
-      // Numéro recalculé depuis la base juste avant l'insertion (évite les doublons)
-      const { data: refRows, error: refErr } = await supabase.from("invoices").select("ref");
-      if (refErr) {
-        toast("Erreur, réessaie");
-        return;
-      }
-      summary.ref = nextRefFrom(((refRows as { ref: string }[]) ?? []).map((x) => x.ref));
-      draft = { ...draft, ref: summary.ref };
-    }
     const wasPaid = id ? invoices.find((x) => x.id === id)?.status === "payee" : false;
     if (id) {
       if (!(await dbUpdate("invoices", id, summary))) {
         toast("Erreur, réessaie");
         return;
       }
-      setRows(invoices.map((x) => (x.id === id ? { ...x, ...summary } : x)));
+      // Émise à l'instant : le numéro vient d'être donné par la base.
+      let ref = draft.ref;
+      if (!ref.trim() && issuedStatus(draft.status)) {
+        const { data: got } = await supabase.from("invoices").select("ref").eq("id", id).maybeSingle();
+        ref = String((got as { ref?: string } | null)?.ref ?? "");
+        draft = { ...draft, ref };
+        setDraft((d) => (d && d.id === id ? { ...d, ref, issueDate: draft.issueDate } : d));
+      }
+      setRows(invoices.map((x) => (x.id === id ? { ...x, ...summary, ref } : x)));
     } else {
       const created = await dbInsert("invoices", { ...summary, sort_order: nextOrder(invoices) });
       if (!created) {
@@ -1116,11 +1123,12 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
         return;
       }
       id = (created as unknown as Row).id;
+      const ref = String((created as unknown as Row).ref ?? "");
       setRows([created as unknown as Row, ...invoices]);
       // La facture existe : un nouveau clic sur « Enregistrer » la MODIFIE (jamais de doublon).
-      draft = { ...draft, id };
+      draft = { ...draft, id, ref };
       const createdId = id;
-      setDraft((d) => (d ? { ...d, id: createdId, ref: summary.ref } : d));
+      setDraft((d) => (d ? { ...d, id: createdId, ref, issueDate: draft.issueDate } : d));
     }
     // Facture créée depuis une collab (ou champ « Collab ») : lien enregistré à part, jamais bloquant.
     if (draft.collabId && id) void setCollabLink("invoices", id, draft.collabId);
@@ -1145,7 +1153,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
     if (isNew && draft.fromQuote) {
       const q = ((freshState["quotes"] as Quote[]) ?? []).find((x) => x.id === draft.fromQuote);
       if (q) {
-        const done: Quote = { ...q, status: "accepte", invoiceId: id, invoiceRef: summary.ref };
+        const done: Quote = { ...q, status: "accepte", invoiceId: id, invoiceRef: draft.ref };
         if (await listAppStateKey("quotes", [done])) setQuotes((list) => list.map((x) => (x.id === done.id ? done : x)));
       }
     }
@@ -1190,7 +1198,27 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
     printHtml(buildHTML(r));
   }
 
-  function sendInvoice(r: Row) {
+  /** Brouillon → « En attente » : la base donne le numéro ; la facture est datée du jour. */
+  async function issueInvoice(r: Row): Promise<Row | null> {
+    if (!(await dbUpdate("invoices", r.id, { status: "attente" }))) {
+      toast("Facture non émise, réessaie");
+      return null;
+    }
+    const { data: got } = await supabase.from("invoices").select("ref").eq("id", r.id).maybeSingle();
+    const ref = String((got as { ref?: string } | null)?.ref ?? "");
+    const d = { ...detailsFor(r), issueDate: todayISO() };
+    setDetails((m) => ({ ...m, [r.id]: d }));
+    void mergeAppStateKey("invoiceDetails", { [r.id]: d });
+    const next: Row = { ...r, status: "attente", ref };
+    setRows((list) => list?.map((x) => (x.id === r.id ? next : x)) ?? list);
+    toast(`Facture ${ref} émise`);
+    return next;
+  }
+
+  async function sendInvoice(row: Row) {
+    // Envoyer = émettre : un brouillon reçoit son numéro (et la date du jour) avant de partir.
+    const r = row.status === "brouillon" ? await issueInvoice(row) : row;
+    if (!r) return;
     const d = detailsFor(r);
     const t = totalsOf(d.items, d.franchise, d.vatRate, d.commissionRate);
     const subject = `Facture ${r.ref} · ${issuer.name}`;
@@ -1295,7 +1323,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
   const canSend = (!!savedRow || !!savedQuote) && !dirty;
 
   function renderEditor() {
-    const crumb = draft ? (draft.id ? `N° ${draft.ref}` : isQuote ? "Nouveau devis" : "Nouvelle facture") : "Ouverture…";
+    const crumb = draft ? (draft.id ? (draft.ref ? `N° ${draft.ref}` : "Brouillon") : isQuote ? "Nouveau devis" : "Nouvelle facture") : "Ouverture…";
     const bar = (
       <div className="mb-5 flex min-h-[46px] flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-xl border border-border bg-panel px-4 py-2 text-[13px]">
         <nav aria-label="Fil d'Ariane" className="flex min-w-0 items-center gap-1.5">
@@ -1363,7 +1391,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
         <div className="mb-5 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
           <div className="min-w-0">
             <h2 className="text-[24px] font-semibold leading-tight tracking-[-0.02em] text-foreground md:text-[28px]">
-              {draft.id ? `${isQuote ? "Devis" : "Facture"} ${draft.ref}` : isQuote ? "Nouveau devis" : "Nouvelle facture"}
+              {draft.id ? `${isQuote ? "Devis" : "Facture"} ${numLabel(draft.ref)}` : isQuote ? "Nouveau devis" : "Nouvelle facture"}
             </h2>
             <p className="mt-1 text-[14px] text-muted-foreground">{subtitle}</p>
           </div>
@@ -1433,7 +1461,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
                     className="flex h-[42px] items-center gap-2 rounded-lg border border-border bg-muted px-3 text-sm tabular-nums text-foreground"
                     title={draft.id ? undefined : "Le numéro est recalculé juste avant l'enregistrement, pour éviter tout doublon."}
                   >
-                    <span className="truncate">{draft.ref}</span>
+                    <span className="truncate">{draft.ref || "Numéro donné à l'émission"}</span>
                     {!draft.id && <span className="ml-auto shrink-0 text-[11.5px] text-faint">provisoire</span>}
                   </div>
                 </Field>
@@ -1602,7 +1630,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
           {/* ── Aperçu vivant (ordinateur) ── */}
           {showPreview && (
             <div className="sticky top-4 hidden min-w-0 xl:block">
-              <InvoiceSheet html={liveHtml} title={`${isQuote ? "Devis" : "Facture"} ${draft.ref}`} className="h-[calc(100dvh-150px)] min-h-[560px]" />
+              <InvoiceSheet html={liveHtml} title={`${isQuote ? "Devis" : "Facture"} ${numLabel(draft.ref)}`} className="h-[calc(100dvh-150px)] min-h-[560px]" />
             </div>
           )}
         </div>
@@ -1610,7 +1638,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
         {/* ── Aperçu (téléphone, tablette) ── */}
         {mobilePreview && (
           <Modal
-            title={`Aperçu · ${draft.ref}`}
+            title={`Aperçu · ${numLabel(draft.ref)}`}
             onClose={() => setMobilePreview(false)}
             wide
             footer={
@@ -1622,7 +1650,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
               </>
             }
           >
-            <InvoiceSheet html={liveHtml} title={`${isQuote ? "Devis" : "Facture"} ${draft.ref}`} className="h-[62vh] p-2 sm:p-3" />
+            <InvoiceSheet html={liveHtml} title={`${isQuote ? "Devis" : "Facture"} ${numLabel(draft.ref)}`} className="h-[62vh] p-2 sm:p-3" />
           </Modal>
         )}
       </div>
@@ -1770,7 +1798,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
       <div ref={editorTop} className="-mb-4 scroll-mt-4" />
       {/* Téléphone : la facture s'ouvre en feuille (comme les autres « + »), pas dans la page. */}
       {editing && phone ? (
-        <IosSheet onClose={() => closeEditor()} label={draft?.id ? `${isQuote ? "Devis" : "Facture"} ${draft.ref}` : isQuote ? "Nouveau devis" : "Nouvelle facture"}>
+        <IosSheet onClose={() => closeEditor()} label={draft?.id ? `${isQuote ? "Devis" : "Facture"} ${numLabel(draft.ref)}` : isQuote ? "Nouveau devis" : "Nouvelle facture"}>
           <div className="max-h-[92dvh] overflow-y-auto overscroll-contain rounded-t-[22px] bg-background px-4 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-7">{renderEditor()}</div>
         </IosSheet>
       ) : null}
@@ -1903,18 +1931,28 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
                 setRows((list) => list?.map((x) => (x.id === r.id ? { ...x, status: before } : x)) ?? list);
                 return toast("Statut non enregistré, réessaie");
               }
-              toast(`Facture ${r.ref} : ${metaOf(status).label}`);
-              if (status === "payee" && before !== "payee" && r.creator) notifyCreator("invoice", r.creator, `Ta facture ${r.ref} a été réglée 💸`);
+              // Brouillon émis depuis la liste : la base vient de donner le numéro ; datée du jour.
+              let ref = r.ref;
+              if (before === "brouillon" && issuedStatus(status)) {
+                const { data: got } = await supabase.from("invoices").select("ref").eq("id", r.id).maybeSingle();
+                ref = String((got as { ref?: string } | null)?.ref ?? "");
+                const d = { ...detailsFor(r), issueDate: todayISO() };
+                setDetails((m) => ({ ...m, [r.id]: d }));
+                void mergeAppStateKey("invoiceDetails", { [r.id]: d });
+                setRows((list) => list?.map((x) => (x.id === r.id ? { ...x, ref } : x)) ?? list);
+              }
+              toast(`Facture ${numLabel(ref)} : ${metaOf(status).label}`);
+              if (status === "payee" && before !== "payee" && r.creator) notifyCreator("invoice", r.creator, `Ta facture ${ref} a été réglée 💸`);
             };
             const menuItems: ActionItem[] = [
               { key: "edit", label: "Modifier", icon: Pencil, onClick: () => void openEdit(r) },
               { key: "preview", label: "Aperçu", icon: Eye, onClick: openPreview },
-              { key: "send", label: "Envoyer au client", icon: Send, onClick: () => sendInvoice(r) },
+              { key: "send", label: "Envoyer au client", icon: Send, onClick: () => void sendInvoice(r) },
               { key: "download", label: "Enregistrer en PDF", icon: Download, onClick: () => downloadInvoice(r) },
               // Une facture émise ne se supprime pas (numérotation continue, obligation légale) :
               // elle s'annule et garde son numéro. Seul un brouillon part à la corbeille.
               r.status === "brouillon"
-                ? { key: "delete", label: "Mettre à la corbeille", icon: Trash2, danger: true, onClick: del, confirm: { title: "Mettre à la corbeille", message: `Déplacer le brouillon ${r.ref} (${r.party}) vers la corbeille ? Tu pourras le restaurer.`, confirmLabel: "Mettre à la corbeille" } }
+                ? { key: "delete", label: "Mettre à la corbeille", icon: Trash2, danger: true, onClick: del, confirm: { title: "Mettre à la corbeille", message: `Déplacer ce brouillon (${r.party}) vers la corbeille ? Tu pourras le restaurer.`, confirmLabel: "Mettre à la corbeille" } }
                 : r.status === "annulee"
                   ? { key: "restore", label: "Réactiver", icon: Undo2, onClick: () => void pickStatus("attente") }
                   : { key: "cancel", label: "Annuler", icon: Ban, danger: true, onClick: () => void pickStatus("annulee"), confirm: { title: "Annuler la facture", message: `Annuler la facture ${r.ref} (${r.party}) ? Elle garde son numéro et reste dans la liste, marquée « Annulée ». Elle ne compte plus dans le chiffre d'affaires.`, confirmLabel: "Annuler la facture" } },
@@ -1931,7 +1969,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
                   onClick={() => setFinView(r)}
                   className="hidden cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-rowhover md:grid md:grid-cols-[0.8fr_2fr_1fr_1.1fr_1fr_1fr_1.4fr]"
                 >
-                  <span className="text-[11px] font-medium text-faint">#{r.ref}</span>
+                  <span className="text-[11px] font-medium text-faint">{r.ref ? `#${r.ref}` : "Brouillon"}</span>
                   <span className="truncate text-sm font-medium text-foreground">{r.party}</span>
                   <span className="text-right text-[13px] font-medium tabular-nums text-foreground">{euroUi(fin.ht)}</span>
                   <span className="text-right tabular-nums">
@@ -1953,7 +1991,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5 text-[10px] font-medium text-faint">
-                        <FileText className="h-3 w-3" /> #{r.ref}
+                        <FileText className="h-3 w-3" /> {r.ref ? `#${r.ref}` : "Brouillon"}
                       </div>
                       <div className="mt-0.5 truncate text-[15px] font-semibold text-foreground">{r.party}</div>
                     </div>
@@ -1995,13 +2033,13 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
         );
         return (
           <Modal
-            title={`Facture #${r.ref} · ${r.party}`}
+            title={`Facture ${r.ref ? `#${r.ref}` : "brouillon"} · ${r.party}`}
             onClose={() => setFinView(null)}
             footer={
               <>
                 <button type="button" className={ghostBtn} onClick={() => { setFinView(null); void openEdit(r); }}>Modifier</button>
                 <button type="button" className={ghostBtn} onClick={() => { setFinView(null); downloadInvoice(r); }}>Enregistrer en PDF</button>
-                <button type="button" className={ghostBtn} onClick={() => { setFinView(null); sendInvoice(r); }}>Envoyer au client</button>
+                <button type="button" className={ghostBtn} onClick={() => { setFinView(null); void sendInvoice(r); }}>Envoyer au client</button>
                 <button type="button" className={primaryBtn} onClick={() => { setFinView(null); setPreview({ html: buildHTML(r), ref: r.ref, email: detailsFor(r).clientEmail, brand: r.party }); }}>Aperçu</button>
               </>
             }
@@ -2099,7 +2137,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
       {/* ── Aperçu facture ── */}
       {preview && (
         <Modal
-          title={`Aperçu · ${preview.ref}`}
+          title={`Aperçu · ${numLabel(preview.ref)}`}
           onClose={() => setPreview(null)}
           wide
           footer={
