@@ -6,6 +6,7 @@ import {
   type FailedSend, type PendingSend,
 } from "@/lib/mailSend";
 import { toast } from "@/components/ui/toast";
+import { holdUpdate } from "@/lib/appUpdate";
 
 /** Texte lisible d'un corps HTML (pour « Copier le texte »). */
 function htmlToText(html: string): string {
@@ -40,9 +41,12 @@ export function UndoSendBar() {
       e.preventDefault();
     };
     window.addEventListener("beforeunload", warn);
+    // Envoi en attente : pas de mise à jour automatique de l'app avant qu'il parte.
+    const release = holdUpdate();
     return () => {
       window.clearInterval(t);
       window.removeEventListener("beforeunload", warn);
+      release();
     };
   }, [items.length]);
 
