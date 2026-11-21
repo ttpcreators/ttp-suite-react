@@ -12,12 +12,12 @@
 // Rien sur ordinateur (souris).
 // ============================================================================
 
-export type HapticKind = "succes" | "retrait" | "erreur";
+export type HapticKind = "succes" | "retrait" | "erreur" | "nav";
 
 export const HAPTICS_KEY = "ttp.vibrations";
 
 /** Motifs Android (ms) : un tic net, un tic un peu plus long, un double tic sec. */
-export const PATTERNS: Record<HapticKind, number | number[]> = { succes: 12, retrait: 18, erreur: [14, 70, 14] };
+export const PATTERNS: Record<HapticKind, number | number[]> = { succes: 12, retrait: 18, erreur: [14, 70, 14], nav: 8 };
 
 /** Deux actions à moins de 150 ms (ex. rond « Fait » puis statut) : un seul tic. */
 export const DEDUPE_MS = 150;
@@ -113,6 +113,31 @@ function browserEnv(): HapticEnv {
     now: () => Date.now(),
     later: (fn, ms) => void setTimeout(fn, ms),
   };
+}
+
+/**
+ * Élément de navigation touché (changement de page ou d'onglet), ou null : un bouton de la
+ * barre d'onglets ou du menu (`nav`), un onglet (`role="tab"`), ou un élément marqué
+ * `data-haptic="nav"` (retour, ligne qui ouvre une page). Rien si c'est déjà la page ou
+ * l'onglet affiché, ou si c'est désactivé. Pur sur l'élément : testé par haptics.test.ts.
+ */
+export function navTarget(el: Element | null): Element | null {
+  const t = el?.closest?.('nav button, nav a, [role="tab"], [data-haptic="nav"]') ?? null;
+  if (!t) return null;
+  if (t.getAttribute("aria-current") === "page" || t.getAttribute("aria-selected") === "true") return null;
+  if (t.hasAttribute("disabled") || t.getAttribute("aria-disabled") === "true") return null;
+  return t;
+}
+
+let navInstalled = false;
+/** Un tic léger à chaque changement de page ou d'onglet (une écoute pour toute l'app). */
+export function installNavHaptics(): void {
+  if (navInstalled || typeof document === "undefined") return;
+  navInstalled = true;
+  // Phase de capture : le tic part dans le geste, avant que la page change.
+  document.addEventListener("click", (e) => {
+    if (navTarget(e.target as Element | null)) haptic("nav");
+  }, { capture: true });
 }
 
 /** Un tic sur l'action en cours. Sans effet hors téléphone ou si c'est coupé. */
