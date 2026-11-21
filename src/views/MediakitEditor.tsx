@@ -17,6 +17,7 @@ import { mergeRates, ratesFromPricing, type RatesMerge } from "@/lib/mediakitRat
 import type { RateOverrides } from "@/lib/pricing";
 import { KitRatesDialog } from "@/components/kit-rates-dialog";
 import { PublishSiteButton } from "@/components/publish-site-button";
+import { holdUpdate } from "@/lib/appUpdate";
 
 /**
  * Éditeur du MEDIA KIT EN LIGNE (par créatrice). Tout est écrit dans la colonne
@@ -243,7 +244,12 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
       e.returnValue = "";
     };
     window.addEventListener("beforeunload", onBeforeUnload);
-    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+    // Modifs non enregistrées : pas de mise à jour automatique de l'app.
+    const release = holdUpdate();
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      release();
+    };
   }, [dirty]);
 
   const changeCreator = (id: string) => {

@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
-import { startUpdateWatch } from './lib/appUpdate'
+import { startUpdateWatch, takeUpdateDone } from './lib/appUpdate'
+import { toast } from './components/ui/toast'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.tsx'
@@ -30,8 +31,10 @@ initDeepLinks()
 window.addEventListener('vite:preloadError', (e) => {
   if (recoverStaleApp()) e.preventDefault()
 })
-// Nouvelle version en ligne : repérée à l'avance, chargée à la page suivante (sans écran d'erreur).
+// Nouvelle version en ligne : repérée à l'avance, installée toute seule au retour dans
+// l'app ou en arrière-plan (sans écran d'erreur, sans fermer l'app sur le téléphone).
 startUpdateWatch()
+if (takeUpdateDone()) window.setTimeout(() => toast("App mise à jour ✓", { variant: "success" }), 1200)
 
 // Service worker dès le démarrage (avant : seulement en activant les notifications) :
 // il garde les fichiers de l'app sur l'appareil → ouverture rapide, même sans réseau.
