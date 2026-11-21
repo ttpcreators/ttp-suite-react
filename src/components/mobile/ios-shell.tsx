@@ -119,7 +119,7 @@ export function IosNavBar({ scrollRef, title, left, right, className, actionSlot
 /** Bouton « ‹ Retour » de la barre de titre. */
 export function IosBackButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="flex h-11 min-w-0 items-center gap-0.5 pr-2 text-[17px] text-primary">
+    <button type="button" onClick={onClick} data-haptic="nav" className="flex h-11 min-w-0 items-center gap-0.5 pr-2 text-[17px] text-primary">
       <ChevronLeft className="h-7 w-7 shrink-0" strokeWidth={2.2} />
       <span className="truncate">{label}</span>
     </button>
@@ -176,7 +176,7 @@ export function IosRow({ icon: Icon, label, detail, onClick, chevron = true, des
   if (onClick && right) {
     return (
       <div className={cn(cls, "gap-0 py-0 pr-1.5")}>
-        <button type="button" onClick={onClick} className="flex min-h-[46px] min-w-0 flex-1 items-center gap-3 py-2 text-left">
+        <button type="button" onClick={onClick} data-haptic={chevron ? "nav" : undefined} className="flex min-h-[46px] min-w-0 flex-1 items-center gap-3 py-2 text-left">
           {leading ?? (Icon ? (
             <span className={cn("grid h-[29px] w-[29px] shrink-0 place-items-center rounded-[8px]", destructive ? "bg-danger/10 text-dangertext" : "bg-muted text-foreground")}>
               <Icon className="h-[17px] w-[17px]" strokeWidth={1.9} />
@@ -191,7 +191,7 @@ export function IosRow({ icon: Icon, label, detail, onClick, chevron = true, des
     );
   }
   return onClick ? (
-    <button type="button" onClick={onClick} className={cls}>{body}</button>
+    <button type="button" onClick={onClick} data-haptic={chevron ? "nav" : undefined} className={cls}>{body}</button>
   ) : (
     <div className={cls}>{body}</div>
   );

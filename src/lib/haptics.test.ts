@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEDUPE_MS, IOS_GAP_MS, PATTERNS, createHaptics, haptic, type HapticEnv } from "./haptics";
+import { DEDUPE_MS, IOS_GAP_MS, PATTERNS, createHaptics, haptic, navTarget, type HapticEnv } from "./haptics";
 
 function env(over: Partial<HapticEnv> = {}) {
   const log: unknown[] = [];
@@ -72,5 +72,34 @@ describe("haptics", () => {
 
   it("hors navigateur : sans effet", () => {
     expect(() => haptic("succes")).not.toThrow();
+  });
+});
+
+describe("navTarget (changement de page ou d'onglet)", () => {
+  // Faux élément : juste ce que navTarget lit.
+  const el = (attrs: Record<string, string>, match = true) => {
+    const node = {
+      getAttribute: (k: string) => attrs[k] ?? null,
+      hasAttribute: (k: string) => k in attrs,
+      closest: () => (match ? node : null),
+    };
+    return node as unknown as Element;
+  };
+  it("un onglet ou un bouton du menu : oui", () => {
+    expect(navTarget(el({ role: "tab", "aria-selected": "false" }))).not.toBeNull();
+    expect(navTarget(el({}))).not.toBeNull();
+  });
+  it("déjà la page ou l'onglet affiché, ou désactivé : non", () => {
+    expect(navTarget(el({ "aria-current": "page" }))).toBeNull();
+    expect(navTarget(el({ "aria-selected": "true" }))).toBeNull();
+    expect(navTarget(el({ disabled: "" }))).toBeNull();
+    expect(navTarget(el({ "aria-disabled": "true" }))).toBeNull();
+  });
+  it("hors navigation : non", () => {
+    expect(navTarget(el({}, false))).toBeNull();
+    expect(navTarget(null)).toBeNull();
+  });
+  it("motif léger sur Android", () => {
+    expect(PATTERNS.nav).toBe(8);
   });
 });

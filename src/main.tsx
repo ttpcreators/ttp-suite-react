@@ -1,5 +1,6 @@
 import { StrictMode } from 'react'
 import { startUpdateWatch, takeUpdateDone } from './lib/appUpdate'
+import { installNavHaptics } from './lib/haptics'
 import { toast } from './components/ui/toast'
 import { createRoot } from 'react-dom/client'
 import './index.css'
@@ -34,6 +35,8 @@ window.addEventListener('vite:preloadError', (e) => {
 // Nouvelle version en ligne : repérée à l'avance, installée toute seule au retour dans
 // l'app ou en arrière-plan (sans écran d'erreur, sans fermer l'app sur le téléphone).
 startUpdateWatch()
+// Un petit tic du téléphone à chaque changement de page ou d'onglet (Paramètres › Vibrations).
+installNavHaptics()
 if (takeUpdateDone()) window.setTimeout(() => toast("App mise à jour ✓", { variant: "success" }), 1200)
 
 // Service worker dès le démarrage (avant : seulement en activant les notifications) :

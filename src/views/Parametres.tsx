@@ -192,7 +192,7 @@ function PrefRow({
 function VibrationsCard() {
   const [on, setOn] = useState(hapticsEnabled);
   return (
-    <Card title="Vibrations" hint="Un petit tic du téléphone quand une tâche est faite, qu'une collab avance d'étape, qu'un élément est supprimé ou archivé, et un double tic sur une erreur. Sur iPhone : iOS 18 ou plus récent.">
+    <Card title="Vibrations" hint="Un petit tic du téléphone quand tu changes de page ou d'onglet, quand une tâche est faite, qu'une collab avance d'étape, qu'un élément est supprimé ou archivé, et un double tic sur une erreur. Sur iPhone : iOS 18 ou plus récent.">
       <PrefRow
         label="Vibrer sur les actions"
         hint="Réglé pour cet appareil seulement."
