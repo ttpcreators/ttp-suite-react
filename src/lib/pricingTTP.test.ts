@@ -3,6 +3,7 @@ import { formatEuro, parseAmount } from "./money";
 import {
   DEFAULT_TARIF_GRID, EMPTY_DEAL, francePctOf, mainAgeOf, pastRates, preChecks, priceTarif, readTarifGrid,
   splitHT, suggestedCoef, tarifAlerts, tarifCopyText, tarifGaps, tarifQuoteLines, tarifViews, type TarifDeal,
+  troisOptions,
 } from "./pricingTTP";
 
 const g = DEFAULT_TARIF_GRID;
@@ -141,5 +142,30 @@ describe("méthode TARIF : devis et texte copié", () => {
   it("vues du format, jamais celles d'un autre", () => {
     const a = { views: "20000", storyViews: "3000", shortViews: "", postViews: "" };
     expect([tarifViews("reel", a), tarifViews("story", a), tarifViews("short", a), tarifViews("carrousel", a)]).toEqual(["20000", "3000", "", ""]);
+  });
+});
+
+describe("troisOptions (devis en 3 options)", () => {
+  const g = readTarifGrid({});
+  const reel = { key: "instagram.reel", label: "Reel Instagram", qty: 1, views: 40000 };
+  const ajout = (key: string) =>
+    key === "instagram.story" ? { key, label: "Story Instagram (séquence de 3)", qty: 1, views: 8000 }
+    : key === "tiktok.video" ? { key, label: "Vidéo TikTok", qty: 1, views: 20000 }
+    : null;
+  it("Essentiel, Pack, Ambassadrice 3 mois, du moins cher au plus cher", () => {
+    const o = troisOptions({ ...EMPTY_DEAL, lines: [reel] }, g, 200, ajout);
+    expect(o.map((x) => x.titre)).toEqual(["Essentiel", "Pack", "Ambassadrice 3 mois"]);
+    expect(o[1].resume).toBe("Reel Instagram, Story Instagram (séquence de 3), Vidéo TikTok");
+    expect(o[0].result.target).toBeLessThan(o[1].result.target);
+    expect(o[1].result.target).toBeLessThan(o[2].result.target);
+    // 3 mois : remise partenariat appliquée (volume écrit).
+    expect(o[2].result.remises.some((r) => r.id === "partner")).toBe(true);
+  });
+  it("un format sans vues n'est pas ajouté au pack (rien d'estimé)", () => {
+    const o = troisOptions({ ...EMPTY_DEAL, lines: [reel] }, g, 200, (k) => (k === "tiktok.video" ? { key: k, label: "Vidéo TikTok", qty: 1, views: 0 } : null));
+    expect(o.map((x) => x.titre)).toEqual(["Essentiel", "Ambassadrice 3 mois"]);
+  });
+  it("sans prix calculable : aucune option", () => {
+    expect(troisOptions({ ...EMPTY_DEAL, lines: [{ ...reel, views: 0 }] }, g, 200, () => null)).toEqual([]);
   });
 });

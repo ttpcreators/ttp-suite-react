@@ -24,7 +24,7 @@ import {
 import { deliverablesText, priceRange, quoteInvoiceLines, ugcDeliverablesText } from "@/lib/pricingForm";
 import {
   CREDIBILITY, PROD_LEVELS, TARIF_FORMATS, creatorFloor, francePctOf, gridDiff, mainAgeOf, pastRates, preChecks, priceTarif, readTarifGrid,
-  splitHT, suggestedCoef, tarifAlerts, tarifCopyText, tarifGaps, tarifQuoteLines, tarifViews,
+  splitHT, suggestedCoef, tarifAlerts, tarifCopyText, tarifGaps, tarifQuoteLines, tarifViews, troisOptions,
   type Credibility, type Exclusivity, type ProdLevel,
 } from "@/lib/pricingTTP";
 import { loadInvoiceHistory, saveCreatorFloor, type InvoiceHistory } from "@/lib/pricingTTPDb";
@@ -288,6 +288,24 @@ export function Pricing() {
     window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "facturation" }));
   };
 
+  /**
+   * « Devis en 3 options » (stratégie : budget d'abord, puis 3 options) : Essentiel, Pack
+   * (+ stories et TikTok) et Ambassadrice 3 mois, chacun en brouillon dans Facturation → Devis.
+   */
+  const createQuote3 = () => {
+    const opts = troisOptions({ ...deal, lines: tarifLines, delayDays, coef }, grid, floorInfo.value, (key) => {
+      const [platform, format] = key.split(".") as [PlatKey, string];
+      return { key, label: lineLabel(platform, format), qty: 1, views: parseFollowers(tarifViews(format, audOf(platform))) };
+    });
+    if (opts.length < 2) return toast("Pas assez de chiffres pour 3 options : il manque les vues des stories ou du TikTok de ce créateur");
+    const ok = putInvoicePrefill({
+      creator: selName ?? "", brand: deal.brand.trim(), lines: tarifQuoteLines(opts[0].result), doc: "devis",
+      options: opts.map((o) => ({ titre: o.titre, resume: o.resume, lines: tarifQuoteLines(o.result) })),
+    });
+    if (!ok) return toast("Impossible de préparer les devis");
+    window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "facturation" }));
+  };
+
   // Livrables et cachet écrits dans la collab (forme lue par la page Collabs).
   const collabDeliverables = mode === "influence" ? deliverablesText(infRows) : ugcDeliverablesText(ugcRows.map((r) => ({ label: UGC_TYPES.find((t) => t.key === r.type)?.label ?? r.type, qty: r.qty })));
   const collabCachet = formatEuro(price.mid);
@@ -398,6 +416,7 @@ export function Pricing() {
         disabled={!hasResult}
         onCopy={() => setPendingSend("copy")}
         onQuote={createQuote}
+        onQuote3={mode === "influence" ? createQuote3 : undefined}
         onPropose={() => setPendingSend("propose")}
         onKit={kitCreatorId ? () => void prepareKit() : undefined}
         collabOpen={collabOpen}
@@ -956,10 +975,11 @@ function ResultDetail({ lines, majorations, result }: {
 }
 
 /** Actions du résultat : copier la proposition, créer le devis, l'écrire dans une collab. */
-function Actions({ disabled, onCopy, onQuote, onPropose, onKit, collabOpen, onCollabOpen, collabs, onPickCollab }: {
+function Actions({ disabled, onCopy, onQuote, onQuote3, onPropose, onKit, collabOpen, onCollabOpen, collabs, onPickCollab }: {
   disabled: boolean;
   onCopy: () => void;
   onQuote: () => void;
+  onQuote3?: () => void;
   onPropose: () => void;
   /** Créateur du roster choisi : écrire les prix dans son media kit. */
   onKit?: () => void;
@@ -977,6 +997,11 @@ function Actions({ disabled, onCopy, onQuote, onPropose, onKit, collabOpen, onCo
       <button type="button" disabled={disabled} onClick={onQuote} className={cn(btn, "bg-primary text-primary-foreground hover:opacity-90")} title="Nouvelle facture en brouillon dans Facturation, lignes remplies">
         <FileText className="h-4 w-4" /> Créer le devis
       </button>
+      {onQuote3 && (
+        <button type="button" disabled={disabled} onClick={onQuote3} className={cn(btn, "bg-field text-foreground hover:bg-rowhover")} title="Trois devis en brouillon : Essentiel, Pack (+ stories et TikTok), Ambassadrice 3 mois">
+          <FileText className="h-4 w-4" /> 3 options
+        </button>
+      )}
       <button type="button" disabled={disabled} onClick={onPropose} className={cn(btn, "bg-field text-foreground hover:bg-rowhover")} title="Enregistre ce prix comme proposition sur le prospect de la marque (Prospection)">
         <Send className="h-4 w-4" /> Proposer
       </button>

@@ -32,6 +32,8 @@ export type InvoicePrefill = {
   /** Taux de commission de la collab (contrat selon l'origine du deal) : prioritaire sur celui de la fiche. */
   commissionRate?: number;
   fromQuote?: string;
+  /** Devis en 3 options (page Tarifs) : un devis en brouillon par option, créés d'un coup. */
+  options?: { titre: string; resume: string; lines: QuoteLine[] }[];
   details?: {
     clientName: string;
     clientEmail: string;

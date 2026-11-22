@@ -146,6 +146,8 @@ type Quote = Details & {
   status: QuoteStatus;
   createdAt: string;
   collabId?: string;
+  /** Jour où le devis est passé à « Envoyé » (relances J+2, J+5, J+10). */
+  sentAt?: string;
   /** Facture créée depuis ce devis. */
   invoiceId?: string;
   invoiceRef?: string;
@@ -768,6 +770,26 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
     const fromQuote = p.details
       ? { ...p.details, items: p.details.items.map((it) => ({ ...it, id: uid() })), ...(p.fromQuote ? { fromQuote: p.fromQuote } : {}) }
       : null;
+    // Devis en 3 options (page Tarifs) : un brouillon par option, créés d'un coup, sans
+    // ouvrir l'éditeur. Chaque devis garde son option dans les notes.
+    if (quoteMode && p.options && p.options.length > 1) {
+      const opts = p.options;
+      void (async () => {
+        const refs: string[] = [];
+        for (const [i, o] of opts.entries()) {
+          const q = await persistQuote({
+            ...base,
+            creator: p.creator, brand: p.brand, commissionRate,
+            items: o.lines.map((l) => ({ id: uid(), label: l.label, qty: 1, unit: l.unit })),
+            notes: `Option ${i + 1} sur ${opts.length} · ${o.titre} : ${o.resume}`,
+            ...(p.collabId ? { collabId: p.collabId } : {}),
+          });
+          if (q) refs.push(`${q.ref} (${o.titre})`);
+        }
+        toast(refs.length ? `${refs.length} devis en brouillon : ${refs.join(", ")}` : "Devis non créés, réessaie");
+      })();
+      return;
+    }
     setDraft({
       ...base, creator: p.creator, brand: p.brand, commissionRate, items: lines.length ? lines : base.items,
       ...(p.collabId ? { collabId: p.collabId } : {}),
@@ -951,6 +973,36 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
     setEditorLoading(false);
   }
 
+  /**
+   * Écrit un devis dans le blob agence (entrée par entrée : un autre poste ne perd pas le
+   * sien), numéro recalculé juste avant. null si la lecture ou l'écriture échoue.
+   */
+  async function persistQuote(draft: Draft): Promise<Quote | null> {
+    const isNew = !draft.id;
+    invalidateAppState();
+    let freshQuotes: Quote[];
+    try {
+      freshQuotes = ((await getAppState())["quotes"] as Quote[] | undefined) ?? [];
+    } catch {
+      return null;
+    }
+    const prev = draft.id ? freshQuotes.find((x) => x.id === draft.id) : undefined;
+    const quote: Quote = {
+      ...detailPartOf(draft),
+      id: draft.id ?? `q${uid()}`,
+      ref: isNew ? nextQuoteRef(freshQuotes.map((x) => x.ref)) : draft.ref,
+      brand: draft.brand.trim(),
+      creator: draft.creator,
+      status: draft.quoteStatus ?? "brouillon",
+      createdAt: prev?.createdAt ?? todayISO(),
+      ...(draft.collabId ? { collabId: draft.collabId } : {}),
+      ...(prev?.invoiceId ? { invoiceId: prev.invoiceId, invoiceRef: prev.invoiceRef } : {}),
+    };
+    if (!(await listAppStateKey("quotes", [quote], [], true))) return null;
+    setQuotes((list) => (list.some((x) => x.id === quote.id) ? list.map((x) => (x.id === quote.id ? quote : x)) : [quote, ...list]));
+    return quote;
+  }
+
   /** Enregistre un devis (entrée par entrée dans le blob agence : un autre poste ne perd pas le sien). */
   async function doSaveQuote(draft: Draft) {
     const isNew = !draft.id;
@@ -988,7 +1040,8 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
 
   /** Change un seul champ d'un devis enregistré (statut…), affiché tout de suite, annulé si la base refuse. */
   async function patchQuote(q: Quote, patch: Partial<Quote>, okMsg?: string) {
-    const next = { ...q, ...patch };
+    // Date d'envoi gardée au passage à « Envoyé » : les relances J+2, J+5, J+10 partent d'elle.
+    const next = { ...q, ...patch, ...(patch.status === "envoye" && !q.sentAt ? { sentAt: todayISO() } : {}) };
     setQuotes((list) => list.map((x) => (x.id === q.id ? next : x)));
     if (!(await listAppStateKey("quotes", [next]))) {
       setQuotes((list) => list.map((x) => (x.id === q.id ? q : x)));
