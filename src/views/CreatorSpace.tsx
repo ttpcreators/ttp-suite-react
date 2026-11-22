@@ -714,7 +714,7 @@ export function CreatorSpace({
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   // Vrais versements et net exact : fonction serveur `creator-report` (filtrée sur la créatrice).
   // Absente ou en erreur : la page Gains garde l'estimation faite à partir des factures.
-  const [money, setMoney] = useState<{ invoices: ReportInvoice[]; details: Record<string, ReportDetail>; payouts: RealPayout[] } | null>(null);
+  const [money, setMoney] = useState<{ invoices: ReportInvoice[]; details: Record<string, ReportDetail>; payouts: RealPayout[]; noPayout?: string[] } | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   // Collabs du créateur (lecture seule : RLS `collabs_scoped`, écriture réservée à l'agence).
   const [collabs, setCollabs] = useState<MissionCollab[]>([]);
@@ -852,9 +852,9 @@ export function CreatorSpace({
     supabase.functions
       .invoke("creator-report", { body: { creator: name } })
       .then(({ data, error }) => {
-        const d = data as { money?: boolean; invoices?: ReportInvoice[]; details?: Record<string, ReportDetail>; payouts?: RealPayout[] } | null;
+        const d = data as { money?: boolean; invoices?: ReportInvoice[]; details?: Record<string, ReportDetail>; payouts?: RealPayout[]; noPayout?: string[] } | null;
         if (!alive || error || !d?.money || !Array.isArray(d.invoices)) return;
-        setMoney({ invoices: d.invoices, details: d.details ?? {}, payouts: Array.isArray(d.payouts) ? d.payouts : [] });
+        setMoney({ invoices: d.invoices, details: d.details ?? {}, payouts: Array.isArray(d.payouts) ? d.payouts : [], noPayout: Array.isArray(d.noPayout) ? d.noPayout : [] });
       })
       .catch(() => undefined);
     // Contacts propres au créateur (RLS : il ne voit QUE ses lignes, jamais celles de l'agence).
@@ -2021,7 +2021,7 @@ export function CreatorSpace({
   );
   // Ce qu'elle touche vraiment : brut moins la commission de SA fiche (src/lib/creatorGains.ts).
   const rate = parseCommissionPct(creator?.commission) ?? DEFAULT_COMMISSION;
-  const real = useMemo(() => (money ? realGains(money.invoices, money.details, money.payouts, rate) : null), [money, rate]);
+  const real = useMemo(() => (money ? realGains(money.invoices, money.details, money.payouts, rate, new Date(), new Set(money.noPayout ?? [])) : null), [money, rate]);
   const net = useMemo(() => real ?? netGains(invoices, rate), [real, invoices, rate]);
   const themeCtx = useTheme();
   // Mode sombre automatique : une créatrice qui n'a rien choisi suit le réglage du téléphone.

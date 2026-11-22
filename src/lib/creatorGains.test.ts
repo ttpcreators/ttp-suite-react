@@ -130,3 +130,18 @@ describe("mêmes montants que la page Reversements (audit 2026-11-11)", () => {
     expect(invoiceNet(inv, { m: { items: line, franchise: false, vatRate: 20, commissionRate: 20 } }, 20)).toBe(800);
   });
 });
+
+describe("factures sans reversement (audit 2026-11-22)", () => {
+  it("commission ou marque qui paie le créateur : ni dû, ni à venir", () => {
+    const NOW = new Date(2026, 10, 22);
+    const invs = [
+      { id: "a", ref: "1", party: "Nike", amount: "1000", date: "2026-11-01", status: "payee" },
+      { id: "b", ref: "2", party: "Commission", amount: "200", date: "2026-11-01", status: "payee" },
+      { id: "c", ref: "3", party: "Hoka", amount: "500", date: "2026-12-01", status: "attente" },
+    ];
+    const g = realGains(invs, {}, [], 20, NOW, new Set(["b", "c"]));
+    expect(g.owed).toBe(800);
+    expect(g.coming).toBe(800);
+    expect(g.lines.map((l) => l.key)).toEqual(["owed"]);
+  });
+});

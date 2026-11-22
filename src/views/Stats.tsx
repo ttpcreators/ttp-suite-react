@@ -13,6 +13,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { useIsFounder } from "@/lib/useFounder";
 import { invoiceHT, type InvoiceDetailLike } from "@/lib/invoice";
+import { parisDay } from "@/lib/compta";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { StatCard } from "@/components/ui/stat-card";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -38,7 +39,7 @@ function fmtK(n: number): string {
 }
 
 type CreatorRow = { name: string; followers: string | null; er: string | null; reach: string | null; ca: string | null; status: string | null };
-type InvRow = { id?: string; amount: string; status: string; creator: string | null; date: string | null };
+type InvRow = { id?: string; amount: string; status: string; creator: string | null; date: string | null; paid_at?: string | null };
 type CountRow = { id: string };
 
 /** Instantané mensuel des indicateurs « état du moment » (blob `statsSnapshots`). */
@@ -247,7 +248,7 @@ export function Stats() {
     (async () => {
       const [cr, inv, br, co, td, id] = await Promise.all([
         supabase.from("creators").select("name,followers,er,reach,ca,status"),
-        supabase.from("invoices").select("id,amount,status,creator,date"),
+        supabase.from("invoices").select("id,amount,status,creator,date,paid_at"),
         supabase.from("briefs").select("id"),
         supabase.from("contacts").select("id"),
         supabase.from("todos").select("id"),
@@ -285,7 +286,7 @@ export function Stats() {
     const cur: Snap = {
       activeCreators: data.creators.filter((c) => (c.status ?? "actif").toLowerCase() !== "inactif").length,
       totalFollowers: data.creators.filter((c) => (c.status ?? "actif").toLowerCase() !== "inactif").reduce((s, c) => s + (cumFollowers[c.name.trim().toLowerCase()] || parseCompact(c.followers)), 0),
-      avgEr: (() => { const v = data.creators.map((c) => parsePct(c.er)).filter((x) => x > 0); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : 0; })(),
+      avgEr: (() => { const v = data.creators.filter((c) => (c.status ?? "actif").toLowerCase() !== "inactif").map((c) => parsePct(c.er)).filter((x) => x > 0); return v.length ? v.reduce((s, x) => s + x, 0) / v.length : 0; })(),
       briefs: data.briefs,
       v: SNAP_VERSION,
     };
@@ -313,7 +314,8 @@ export function Stats() {
   // Abonnés tous réseaux, créateurs actifs : même calcul et même total que le Roster.
   const followersOf = (c: { name: string; followers: string | null }) => cumFollowers[c.name.trim().toLowerCase()] || parseCompact(c.followers);
   const totalFollowers = data.creators.filter((c) => (c.status ?? "actif").toLowerCase() !== "inactif").reduce((s, c) => s + followersOf(c), 0);
-  const erVals = data.creators.map((c) => parsePct(c.er)).filter((v) => v > 0);
+  // Engagement moyen des créateurs ACTIFS, comme les abonnés et l'outil `stats` d'Alfred.
+  const erVals = data.creators.filter((c) => (c.status ?? "actif").toLowerCase() !== "inactif").map((c) => parsePct(c.er)).filter((v) => v > 0);
   const avgEr = erVals.length ? erVals.reduce((s, v) => s + v, 0) / erVals.length : 0;
 
   // Variation MoM depuis l'instantané du mois PRÉCÉDENT (le plus récent < mois courant).
@@ -349,7 +351,16 @@ export function Stats() {
     const a = htOf(iv);
     const cur = monthAgg.get(k) ?? { tot: 0, paid: 0 };
     if (iv.status !== "brouillon" && iv.status !== "annulee") cur.tot += a; // « facturé » = hors brouillons
-    if (iv.status === "payee") cur.paid += a;
+    monthAgg.set(k, cur);
+  }
+  // « Encaissé » = mois du PAIEMENT (paid_at, heure de Paris), comme Facturation et Compta
+  // (audit 22 nov. 2026) ; ancienne facture sans paid_at : son mois d'émission.
+  for (const iv of data.invoices) {
+    if (iv.status !== "payee") continue;
+    const k = (iv.paid_at ? invMonthKey(parisDay(iv.paid_at) ?? "") : null) || invMonth(iv);
+    if (!k) continue;
+    const cur = monthAgg.get(k) ?? { tot: 0, paid: 0 };
+    cur.paid += htOf(iv);
     monthAgg.set(k, cur);
   }
   const monthKeys = [...monthAgg.keys()].sort();

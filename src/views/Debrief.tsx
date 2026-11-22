@@ -258,7 +258,10 @@ export function Debrief() {
   useEffect(() => {
     supabase.from("briefs").select("id, brand, creator, status, due").then(({ data: b }) => setBriefRows((b as typeof briefRows) ?? []));
   }, []);
-  const brandKey = (s: string | null) => (s || "").toLowerCase().split(/[×x·]/)[0].trim();
+  // Marque seule : « Kosbiotic × Léna » → « kosbiotic ». Le « x » ne coupe que s'il est entouré
+  // d'espaces (sinon « Luxe » ou « Fixit » étaient tronqués). Casse et accents ignorés.
+  const fold = (s: string | null) => (s || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").trim();
+  const brandKey = (s: string | null) => fold((s || "").split(/\s[×x·]\s|×|·/)[0]);
   const duePast = (due: string | null) => {
     const t = (due || "").trim();
     let iso = "";
@@ -268,8 +271,17 @@ export function Debrief() {
   };
   const briefDone = (b: { status: string; due: string | null }) =>
     (b.status || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").includes("termin") || duePast(b.due);
-  const debriefedKeys = new Set(list.map((d) => brandKey(d.brand)).filter(Boolean));
-  const needsDebrief = briefRows.filter((b) => b.brand && briefDone(b) && !debriefedKeys.has(brandKey(b.brand)));
+  // Un bilan couvre une campagne marque × créateur : le bilan Kosbiotic × Léna ne doit pas
+  // cacher la campagne Kosbiotic × Ana. Bilan ou brief sans créateur : la marque seule suffit.
+  const debriefedPairs = new Set(list.filter((d) => d.creator).map((d) => `${brandKey(d.brand)}|${fold(d.creator)}`));
+  const debriefedBrands = new Set(list.filter((d) => !d.creator).map((d) => brandKey(d.brand)).filter(Boolean));
+  const isDebriefed = (b: { brand: string; creator: string | null }) => {
+    const k = brandKey(b.brand);
+    if (debriefedBrands.has(k)) return true;
+    if (!b.creator) return list.some((d) => brandKey(d.brand) === k);
+    return debriefedPairs.has(`${k}|${fold(b.creator)}`);
+  };
+  const needsDebrief = briefRows.filter((b) => b.brand && briefDone(b) && !isDebriefed(b));
 
   const [view, setView] = useStickyState<DebriefView>("debrief:vue", ["cards", "list", "table"], "cards");
   const [viewD, setViewD] = useState<Debrief | null>(null); // fiche détail (clic sur une ligne)

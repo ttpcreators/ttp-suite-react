@@ -158,6 +158,9 @@ export function realGains(
   payouts: RealPayout[],
   ratePct: number,
   now: Date = new Date(),
+  /** Factures sans reversement (commission, ou la marque paie le créateur) : même règle que
+   *  la page Reversements (noPayoutIds), calculée par creator-report (audit 22 nov. 2026). */
+  skip: ReadonlySet<string> = new Set(),
 ): RealGains {
   let due = 0;
   let upcoming = 0;
@@ -165,7 +168,7 @@ export function realGains(
   const lines: GainLine[] = [];
   for (const inv of invoices) {
     // Facture annulée : ni « à venir » ni « en cours » (elle ne sera jamais payée).
-    if (inv.status === "annulee") continue;
+    if (inv.status === "annulee" || skip.has(inv.id)) continue;
     const net = invoiceNet(inv, details, ratePct);
     if (inv.status === "payee") {
       due += net;

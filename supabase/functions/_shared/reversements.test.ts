@@ -45,3 +45,14 @@ describe("seuil de commission en devise (audit 2026-11-11, même règle que src/
     expect(invoiceTotals(0, { items: [{ qty: 1, unit: 95 }], franchise: true, commissionRate: 20, currency: "GBP", fxRate: 1.17 }, 20)).toMatchObject({ ht: 111.15, commission: 22.23 });
   });
 });
+
+describe("amountOf : même lecture que l'app (audit 2026-11-22)", () => {
+  it("point des milliers, virgule décimale", () => {
+    expect(amountOf("1.500 €")).toBe(1500);
+    expect(amountOf("1.440,00 €")).toBe(1440);
+    expect(amountOf("12,5")).toBe(12.5);
+    expect(amountOf("1234.5")).toBe(1234.5);
+    expect(amountOf("0.500")).toBe(0.5);
+    expect(amountOf("")).toBe(0);
+  });
+});

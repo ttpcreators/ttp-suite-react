@@ -22,7 +22,7 @@ import { ADMIN_TOOLS } from "./admin.ts";
 import { adressesDe, adressesInvalides } from "./prospection.ts";
 import { addressList, mailHtml, sparkLink } from "../_shared/mcpAdmin.ts";
 import { guessEventKind } from "../_shared/eventKind.ts";
-import { comptaSummary, type ComptaInv } from "../_shared/compta.ts";
+import { comptaSummary, parisDay, type ComptaInv } from "../_shared/compta.ts";
 import { activityText } from "../_shared/activityText.ts";
 import { upcomingBirthdays } from "../_shared/birthdays.ts";
 import { amountOf, contractList, invoiceTotals, owesMoney, pctOf, reversementRows, type Detail, type Payout } from "../_shared/reversements.ts";
@@ -75,13 +75,16 @@ const frDay = (iso: string) => {
   const d = new Date(iso.slice(0, 10) + "T12:00:00Z");
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("fr-FR", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
 };
-/** Échéance des tâches : « AAAA-MM-JJ », ancien « jj/mm/aaaa » ou « — » → « AAAA-MM-JJ » ou "". */
+/** Échéance des tâches : « AAAA-MM-JJ », ancien « jj/mm[/aaaa] » ou « — » → « AAAA-MM-JJ » ou "".
+ *  Sans année : l'année en cours, comme l'app (src/lib/relance.ts parseDueDate, audit 22 nov. 2026). */
 const dueIso = (v: unknown) => {
   const t = String(v ?? "").trim();
   const iso = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
-  const fr = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/.exec(t);
-  return fr ? `${fr[3].length === 2 ? "20" + fr[3] : fr[3]}-${fr[2].padStart(2, "0")}-${fr[1].padStart(2, "0")}` : "";
+  const fr = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?/.exec(t);
+  if (!fr) return "";
+  const y = fr[3] ? (fr[3].length === 2 ? "20" + fr[3] : fr[3]) : isoDay().slice(0, 4);
+  return `${y}-${fr[2].padStart(2, "0")}-${fr[1].padStart(2, "0")}`;
 };
 const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const int = (v: unknown, def: number, min: number, max: number) => {
@@ -566,7 +569,7 @@ const tableauLundiTool: Tool = {
 const objectifs: Tool = {
   name: "objectifs",
   title: "Objectifs du mois",
-  description: "Les objectifs de l'agence pour un mois (page Objectifs : intitulé, réalisé, cible, progression), et l'argent encaissé ce mois-là d'après les factures payées (TTC). Pour dire chaque lundi où en est l'agence et quels deals pousser. Mois au format AAAA-MM (défaut : le mois en cours).",
+  description: "Les objectifs de l'agence pour un mois (page Objectifs : intitulé, réalisé, cible, progression), et l'argent encaissé ce mois-là d'après les factures payées (HT, mois du paiement à l'heure de Paris, comme Facturation et Compta). Pour dire chaque lundi où en est l'agence et quels deals pousser. Mois au format AAAA-MM (défaut : le mois en cours).",
   inputSchema: { type: "object", properties: { mois: { type: "string", description: "AAAA-MM (facultatif)" } }, additionalProperties: false },
   founder: true,
   run: async (sb, _c, a) => {
@@ -574,14 +577,18 @@ const objectifs: Tool = {
     const mois = /^\d{4}-\d{2}$/.test(str(a.mois)) ? str(a.mois) : courant;
     const st = await appState(sb);
     const liste = objectifsDuMois(st.objByMonth, mois, courant);
-    const { data: inv } = await sb.from("invoices").select("ref, party, amount, paid_at, status").eq("status", "payee").gte("paid_at", `${mois}-01`).lt("paid_at", moisSuivant(mois));
-    const payees = (inv as Json[] | null) ?? [];
-    const encaisse = payees.reduce((t, f) => t + amountOf(f.amount), 0);
+    // Fenêtre élargie d'un jour de chaque côté (UTC vs Paris), puis tri au jour de Paris.
+    const avant = new Date(`${mois}-01T00:00:00Z`);
+    avant.setUTCDate(avant.getUTCDate() - 1);
+    const { data: inv } = await sb.from("invoices").select("id, ref, party, amount, paid_at, status").eq("status", "payee").gte("paid_at", avant.toISOString().slice(0, 10)).lt("paid_at", `${moisSuivant(mois)}T23:59:59Z`);
+    const det = (st.invoiceDetails ?? {}) as Record<string, Detail>;
+    const payees = ((inv as Json[] | null) ?? []).filter((f) => String(parisDay(f.paid_at) ?? "").slice(0, 7) === mois);
+    const encaisse = payees.reduce((t, f) => t + invoiceTotals(amountOf(f.amount), det[String(f.id)], 0).ht, 0);
     const nom = (o: Objectif) => o.name || o.label || o.creator || "Sans intitulé";
     return ok([
       `# Objectifs · ${mois}`,
       lines(liste.map((o) => `- ${nom(o)} : ${o.ca ?? o.current ?? o.value ?? o.actual ?? "?"} sur ${o.target ?? "?"}${Number.isFinite(Number(o.pct)) ? ` (${Math.round(Number(o.pct))} %)` : ""}`), "Aucun objectif saisi pour ce mois dans la page Objectifs."),
-      `\nEncaissé ce mois (factures payées) : ${eur(encaisse)} TTC sur ${payees.length} facture(s).`,
+      `\nEncaissé ce mois (factures payées) : ${eur(encaisse)} HT sur ${payees.length} facture(s).`,
       "Ouvrir dans l'app : https://app.ttpcreators.pro/?open=view&view=objectifs",
     ].join("\n"));
   },
@@ -2321,12 +2328,12 @@ const monthTxt = (ym: string) => `${MOIS_FR[Number(ym.slice(5, 7)) - 1] ?? ym} $
 const stats: Tool = {
   name: "stats",
   title: "Stats de l'agence",
-  description: "Page Stats (réservé aux fondateurs) : chiffre d'affaires HT facturé et encaissé par mois d'ÉMISSION de la facture (hors brouillons et annulées), répartition par statut, créateurs actifs, abonnés cumulés tous réseaux, engagement moyen, briefs. Mêmes chiffres que la page Stats.",
+  description: "Page Stats (réservé aux fondateurs) : chiffre d'affaires HT facturé par mois d'ÉMISSION de la facture (hors brouillons et annulées) et encaissé par mois de PAIEMENT, répartition par statut, créateurs actifs, abonnés cumulés tous réseaux, engagement moyen, briefs. Mêmes chiffres que la page Stats.",
   inputSchema: { type: "object", properties: { mois: { type: "number", description: "Nombre de mois affichés (défaut 6)" } }, additionalProperties: false },
   founder: true,
   run: async (sb, _c, a) => {
     const [{ data: inv, error }, { data: cr }, { count: briefs }] = await Promise.all([
-      sb.from("invoices").select("id, amount, status, date").limit(5000),
+      sb.from("invoices").select("id, amount, status, date, paid_at").limit(5000),
       sb.from("creators").select("name, followers, er, status, ig, tt, yt"),
       sb.from("briefs").select("id", { count: "exact", head: true }),
     ]);
@@ -2343,8 +2350,14 @@ const stats: Tool = {
       if (!/^\d{4}-\d{2}$/.test(ym)) continue;
       const m = byMonth.get(ym) ?? { tot: 0, paid: 0 };
       if (s !== "brouillon" && s !== "annulee") m.tot += ht;
-      if (s === "payee") m.paid += ht;
       byMonth.set(ym, m);
+      if (s === "payee") {
+        // Encaissé : mois du paiement (paid_at, heure de Paris), repli sur le mois d'émission.
+        const pm = String((r.paid_at ? parisDay(r.paid_at) : null) ?? ym).slice(0, 7);
+        const p = byMonth.get(pm) ?? { tot: 0, paid: 0 };
+        p.paid += ht;
+        byMonth.set(pm, p);
+      }
     }
     const n = int(a.mois, 6, 1, 24);
     const months = [...byMonth.keys()].sort().slice(-n);
@@ -2355,8 +2368,8 @@ const stats: Tool = {
     const avgEr = ers.length ? ers.reduce((x, y) => x + y, 0) / ers.length : 0;
     return ok([
       `# Stats · CA facturé HT ${eur(byStatus.payee + byStatus.attente + byStatus.retard)} (payé ${eur(byStatus.payee)}, en attente ${eur(byStatus.attente)}, en retard ${eur(byStatus.retard)}) · brouillons ${eur(byStatus.brouillon)} hors total`,
-      `- ${active.length} créateurs actifs · ${compact(followers)} abonnés cumulés · engagement moyen ${avgEr.toFixed(2).replace(".", ",")} % · ${briefs ?? 0} briefs`,
-      "## Par mois d'émission (HT)",
+      `- ${active.length} créateurs actifs · ${compact(followers)} abonnés cumulés · engagement moyen ${avgEr.toFixed(1).replace(".", ",")} % · ${briefs ?? 0} briefs`,
+      "## Par mois (HT) : facturé à l'émission, encaissé au paiement",
       ...months.map((m) => `- ${monthTxt(m)} : facturé ${eur(byMonth.get(m)!.tot)} · encaissé ${eur(byMonth.get(m)!.paid)}`),
     ].join("\n"));
   },
