@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lundiDe, montantCachet, tableauLundi, tableauTexte, type TableauIn } from "./tableauLundi.ts";
+import { datesSignature, lundiDe, montantCachet, tableauLundi, tableauTexte, type TableauIn } from "./tableauLundi.ts";
 
 // Jeudi 19 novembre 2026, 15 h à Paris : semaine du 16 au 22, la précédente du 9 au 15.
 const NOW = new Date("2026-11-19T14:00:00Z");
@@ -97,5 +97,20 @@ describe("tableauLundi", () => {
     expect(s).toMatch(/passés à Marc 1/);
     expect(s).toMatch(/Montant HT signé 1 400 €/);
     expect(s).not.toMatch(/undefined|NaN/);
+  });
+});
+
+describe("datesSignature", () => {
+  it("première étape de négociation, même créée à l'étape 2 ; rien pour une collab recréée tard", () => {
+    const d = datesSignature([
+      { collab_id: "kosbiotic", step: 2, reached_at: "2026-11-10T08:00:00Z" },
+      { collab_id: "kosbiotic", step: 4, reached_at: "2026-11-20T08:00:00Z" },
+      { collab_id: "yade", step: 1, reached_at: "2026-10-27T08:00:00Z" },
+      { collab_id: "yade", step: 2, reached_at: "2026-11-02T08:00:00Z" },
+      { collab_id: "jnpr", step: 8, reached_at: "2026-11-02T08:00:00Z" },
+    ]);
+    expect(d.get("kosbiotic")).toBe("2026-11-10T08:00:00Z");
+    expect(d.get("yade")).toBe("2026-10-27T08:00:00Z");
+    expect(d.has("jnpr")).toBe(false);
   });
 });

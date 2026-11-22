@@ -27,7 +27,7 @@ import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "
 import { discover, discoverImages, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, type IgPost, type IgResult } from "../_shared/instagram.ts";
 import { accountTotals, audience, freshToken, loginReady, ownMediaImages, postInsights, recentReels, type IgAccount, type Split } from "../_shared/instagram-login.ts";
 import { buildFeed, feedDir, feedThumbPath, missingThumbs, staleThumbs, type FeedPost, type PostStats } from "../_shared/igFeed.ts";
-import { citesHandle } from "../_shared/mentions.ts";
+import { brandMatcher } from "../_shared/collabPosts.ts";
 import { isMain, markStatsMonth, recordAutoMeasure } from "../_shared/autoStats.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -272,23 +272,7 @@ async function syncFeed(ctx: Ctx, c: CreatorRow, handle: string, media: IgPost[]
 }
 
 // ── 2. Collabs : publications de la marque ───────────────────────────────────
-/** Le post cite-t-il la marque ? @ ou # du compte, nom du compte seul (Meta retire les @), ou nom de la marque. */
-function brandMatcher(brand: string, handles: string[]): (caption: string) => boolean {
-  const words = new Set<string>();
-  for (const h of handles) {
-    words.add(h.toLowerCase());
-    words.add(h.toLowerCase().replace(/[._]/g, ""));
-  }
-  const flat = norm(brand).replace(/[^a-z0-9]/g, "");
-  if (flat.length >= 3) words.add(flat);
-  const word = norm(brand).trim();
-  const re = word.length >= 4 ? new RegExp(`(^|[^a-z0-9@#])${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}($|[^a-z0-9])`) : null;
-  return (caption) => {
-    const c = norm(caption);
-    for (const w of words) if (citesHandle(c, w)) return true;
-    return re ? re.test(c) : false;
-  };
-}
+// Le post cite-t-il la marque ? Règle dans _shared/collabPosts.ts (brandMatcher).
 
 async function syncCollab(ctx: Ctx, col: CollabRow, creator: CreatorRow | undefined): Promise<Json> {
   const prev = (col.ig ?? {}) as Json;

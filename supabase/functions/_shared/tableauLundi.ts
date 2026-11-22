@@ -232,6 +232,28 @@ export function tableauTexte(t: Tableau): string {
   ].join("\n");
 }
 
+/** Étapes de négociation (Signature, Brief transmis, Concept validé) : la première date la signature. */
+export const ETAPES_SIGNATURE = 3;
+
+/**
+ * Date de signature de chaque collab : sa première étape de négociation (1 à 3). Une collab
+ * créée directement à l'étape 2 (« Brief transmis ») est bien signée ce jour-là ; une collab
+ * recréée tard dans sa vie (étape 8, 9…) n'a pas d'étape de négociation et ne compte pas.
+ * Audit du 22/11/2026 : Kosbiotic (2 000 €, créée à l'étape 2) manquait au mois de novembre.
+ */
+export function datesSignature(steps: readonly { collab_id: unknown; step: unknown; reached_at: unknown }[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const s of steps) {
+    const n = Number(s.step);
+    const at = String(s.reached_at ?? "");
+    if (!(n >= 1 && n <= ETAPES_SIGNATURE) || !at) continue;
+    const id = String(s.collab_id);
+    const prev = out.get(id);
+    if (!prev || at < prev) out.set(id, at);
+  }
+  return out;
+}
+
 // deno-lint-ignore no-explicit-any
 type Sb = { from: (table: string) => any };
 
@@ -248,10 +270,17 @@ export async function chargerTableau(sb: Sb, now: Date, quotes: TableauIn["quote
     sb.from("creator_pool").select("last_contacted").gte("last_contacted", depuis).limit(2000),
     sb.from("todos").select("text, created_at").gte("created_at", depuisIso).limit(1000),
     sb.from("events").select("date, type, deleted").gte("date", depuis).lte("date", auj).limit(1000),
-    sb.from("collab_steps").select("collab_id, reached_at").eq("step", 1).gte("reached_at", depuisIso).limit(1000),
+    sb.from("collab_steps").select("collab_id").lte("step", ETAPES_SIGNATURE).gte("reached_at", depuisIso).limit(1000),
   ]);
   for (const r of [contacts, pool, todos, events, steps]) if (r.error) throw new Error(r.error.message);
-  const ids = [...new Set(((steps.data ?? []) as { collab_id: string }[]).map((s) => s.collab_id))];
+  const candidats = [...new Set(((steps.data ?? []) as { collab_id: string }[]).map((s) => s.collab_id))];
+  // Toutes leurs étapes de négociation, même anciennes : la PREMIÈRE date la signature.
+  const toutes = candidats.length
+    ? await sb.from("collab_steps").select("collab_id, step, reached_at").lte("step", ETAPES_SIGNATURE).in("collab_id", candidats).limit(3000)
+    : { data: [], error: null };
+  if (toutes.error) throw new Error(toutes.error.message);
+  const dates = datesSignature((toutes.data ?? []) as { collab_id: string; step: number; reached_at: string }[]);
+  const ids = [...dates.entries()].filter(([, at]) => at >= depuisIso).map(([id]) => id);
   const collabs = ids.length ? await sb.from("collabs").select("id, cachet, creator, brand").in("id", ids) : { data: [], error: null };
   if (collabs.error) throw new Error(collabs.error.message);
   const byId = new Map(((collabs.data ?? []) as Record<string, unknown>[]).map((c) => [String(c.id), c]));
@@ -261,9 +290,9 @@ export async function chargerTableau(sb: Sb, now: Date, quotes: TableauIn["quote
     todos: todos.data ?? [],
     events: events.data ?? [],
     quotes,
-    signatures: ((steps.data ?? []) as { collab_id: string; reached_at: string }[]).map((s) => {
-      const c = byId.get(String(s.collab_id)) ?? {};
-      return { reached_at: s.reached_at, cachet: c.cachet, creator: c.creator, brand: c.brand };
+    signatures: ids.map((id) => {
+      const c = byId.get(id) ?? {};
+      return { reached_at: dates.get(id), cachet: c.cachet, creator: c.creator, brand: c.brand };
     }),
   };
 }
