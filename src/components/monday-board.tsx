@@ -3,7 +3,8 @@
 // de la page Objectifs. Deux parties, Gianni (acquisition) et Marc (closing), pour la
 // semaine dernière ou la semaine en cours, puis le mois face à la cible.
 // Calcul et lecture : supabase/functions/_shared/tableauLundi.ts (les mêmes qu'Alfred,
-// outil `tableau_lundi`).
+// outil `tableau_lundi`). Incidents de conformité : clé `conformiteIncidents` du blob,
+// remplie par ig-sync.
 // ============================================================================
 
 import { useEffect, useState } from "react";
@@ -83,23 +84,25 @@ function Marc({ s }: { s: Semaine }) {
 
 export function MondayBoard() {
   const { data: quotesRaw } = useAppState((s) => s["quotes"]);
+  const { data: journalRaw } = useAppState((s) => s["conformiteIncidents"]);
   const [t, setT] = useState<Tableau | null>(null);
   const [erreur, setErreur] = useState(false);
   const [vue, setVue] = useState<"precedente" | "maintenant">(() => (new Date().getDay() === 1 ? "precedente" : "maintenant"));
   const quotes = Array.isArray(quotesRaw) ? (quotesRaw as Record<string, unknown>[]) : null;
   const quotesKey = quotes ? quotes.length : -1;
+  const journalKey = journalRaw && typeof journalRaw === "object" ? Object.keys(journalRaw).length : -1;
 
   useEffect(() => {
     let vivant = true;
     const now = new Date();
-    chargerTableau(supabase, now, quotes)
+    chargerTableau(supabase, now, quotes, journalRaw)
       .then((d) => vivant && setT(tableauLundi(d, now)))
       .catch(() => vivant && setErreur(true));
     return () => {
       vivant = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [quotesKey]);
+  }, [quotesKey, journalKey]);
 
   if (erreur) return <section className="rounded-[22px] bg-surface p-5 text-[13px] text-muted-foreground">Tableau du lundi indisponible pour l'instant.</section>;
   if (!t) return <section className="rounded-[22px] bg-surface p-5 text-[13px] text-muted-foreground">Tableau du lundi…</section>;
@@ -144,6 +147,10 @@ export function MondayBoard() {
           <span>{m.creatricesQuiSignent} créatrices signent</span>
           <span>Carnet traité {m.carnetTraite} / {m.carnetTotal}</span>
           <span>{m.agencesActives} agences actives</span>
+          <span>
+            Conformité :{" "}
+            {m.incidentsConformite == null ? "non mesurée" : `${m.incidentsConformite} incident${m.incidentsConformite > 1 ? "s" : ""} ce mois, ${s.incidentsConformite ?? 0} ${vue === "precedente" ? "semaine dernière" : "cette semaine"}`}
+          </span>
         </div>
       </div>
     </section>

@@ -1,0 +1,151 @@
+// ============================================================================
+// rdv/index.ts : la page publique « Réserver une visio avec Marc » (app.ttpcreators.pro/rdv/).
+// ----------------------------------------------------------------------------
+// GET  → { actif, duree, jours: [{ jour, label, heures[] }] } : créneaux libres de Marc
+//        (ses demi-journées réglées dans Paramètres, moins ce qui est déjà dans Google Agenda).
+// POST { jour, heure, nom, email, marque, message?, site? (piège à robots) } →
+//        rendez-vous Google Agenda avec lien Meet et invitation Google au contact,
+//        contact noté au carnet (séquence arrêtée : il a répondu), tâche « Visio : marque »
+//        avec la fiche pour Marc, push générique à l'agence.
+// AUTH : verify_jwt = false (page publique). Garde-fous : CORS app seulement, piège à
+// robots, créneau revérifié au moment de réserver, 10 réservations par heure au plus,
+// aucun texte du visiteur dans la notification. Règles : _shared/rdv.ts.
+// ============================================================================
+
+import { APP_TIMEZONE, CALENDAR_ID, gcalFetch, getServiceClient, triggerSync } from "../_shared/google.ts";
+import { readAppState } from "../_shared/appState.ts";
+import { meetEventBody, meetLinkOf } from "../_shared/meetEvent.ts";
+import { makePayload, pushReady, sendTo } from "../_shared/push.ts";
+import { arreter, lireSequence } from "../_shared/sequence.ts";
+import { LEAD_TAG } from "../_shared/siteLead.ts";
+import { RDV_KEY, RDV_ORIGINS, creneauOk, creneauxLibres, lireRdv, lireReservation, quandFr, type Occupe, type RdvConfig } from "../_shared/rdv.ts";
+
+type Sb = ReturnType<typeof getServiceClient>;
+
+async function occupe(sb: Sb, c: RdvConfig, now: Date): Promise<Occupe[]> {
+  const res = await gcalFetch(sb, "/freeBusy", {
+    method: "POST",
+    body: JSON.stringify({
+      timeMin: now.toISOString(),
+      timeMax: new Date(now.getTime() + (c.horizonJours + 1) * 86_400_000).toISOString(),
+      timeZone: APP_TIMEZONE,
+      items: [{ id: CALENDAR_ID }],
+    }),
+  }, { maxRetries: 2 });
+  if (!res.ok) throw new Error(`freebusy_${res.status}`);
+  const j = await res.json() as { calendars?: Record<string, { busy?: { start: string; end: string }[] }> };
+  const busy = Object.values(j.calendars ?? {}).flatMap((x) => x.busy ?? []);
+  return busy.map((b) => ({ debut: Date.parse(b.start), fin: Date.parse(b.end) })).filter((o) => Number.isFinite(o.debut) && Number.isFinite(o.fin));
+}
+
+Deno.serve(async (req: Request) => {
+  const origin = req.headers.get("Origin");
+  const cors: Record<string, string> = {
+    "Access-Control-Allow-Headers": "content-type",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    Vary: "Origin",
+    ...(origin && RDV_ORIGINS.includes(origin) ? { "Access-Control-Allow-Origin": origin } : {}),
+  };
+  const json = (b: unknown, status = 200) => new Response(JSON.stringify(b), { status, headers: { ...cors, "Content-Type": "application/json", "Cache-Control": "no-store" } });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
+  if (origin && !RDV_ORIGINS.includes(origin)) return json({ error: "origin" }, 403);
+
+  const sb = getServiceClient();
+  const now = new Date();
+  let c: RdvConfig;
+  try {
+    c = lireRdv((await readAppState(sb))[RDV_KEY]);
+  } catch {
+    return json({ error: "indisponible" }, 503);
+  }
+  if (!c.actif) return json({ actif: false });
+
+  if (req.method === "GET") {
+    try {
+      const libres = creneauxLibres(c, now, await occupe(sb, c, now));
+      const jours: { jour: string; label: string; heures: string[] }[] = [];
+      for (const x of libres) {
+        let j = jours.find((d) => d.jour === x.jour);
+        if (!j) {
+          j = { jour: x.jour, label: new Date(x.jour + "T12:00:00Z").toLocaleDateString("fr-FR", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" }), heures: [] };
+          jours.push(j);
+        }
+        j.heures.push(x.heure);
+      }
+      return json({ actif: true, duree: c.duree, jours });
+    } catch (e) {
+      console.error("rdv créneaux", (e as Error).message);
+      return json({ error: "agenda" }, 503);
+    }
+  }
+  if (req.method !== "POST") return json({ error: "method" }, 405);
+
+  const lu = lireReservation(await req.json().catch(() => null));
+  if ("robot" in lu) return json({ ok: true });
+  if ("erreur" in lu) return json({ error: lu.erreur }, 400);
+  const r = lu.r;
+
+  const { count } = await sb.from("todos").select("id", { count: "exact", head: true }).like("text", "Visio : %").gte("created_at", new Date(now.getTime() - 3_600_000).toISOString());
+  if ((count ?? 0) >= 10) return json({ error: "trop" }, 429);
+
+  try {
+    if (!creneauOk(c, now, await occupe(sb, c, now), r.jour, r.heure)) return json({ error: "pris" }, 409);
+  } catch {
+    return json({ error: "agenda" }, 503);
+  }
+
+  // Le rendez-vous, avec Meet et l'invitation Google au contact.
+  const cal = `/calendars/${encodeURIComponent(CALENDAR_ID)}/events`;
+  const note = [`Visio réservée depuis la page de rendez-vous par ${r.nom} (${r.email}), ${r.marque}.`, r.message ? `Son besoin : ${r.message}` : ""].filter(Boolean).join("\n");
+  const res = await gcalFetch(sb, `${cal}?conferenceDataVersion=1&sendUpdates=all`, {
+    method: "POST",
+    body: JSON.stringify(meetEventBody({ title: `Visio TTP Creators × ${r.marque}`, date: r.jour, time: r.heure, duration: c.duree, guests: [r.email], meet: true, invite: true, note, who: null }, APP_TIMEZONE, crypto.randomUUID())),
+  }, { maxRetries: 2 }).catch(() => null);
+  const ev = res ? await res.json().catch(() => ({})) as { id?: string; hangoutLink?: string; conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] } } : {};
+  if (!res?.ok || !ev.id) {
+    console.error("rdv évènement", res?.status);
+    return json({ error: "agenda" }, 503);
+  }
+  const meet = meetLinkOf(ev);
+
+  // Carnet : le contact a répondu (sa séquence s'arrête), la visio est notée dans son journal.
+  const jour = r.jour;
+  const touche = { id: `rdv${now.getTime().toString(36)}`, date: new Date().toISOString().slice(0, 10), canal: "email", kind: "reponse", note: `Visio réservée pour le ${quandFr(r.jour, r.heure)}` };
+  const { data: ex } = await sb.from("contacts").select("*").ilike("email", r.email.replace(/[\\%_]/g, (m) => `\\${m}`)).limit(1);
+  const contact = ((ex ?? []) as Record<string, unknown>[])[0];
+  let historique = "";
+  if (contact) {
+    const touches = Array.isArray(contact.touches) ? (contact.touches as Record<string, unknown>[]) : [];
+    historique = touches.slice(0, 6).map((t) => `- ${String(t.date ?? "").slice(0, 10)} · ${t.canal ?? ""} · ${t.kind ?? ""}${t.note ? ` · ${String(t.note).slice(0, 120)}` : ""}`).join("\n");
+    const patch: Record<string, unknown> = { touches: [touche, ...touches] };
+    const seq = lireSequence(contact.sequence);
+    if (seq && seq.statut === "en_cours") patch.sequence = arreter(seq, "visio réservée", now, "positive");
+    await sb.from("contacts").update(patch).eq("id", contact.id).then(() => {}, () => {});
+  } else {
+    await sb.from("contacts").insert({ brand: r.marque, person: r.nom, email: r.email, tag: LEAD_TAG, touches: [touche] }).then(() => {}, () => {});
+  }
+
+  // Tâche « Visio : marque » avec la fiche avant l'appel (une seule ouverte par marque).
+  const text = `Visio : ${r.marque.slice(0, 80)}`;
+  const descr = [
+    `Visio réservée par ${r.nom} (${r.email}) pour le ${quandFr(r.jour, r.heure)} (${c.duree} min).`,
+    meet ? `Lien Meet : ${meet}` : "",
+    r.message ? `Son besoin : ${r.message}` : "",
+    contact ? `Déjà au carnet (${String(contact.brand ?? "")}).` : "Nouveau contact (ajouté au carnet, étiquette « Lead site »).",
+    historique ? `Historique :\n${historique}` : "",
+    "La visio en 5 points : le besoin, le budget, qui décide, notre proposition orale, et un devis envoyé le jour même.",
+  ].filter(Boolean).join("\n");
+  const { data: deja } = await sb.from("todos").select("id").eq("text", text).or("done.is.null,done.eq.false").limit(1);
+  if ((deja ?? []).length) await sb.from("todos").update({ descr, due: jour, priority: "haute" }).eq("id", (deja as { id: string }[])[0].id).then(() => {}, () => {});
+  else await sb.from("todos").insert({ text, descr, priority: "haute", due: jour, done: false }).then(() => {}, () => {});
+
+  if (pushReady()) {
+    await sendTo(sb, { agency: true }, makePayload({ kind: "team", title: "Visio réservée", body: "Un contact a réservé une visio. Détail dans la to-do et le planning.", url: "/?open=view&view=todo", tag: "ttp-rdv" })).catch(() => {});
+  }
+  try {
+    triggerSync("webhook");
+  } catch {
+    /* la synchro horaire l'amènera dans le Planning */
+  }
+  return json({ ok: true, quand: quandFr(r.jour, r.heure), duree: c.duree, meet });
+});

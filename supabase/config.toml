@@ -48,6 +48,11 @@ verify_jwt = false
 [functions.site-lead]
 verify_jwt = false
 
+# rdv : page publique « Réserver une visio avec Marc » (app.ttpcreators.pro/rdv/) → verify_jwt=false ;
+# CORS app, piège à robots, créneau revérifié, 10 réservations par heure, push sans texte du visiteur.
+[functions.rdv]
+verify_jwt = false
+
 # report-error : reçoit les crashs de l'ErrorBoundary (même déconnecté, ex. écran
 # login) → verify_jwt=false. Ne fait que journaliser + notifier l'agence (anti-spam).
 [functions.report-error]

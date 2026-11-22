@@ -35,6 +35,8 @@ import { nomPropre, problemePieces, typeDuNom, type Piece } from "../_shared/pie
 import { CATEGORIES_MODELES, objectifsDuMois, problemeModele, type Objectif } from "../_shared/alfredOutils.ts";
 import { CREE_PAR_CLAUDE, preparerBrouillonPost } from "../_shared/igDraft.ts";
 import { appliquerChiffres } from "../_shared/mediakitChiffres.ts";
+import { appelsCorrection, controlerKit, piecesKit, texteControle, type Mesure } from "../_shared/mediakitControle.ts";
+import { ENTETE_KIT, verifierKitsDuMail } from "./kitGarde.ts";
 import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
 import { CONTRACT_DRAFTS_KEY, DRAFT_OPTS, choisirCreateur, estRepresentation, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "../_shared/contractDraft.ts";
 import { ligneContrat, texteContrat, trouverContrats } from "../_shared/contractLecture.ts";
@@ -43,6 +45,7 @@ import { disposTexte, isMois, moisCourant, moisDecale } from "../_shared/disposD
 import { genererDisposDuMois } from "../_shared/disposDuMoisDb.ts";
 import { REGLES_OFFRE, STRATEGIE_VERSION, strategieTexte } from "../_shared/strategie.ts";
 import { chargerTableau, tableauLundi, tableauTexte } from "../_shared/tableauLundi.ts";
+import { devisARelancer } from "../_shared/devisRelances.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
 type Json = Record<string, unknown>;
@@ -354,6 +357,13 @@ const ficheCreateur: Tool = {
       tt ? `TikTok (relevé automatique) : ${tt.followers ?? "?"} abonnés${tt.er != null ? ` · engagement ${pct(tt.er)}` : ""}${tt.avgViews ? ` · vues moyennes ${tt.avgViews}` : ""}` : measure("tiktok", "TikTok"),
       yt ? `YouTube (relevé automatique) : ${yt.subscribers ?? "?"} abonnés${yt.avgViews ? ` · vues moyennes ${yt.avgViews}` : ""}` : measure("youtube", "YouTube"),
       ...[...lastEng.keys()].filter((k) => !["instagram", "tiktok", "youtube"].includes(k)).map((k) => measure(k, titleCase(k))),
+      // Chiffres du media kit comparés aux chiffres réels (_shared/mediakitControle.ts).
+      `\n## Media kit`,
+      (() => {
+        const ctl = controlerKit({ name, mediakit: c.mediakit, ig, tt, yt }, hist as Mesure[]);
+        const appels = appelsCorrection(name, ctl);
+        return `${texteControle(titleCase(name), ctl)}${appels.length ? `\nAucun mail de prospection ne part avec ce kit. Pour le corriger (après le « oui » de Marc) : ${appels.join(" ; ")}` : ""}`;
+      })(),
       `\n## Collabs`,
       lines(((col.data as Json[] | null) ?? []).map((r) => `- ${r.brand} · étape ${r.step}/11 « ${COLLAB_STEPS[Number(r.step) - 1] ?? ""} » · ${COLLAB_LABEL[collabState(r)] ?? collabState(r)}${r.cachet ? ` · cachet ${r.cachet}` : ""} [collab ${r.id}]`), "Aucune."),
       `\n## Prochains rendez-vous`,
@@ -514,11 +524,30 @@ const strategie: Tool = {
   run: async () => ok(strategieTexte(isoDay())),
 };
 
+const devisRelancer: Tool = {
+  name: "devis_a_relancer",
+  title: "Devis à relancer",
+  description:
+    "Les devis envoyés dont une relance est due aujourd'hui (stratégie : relances à J+2, J+5 et J+10 avec une date limite) : référence, marque, créatrice, adresse du client, date d'envoi, relance à faire, date limite (validité du devis) et devis expiré. Pour préparer les relances (brouillons à valider par Marc). Un devis passe « envoyé » dans Facturation → Devis.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  founder: true,
+  run: async (sb) => {
+    const st = await appState(sb);
+    const liste = devisARelancer(Array.isArray(st.quotes) ? (st.quotes as Json[]) : [], isoDay());
+    if (!liste.length) return ok("Aucun devis à relancer aujourd'hui.");
+    return ok([
+      `# ${liste.length} devis à relancer`,
+      ...liste.map((d) => `- ${d.ref} · ${d.marque}${d.createur ? ` × ${titleCase(d.createur)}` : ""} · relance ${d.relance} (envoyé le ${frDay(d.envoyeLe)})${d.email ? ` · ${d.email}` : " · adresse du client manquante"}${d.dateLimite ? ` · ${d.expire ? "EXPIRÉ depuis le" : "valable jusqu'au"} ${frDay(d.dateLimite)}` : ""}`),
+      "Chaque relance rappelle la date limite. J+10 : dernière relance, puis reprise au prochain temps fort.",
+    ].join("\n"));
+  },
+};
+
 const tableauLundiTool: Tool = {
   name: "tableau_lundi",
   title: "Tableau de bord du lundi",
   description:
-    "Le tableau de bord du lundi de la stratégie, en deux parties : Gianni (contacts touchés par canal d'après le journal de contact des fiches, taux de réponse, contacts passés à Marc = tâches « Visio : … », créatrices approchées) et Marc (visios faites, devis envoyés, deals signés, montant moyen), pour la semaine dernière et la semaine en cours, puis le mois face aux cibles (montant HT signé, deal moyen, part de Léna, carnet traité, agences actives). À lire pour le point du lundi ; un chiffre « non mesuré » ne s'estime pas.",
+    "Le tableau de bord du lundi de la stratégie, en deux parties : Gianni (contacts touchés par canal d'après le journal de contact des fiches, taux de réponse, contacts passés à Marc = tâches « Visio : … », créatrices approchées) et Marc (visios faites, devis envoyés, deals signés, montant moyen), pour la semaine dernière et la semaine en cours, puis le mois face aux cibles (montant HT signé, deal moyen, part de Léna, carnet traité, agences actives, incidents de conformité relevés par ig-sync : mention « Collaboration commerciale » manquante ou marque concurrente pendant une exclusivité). À lire pour le point du lundi ; un chiffre « non mesuré » ne s'estime pas.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   founder: true,
   run: async (sb) => {
@@ -526,7 +555,7 @@ const tableauLundiTool: Tool = {
     const quotes = Array.isArray(st.quotes) ? (st.quotes as Json[]) : null;
     try {
       const now = new Date();
-      return ok(tableauTexte(tableauLundi(await chargerTableau(sb, now, quotes), now)));
+      return ok(tableauTexte(tableauLundi(await chargerTableau(sb, now, quotes, st.conformiteIncidents), now)));
     } catch (e) {
       return fail(`Tableau illisible : ${(e as Error).message}`);
     }
@@ -1544,6 +1573,13 @@ const brouillonMail: Tool = {
         items: { type: "object", properties: { document: { type: "string" }, fil: { type: "string" }, nom: { type: "string" }, boite: { type: "string" }, url: { type: "string" } }, additionalProperties: false },
       },
       envoyer_en_tant_que: { type: "string", description: "Facultatif : alias mail d'une créatrice (ex. anamilanovic@ttpcreators.pro, via alias_createurs ou fiche_createur) pour écrire EN SON NOM. Accepté seulement s'il est réglé dans « Envoyer en tant que » de la boîte dans Gmail ; les réponses de la marque reviennent sur l'alias." },
+      createur: { type: "string", description: "Le créateur proposé dans ce mail de prospection (nom du roster). Son media kit est comparé aux chiffres réels : un kit faux bloque le brouillon. Reconnu aussi par son @, son adresse en cci, son alias ou son kit joint." },
+      chiffres_kit: {
+        type: "array",
+        maxItems: 5,
+        description: "Obligatoire si le media kit joint ne vient pas du site (page Documents, mail reçu, dépôt d'Alfred) : les abonnés ÉCRITS dans ce PDF, par réseau, tels quels (ex. instagram « 210K »). Ils sont comparés aux vrais chiffres ; jamais estimés ni corrigés à la main.",
+        items: { type: "object", properties: { createur: { type: "string" }, instagram: { type: "string" }, tiktok: { type: "string" }, youtube: { type: "string" } }, additionalProperties: false },
+      },
     },
     required: ["boite", "a", "objet", "message"],
     additionalProperties: false,
@@ -1564,6 +1600,14 @@ const brouillonMail: Tool = {
     const probleme = problemeTexteDestinataire(str(a.message, 20000));
     if (probleme) return fail(probleme);
     const alias = str(a.envoyer_en_tant_que, 200);
+    // Media kit faux (cas du 20 novembre 2026 : 210 K annoncés pour 5,9 K réels, joint à 16 mails) :
+    // le brouillon de prospection n'est pas préparé (kitGarde.ts, _shared/mediakitControle.ts).
+    const kitsJoints = piecesKit(a.pieces_jointes);
+    const kit = await verifierKitsDuMail(sb, {
+      createur: str(a.createur, 80), alias, a: adressesDe(to), copies: cci, objet: str(a.objet, 300), texte: str(a.message, 20000),
+      reponse: /^[A-Za-z0-9]+$/.test(fil), pieces: kitsJoints, chiffresKit: a.chiffres_kit,
+    });
+    if (kit.refus) return fail(kit.refus);
     try {
       // Alias : vérifié dans les « Envoyer en tant que » de la boîte avant de préparer quoi que ce soit.
       let from: SendAs | undefined;
@@ -1599,7 +1643,7 @@ const brouillonMail: Tool = {
       // une pièce introuvable ou refusée : rien n'est créé, Alfred le dit à Marc.
       const pieces = await piecesDuBrouillon(sb, box, a.pieces_jointes);
       if ("erreur" in pieces) return fail(pieces.erreur);
-      const r = await createDraft(sb, box, to, str(a.objet, 300), str(a.message, 20000), /^[A-Za-z0-9]+$/.test(fil) ? fil : undefined, html, cci, from, pieces.liste);
+      const r = await createDraft(sb, box, to, str(a.objet, 300), str(a.message, 20000), /^[A-Za-z0-9]+$/.test(fil) ? fil : undefined, html, cci, from, pieces.liste, kit.kitJoint ? [`${ENTETE_KIT}: verifie`] : []);
       const de = from ? ` (de ${from.email}${from.name ? `, « ${from.name} »` : ""})` : "";
       const how = r.replaced
         ? `Brouillon MIS À JOUR dans ${box.includes("@") ? box : `${box}@`}${de} (il remplace celui déjà préparé pour ${to}, aucun doublon${r.removed ? `, ${r.removed} ancien${r.removed > 1 ? "s" : ""} doublon${r.removed > 1 ? "s" : ""} supprimé${r.removed > 1 ? "s" : ""}` : ""})`
@@ -1613,7 +1657,7 @@ const brouillonMail: Tool = {
         // Boîte d'un créateur : pas encore dans la page Mails de l'app, seulement Spark.
         liens = `${spark ? `\nOuvrir dans Spark : ${spark}` : ""}${thread && !box.includes("@") ? `\nOuvrir dans l'app : https://app.ttpcreators.pro/?open=mails&thread=${thread}&box=${box}` : ""}`;
       }
-      return ok(`${how}${cci.length ? ` (en copie cachée : ${cci.join(", ")})` : ""}${pieces.liste.length ? ` avec ${pieces.liste.length} pièce(s) jointe(s) : ${pieces.liste.map((x) => x.nom).join(", ")}` : ""} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail, Spark ou l'app (Mails, dossier Brouillons).${r.id ? ` Id du brouillon : ${r.id}.` : ""}${liens}${dejaVu}`);
+      return ok(`${how}${cci.length ? ` (en copie cachée : ${cci.join(", ")})` : ""}${pieces.liste.length ? ` avec ${pieces.liste.length} pièce(s) jointe(s) : ${pieces.liste.map((x) => x.nom).join(", ")}` : ""} : « ${str(a.objet, 300)} ». À relire et envoyer depuis Gmail, Spark ou l'app (Mails, dossier Brouillons).${r.id ? ` Id du brouillon : ${r.id}.` : ""}${liens}${dejaVu}${kit.note}`);
     } catch (e) {
       return fail(`Brouillon non créé : ${(e as Error).message}`);
     }
@@ -2417,7 +2461,7 @@ const brouillonPostInstagram: Tool = {
 const majChiffresMediakit: Tool = {
   name: "maj_chiffres_mediakit",
   title: "Mettre à jour les chiffres d'un media kit",
-  description: "Met à jour les CHIFFRES d'une plateforme du media kit d'un créateur (abonnés, engagement, vues moyennes, vues des stories), visibles aussitôt sur sa page ttpcreators.pro/mediakit. Ne touche à rien d'autre (bio, marques, tarifs, photos, autres réseaux). À n'appeler qu'après le « oui » de Marc sur les nouveaux chiffres, et seulement avec des chiffres relevés dans l'app (fiche_createur), jamais estimés. Engagement : celui de l'app, même base que le kit.",
+  description: "Met à jour les CHIFFRES d'une plateforme du media kit d'un créateur (abonnés, engagement, vues moyennes, vues des stories), visibles aussitôt sur sa page ttpcreators.pro/mediakit. Ne touche à rien d'autre (bio, marques, tarifs, photos, autres réseaux). À n'appeler qu'après le « oui » de Marc sur les nouveaux chiffres, et seulement avec des chiffres relevés dans l'app (fiche_createur, section « Media kit », qui donne l'appel exact quand le kit est à corriger), jamais estimés. Un kit à corriger bloque les mails de prospection du créateur jusqu'à cette mise à jour. Engagement : celui de l'app, même base que le kit.",
   write: true,
   founder: true,
   inputSchema: {
@@ -2820,7 +2864,7 @@ const lireContrat: Tool = {
 };
 
 export const TOOLS: Tool[] = [
-  pointDuJour, strategie, tableauLundiTool, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
+  pointDuJour, strategie, tableauLundiTool, devisRelancer, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
   creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief, lireContrat,

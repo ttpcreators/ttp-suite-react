@@ -18,6 +18,8 @@ import type { RateOverrides } from "@/lib/pricing";
 import { KitRatesDialog } from "@/components/kit-rates-dialog";
 import { PublishSiteButton } from "@/components/publish-site-button";
 import { holdUpdate } from "@/lib/appUpdate";
+import { KitCheckAlert, useMesures } from "@/components/kit-check";
+import { appliquerCorrections, controlerKit } from "../../supabase/functions/_shared/mediakitControle.ts";
 
 /**
  * Éditeur du MEDIA KIT EN LIGNE (par créatrice). Tout est écrit dans la colonne
@@ -211,6 +213,9 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
   // media kit en base. Garde-fou anti perte de données silencieuse.
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Chiffres réels du créateur (relevés automatiques), pour vérifier ceux du kit.
+  const [reel, setReel] = useState<{ ig?: unknown; tt?: unknown; yt?: unknown }>({});
+  const mesures = useMesures();
   // Instantané (JSON) du kit tel que chargé / dernièrement enregistré : sert à
   // détecter les modifications non enregistrées.
   const [savedSnap, setSavedSnap] = useState<string | null>(null);
@@ -272,9 +277,10 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
     setLoadError(false);
     setLoadedId(null);
     setSavedSnap(null);
+    setReel({});
     supabase
       .from("creators")
-      .select("mediakit")
+      .select("mediakit, ig, tt, yt")
       .eq("id", selId)
       .limit(1)
       .then(({ data, error }) => {
@@ -294,6 +300,8 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
           const known = knownBioEn(blob.bio);
           if (known) blob.bioEn = known;
         }
+        const row = data?.[0] as { ig?: unknown; tt?: unknown; yt?: unknown } | undefined;
+        setReel({ ig: row?.ig, tt: row?.tt, yt: row?.yt });
         setMk(blob);
         setSavedSnap(JSON.stringify(blob));
         setLoadedId(selId);
@@ -394,6 +402,21 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
       return { ...m, platforms };
     });
     toast(`Followers + ER importés (${latest.size} plateforme${latest.size > 1 ? "s" : ""}) ✓`);
+  };
+
+  // Chiffres du kit (saisie en cours comprise) comparés aux chiffres réels.
+  const controle = useMemo(
+    () => (selected && loadedId === selId ? controlerKit({ name: selected.name, mediakit: mk, ...reel }, mesures) : null),
+    [selected, loadedId, selId, mk, reel, mesures],
+  );
+  // « Mettre à jour » : les chiffres réels dans le formulaire (à enregistrer ensuite, comme l'import).
+  const putRealNumbers = () => {
+    if (!controle) return;
+    const r = appliquerCorrections(mk, controle);
+    if ("error" in r) return toast(r.error);
+    if (!r.changements.length) return toast("Rien à changer");
+    setMk(r.mediakit as MediaKit);
+    toast("Chiffres réels mis dans le kit : clique sur Enregistrer");
   };
 
   // ---- petites listes éditables ----
@@ -512,6 +535,8 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
           </div>
         )}
       </div>
+
+      {controle && mode === "standard" && <KitCheckAlert controle={controle} onUpdate={putRealNumbers} verifier />}
 
       {!selId ? (
         <div className="rounded-2xl border border-border bg-surface p-10 text-center">

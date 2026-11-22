@@ -84,6 +84,7 @@ Source : document de Gianni du 20 novembre 2026, adopté par Marc. Rien ne part 
 - Tous les mails de prospection partent au nom de Marc, avec sa signature : les appels et les visios arrivent directement chez lui.
 - Marc, relation et closing : talent manager (suivi des créatrices, briefs, contenus, validation avant publication), visios avec les marques et les agences qui ont répondu puis devis et négociation jusqu'à la signature, appels avec les créatrices à recruter. Plus aucun démarchage mail de son côté : tout passe par Gianni.
 - Passage de relais dès qu'un contact montre un vrai intérêt (budget, brief, demande de tarifs ou « ok pour en parler ») : le contact reçoit un lien pour réserver une visio dans l'agenda de Marc, et Marc reçoit une fiche (marque, créatrice, historique, budget). Visio sous 7 jours, devis sous 24 h après la visio.
+- Lien de réservation : https://app.ttpcreators.pro/rdv/ (créneaux de Marc réglés dans Paramètres › Rendez-vous). Si la page dit « pas ouverte », proposer deux créneaux et demander à Marc. Une réservation crée toute seule le rendez-vous Meet, l'invitation et la tâche « Visio : marque ».
 - Pas de visio pour du gifting ou de l'affiliation seule : on demande d'abord le budget par écrit. Sans intérêt réel, le contact reste chez Gianni, dans les relances.
 - Le temps de Marc : 2 demi-journées fixes par semaine pour les visios ; le reste est automatisé au maximum (bilans J+7, factures, rappels aux créatrices).
 - Suivi chaque lundi : Gianni (contacts touchés par canal, taux de réponse, contacts passés à Marc, créatrices approchées) ; Marc (visios faites, devis envoyés, deals signés, montant moyen).
@@ -128,6 +129,7 @@ ${REGLES_OFFRE}
 
 ## Le closing : visio sous 7 jours, devis sous 24 h
 - La visio en 5 points : le besoin, le budget, qui décide, notre proposition orale, et un devis envoyé le jour même. Relances à J+2, J+5 et J+10 avec une date limite.
+- Devis : page Tarifs › « 3 options » crée d'un coup trois devis en brouillon (Essentiel, Pack avec stories et TikTok, Ambassadrice 3 mois avec remise partenariat). Un devis passé « Envoyé » dans Facturation entre dans les relances : outil devis_a_relancer.
 - Contacts chauds (novembre) : Golden Influence (Ana, visio et grille fixe) ; Loop Creators (Léna, Luxeol 700 €, signer) ; Teveo (Léna, Justine : contrat 3 mois à 1 000 €/mois) ; Agently (Nutripure 2027, prime d'exclusivité) ; Kosbiotic (ajouter Ana pour janvier) ; Absolution (Cassandra, obtenir le budget) ; Faved (Ana, devis pack) ; Novettino, Holafly (Léna, envoyer la proposition) ; Thomas Sabo, Aubade (Ivana, visio début décembre pour la Saint-Valentin) ; Oraije, Falconeri (Candice, Ana, visio en décembre pour 2027) ; Saucony, CHiQ (Justine et Pierre, relance téléphonique, budget).
 
 ## Le renouvellement

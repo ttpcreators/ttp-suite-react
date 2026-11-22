@@ -535,7 +535,12 @@ export function Debrief() {
       resetForm();
       setFormOpen(false);
       if (!wasEdit && built.creator) notifyCreator("debrief", built.creator, built.brand); // push au créateur à la création
-      toast(wasEdit ? "Debrief modifié ✓" : "Debrief créé ✓");
+      // Bilan J+7 d'une collab (stratégie : « envoyé sans attendre qu'on le demande, avec
+      // une proposition de suite ») : la fenêtre d'envoi s'ouvre, adresse de la marque comprise.
+      if (!wasEdit && built.collabId) {
+        openShare(built);
+        toast("Bilan créé ✓ Vérifie l'adresse et envoie-le à la marque");
+      } else toast(wasEdit ? "Debrief modifié ✓" : "Debrief créé ✓");
     } catch {
       toast("Erreur, réessaie");
     }
@@ -588,11 +593,28 @@ export function Debrief() {
     toast("Debrief téléchargé ✓");
   }
 
+  // Adresse de la marque pour l'envoi du bilan : contact de la collab s'il a une adresse,
+  // sinon le contact du carnet de cette marque (le plus récemment contacté). "" sinon.
+  async function brandEmail(brand: string, collabId?: string): Promise<string> {
+    const isMail = (v: unknown) => /^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$/.test(String(v ?? "").trim());
+    if (collabId) {
+      const { data } = await supabase.from("collabs").select("contact").eq("id", collabId).maybeSingle();
+      const m = String((data as { contact?: string } | null)?.contact ?? "").match(/[^\s<>,;]+@[^\s<>,;]+\.[^\s<>,;]+/)?.[0];
+      if (m && isMail(m)) return m.toLowerCase();
+    }
+    const b = brand.trim().replace(/[\\%_]/g, (m) => `\\${m}`);
+    if (!b) return "";
+    const { data } = await supabase.from("contacts").select("email, last_contacted").ilike("brand", b).not("email", "is", null).order("last_contacted", { ascending: false, nullsFirst: false }).limit(5);
+    return String(((data as { email: string }[] | null) ?? []).find((c) => isMail(c.email))?.email ?? "").trim().toLowerCase();
+  }
+
   function openShare(d: Debrief) {
     setShareD(d);
     setShareTo("");
-    setShareSubject(`Bilan de campagne · ${d.brand}`);
+    setShareSubject(`Bilan de campagne · ${d.brand}${d.creator ? ` × ${titleCase(d.creator)}` : ""}`);
     setShareVia("gmail");
+    // Destinataire prérempli avec l'adresse de la marque (modifiable avant l'envoi).
+    void brandEmail(d.brand, d.collabId).then((to) => to && setShareTo((cur) => cur || to)).catch(() => {});
   }
   // `printHtml` = iframe caché même origine → pas de pop-up à autoriser (et cohérent
   // avec Contrats / Briefs). L'await sur les captures ne pose donc plus de problème
@@ -683,11 +705,13 @@ export function Debrief() {
       {list.length > 0 && (() => {
         const sumRevenue = list.reduce((s, d) => s + amountOf(d.revenue), 0);
         const sumBudget = list.reduce((s, d) => s + amountOf(d.budget), 0);
-        const roiStr = sumBudget > 0 ? (sumRevenue / sumBudget).toFixed(1).replace(".", ",") + "×" : "—";
+        // Le CA généré est facultatif (souvent inconnu : la marque ne le partage pas) :
+        // sans CA saisi, pas de « 0,0× le budget » mais « à saisir (facultatif) ».
+        const roiStr = sumBudget > 0 && sumRevenue > 0 ? (sumRevenue / sumBudget).toFixed(1).replace(".", ",") + "×" : "—";
         return (
           <StatsBento phoneStrip
-            primary={{ eyebrow: "CA généré · bilans", value: formatEuro(sumRevenue), caption: `${list.length} campagne${list.length > 1 ? "s" : ""} · budget HT ${formatEuro(sumBudget)}` }}
-            bars={{ label: "CA par campagne", value: `CA : ${roasText(roiStr)}`, series: list.map((d) => amountOf(d.revenue)) }}
+            primary={{ eyebrow: "CA généré · bilans", value: sumRevenue > 0 ? formatEuro(sumRevenue) : "—", caption: `${list.length} campagne${list.length > 1 ? "s" : ""} · budget HT ${formatEuro(sumBudget)}${sumRevenue > 0 ? "" : " · CA facultatif"}` }}
+            bars={{ label: "CA par campagne", value: sumRevenue > 0 ? `CA : ${roasText(roiStr)}` : "CA à saisir (facultatif)", series: list.map((d) => amountOf(d.revenue)) }}
             small={{ value: String(list.length), label: "Campagnes" }}
             accent={{ value: String(needsDebrief.length), label: "À débriefer", icon: Activity }}
           />
@@ -743,7 +767,7 @@ export function Debrief() {
           className="sm:min-w-[120px] flex-1"
         />
         <TextField
-          label="CA généré"
+          label="CA généré (facultatif)"
           value={revenue}
           onChange={setRevenue}
           placeholder="12 000 €"
@@ -809,7 +833,7 @@ export function Debrief() {
             <div className="mb-1 flex items-center gap-2 text-[13px] font-semibold text-primary">
               <Sparkles className="h-4 w-4 shrink-0" /> {ready.length} bilan{ready.length > 1 ? "s" : ""} prêt{ready.length > 1 ? "s" : ""} à préparer
             </div>
-            <p className="mb-2.5 text-[12px] text-muted-foreground">Collabs publiées depuis 7 jours : le bilan se remplit tout seul avec les chiffres des posts, et se termine par une proposition de renouvellement.</p>
+            <p className="mb-2.5 text-[12px] text-muted-foreground">Collabs publiées depuis 7 jours : le bilan se remplit tout seul avec les chiffres des posts et une proposition de renouvellement. Une fois créé, la fenêtre d'envoi à la marque s'ouvre, son adresse déjà remplie.</p>
             <div className="flex flex-col gap-2">
               {ready.map((c) => {
                 const posts = (c.ig?.posts?.length ?? 0) + (c.tt?.posts?.length ?? 0) + (c.yt?.posts?.length ?? 0);
@@ -899,9 +923,11 @@ export function Debrief() {
                     <div className="mt-0.5 text-[11px] text-faint">{d.period}</div>
                   )}
                 </div>
-                <span className="shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[12px] font-medium text-signaltext">
-                  CA : {roasText(d.roi)}
-                </span>
+                {d.roi && d.roi !== "—" && (
+                  <span className="shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[12px] font-medium text-signaltext">
+                    CA : {roasText(d.roi)}
+                  </span>
+                )}
               </div>
 
               {/* Budget HT → CA */}
@@ -974,9 +1000,11 @@ export function Debrief() {
                   </span>
                 </div>
               </div>
-              <span className="hidden shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[12px] font-medium text-signaltext sm:inline">
-                CA : {roasText(d.roi)}
-              </span>
+              {d.roi && d.roi !== "—" && (
+                <span className="hidden shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[12px] font-medium text-signaltext sm:inline">
+                  CA : {roasText(d.roi)}
+                </span>
+              )}
               <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>{actions(d)}</div>
             </div>
           ))}

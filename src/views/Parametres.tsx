@@ -15,6 +15,7 @@ import { BACKUP_STATUS_KEY, backupStatusLine, latestStatus } from "../../supabas
 import { WIDGET_KEY, sha256Hex, widgetKeyOf } from "../../supabase/functions/_shared/widget.ts";
 import { SCRIPTABLE_APP_STORE, nouvelleCle, widgetScript } from "@/lib/widgetScript";
 import { haptic, hapticsEnabled, setHapticsEnabled } from "@/lib/haptics";
+import { RDV_KEY, RDV_URL, lireRdv, type Plage, type RdvConfig } from "../../supabase/functions/_shared/rdv.ts";
 import { RELANCE_DAYS, type ProspectSettings, type WaMode } from "@/lib/touches";
 import { usePush } from "@/lib/push";
 import { toast } from "@/components/ui/toast";
@@ -119,6 +120,7 @@ const ENTRIES: Entry[] = [
       { title: "Résumé de la semaine", keywords: ["lundi", "semaine"] },
       { title: "Données créateurs à jour", keywords: ["stats", "roster", "mensuel", "abonnés"] },
       { title: "Sauvegarde mensuelle", keywords: ["sauvegarde", "backup", "csv", "export", "media kit", "crash"] },
+      { title: "Rendez-vous (page publique)", keywords: ["rendez-vous", "rdv", "visio", "calendly", "réserver", "demi-journée", "agenda"] },
       { title: "Widget iPhone", keywords: ["widget", "iphone", "écran d'accueil", "scriptable", "écran verrouillé", "mails"] },
     ],
   },
@@ -185,6 +187,69 @@ function PrefRow({
       </div>
       <Toggle checked={checked} onChange={onChange} label={label} />
     </div>
+  );
+}
+
+const JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"];
+
+/**
+ * Page publique « Réserver une visio avec Marc » (/rdv/, fonction rdv) : les demi-journées
+ * fixes de Marc, la durée, et l'interrupteur qui ouvre la page (organisation Gianni / Marc).
+ */
+function RdvCard() {
+  const { data: saved } = useAppState((s) => s[RDV_KEY]);
+  const [c, setC] = useState<RdvConfig | null>(null);
+  const [busy, setBusy] = useState(false);
+  const cur = c ?? lireRdv(saved);
+  const edit = (patch: Partial<RdvConfig>) => setC({ ...cur, ...patch });
+  const setPlage = (i: number, patch: Partial<Plage>) => edit({ plages: cur.plages.map((p, j) => (j === i ? { ...p, ...patch } : p)) });
+  const save = async (next: RdvConfig) => {
+    setBusy(true);
+    const ok = await saveAppStateKey(RDV_KEY, next);
+    setBusy(false);
+    if (ok) setC(null);
+    toast(ok ? (next.actif ? "Page de rendez-vous ouverte ✓" : "Réglages enregistrés ✓") : "Erreur, réessaie");
+  };
+  const field = "h-9 rounded-xl bg-field px-2.5 text-[13px] text-foreground";
+  return (
+    <Card
+      title="Rendez-vous (page publique)"
+      hint="Le lien que reçoivent les contacts intéressés pour réserver une visio sur tes demi-journées. Les créneaux déjà pris dans ton Google Agenda sont retirés, le lien Meet et l'invitation partent tout seuls, et la fiche du contact arrive dans ta to-do."
+      right={<Toggle checked={cur.actif} onChange={(v) => void save({ ...cur, actif: v })} label="Page ouverte" />}
+    >
+      <div className="space-y-3">
+        {cur.plages.map((p, i) => (
+          <div key={i} className="flex flex-wrap items-center gap-2 text-[13px]">
+            <select value={p.jour} onChange={(e) => setPlage(i, { jour: Number(e.target.value) })} className={field} aria-label="Jour">
+              {JOURS.map((j, k) => <option key={j} value={k + 1}>{j}</option>)}
+            </select>
+            <span className="text-muted-foreground">de</span>
+            <input type="time" value={p.debut} onChange={(e) => setPlage(i, { debut: e.target.value })} className={field} aria-label="Début" />
+            <span className="text-muted-foreground">à</span>
+            <input type="time" value={p.fin} onChange={(e) => setPlage(i, { fin: e.target.value })} className={field} aria-label="Fin" />
+            <button type="button" onClick={() => edit({ plages: cur.plages.filter((_, j) => j !== i) })} className="text-[12px] text-muted-foreground hover:text-foreground">Retirer</button>
+          </div>
+        ))}
+        <div className="flex flex-wrap items-center gap-2 text-[13px]">
+          <button type="button" onClick={() => edit({ plages: [...cur.plages, { jour: 5, debut: "14:00", fin: "17:00" }] })} className="text-[12px] font-medium text-primary">+ Une demi-journée</button>
+          <span className="ml-auto text-muted-foreground">Durée</span>
+          <select value={cur.duree} onChange={(e) => edit({ duree: Number(e.target.value) })} className={field} aria-label="Durée">
+            {[15, 20, 30, 45, 60].map((m) => <option key={m} value={m}>{m} min</option>)}
+          </select>
+        </div>
+        {c && (
+          <button type="button" disabled={busy} onClick={() => void save(cur)} className="h-9 rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50">
+            {busy ? "Enregistrement…" : "Enregistrer"}
+          </button>
+        )}
+        <p className="text-[12px] leading-snug text-muted-foreground">
+          Lien à donner : <a href={RDV_URL} target="_blank" rel="noreferrer" className="font-medium text-foreground underline underline-offset-2">{RDV_URL}</a>
+          {cur.actif ? "" : " (fermé : la page dit que la prise de rendez-vous n'est pas ouverte)"}
+          {" "}
+          <button type="button" onClick={() => void navigator.clipboard.writeText(RDV_URL).then(() => toast("Lien copié ✓"), () => {})} className="font-medium text-primary">Copier</button>
+        </p>
+      </div>
+    </Card>
   );
 }
 
@@ -1367,6 +1432,7 @@ export function Parametres() {
             </Card>
             <BackupCard />
             <WidgetCard />
+            <RdvCard />
           </>
         );
       case "activite":

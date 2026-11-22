@@ -251,7 +251,7 @@ fonction avec `Authorization: Bearer <CRON_SECRET>`.
 |---|---|---|---|---|---|
 | `ig-avatar` | Profils Instagram du Scouting | `Vivier.tsx` | oui | rôle agence | |
 | `ig-hashtag` | Posts par hashtag | `HashtagSearch.tsx` | oui | rôle agence | |
-| `ig-sync` | Chiffres Instagram du roster (+ feed des 12 derniers posts, images copiées dans `avatars/feed/`), des collabs, des marques | pg_cron, `instagram.ts`, `ig-callback` | non | CRON_SECRET ou agence | `20 5 * * *` et `30 14 * * *` |
+| `ig-sync` | Chiffres Instagram du roster (+ feed des 12 derniers posts, images copiées dans `avatars/feed/`), des collabs, des marques ; conformité des posts (tâches internes + journal `conformiteIncidents`) | pg_cron, `instagram.ts`, `ig-callback` | non | CRON_SECRET ou agence | `20 5 * * *` et `30 14 * * *` |
 | `ig-connect` / `ig-callback` | Un créateur connecte son Instagram | `instagram.ts` / navigateur | oui / non | créateur ou agence / state signé | |
 | `ig-sourcing` | Sourcing, radar à marques, concurrents | pg_cron, `Sourcing.tsx`, `RivalWatch.tsx` | non | CRON_SECRET ou agence | `40 */2 * * *` |
 | `ig-inbox` | DM du compte de l'agence | pg_cron, `Messages.tsx`, `ig-webhook` | non | CRON_SECRET ou agence | `25 * * * *` |
@@ -299,6 +299,7 @@ hiver : la fonction ne garde que le bon passage. Hors fonction : `ttp-app-state-
 | `tiktok.ts` | TikTok Login Kit | `tt-*` |
 | `youtube.ts`, `youtube-login.ts` | YouTube Data API (quota) et connexion d'un créateur | `yt-*` |
 | `mentions.ts` | Comptes cités dans un post (Meta retire les @) | `ig-sync`, `ig-sourcing` |
+| `conformite.ts` | Conformité des posts : mention « Collaboration commerciale » manquante, marque concurrente pendant une exclusivité | `ig-sync`, `tableauLundi.ts` |
 | `igFeed.ts` | Feed Instagram d'un créateur (posts, chiffres, chemins d'images) | `ig-sync`, `ig-connect` |
 | `exclusivites.ts` | Exclusivités des créateurs : conflits marque × concurrents, lecture d'un contrat (règles fixes) | app (`useExclusivites.ts`, page Exclusivités, choix d'un créateur, Mails), `ttp-mcp` |
 | `disposDuMois.ts`, `disposDuMoisDb.ts` | Dispos du mois pour les agences : créateurs actifs, chiffres par réseau, prix agence indicatif (méthode TARIF), catégories prises en exclusivité sans la marque ; enregistrement dans `creator_lists.dispos` | app (`BaseCreateurs.tsx`, bouton « Générer les dispos du mois »), `ttp-mcp` (outil `dispos_du_mois`), `dispos-du-mois` |
@@ -308,6 +309,7 @@ hiver : la fonction ne garde que le bon passage. Hors fonction : `ttp-app-state-
 | `autoStats.ts` | Stats du mois relevées toutes seules | `ig-sync`, `tt-sync` |
 | `inbox.ts` | Touches de prospection tirées des DM | `ig-inbox` |
 | `meetEvent.ts` | Rendez-vous Meet (logique pure, testée) | `meet-invite` |
+| `mediakitControle.ts` | Chiffres d'un media kit comparés aux chiffres réels (relevés automatiques, mesures du calculateur) : « ok », « à corriger » (abonnés à plus de 25 %, engagement ou vues à plus de 50 %), « à vérifier » (pas de chiffre réel de moins de 62 jours) ; reconnaissance du créateur proposé dans un mail (logique pure, testée) | app (`kit-check.tsx` sur la page Media kit et la fiche roster, `mediakitControleDb.ts` pour « Mettre à jour »), `ttp-mcp` (`kitGarde.ts` : refus des mails de prospection avec un kit faux, section « Media kit » de `fiche_createur`) |
 
 ## 7. Base de données (`supabase/`)
 
