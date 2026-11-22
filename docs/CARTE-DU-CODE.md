@@ -276,6 +276,7 @@ fonction avec `Authorization: Bearer <CRON_SECRET>`.
 | `team-notify` | Push « qui fait quoi » aux autres comptes agence | `team.ts` | oui | rôle agence | |
 | `daily-digest` | Résumés push (matin, semaine, après-midi, rappel des stats) et notifications d'activité | pg_cron, `push.ts`, `diagnostics.ts` | non | CRON_SECRET ou JWT | `0 6,7 * * *`, `0 6,7 * * 1`, `0 12,13 * * *`, `0 7,8 * * *` |
 | `report-error` | Journal des crashs + push agence (anti-spam) | `errorReport.ts` | non | aucun (crash possible hors connexion) | |
+| `dispos-du-mois` | Liste « Dispos de <mois> » pour les agences (Base créateurs › Listes, lien public), logique `_shared/disposDuMois.ts` et `disposDuMoisDb.ts` | pg_cron | non | CRON_SECRET | `45 6 1 * *` |
 | `ttp-mcp` | Connecteur Claude : serveur MCP (`index.ts`), OAuth (`oauth.ts`), outils (`tools.ts`), Gmail (`gmail.ts`) | Claude, `connecteur/`, `Parametres.tsx` | non | jetons propres hachés, rôle agence, outils fondateurs filtrés | |
 
 Les crons doublés (`6,7`, `12,13`, `7,8`) servent à tomber à la bonne heure de Paris été comme
@@ -301,6 +302,7 @@ hiver : la fonction ne garde que le bon passage. Hors fonction : `ttp-app-state-
 | `conformite.ts` | Conformité des posts : mention « Collaboration commerciale » manquante, marque concurrente pendant une exclusivité | `ig-sync`, `tableauLundi.ts` |
 | `igFeed.ts` | Feed Instagram d'un créateur (posts, chiffres, chemins d'images) | `ig-sync`, `ig-connect` |
 | `exclusivites.ts` | Exclusivités des créateurs : conflits marque × concurrents, lecture d'un contrat (règles fixes) | app (`useExclusivites.ts`, page Exclusivités, choix d'un créateur, Mails), `ttp-mcp` |
+| `disposDuMois.ts`, `disposDuMoisDb.ts` | Dispos du mois pour les agences : créateurs actifs, chiffres par réseau, prix agence indicatif (méthode TARIF), catégories prises en exclusivité sans la marque ; enregistrement dans `creator_lists.dispos` | app (`BaseCreateurs.tsx`, bouton « Générer les dispos du mois »), `ttp-mcp` (outil `dispos_du_mois`), `dispos-du-mois` |
 | `mailTasks.ts` | Demandes d'un mail reçu → tâches (règles fixes FR/EN, échéances, sans IA) | `gmail-poll` (`gmail-poll/tasks.ts`) |
 | `signals.ts` | Partenariat payé, emails, « déjà en agence » | `ig-inbox`, `ig-sourcing`, `yt-*` |
 | `brandmatch.ts` | Une publication cite-t-elle la marque ? | `tt-sync`, `yt-sync` |

@@ -234,6 +234,11 @@ verify_jwt = false
 [functions.mediakit-publish]
 verify_jwt = false
 
+# dispos-du-mois : la sélection « Dispos de <mois> » pour les agences, le 1er du mois (pg_cron,
+# CRON_SECRET vérifié dans le code).
+[functions.dispos-du-mois]
+verify_jwt = false
+
 [functions.agent-watchdog]
 verify_jwt = false
 

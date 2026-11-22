@@ -2702,6 +2702,8 @@ create table if not exists public.creator_lists (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+-- Dispos du mois pour les agences (2026-11-22) : la sélection calculée, lue par la page publique.
+alter table public.creator_lists add column if not exists dispos jsonb;
 alter table public.creator_lists enable row level security;
 revoke all on public.creator_lists from anon;
 drop policy if exists creator_lists_agency on public.creator_lists;
@@ -2726,7 +2728,8 @@ with (security_invoker = false) as
            from public.ig_profiles p
            left join public.creator_base_meta m on m.username = p.username
            where p.username = any(l.usernames) and coalesce(m.excluded, false) = false
-         ), '[]'::jsonb) as creators
+         ), '[]'::jsonb) as creators,
+         l.dispos
   from public.creator_lists l
   where l.public;
 grant select on public.public_creator_lists to anon, authenticated;
