@@ -307,6 +307,7 @@ hiver : la fonction ne garde que le bon passage. Hors fonction : `ttp-app-state-
 | `autoStats.ts` | Stats du mois relevées toutes seules | `ig-sync`, `tt-sync` |
 | `inbox.ts` | Touches de prospection tirées des DM | `ig-inbox` |
 | `meetEvent.ts` | Rendez-vous Meet (logique pure, testée) | `meet-invite` |
+| `mediakitControle.ts` | Chiffres d'un media kit comparés aux chiffres réels (relevés automatiques, mesures du calculateur) : « ok », « à corriger » (abonnés à plus de 25 %, engagement ou vues à plus de 50 %), « à vérifier » (pas de chiffre réel de moins de 62 jours) ; reconnaissance du créateur proposé dans un mail (logique pure, testée) | app (`kit-check.tsx` sur la page Media kit et la fiche roster, `mediakitControleDb.ts` pour « Mettre à jour »), `ttp-mcp` (`kitGarde.ts` : refus des mails de prospection avec un kit faux, section « Media kit » de `fiche_createur`) |
 
 ## 7. Base de données (`supabase/`)
 
