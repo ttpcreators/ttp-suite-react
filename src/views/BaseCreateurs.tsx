@@ -10,6 +10,9 @@ import { CREATOR_NICHES } from "@/lib/niche";
 import { VILLES, cleanUser, construireBase, deburr, filtrerBase, type BaseCreateur, type BaseMeta, type BaseProf } from "../../supabase/functions/_shared/baseCreateurs.ts";
 import { useStickyState } from "@/lib/useStickyState";
 import { TtpSpider } from "@/components/icons/ttp-icons";
+import { HelpTip } from "@/components/ui/help-tip";
+import { moisCourant, moisDecale, moisLabel } from "../../supabase/functions/_shared/disposDuMois.ts";
+import { genererDisposDuMois } from "../../supabase/functions/_shared/disposDuMoisDb.ts";
 
 /**
  * La « Base créateurs » de TTP, façon Kolsquare : tous les comptes Instagram que l'agence a
@@ -504,6 +507,7 @@ function Lists(props: {
 
   return (
     <div className="flex flex-col gap-3">
+      <DisposDuMois onDone={props.onReload} />
       <form onSubmit={(e) => { e.preventDefault(); void create(); }} className="flex flex-wrap gap-2 rounded-[18px] bg-surface p-3">
         <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Nouvelle liste : « Running Lyon pour Decathlon »" className={cn(IN, "min-w-0 flex-1 bg-background")} aria-label="Nom de la nouvelle liste" />
         <button type="submit" disabled={!title.trim() || busy} className="h-9 rounded-full bg-foreground px-4 text-[13px] font-semibold text-background disabled:opacity-40">Créer</button>
@@ -522,6 +526,57 @@ function Lists(props: {
       <p className="text-[11px] text-faint">
         Une liste publique se lit sans compte sur ttpcreators.pro/selection/, à qui a le lien (la page n'est pas référencée sur Google). Elle montre la photo, le nom, le compte, la niche, la ville, les abonnés, l'engagement et le rythme. Jamais d'email, de bio ni de note.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Les dispos du mois pour les agences (stratégie de Gianni, 20/11/2026) : crée ou met à jour la
+ * liste « Dispos de <mois> », lien public activé (même travail que l'outil Claude `dispos_du_mois`
+ * et la fonction du 1er du mois). À partir du 20, on peut préparer le mois suivant.
+ */
+function DisposDuMois({ onDone }: { onDone: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [notes, setNotes] = useState<string[]>([]);
+  const now = new Date();
+  const cur = moisCourant(now);
+  const next = moisDecale(cur, 1);
+  const lateInMonth = Number(new Intl.DateTimeFormat("fr-FR", { timeZone: "Europe/Paris", day: "numeric" }).format(now)) >= 20;
+
+  const run = async (mois: string) => {
+    setBusy(mois);
+    const r = await genererDisposDuMois(supabase, mois);
+    setBusy(null);
+    if (!r.ok) return toast(r.error);
+    setNotes([...(r.sansDispos ? ["SQL 2026-11-22-dispos-du-mois.sql pas encore lancé : la page montre seulement les chiffres Instagram, sans prix ni exclusivités."] : []), ...r.resultat.notes]);
+    toast(`${r.titre} ${r.cree ? "créée" : "mise à jour"} · lien actif`);
+    onDone();
+  };
+
+  return (
+    <div className="flex flex-col gap-2 rounded-[18px] bg-surface p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button type="button" disabled={!!busy} onClick={() => void run(cur)} className="h-9 rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground disabled:opacity-40">
+          {busy === cur ? <Spin /> : "Générer les dispos du mois"}
+        </button>
+        {lateInMonth && (
+          <button type="button" disabled={!!busy} onClick={() => void run(next)} className="h-9 rounded-full border border-border px-4 text-[13px] font-semibold text-foreground disabled:opacity-40">
+            {busy === next ? <Spin /> : `Préparer ${moisLabel(next).split(" ")[0]}`}
+          </button>
+        )}
+        <HelpTip title="Dispos du mois">
+          <p>Une liste « Dispos de {moisLabel(cur)} » pour les agences : les créateurs actifs, leurs chiffres à jour, un prix agence indicatif (barème de la page Tarifs, seulement quand les vues sont mesurées) et les catégories prises en exclusivité, sans nommer la marque.</p>
+          <p>Une seule liste par mois : la regénérer la met à jour, le lien ne change pas. Elle se fait aussi toute seule le 1er du mois.</p>
+        </HelpTip>
+      </div>
+      {notes.length > 0 && (
+        <div className="rounded-[14px] bg-background/50 px-3 py-2 text-[12px] text-muted-foreground">
+          <div className="mb-1 font-semibold text-foreground">À vérifier avant l'envoi</div>
+          <ul className="flex flex-col gap-0.5">
+            {notes.map((n) => <li key={n}>{n}</li>)}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

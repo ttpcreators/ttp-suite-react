@@ -3,7 +3,7 @@
 // Lecture : point du jour, recherche, roster, fiche créateur, mails, DM Instagram,
 // scouting (créateurs / sportifs), Base créateurs, contacts, pipeline, collabs, planning, tâches,
 // factures et méthode TARIF (fondateurs), briefs. Actions : tâche, rendez-vous, brouillon de mail, contact,
-// échange noté, scouting, étape de collab, résumé de brief. Claude demande l'accord avant chaque action.
+// échange noté, scouting, étape de collab, résumé de brief, dispos du mois. Claude demande l'accord avant chaque action.
 // Accès complet des fondateurs (admin.ts) : lire / créer / modifier / supprimer (Corbeille) partout,
 // réglages, factures, envoi de mails et de DM Instagram.
 // Jamais exposés : coffre des mots de passe, IBAN, jetons de connexion.
@@ -39,6 +39,8 @@ import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
 import { CONTRACT_DRAFTS_KEY, DRAFT_OPTS, choisirCreateur, estRepresentation, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "../_shared/contractDraft.ts";
 import { ligneContrat, texteContrat, trouverContrats } from "../_shared/contractLecture.ts";
 import { cleanUser, construireBase, filtrerBase, ligneBase, type BaseMeta, type BaseRow } from "../_shared/baseCreateurs.ts";
+import { disposTexte, isMois, moisCourant, moisDecale } from "../_shared/disposDuMois.ts";
+import { genererDisposDuMois } from "../_shared/disposDuMoisDb.ts";
 import { REGLES_OFFRE, STRATEGIE_VERSION, strategieTexte } from "../_shared/strategie.ts";
 import { chargerTableau, tableauLundi, tableauTexte } from "../_shared/tableauLundi.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
@@ -2567,6 +2569,38 @@ const sourcing: Tool = {
   },
 };
 
+// Les dispos du mois pour les agences (stratégie de Gianni, 20/11/2026) : crée ou met à jour la
+// liste « Dispos de <mois> » (Base créateurs › Listes) et renvoie son lien public à Alfred.
+const disposDuMoisTool: Tool = {
+  name: "dispos_du_mois",
+  title: "Dispos du mois pour les agences",
+  description:
+    "Crée ou met à jour la sélection « Dispos de <mois> » envoyée aux agences le 1er du mois, et renvoie son LIEN public (ttpcreators.pro/selection/) à mettre dans les messages. Contenu : les créateurs actifs du roster, leurs chiffres à jour par réseau (abonnés, vues médianes ou moyennes mesurées, engagement), un prix agence indicatif HT par format clé (Reel, story, TikTok, pack) calculé avec le barème de la page Tarifs, seulement quand les vues sont mesurées (sinon « prix sur demande », jamais estimé), et les catégories où une exclusivité est en cours, sans jamais nommer la marque. Une seule liste par mois : la relancer la met à jour, le lien ne change pas. Renvoie aussi les points à vérifier avant l'envoi (exclusivités à confirmer, créateurs sans prix) : ne jamais les mettre dans un message à une agence. Aucun message n'est envoyé.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      mois: { type: "string", description: "Mois au format AAAA-MM (ex. 2026-12). Par défaut le mois en cours (heure de Paris)." },
+    },
+    additionalProperties: false,
+  },
+  write: true,
+  run: async (sb, _c, a) => {
+    const now = new Date();
+    const cur = moisCourant(now);
+    const mois = str(a.mois, 7) || cur;
+    if (!isMois(mois)) return fail("Mois attendu au format AAAA-MM, par exemple 2026-12.");
+    if (mois < moisDecale(cur, -1) || mois > moisDecale(cur, 2)) return fail(`Mois hors de portée : de ${moisDecale(cur, -1)} à ${moisDecale(cur, 2)}.`);
+    const r = await genererDisposDuMois(sb, mois, now);
+    if (!r.ok) return fail(r.error);
+    return ok([
+      r.cree ? `Liste « ${r.titre} » créée, lien public actif.` : `Liste « ${r.titre} » mise à jour, même lien qu'avant.`,
+      r.sansDispos ? "⚠ Le SQL 2026-11-22-dispos-du-mois.sql n'est pas encore lancé : la page montre seulement les chiffres Instagram, sans prix ni exclusivités. Le dire à Marc avant d'envoyer le lien." : "",
+      "",
+      disposTexte(r.resultat, r.url),
+    ].filter((x, i) => x || i === 2).join("\n"));
+  },
+};
+
 const baseCreateurs: Tool = {
   name: "base_createurs",
   title: "Base créateurs (façon Kolsquare)",
@@ -2790,7 +2824,7 @@ export const TOOLS: Tool[] = [
   creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief, lireContrat,
-  compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, baseCreateurs, notifications,
+  compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, baseCreateurs, disposDuMoisTool, notifications,
   droitsUsage, noterDroits, postsCreateur, preparerContrat,
   ...ADMIN_TOOLS,
 ];
