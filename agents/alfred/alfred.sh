@@ -91,6 +91,16 @@ fi
 # Les pièces jointes copiées depuis Spark (etat/pieces) aussi : 14 jours.
 [ -d etat/pieces ] && find etat/pieces -type f -mtime +14 -delete
 
+# L'écoute Telegram est-elle vivante ? Elle note l'heure chaque minute dans etat/ecoute-vu. Muette
+# depuis 10 minutes (coupure du 20 novembre 2026) : relancée à neuf par launchd, et noté au journal.
+if [[ "$1" != "--reponse" && "$1" != "--evenements" ]]; then
+  vu=$(cat etat/ecoute-vu 2>/dev/null)
+  if [[ "$vu" == <-> ]] && (( $(date +%s) * 1000 - vu > 600000 )); then
+    echo "$(date) : écoute muette depuis plus de 10 minutes, relancée" >> "$LOG"
+    launchctl kickstart -k "gui/$(id -u)/com.ttp.alfred.ecoute" >> "$LOG" 2>&1
+  fi
+fi
+
 # Rappels arrivés à l'heure : envoyés tels quels, sans réveiller Claude.
 [[ "$1" != "--reponse" ]] && node telegram.mjs rappels >> "$LOG" 2>&1
 
