@@ -263,12 +263,12 @@ async function claudeTwins(token: string, to: string, subject: string, threadId?
  * la même personne et le même objet, il est MIS À JOUR au lieu d'en créer un nouveau, et
  * ses éventuels doublons plus anciens (copies du même brouillon) sont supprimés.
  */
-export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, subject: string, message: string, threadId?: string, html?: string, bcc: string[] = [], from?: SendAs, pieces: Piece[] = []): Promise<{ id: string; replaced: boolean; removed: number }> {
+export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, subject: string, message: string, threadId?: string, html?: string, bcc: string[] = [], from?: SendAs, pieces: Piece[] = [], extraHeaders: string[] = []): Promise<{ id: string; replaced: boolean; removed: number }> {
   const token = await tokenFor(sb, box, "modify");
   // X-TTP-Source : la page Mails de l'app affiche « par Claude » sur ce brouillon.
   // Bcc : copie cachée (un créateur qui suit la prospection faite pour lui) ; Gmail la retire à l'envoi.
   // From : alias d'une créatrice (« Envoyer en tant que » vérifié avant), sinon la boîte.
-  const headers: string[] = [...(from ? [fromHeader(from)] : []), `To: ${clean(to)}`, ...(bcc.length ? [`Bcc: ${clean(bcc.join(", "))}`] : []), `Subject: ${encWord(clean(subject))}`, "X-TTP-Source: claude", "MIME-Version: 1.0"];
+  const headers: string[] = [...(from ? [fromHeader(from)] : []), `To: ${clean(to)}`, ...(bcc.length ? [`Bcc: ${clean(bcc.join(", "))}`] : []), `Subject: ${encWord(clean(subject))}`, "X-TTP-Source: claude", ...extraHeaders.map(clean), "MIME-Version: 1.0"];
   if (threadId) {
     // Réponse : rattachée au dernier message du fil (le fil reste groupé chez la marque).
     const t = await gjson(token, `${GMAIL}/threads/${encodeURIComponent(threadId)}?format=metadata&metadataHeaders=Message-ID&metadataHeaders=References`);
@@ -428,14 +428,26 @@ export async function deleteClaudeDraft(sb: SupabaseClient, box: MailBox, draftI
  * EXACTEMENT tel qu'il est dans Gmail (relu, éventuellement retouché par Marc), puis Gmail le
  * retire des brouillons. Un brouillon écrit à la main n'est jamais envoyé par ici.
  */
-export async function sendDraft(sb: SupabaseClient, box: MailBox, draftId: string, expectFrom?: string): Promise<{ to: string; subject: string; threadId: string; from: string }> {
+/** Un brouillon tel qu'il partira (pour le garde-fou des media kits avant l'envoi). */
+export type BrouillonLu = { from: string; to: string; cc: string; bcc: string; subject: string; text: string; files: string[]; reponse: boolean; kit: string };
+
+export async function sendDraft(sb: SupabaseClient, box: MailBox, draftId: string, expectFrom?: string, verifier?: (b: BrouillonLu) => Promise<string | null>): Promise<{ to: string; subject: string; threadId: string; from: string }> {
   const token = await tokenFor(sb, box, "modify");
-  const d = (await gjson(token, `${GMAIL}/drafts/${encodeURIComponent(draftId)}?format=metadata`)) as DraftRes;
+  const d = (await gjson(token, `${GMAIL}/drafts/${encodeURIComponent(draftId)}?format=${verifier ? "full" : "metadata"}`)) as DraftRes;
   const h = d.message?.payload?.headers;
   if (header(h, "x-ttp-source").toLowerCase() !== "claude") throw new Error("not_claude");
   // Alias demandé : le brouillon doit déjà partir de cette adresse (rien n'est réécrit à l'envoi).
   const from = addressOf(header(h, "from")) || boxAddress(box);
   if (expectFrom && from !== expectFrom.trim().toLowerCase()) throw new Error(`from_mismatch: ${from}`);
+  // Media kit faux (ou joint sans vérification) : rien ne part (_shared/mediakitControle.ts).
+  if (verifier) {
+    const { text, files } = textOf(d.message?.payload);
+    const refus = await verifier({
+      from, to: header(h, "to"), cc: header(h, "cc"), bcc: header(h, "bcc"), subject: header(h, "subject"), text, files,
+      reponse: !!header(h, "in-reply-to"), kit: header(h, "x-ttp-kit"),
+    });
+    if (refus) throw new Error(`kit_refuse: ${refus}`);
+  }
   const res = await gjson(token, `${GMAIL}/drafts/send`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

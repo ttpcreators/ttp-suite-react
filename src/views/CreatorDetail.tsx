@@ -71,6 +71,9 @@ import { YouTubeCard } from "@/components/YouTubeCard";
 import type { TtCreator } from "@/lib/tiktok";
 import type { YtCreator } from "@/lib/youtube";
 import { fmtAgo, type IgCreator } from "@/lib/instagram";
+import { KitCheckAlert, useMesures } from "@/components/kit-check";
+import { mettreChiffresReels } from "@/lib/mediakitControleDb";
+import { controlerKit } from "../../supabase/functions/_shared/mediakitControle.ts";
 
 type Creator = {
   id: string;
@@ -230,6 +233,24 @@ export function CreatorDetail({
   const [ctType, setCtType] = useState("représentation");
 
   const live = useLiveKey();
+  // Chiffres du media kit comparés aux chiffres réels (« Chiffres à mettre à jour »).
+  const mesures = useMesures();
+  const kitControle = c?.mediakit ? controlerKit({ name: c.name, mediakit: c.mediakit, ig: c.ig, tt: c.tt, yt: c.yt }, mesures) : null;
+  const [kitBusy, setKitBusy] = useState(false);
+  const updateKit = async () => {
+    if (!c?.id || kitBusy) return;
+    setKitBusy(true);
+    try {
+      const r = await mettreChiffresReels(c.id, c.name);
+      if (!r.ok) return toast(r.error);
+      if (!r.changements.length) return toast("Media kit déjà à jour");
+      const { data } = await supabase.from("creators").select("mediakit").eq("id", c.id).maybeSingle();
+      if (data) setC((prev) => (prev && prev.id === c.id ? { ...prev, mediakit: (data as Pick<Creator, "mediakit">).mediakit } : prev));
+      toast("Media kit mis à jour ✓");
+    } finally {
+      setKitBusy(false);
+    }
+  };
   // Lignes des factures (blob) : le CA encaissé s'affiche en HORS TAXES (choix de Marc, 2026-10-25).
   const { data: invDetails } = useAppState<Record<string, InvoiceDetailLike>>((s: AppState) => (s["invoiceDetails"] as Record<string, InvoiceDetailLike>) ?? {});
   const { data: deadlinesRemote } = useAppState<CtDeadline[]>((s: AppState) => (s["contractDeadlines"] as CtDeadline[]) ?? []);
@@ -1082,6 +1103,7 @@ export function CreatorDetail({
           </div>
         </>
       )}
+      {kitControle && <KitCheckAlert controle={kitControle} onUpdate={updateKit} busy={kitBusy} className="mb-4" />}
       <div className={cn("mb-4 grid gap-px overflow-hidden rounded-2xl border border-border bg-border", founder ? "grid-cols-2 md:grid-cols-4" : "grid-cols-3", iosPhone && "hidden")}>
         {stat(
           "Abonnés",
