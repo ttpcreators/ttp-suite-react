@@ -354,3 +354,48 @@ export function tarifCopyText(r: TarifResult, who: string, eur: (n: number) => s
   out.push("", `Répartition de la cible : créateur ${v(extra.split.creator)}, agence ${v(extra.split.agency)} (commission ${extra.split.pct} %)`);
   return out.join("\n");
 }
+
+// ── Devis en 3 options (stratégie du 20/11/2026 : « jamais le prix en premier : on demande
+//    le budget, puis on propose 3 options » ; « on vend des packs » ; « toujours une option
+//    sur 3 mois ») ─────────────────────────────────────────────────────────────────────────
+
+export type OptionDevis = { titre: string; resume: string; result: TarifResult };
+
+/** Le pack : la demande, plus une séquence de stories Instagram et un TikTok s'ils manquent. */
+export const PACK_EN_PLUS = ["instagram.story", "tiktok.video"];
+
+/**
+ * Les 3 options d'un devis, toutes calculées par la méthode TARIF :
+ *   1. Essentiel : la demande telle quelle ;
+ *   2. Pack : la demande + une séquence de stories + un TikTok (seulement les formats dont
+ *      on connaît les vues : rien n'est estimé) ;
+ *   3. Ambassadrice 3 mois : le pack trois fois, avec la remise partenariat (volume écrit).
+ * Une option sans prix (vues manquantes) ou identique à la précédente est retirée.
+ */
+export function troisOptions(
+  deal: TarifDeal,
+  g: TarifGrid,
+  creatorFloor: number,
+  ajout: (key: string) => TarifLineIn | null,
+): OptionDevis[] {
+  const lignes = (ls: TarifLineIn[]) => ls.map((l) => `${l.qty > 1 ? `${l.qty} × ` : ""}${l.label}`).join(", ");
+  const essentiel = deal.lines;
+  const pack = [...essentiel];
+  for (const key of PACK_EN_PLUS) {
+    if (pack.some((l) => l.key === key)) continue;
+    const l = ajout(key);
+    if (l && l.views > 0) pack.push({ ...l, qty: 1 });
+  }
+  const troisMois = pack.map((l) => ({ ...l, qty: l.qty * 3 }));
+  const out: OptionDevis[] = [];
+  const push = (titre: string, resume: string, d: TarifDeal) => {
+    const result = priceTarif(d, g, creatorFloor);
+    if (!result.priced || result.target <= 0) return;
+    if (out.length && out[out.length - 1].result.target === result.target) return;
+    out.push({ titre, resume, result });
+  };
+  push("Essentiel", lignes(essentiel), { ...deal, lines: essentiel });
+  push("Pack", lignes(pack), { ...deal, lines: pack });
+  push("Ambassadrice 3 mois", `${lignes(pack)}, chaque mois pendant 3 mois`, { ...deal, lines: troisMois, partnership: true, volumeWritten: true });
+  return out;
+}

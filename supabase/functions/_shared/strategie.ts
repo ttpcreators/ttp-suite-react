@@ -129,6 +129,7 @@ ${REGLES_OFFRE}
 
 ## Le closing : visio sous 7 jours, devis sous 24 h
 - La visio en 5 points : le besoin, le budget, qui décide, notre proposition orale, et un devis envoyé le jour même. Relances à J+2, J+5 et J+10 avec une date limite.
+- Devis : page Tarifs › « 3 options » crée d'un coup trois devis en brouillon (Essentiel, Pack avec stories et TikTok, Ambassadrice 3 mois avec remise partenariat). Un devis passé « Envoyé » dans Facturation entre dans les relances : outil devis_a_relancer.
 - Contacts chauds (novembre) : Golden Influence (Ana, visio et grille fixe) ; Loop Creators (Léna, Luxeol 700 €, signer) ; Teveo (Léna, Justine : contrat 3 mois à 1 000 €/mois) ; Agently (Nutripure 2027, prime d'exclusivité) ; Kosbiotic (ajouter Ana pour janvier) ; Absolution (Cassandra, obtenir le budget) ; Faved (Ana, devis pack) ; Novettino, Holafly (Léna, envoyer la proposition) ; Thomas Sabo, Aubade (Ivana, visio début décembre pour la Saint-Valentin) ; Oraije, Falconeri (Candice, Ana, visio en décembre pour 2027) ; Saucony, CHiQ (Justine et Pierre, relance téléphonique, budget).
 
 ## Le renouvellement
