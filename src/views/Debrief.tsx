@@ -354,13 +354,45 @@ export function Debrief() {
     setFormOpen(true);
   }
 
-  // Crée un débrief pré-rempli à partir d'un brief (marque + créateur).
-  function createFromBrief(b: { brand: string; creator: string | null }) {
+  // La collab la plus récente pour cette marque × ce créateur (bilan prérempli avec ses
+  // posts Instagram, son budget payé et ses livrables). null si aucune.
+  async function findCollab(b: string, cr: string): Promise<(CollabForRecap & { pub: string | null }) | null> {
+    const esc = (x: string) => x.trim().replace(/[\\%_]/g, (m) => `\\${m}`);
+    if (b.trim().length < 2 || !cr.trim()) return null;
+    const { data } = await supabase.from("collabs").select("id, brand, creator, deliverables, cachet, step, created_at, ig, tt, yt")
+      .ilike("brand", esc(b)).ilike("creator", esc(cr)).neq("status", "archivee").order("created_at", { ascending: false }).limit(1);
+    const col = ((data as CollabForRecap[] | null) ?? [])[0];
+    if (!col) return null;
+    const { data: st } = await supabase.from("collab_steps").select("collab_id, step, reached_at").eq("collab_id", col.id).gte("step", 6);
+    return { ...col, pub: publicationDate(col, (st as StepRow[] | null) ?? []) };
+  }
+
+  // Crée un débrief à partir d'un brief (marque + créateur) : prérempli avec la collab
+  // correspondante quand elle existe (audit du 22/11/2026 : « préremplir au maximum »).
+  async function createFromBrief(b: { brand: string; creator: string | null }) {
     resetForm();
     setBrand(b.brand || "");
     setCreator(b.creator || "");
     setFormOpen(true);
+    const col = await findCollab(b.brand || "", b.creator || "").catch(() => null);
+    if (col) void prepareFromCollab(col);
   }
+
+  // Nouveau bilan tapé à la main : dès que la marque et le créateur correspondent à une
+  // collab, on propose de tout remplir avec elle (posts Instagram, budget, livrables).
+  const [collabMatch, setCollabMatch] = useState<(CollabForRecap & { pub: string | null }) | null>(null);
+  useEffect(() => {
+    if (!formOpen || editing || fromCollab) return setCollabMatch(null);
+    let alive = true;
+    const t = window.setTimeout(() => {
+      void findCollab(brand, creator).then((c) => alive && setCollabMatch(c)).catch(() => {});
+    }, 500);
+    return () => {
+      alive = false;
+      window.clearTimeout(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formOpen, editing, fromCollab, brand, creator]);
 
   function startEdit(d: Debrief) {
     setEditing(d);
@@ -686,6 +718,16 @@ export function Debrief() {
           creators={creators}
           className="sm:min-w-[170px] flex-1"
         />
+        {collabMatch && !fromCollab && (
+          <div className="flex min-w-full flex-wrap items-center justify-between gap-2 rounded-xl bg-field px-3 py-2 text-[13px]">
+            <span className="text-foreground">
+              Collab trouvée : {collabMatch.brand} × {collabMatch.creator}. Ses posts Instagram, son budget et ses livrables peuvent remplir le bilan.
+            </span>
+            <button type="button" onClick={() => void prepareFromCollab(collabMatch)} className="h-8 rounded-full bg-primary px-3 text-[12px] font-semibold text-primary-foreground hover:opacity-90">
+              Tout remplir
+            </button>
+          </div>
+        )}
         <TextField
           label="Période"
           value={period}
@@ -808,7 +850,7 @@ export function Debrief() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => createFromBrief(b)}
+                  onClick={() => void createFromBrief(b)}
                   className="shrink-0 rounded-full bg-primary px-3 py-1.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
                 >
                   Créer le débrief
