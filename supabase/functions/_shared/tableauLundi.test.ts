@@ -91,6 +91,19 @@ describe("tableauLundi", () => {
     expect(tableauLundi({ ...d, quotes: null }, NOW).maintenant.marc.devisEnvoyes).toBeNull();
   });
 
+  it("incidents de conformité : semaine et mois (date du post), non mesurés sans journal", () => {
+    const avec = tableauLundi({ ...d, incidents: [
+      { at: "2026-11-18T10:00:00.000Z" }, { at: "2026-11-17T10:00:00.000Z" }, { at: "2026-11-10T10:00:00.000Z" }, { at: "2026-10-30T10:00:00.000Z" },
+    ] }, NOW);
+    expect(avec.maintenant.incidentsConformite).toBe(2);
+    expect(avec.precedente.incidentsConformite).toBe(1);
+    expect(avec.mois.incidentsConformite).toBe(3);
+    expect(tableauTexte(avec)).toMatch(/incidents de conformité 3 \(cible : 0\)/);
+    expect(tableauTexte(avec)).not.toMatch(/Non mesurés ici :[^\n]*conformité/);
+    expect(t.mois.incidentsConformite).toBeNull();
+    expect(tableauLundi({ ...d, incidents: [] }, NOW).mois.incidentsConformite).toBe(0);
+  });
+
   it("texte pour Alfred", () => {
     const s = tableauTexte(t);
     expect(s).toMatch(/Mails 1 \/ 145/);
