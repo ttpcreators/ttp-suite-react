@@ -20,6 +20,7 @@ import {
   INVOICE_STATUSES, TABLES, addressList, blockedSetting, defaultFranchise, euro2, invoiceParty, lockedInvoiceChange, invoiceTotals, mailHtml, nextInvoiceRef, nextQuoteRef, pct, readableRow, writableFields, type InvoiceLine,
 } from "../_shared/mcpAdmin.ts";
 import { eurRateOf } from "../_shared/reversements.ts";
+import { estUuid, plageUuid } from "../_shared/idCourt.ts";
 import { listSendAs, parseMailBox, resolveSender, sendDraft, sendMail, type MailBox } from "./gmail.ts";
 import { LIEN_TTL_MS, PROJECT_URL, creatorBoxReady, listCreatorBoxes, normEmail } from "../_shared/creatorBox.ts";
 import { genNonce, signState } from "../_shared/state.ts";
@@ -76,7 +77,10 @@ const lireDonnees: AdminTool = {
     if ("error" in t) return fail(t.error);
     const rule = TABLES[t.table];
     let q = sb.from(t.table).select("*");
-    if (str(a.id)) q = q.eq(keyOf(t.table), str(a.id));
+    if (str(a.id)) {
+      const p = keyOf(t.table) === "id" && !estUuid(str(a.id)) ? plageUuid(str(a.id)) : null;
+      q = p ? q.gte("id", p.de).lte("id", p.a) : q.eq(keyOf(t.table), str(a.id));
+    }
     const s = str(a.recherche, 120);
     if (s && rule.search.length) q = q.or(rule.search.map((c) => `${c}.ilike.${JSON.stringify(like(s))}`).join(","));
     for (const [k, v] of Object.entries(obj(a.filtres) ?? {})) {
@@ -145,7 +149,15 @@ const modifierElement: AdminTool = {
     if ("error" in t) return fail(t.error);
     const rule = TABLES[t.table];
     const key = keyOf(t.table);
-    const id = str(a.id, 200);
+    let id = str(a.id, 200);
+    // Le début d'un id (8 caractères, comme dans les boutons d'Alfred) : on retrouve l'id complet.
+    if (key === "id" && !estUuid(id) && plageUuid(id)) {
+      const p = plageUuid(id)!;
+      const { data: trouves } = await sb.from(t.table).select("id").gte("id", p.de).lte("id", p.a).limit(2);
+      const l = (trouves as { id: string }[] | null) ?? [];
+      if (l.length !== 1) return fail(l.length ? `Plusieurs éléments commencent par ${id} : donne l'id complet.` : `${rule.label} introuvable (${id}).`);
+      id = l[0].id;
+    }
     const { ok: fields, refused } = writableFields(t.table, obj(a.champs) ?? {});
     if (!Object.keys(fields).length) return fail(`Aucun champ modifiable${refused.length ? ` (refusés : ${refused.join(", ")})` : ""}.`);
     const { data: before, error: e1 } = await sb.from(t.table).select("*").eq(key, id).maybeSingle();

@@ -31,6 +31,7 @@ import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCart
 import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
 import { ciblesEchange, requeteEchange, texteEchanges } from "../_shared/dejaEchange.ts";
 import { cleDuCreateur, dateVersement, versementEnDouble } from "../_shared/versement.ts";
+import { estUuid, plageUuid } from "../_shared/idCourt.ts";
 import { nomPropre, problemePieces, typeDuNom, type Piece } from "../_shared/piecesJointes.ts";
 import { CATEGORIES_MODELES, objectifsDuMois, problemeModele, type Objectif } from "../_shared/alfredOutils.ts";
 import { CREE_PAR_CLAUDE, preparerBrouillonPost } from "../_shared/igDraft.ts";
@@ -1201,7 +1202,14 @@ const cocherTache: Tool = {
     const key = str(a.tache, 200);
     if (!key) return fail("Indique la tâche (id ou titre).");
     const done = a.fait !== false;
-    let { data, error } = await sb.from("todos").select("id, text, done").eq("id", key).limit(1);
+    // Un id complet, ou son début (Alfred met 8 caractères dans ses boutons Telegram).
+    const plage = estUuid(key) ? null : plageUuid(key);
+    let { data, error } = estUuid(key)
+      ? await sb.from("todos").select("id, text, done").eq("id", key).limit(1)
+      : plage
+        ? await sb.from("todos").select("id, text, done").gte("id", plage.de).lte("id", plage.a).limit(2)
+        : { data: [] as Json[], error: null };
+    if (!error && plage && ((data as Json[] | null)?.length ?? 0) > 1) return fail(`Plusieurs tâches commencent par ${key} : donne l'id complet (outil taches).`);
     if (error || !(data as Json[] | null)?.length) {
       ({ data, error } = await sb.from("todos").select("id, text, done").ilike("text", key.replace(/[%_\\]/g, (c) => `\\${c}`)).eq("done", !done).limit(5));
     }
