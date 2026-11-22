@@ -251,7 +251,7 @@ fonction avec `Authorization: Bearer <CRON_SECRET>`.
 |---|---|---|---|---|---|
 | `ig-avatar` | Profils Instagram du Scouting | `Vivier.tsx` | oui | rôle agence | |
 | `ig-hashtag` | Posts par hashtag | `HashtagSearch.tsx` | oui | rôle agence | |
-| `ig-sync` | Chiffres Instagram du roster (+ feed des 12 derniers posts, images copiées dans `avatars/feed/`), des collabs, des marques | pg_cron, `instagram.ts`, `ig-callback` | non | CRON_SECRET ou agence | `20 5 * * *` et `30 14 * * *` |
+| `ig-sync` | Chiffres Instagram du roster (+ feed des 12 derniers posts, images copiées dans `avatars/feed/`), des collabs, des marques ; conformité des posts (tâches internes + journal `conformiteIncidents`) | pg_cron, `instagram.ts`, `ig-callback` | non | CRON_SECRET ou agence | `20 5 * * *` et `30 14 * * *` |
 | `ig-connect` / `ig-callback` | Un créateur connecte son Instagram | `instagram.ts` / navigateur | oui / non | créateur ou agence / state signé | |
 | `ig-sourcing` | Sourcing, radar à marques, concurrents | pg_cron, `Sourcing.tsx`, `RivalWatch.tsx` | non | CRON_SECRET ou agence | `40 */2 * * *` |
 | `ig-inbox` | DM du compte de l'agence | pg_cron, `Messages.tsx`, `ig-webhook` | non | CRON_SECRET ou agence | `25 * * * *` |
@@ -298,6 +298,7 @@ hiver : la fonction ne garde que le bon passage. Hors fonction : `ttp-app-state-
 | `tiktok.ts` | TikTok Login Kit | `tt-*` |
 | `youtube.ts`, `youtube-login.ts` | YouTube Data API (quota) et connexion d'un créateur | `yt-*` |
 | `mentions.ts` | Comptes cités dans un post (Meta retire les @) | `ig-sync`, `ig-sourcing` |
+| `conformite.ts` | Conformité des posts : mention « Collaboration commerciale » manquante, marque concurrente pendant une exclusivité | `ig-sync`, `tableauLundi.ts` |
 | `igFeed.ts` | Feed Instagram d'un créateur (posts, chiffres, chemins d'images) | `ig-sync`, `ig-connect` |
 | `exclusivites.ts` | Exclusivités des créateurs : conflits marque × concurrents, lecture d'un contrat (règles fixes) | app (`useExclusivites.ts`, page Exclusivités, choix d'un créateur, Mails), `ttp-mcp` |
 | `mailTasks.ts` | Demandes d'un mail reçu → tâches (règles fixes FR/EN, échéances, sans IA) | `gmail-poll` (`gmail-poll/tasks.ts`) |

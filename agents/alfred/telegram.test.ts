@@ -1,9 +1,9 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { ecrireSkill, ligneEvenement, messageDemande, reponseDepuis, origineTransfert, texteDuMail, ajouterCommandes, carteDepuis, cleSujet, commandeFixe, doitSonner, enHtml, extraireSujet, graphiqueHtml, ligneRemise, messageMail, aEnvoyerWhatsApp, boutonsLiens, chunks, clavier, commandesDepuis, COMMANDES_DE_BASE, menuDepuis, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
+import { prendreLaPlace, ecrireSkill, ligneEvenement, messageDemande, reponseDepuis, origineTransfert, texteDuMail, ajouterCommandes, carteDepuis, cleSujet, commandeFixe, doitSonner, enHtml, extraireSujet, graphiqueHtml, ligneRemise, messageMail, aEnvoyerWhatsApp, boutonsLiens, chunks, clavier, commandesDepuis, COMMANDES_DE_BASE, menuDepuis, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -465,6 +465,23 @@ describe("raccourcis des créateurs", () => {
     expect(m.text).toContain("📎 Contrat Nova.pdf");
     expect(m.text).not.toContain("Pièces jointes");
     expect(m.text).toContain("Voici le contrat.");
+  });
+
+  it("une seule écoute : l'ancienne encore vivante est arrêtée", () => {
+    const ici = mkdtempSync(join(tmpdir(), "alfred-pid-"));
+    try {
+      mkdirSync(join(ici, "etat"));
+      writeFileSync(join(ici, "etat/ecoute.pid"), "4242");
+      const tues: number[] = [];
+      expect(prendreLaPlace(ici, (pid: number) => tues.push(pid), () => true)).toBe(4242);
+      expect(tues).toEqual([4242]);
+      expect(readFileSync(join(ici, "etat/ecoute.pid"), "utf8")).toBe(String(process.pid));
+      const encore: number[] = [];
+      prendreLaPlace(ici, (pid: number) => encore.push(pid), () => true);
+      expect(encore).toEqual([]);
+    } finally {
+      rmSync(ici, { recursive: true, force: true });
+    }
   });
 });
 

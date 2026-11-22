@@ -43,6 +43,7 @@ import { ligneContrat, texteContrat, trouverContrats } from "../_shared/contract
 import { cleanUser, construireBase, filtrerBase, ligneBase, type BaseMeta, type BaseRow } from "../_shared/baseCreateurs.ts";
 import { REGLES_OFFRE, STRATEGIE_VERSION, strategieTexte } from "../_shared/strategie.ts";
 import { chargerTableau, tableauLundi, tableauTexte } from "../_shared/tableauLundi.ts";
+import { devisARelancer } from "../_shared/devisRelances.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
 type Json = Record<string, unknown>;
@@ -521,11 +522,30 @@ const strategie: Tool = {
   run: async () => ok(strategieTexte(isoDay())),
 };
 
+const devisRelancer: Tool = {
+  name: "devis_a_relancer",
+  title: "Devis à relancer",
+  description:
+    "Les devis envoyés dont une relance est due aujourd'hui (stratégie : relances à J+2, J+5 et J+10 avec une date limite) : référence, marque, créatrice, adresse du client, date d'envoi, relance à faire, date limite (validité du devis) et devis expiré. Pour préparer les relances (brouillons à valider par Marc). Un devis passe « envoyé » dans Facturation → Devis.",
+  inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  founder: true,
+  run: async (sb) => {
+    const st = await appState(sb);
+    const liste = devisARelancer(Array.isArray(st.quotes) ? (st.quotes as Json[]) : [], isoDay());
+    if (!liste.length) return ok("Aucun devis à relancer aujourd'hui.");
+    return ok([
+      `# ${liste.length} devis à relancer`,
+      ...liste.map((d) => `- ${d.ref} · ${d.marque}${d.createur ? ` × ${titleCase(d.createur)}` : ""} · relance ${d.relance} (envoyé le ${frDay(d.envoyeLe)})${d.email ? ` · ${d.email}` : " · adresse du client manquante"}${d.dateLimite ? ` · ${d.expire ? "EXPIRÉ depuis le" : "valable jusqu'au"} ${frDay(d.dateLimite)}` : ""}`),
+      "Chaque relance rappelle la date limite. J+10 : dernière relance, puis reprise au prochain temps fort.",
+    ].join("\n"));
+  },
+};
+
 const tableauLundiTool: Tool = {
   name: "tableau_lundi",
   title: "Tableau de bord du lundi",
   description:
-    "Le tableau de bord du lundi de la stratégie, en deux parties : Gianni (contacts touchés par canal d'après le journal de contact des fiches, taux de réponse, contacts passés à Marc = tâches « Visio : … », créatrices approchées) et Marc (visios faites, devis envoyés, deals signés, montant moyen), pour la semaine dernière et la semaine en cours, puis le mois face aux cibles (montant HT signé, deal moyen, part de Léna, carnet traité, agences actives). À lire pour le point du lundi ; un chiffre « non mesuré » ne s'estime pas.",
+    "Le tableau de bord du lundi de la stratégie, en deux parties : Gianni (contacts touchés par canal d'après le journal de contact des fiches, taux de réponse, contacts passés à Marc = tâches « Visio : … », créatrices approchées) et Marc (visios faites, devis envoyés, deals signés, montant moyen), pour la semaine dernière et la semaine en cours, puis le mois face aux cibles (montant HT signé, deal moyen, part de Léna, carnet traité, agences actives, incidents de conformité relevés par ig-sync : mention « Collaboration commerciale » manquante ou marque concurrente pendant une exclusivité). À lire pour le point du lundi ; un chiffre « non mesuré » ne s'estime pas.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   founder: true,
   run: async (sb) => {
@@ -533,7 +553,7 @@ const tableauLundiTool: Tool = {
     const quotes = Array.isArray(st.quotes) ? (st.quotes as Json[]) : null;
     try {
       const now = new Date();
-      return ok(tableauTexte(tableauLundi(await chargerTableau(sb, now, quotes), now)));
+      return ok(tableauTexte(tableauLundi(await chargerTableau(sb, now, quotes, st.conformiteIncidents), now)));
     } catch (e) {
       return fail(`Tableau illisible : ${(e as Error).message}`);
     }
@@ -2810,7 +2830,7 @@ const lireContrat: Tool = {
 };
 
 export const TOOLS: Tool[] = [
-  pointDuJour, strategie, tableauLundiTool, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
+  pointDuJour, strategie, tableauLundiTool, devisRelancer, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
   creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief, lireContrat,

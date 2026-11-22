@@ -1373,6 +1373,25 @@ async function prendrePouls(env, token, chatId, here, fil) {
   return { demandes: Array.isArray(r.demandes) ? r.demandes : [], evenements: Array.isArray(r.evenements) ? r.evenements : [] };
 }
 
+/**
+ * Une seule écoute à la fois : etat/ecoute.pid garde le numéro de l'écoute en cours ; une autre
+ * encore vivante (restée d'avant une mise à jour) est arrêtée avant de commencer.
+ */
+export function prendreLaPlace(here, tuer = (pid) => process.kill(pid, "SIGTERM"), enVie = vivant) {
+  const f = join(here, "etat/ecoute.pid");
+  const ancien = Number(existsSync(f) ? readFileSync(f, "utf8").trim() : 0);
+  if (ancien && ancien !== process.pid && enVie(ancien)) {
+    try {
+      tuer(ancien);
+      console.error(`${new Date().toISOString()} ancienne écoute ${ancien} arrêtée.`);
+    } catch {
+      // déjà partie
+    }
+  }
+  writeFileSync(f, String(process.pid));
+  return ancien;
+}
+
 async function main() {
   const [mode, arg] = process.argv.slice(2);
   const here = fileURLToPath(new URL(".", import.meta.url));
@@ -1644,12 +1663,31 @@ async function main() {
     // Pendant un passage, l'écoute attend : un signe de vie par minute, pour que l'app ne le croie pas tombé.
     const vivant = () => pont(env, { action: "vivant" });
     const fichierEv = join(here, "etat/evenements.txt");
+    // Stabilité (coupure du 20 novembre 2026, 4 h à 10 h, après la mise à jour de nuit) :
+    // 1. une seule écoute à la fois : deux écoutes qui lisent Telegram en même temps se font
+    //    refuser toutes les deux (erreur 409), et plus rien ne passe ;
+    prendreLaPlace(here);
+    // 2. le signe de vie part chaque minute, que Telegram réponde ou non (avant, il attendait une
+    //    lecture réussie de Telegram, et se taisait alors que l'iMac était allumé) ;
+    // 3. Telegram en échec depuis 10 minutes : l'écoute s'arrête, launchd la relance à neuf (30 s).
+    let telegramOkLe = Date.now();
+    const coeurPermanent = setInterval(() => {
+      writeFileSync(join(here, "etat/ecoute-vu"), String(Date.now()));
+      vivant().catch(() => {});
+      if (Date.now() - telegramOkLe > 10 * 60_000) {
+        console.error(`${new Date().toISOString()} Telegram en échec depuis 10 min : l'écoute redémarre.`);
+        clearInterval(coeurPermanent);
+        process.exit(1);
+      }
+    }, 60_000);
+    writeFileSync(join(here, "etat/ecoute-vu"), String(Date.now()));
     for (;;) {
       let n = 0;
       let recus = [];
       try {
         recus = await ranger(dernierPouls ? 45 : 0);
         n = recus.length;
+        telegramOkLe = Date.now();
       } catch (e) {
         console.error(`${new Date().toISOString()} ${e.message}`);
         await sleep(e.code === 409 ? 30_000 : 5_000);

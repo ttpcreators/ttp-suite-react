@@ -43,6 +43,23 @@ mkdir -p "$SRC"
 rsync -a --delete --exclude "*.test.ts" "$neuf/" "$SRC/"
 if ALFRED_MAJ=1 zsh "$SRC/installer.sh" >> "$LOG" 2>&1; then
   echo "$sha" > "$DEST/etat/version-programme"
+  # L'écoute doit repartir (coupure du 20 novembre 2026 : muette de 4 h à 10 h après une mise à
+  # jour). Elle note l'heure dans etat/ecoute-vu dès son démarrage : 2 minutes sans signe, elle est
+  # relancée à neuf, et Marc est prévenu si elle ne repart toujours pas.
+  avant=$(( $(date +%s) * 1000 ))
+  repartie=0
+  for i in {1..24}; do
+    sleep 5
+    vu=$(cat "$DEST/etat/ecoute-vu" 2>/dev/null)
+    [[ "$vu" == <-> ]] && (( vu >= avant )) && { repartie=1; break; }
+  done
+  if (( ! repartie )); then
+    note "écoute pas repartie après l'installation : relance"
+    launchctl kickstart -k "gui/$(id -u)/com.ttp.alfred.ecoute" >> "$LOG" 2>&1
+    sleep 60
+    vu=$(cat "$DEST/etat/ecoute-vu" 2>/dev/null)
+    [[ "$vu" == <-> ]] && (( vu >= avant )) || (cd "$DEST" && node telegram.mjs texte "Après ma mise à jour de cette nuit, mon écoute ne repart pas. Sur l'iMac : Terminal, puis launchctl kickstart -k gui/\$(id -u)/com.ttp.alfred.ecoute" >> "$LOG" 2>&1)
+  fi
   # Le menu « / » de Telegram (commandes et raccourcis) remis à jour.
   (cd "$DEST" && node telegram.mjs raccourcis >> "$LOG" 2>&1)
   (cd "$DEST" && node telegram.mjs clavier >> "$LOG" 2>&1)

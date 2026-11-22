@@ -15,6 +15,11 @@
 //      enregistrements, partages, vues si elle a connecté son compte).
 //   3. Marques (contacts avec un @Instagram) : abonnés, rythme, dernier post →
 //      contacts.ig (une fois par semaine, 20 marques par passage).
+//   4. Conformité (passage complet) : les posts lus à l'étape 1 passent la règle de
+//      _shared/conformite.ts (mention « Collaboration commerciale » manquante, marque
+//      concurrente pendant une exclusivité). Chaque nouvel incident (une fois par post et
+//      par type) devient une tâche interne de priorité haute et entre dans le journal
+//      `conformiteIncidents` du blob agence (compté par le tableau du lundi).
 //
 // Entrée (POST JSON) : {} = tout (cron quotidien) ; { scope: "creator" |
 // "collab" | "contact", id } = une seule fiche (bouton « Actualiser » de l'app),
@@ -29,6 +34,9 @@ import { accountTotals, audience, freshToken, loginReady, ownMediaImages, postIn
 import { buildFeed, feedDir, feedThumbPath, missingThumbs, staleThumbs, type FeedPost, type PostStats } from "../_shared/igFeed.ts";
 import { brandMatcher } from "../_shared/collabPosts.ts";
 import { isMain, markStatsMonth, recordAutoMeasure } from "../_shared/autoStats.ts";
+import { readAppState } from "../_shared/appState.ts";
+import { readExclusivites } from "../_shared/exclusivites.ts";
+import { incidentsConformite, journalEntry, journalStale, readJournal, tacheBloc, tacheTitre, JOURNAL_KEY, type Incident, type JournalEntry, type MarqueConnue } from "../_shared/conformite.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 // Motif ilike EXACT : « _ » et « % » d'un nom ne servent pas de jokers.
@@ -76,6 +84,8 @@ type Ctx = {
   profiles: Map<string, Promise<IgResult>>;
   accounts: Map<string, IgAccount>;
   brandHandles: Map<string, string[]>;
+  /** Posts lus à l'instant, par créatrice (id) : pour la conformité. */
+  media: Map<string, IgPost[]>;
 };
 const inBudget = (ctx: Ctx) => !ctx.stop && Date.now() - ctx.t0 < 110_000; // marge sous la limite de 150 s
 
@@ -168,6 +178,7 @@ async function syncCreator(ctx: Ctx, c: CreatorRow): Promise<Json> {
     else {
       const p = r.profile;
       media = p.media;
+      ctx.media.set(c.id, p.media);
       const last12 = p.media.slice(0, 12);
       next = {
         ...prev, at: now, ok: now, why: null,
@@ -347,6 +358,91 @@ async function syncContact(ctx: Ctx, ct: ContactRow): Promise<Json> {
   return next;
 }
 
+// ── 4. Conformité : mention manquante, conflit d'exclusivité ─────────────────
+// Règle dans _shared/conformite.ts. Tâche INTERNE (sans créateur, comme « Tâche agence » de
+// la to-do) : une seule tâche ouverte par créatrice, marque et type ; un nouveau post fautif
+// s'ajoute à sa description. Journal : clé `conformiteIncidents` du blob (id = post:type).
+const sansColonne = (msg: string) => /creators|attachments/i.test(msg);
+const shortDay = (iso: string) => new Date(iso).toLocaleDateString("fr-FR", { timeZone: "Europe/Paris", day: "numeric", month: "short" });
+
+async function writeTodo(sb: SupabaseClient, titre: string, list: Incident[]): Promise<boolean> {
+  const { data: open } = await sb.from("todos").select("id, descr").eq("text", titre).eq("done", false).limit(1);
+  const cur = ((open as { id: string; descr: string | null }[] | null) ?? [])[0];
+  if (cur) {
+    const add = list.filter((i) => !(cur.descr ?? "").includes(i.url)).map(tacheBloc);
+    if (!add.length) return true;
+    const { error } = await sb.from("todos").update({ descr: [cur.descr ?? "", ...add].filter(Boolean).join("\n\n") }).eq("id", cur.id);
+    if (error) console.error("ig-sync conformité tâche", error.message);
+    return !error;
+  }
+  const { data: top } = await sb.from("todos").select("sort_order").order("sort_order", { ascending: true }).limit(1);
+  const row: Record<string, unknown> = {
+    text: titre,
+    descr: list.map(tacheBloc).join("\n\n"),
+    due: today(),
+    priority: "haute",
+    tag: "AGENCE",
+    creator: null,
+    creators: [],
+    source: "agency",
+    status: "À faire",
+    done: false,
+    sort_order: ((top as { sort_order: number }[] | null)?.[0]?.sort_order ?? 0) - 1,
+    attachments: list.map((i) => ({ name: `Post du ${shortDay(i.at)}`, size: "", path: i.url })),
+  };
+  let { error } = await sb.from("todos").insert(row);
+  if (error && sansColonne(error.message)) {
+    delete row.creators;
+    delete row.attachments;
+    ({ error } = await sb.from("todos").insert(row));
+  }
+  if (error) console.error("ig-sync conformité tâche", error.message);
+  return !error;
+}
+
+async function syncConformite(ctx: Ctx, creators: CreatorRow[]): Promise<{ incidents: number; error?: string }> {
+  const now = new Date();
+  let st: Record<string, unknown>;
+  try {
+    st = await readAppState(ctx.sb); // fail-closed : sans journal lisible, pas de tâche (sinon doublons)
+  } catch (e) {
+    return { incidents: 0, error: (e as Error).message };
+  }
+  const journal = readJournal(st[JOURNAL_KEY]);
+  const exclusivites = readExclusivites(st.exclusivites);
+  const [cols, cts] = await Promise.all([
+    ctx.sb.from("collabs").select("brand, creator, created_at").in("status", ["active", "gagnee"]).gte("created_at", new Date(Date.now() - 365 * DAY).toISOString()),
+    ctx.sb.from("contacts").select("brand, instagram, tag").not("brand", "is", null).limit(5000),
+  ]);
+  if (cols.error || cts.error) return { incidents: 0, error: (cols.error ?? cts.error)?.message };
+  const marques: MarqueConnue[] = ((cts.data as { brand: string; instagram: string | null; tag: string | null }[] | null) ?? [])
+    .map((b) => ({ brand: b.brand, handles: igUser(b.instagram) ? [igUser(b.instagram)] : [], tags: b.tag ? [b.tag] : [] }));
+  const collabs = (cols.data as { brand: string; creator: string | null; created_at: string }[] | null) ?? [];
+
+  const found: Incident[] = [];
+  for (const c of creators) {
+    const media = ctx.media.get(c.id);
+    if (!media?.length) continue;
+    found.push(...incidentsConformite({
+      creator: c.name,
+      posts: media.map((p) => ({ id: p.id, url: p.url, at: p.at, caption: p.caption, product: p.product })),
+      collabs: collabs.filter((x) => sameName(x.creator, c.name)).map((x) => ({ brand: x.brand, since: x.created_at })),
+      exclusivites, marques, now,
+    }));
+  }
+  const fresh = found.filter((i) => !journal[i.id]);
+  const byTitle = new Map<string, Incident[]>();
+  for (const i of fresh) byTitle.set(tacheTitre(i), [...(byTitle.get(tacheTitre(i)) ?? []), i]);
+  const set: Record<string, JournalEntry> = {};
+  for (const [titre, list] of byTitle) {
+    if (await writeTodo(ctx.sb, titre, list)) for (const i of list) set[i.id] = journalEntry(i, now);
+  }
+  // Toujours écrit (même vide) : la clé existe, le tableau du lundi affiche 0 et non « non mesuré ».
+  const { error } = await ctx.sb.rpc("app_state_merge", { p_key: JOURNAL_KEY, p_set: set, p_remove: journalStale(journal, now) });
+  if (error) return { incidents: Object.keys(set).length, error: error.message };
+  return { incidents: Object.keys(set).length };
+}
+
 // ── Chargements communs ──────────────────────────────────────────────────────
 async function loadShared(ctx: Ctx) {
   const [acc, brands] = await Promise.all([
@@ -391,7 +487,7 @@ Deno.serve(async (req: Request) => {
   }
   if (!metaReady()) return res({ error: "meta_non_configure" });
 
-  const ctx: Ctx = { sb, stop: "", t0: Date.now(), profiles: new Map(), accounts: new Map(), brandHandles: new Map() };
+  const ctx: Ctx = { sb, stop: "", t0: Date.now(), profiles: new Map(), accounts: new Map(), brandHandles: new Map(), media: new Map() };
   await loadShared(ctx);
   const id = typeof body.id === "string" ? body.id : "";
 
@@ -431,12 +527,21 @@ Deno.serve(async (req: Request) => {
   const byName = new Map(creators.map((c) => [c.name.trim().toLowerCase(), c]));
   const nCollabs = await each(ctx, (cols as CollabRow[] | null) ?? [], (col) => syncCollab(ctx, col, byName.get((col.creator ?? "").trim().toLowerCase())));
 
+  // Conformité : aucun appel à Meta (les posts sont déjà lus), donc même si le temps manque.
+  let conformite: { incidents: number; error?: string };
+  try {
+    conformite = await syncConformite(ctx, creators);
+  } catch (e) {
+    conformite = { incidents: 0, error: (e as Error).message };
+  }
+  if (conformite.error) console.error("ig-sync conformité", conformite.error);
+
   const { data: cts } = await sb.from("contacts").select("id, brand, instagram, ig").not("instagram", "is", null);
   const brands = ((cts as ContactRow[] | null) ?? []).filter((c) => igUser(c.instagram) && brandStale(c.ig));
   brands.sort((a, b) => age(b.ig?.at) - age(a.ig?.at));
   const nContacts = await each(ctx, brands.slice(0, BRANDS_PER_RUN), (ct) => syncContact(ctx, ct));
 
-  const out = { creators: nCreators, collabs: nCollabs, contacts: nContacts, stopped: ctx.stop || undefined, ms: Date.now() - ctx.t0 };
+  const out = { creators: nCreators, collabs: nCollabs, contacts: nContacts, conformite, stopped: ctx.stop || undefined, ms: Date.now() - ctx.t0 };
   console.log("ig-sync", JSON.stringify(out));
   return res({ ...out, quota: await saveUsage(sb) });
 });
