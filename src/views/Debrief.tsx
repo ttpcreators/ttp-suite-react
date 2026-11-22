@@ -683,11 +683,13 @@ export function Debrief() {
       {list.length > 0 && (() => {
         const sumRevenue = list.reduce((s, d) => s + amountOf(d.revenue), 0);
         const sumBudget = list.reduce((s, d) => s + amountOf(d.budget), 0);
-        const roiStr = sumBudget > 0 ? (sumRevenue / sumBudget).toFixed(1).replace(".", ",") + "×" : "—";
+        // Le CA généré est facultatif (souvent inconnu : la marque ne le partage pas) :
+        // sans CA saisi, pas de « 0,0× le budget » mais « à saisir (facultatif) ».
+        const roiStr = sumBudget > 0 && sumRevenue > 0 ? (sumRevenue / sumBudget).toFixed(1).replace(".", ",") + "×" : "—";
         return (
           <StatsBento phoneStrip
-            primary={{ eyebrow: "CA généré · bilans", value: formatEuro(sumRevenue), caption: `${list.length} campagne${list.length > 1 ? "s" : ""} · budget HT ${formatEuro(sumBudget)}` }}
-            bars={{ label: "CA par campagne", value: `CA : ${roasText(roiStr)}`, series: list.map((d) => amountOf(d.revenue)) }}
+            primary={{ eyebrow: "CA généré · bilans", value: sumRevenue > 0 ? formatEuro(sumRevenue) : "—", caption: `${list.length} campagne${list.length > 1 ? "s" : ""} · budget HT ${formatEuro(sumBudget)}${sumRevenue > 0 ? "" : " · CA facultatif"}` }}
+            bars={{ label: "CA par campagne", value: sumRevenue > 0 ? `CA : ${roasText(roiStr)}` : "CA à saisir (facultatif)", series: list.map((d) => amountOf(d.revenue)) }}
             small={{ value: String(list.length), label: "Campagnes" }}
             accent={{ value: String(needsDebrief.length), label: "À débriefer", icon: Activity }}
           />
@@ -743,7 +745,7 @@ export function Debrief() {
           className="sm:min-w-[120px] flex-1"
         />
         <TextField
-          label="CA généré"
+          label="CA généré (facultatif)"
           value={revenue}
           onChange={setRevenue}
           placeholder="12 000 €"
@@ -899,9 +901,11 @@ export function Debrief() {
                     <div className="mt-0.5 text-[11px] text-faint">{d.period}</div>
                   )}
                 </div>
-                <span className="shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[12px] font-medium text-signaltext">
-                  CA : {roasText(d.roi)}
-                </span>
+                {d.roi && d.roi !== "—" && (
+                  <span className="shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[12px] font-medium text-signaltext">
+                    CA : {roasText(d.roi)}
+                  </span>
+                )}
               </div>
 
               {/* Budget HT → CA */}
@@ -974,9 +978,11 @@ export function Debrief() {
                   </span>
                 </div>
               </div>
-              <span className="hidden shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[12px] font-medium text-signaltext sm:inline">
-                CA : {roasText(d.roi)}
-              </span>
+              {d.roi && d.roi !== "—" && (
+                <span className="hidden shrink-0 whitespace-nowrap rounded-full bg-signalsoft px-2.5 py-1 text-[12px] font-medium text-signaltext sm:inline">
+                  CA : {roasText(d.roi)}
+                </span>
+              )}
               <div className="flex shrink-0 items-center gap-1" onClick={(e) => e.stopPropagation()}>{actions(d)}</div>
             </div>
           ))}
