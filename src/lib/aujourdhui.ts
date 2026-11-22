@@ -2,8 +2,8 @@ import type { StatusTone } from "./statusTone";
 import { overdueInvoices, type RelanceInvoice, type Reminders } from "./relance";
 import { fmtDay, toISODate } from "./dates";
 import { formatEuro, parseAmount } from "./money";
-import { totalsOf, type LineItem } from "./invoice";
-import { DEFAULT_COMMISSION } from "./commission";
+import { invoiceTotals, type InvoiceDetailLike } from "./invoice";
+import { DEFAULT_COMMISSION, rateFor } from "./commission";
 import { titleCase } from "./utils";
 
 /*
@@ -229,19 +229,19 @@ export function handledToday(map: HandledMap, today: string): DoneEntry[] {
 }
 
 // ── Commission : même logique que Facturation / Reversements ─────────────────
-export type InvDetailsLite = { items?: LineItem[]; franchise?: boolean; vatRate?: number; commissionRate?: number };
+export type InvDetailsLite = InvoiceDetailLike & { kind?: string };
 /** Taux : fiche roster d'abord, puis l'ancien blob `creatorCommission`, puis le défaut. */
+// Nom comparé sans casse (« LÉNA PASQUALE » = « Léna Pasquale »), comme Facturation (rateFor).
 export function commissionRateFor(creator: string | null, roster: Record<string, number>, legacy: Record<string, number>): number {
-  if (!creator) return DEFAULT_COMMISSION;
-  return roster[creator] ?? (legacy[creator] != null ? legacy[creator] : DEFAULT_COMMISSION);
+  return rateFor(creator, roster, legacy, DEFAULT_COMMISSION);
 }
 /** Part du créateur d'une facture (HT − commission), comme `finOf` de Facturation. */
+// Même calcul que Facturation (invoiceTotals : devise, seuil 100 €) ; facture de commission :
+// tout revient à l'agence (audit 22 nov. 2026).
 export function creatorShare(amount: string, details: InvDetailsLite | undefined, fallbackRate: number): { reversal: number; commission: number; rate: number } {
-  const rate = details?.commissionRate ?? fallbackRate;
-  const t = details?.items?.length
-    ? totalsOf(details.items, !!details.franchise, details.vatRate ?? 0, rate)
-    : totalsOf([{ id: "x", label: "", qty: 1, unit: parseAmount(amount) }], true, 0, rate);
-  return { reversal: t.reversal, commission: t.commission, rate };
+  const t = invoiceTotals(parseAmount(amount), details, fallbackRate);
+  if (details?.kind === "commission") return { reversal: 0, commission: t.ht, rate: t.rate };
+  return { reversal: t.reversal, commission: t.commission, rate: t.rate };
 }
 
 // ── Construction de la liste ─────────────────────────────────────────────────

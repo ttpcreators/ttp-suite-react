@@ -14,14 +14,27 @@ export const cents = (n: number): number => (Number.isFinite(n) ? Math.round(n *
 const finite = (n: unknown): number => (typeof n === "number" && Number.isFinite(n) ? n : Number(n) || 0);
 const key = (s: unknown) => String(s ?? "").trim().toLowerCase();
 
-/** « 1 440,00 € », « 600 », 600 → nombre (0 si illisible). */
+/** « 1 440,00 € », « 1.500 € », « 600 », 600 → nombre (0 si illisible). Même lecture que
+ *  readNumber de l'app (src/lib/money.ts) : « 1.500 » = 1 500, « 12,5 » = 12,5 (audit 22 nov. 2026). */
 export function amountOf(v: unknown): number {
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
-  let t = String(v ?? "").replace(/[\s  ]/g, "").replace(/[^0-9,.-]/g, "");
-  // « 1.440,00 » : le point sépare les milliers.
-  if (/,\d{1,2}$/.test(t)) t = t.replace(/\./g, "").replace(",", ".");
-  else t = t.replace(/,/g, "");
-  const n = parseFloat(t);
+  let s = String(v ?? "").replace(/[\s  ]/g, "").replace(/[^0-9,.-]/g, "");
+  const lastComma = s.lastIndexOf(",");
+  const lastDot = s.lastIndexOf(".");
+  if (lastComma >= 0 && lastDot >= 0) {
+    // Les deux : le dernier séparateur est la décimale, l'autre les milliers.
+    if (lastComma > lastDot) s = s.replace(/\./g, "").replace(",", ".");
+    else s = s.replace(/,/g, "");
+  } else if (lastComma >= 0) {
+    // Virgule seule : décimale si unique, sinon milliers (« 1,234,567 »).
+    s = (s.match(/,/g) || []).length > 1 ? s.replace(/,/g, "") : s.replace(",", ".");
+  } else if (lastDot >= 0) {
+    // Point seul : milliers si plusieurs points ou « x.000 », sinon décimale.
+    const dots = (s.match(/\./g) || []).length;
+    const intPart = s.slice(0, s.indexOf(".")).replace("-", "");
+    if (dots > 1 || (/^\d+\.\d{3}$/.test(s.replace("-", "")) && intPart !== "0")) s = s.replace(/\./g, "");
+  }
+  const n = parseFloat(s);
   return Number.isFinite(n) ? n : 0;
 }
 

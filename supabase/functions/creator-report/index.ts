@@ -16,6 +16,7 @@
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 import { readAppState } from "../_shared/appState.ts";
+import { cashModeFor } from "../_shared/reversements.ts";
 
 type Json = Record<string, unknown>;
 const lc = (s: unknown) => String(s ?? "").trim().toLowerCase();
@@ -54,7 +55,7 @@ Deno.serve(async (req: Request) => {
   const [cr, inv, col, gif] = await Promise.all([
     sb.from("creators").select("name,commission,ig,tt,yt").ilike("name", pat).limit(1).maybeSingle(),
     money
-      ? sb.from("invoices").select("id,ref,party,amount,date,status,created_at").ilike("creator", pat)
+      ? sb.from("invoices").select("id,ref,party,amount,date,status,created_at,collab_id").ilike("creator", pat)
       : Promise.resolve({ data: [], error: null }),
     sb.from("collabs").select("id,brand,deliverables,cachet,step,status,created_at").ilike("creator", pat),
     sb.from("gifting").select("brand,product,value,received_on,created_at").ilike("creator", pat),
@@ -76,13 +77,19 @@ Deno.serve(async (req: Request) => {
     return jsonRes({ error: "lecture impossible" }, 500);
   }
   // Détails des SEULES factures du créateur, réduits aux champs utiles au calcul.
-  const invoices = (inv.data ?? []) as { id: string }[];
+  const invoices = (inv.data ?? []) as { id: string; collab_id?: string | null }[];
   const allDetails = (state.invoiceDetails ?? {}) as Record<string, Json>;
   const details: Record<string, Json> = {};
   for (const i of invoices) {
     const d = allDetails[i.id];
     if (d) details[i.id] = { items: d.items, franchise: d.franchise, vatRate: d.vatRate, commissionRate: d.commissionRate, issueDate: d.issueDate, currency: d.currency, fxRate: d.fxRate, onBehalf: d.onBehalf };
   }
+  // Factures sans reversement, même règle que la page Reversements (src/lib/compta.ts
+  // noPayoutIds) : facture de commission, ou collab où la marque paie le créateur.
+  const modes = (state.collabCashMode ?? {}) as Record<string, string>;
+  const noPayout = invoices
+    .filter((i) => (allDetails[i.id] as Json | undefined)?.kind === "commission" || cashModeFor(i.collab_id, null, modes, {}) === "createur")
+    .map((i) => i.id);
   const payMap = (state.creatorPayouts ?? {}) as Record<string, unknown[]>;
   const payouts = !money ? [] : Object.entries(payMap).filter(([k]) => lc(k) === lc(name)).flatMap(([, v]) => (Array.isArray(v) ? v : []));
   const engagement = (Array.isArray(state.engagementHistory) ? (state.engagementHistory as Json[]) : [])
@@ -106,6 +113,7 @@ Deno.serve(async (req: Request) => {
     },
     invoices,
     details,
+    noPayout,
     payouts,
     collabs,
     steps: steps.data ?? [],
