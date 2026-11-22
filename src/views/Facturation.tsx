@@ -1940,6 +1940,8 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
             const fin = finOf(r);
             const rate = fin.rate;
             const del = async () => {
+              // Seul un brouillon part à la corbeille (dbTrash relit aussi le statut en base).
+              if (r.status !== "brouillon") return toast("Une facture émise ne se supprime pas : passe-la en Annulée");
               if (await dbTrash("invoices", r.id, r.party, formatEuro(parseAmount(r.amount)))) {
                 setRows(invoices.filter((x) => x.id !== r.id));
                 toast("Déplacé dans la corbeille");

@@ -1,4 +1,4 @@
-import { parseAmount } from "./money";
+import { parseAmount, parseAmountStrict } from "./money";
 import { cents, invoiceTotals, PAYOUT_TOLERANCE_EUR, totalsOf, type InvoiceDetailLike } from "./invoice";
 import { ACTIVITIES, MICRO_CEILING, VAT_FRANCHISE, type Activity } from "./comptaRates";
 
@@ -324,8 +324,13 @@ export function collabTake(c: CollabLite, lines: InvoiceLine[], rate: number, mo
   if (mode === "createur" && comLines.length) commission = cents(comLines.reduce((a, l) => a + l.commission, 0));
   else if (brandLines.length) commission = cents(brandLines.reduce((a, l) => a + l.commission, 0));
   else {
-    estimated = true;
-    commission = totalsOf([{ id: "c", label: "", qty: 1, unit: parseAmount(c.cachet) }], true, 0, rate).commission;
+    // Estimation seulement sur un cachet PROPRE (un seul montant en euros) : « 30 % sur
+    // l'abonnement à 69,99 € » était lu 306 999 €. Sinon, pas d'estimation (0).
+    const cachet = parseAmountStrict(c.cachet);
+    if (cachet !== null && cachet > 0) {
+      estimated = true;
+      commission = totalsOf([{ id: "c", label: "", qty: 1, unit: cachet }], true, 0, rate).commission;
+    } else commission = 0;
   }
   // Cotisations sur ce que l'agence gagne vraiment sur cette collab (sa commission).
   const social = cents((commission * socialRate(s)) / 100);

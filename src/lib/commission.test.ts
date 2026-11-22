@@ -68,6 +68,15 @@ describe("commission du contrat", () => {
     expect(collabRateFor("Ivana", "talent", contracts, {})).toBe(20);
     expect(collabRateFor("Ivana", "autonome", contracts, {})).toBe(0);
   });
+  it("contrat sans `creator` : retrouvé par le nom du talent, sans majuscules ni accents", () => {
+    const rates = contractRatesFrom([
+      { createdAt: "2026-11-10", config: { talentNom: "LÉNA PASQUALE", modeCommission: "uniforme", commUniforme: "15" } },
+      { createdAt: "2026-11-11", config: { modeCommission: "uniforme", commUniforme: "40" } }, // ni creator ni talentNom : ignoré
+    ]);
+    expect(collabRateFor("Léna Pasquale", "agence", rates, {})).toBe(15);
+    expect(collabRateFor("lena pasquale", "talent", rates, {})).toBe(15);
+    expect(Object.keys(rates)).toHaveLength(1);
+  });
   it("reprend la fiche sans contrat", () => {
     expect(collabRateFor("Léna", "agence", contracts, { "Léna": 20 })).toBe(20);
     expect(collabRateFor("Inconnue", "agence", contracts, {})).toBe(DEFAULT_COMMISSION);

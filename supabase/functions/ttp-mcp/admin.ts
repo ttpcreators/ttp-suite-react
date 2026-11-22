@@ -214,6 +214,8 @@ const supprimerElement: AdminTool = {
       await sb.rpc("app_state_list", { p_key: "trashBin", p_upsert: [], p_remove: [entry.id], p_prepend: false });
       return fail(`Suppression refusée : ${e3.message}`);
     }
+    // Brief supprimé : les collabs qui le désignaient ne pointent plus dans le vide (pas de clé étrangère).
+    if (t.table === "briefs") await sb.from("collabs").update({ brief_id: null }).eq("brief_id", id);
     return ok(`✓ ${rule.label} « ${name} » mis à la Corbeille (restaurable 30 jours depuis l'app).`);
   },
 };

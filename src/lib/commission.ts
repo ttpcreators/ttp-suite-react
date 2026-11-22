@@ -1,3 +1,5 @@
+import { foldName } from "../../supabase/functions/_shared/exclusivites.ts";
+
 /**
  * Source UNIQUE du taux de commission agence : le champ `commission` de la fiche
  * créateur (roster). Facturation, Reversements et Aperçu lisent tous ce taux, si
@@ -54,9 +56,13 @@ export const DEAL_ORIGINS: { value: DealOrigin; label: string }[] = [
 
 type ContractRates = { uniform: number | null; agence: number; talent: number; autonome: number };
 
+/** Clé d'un créateur dans les taux de contrat : sans majuscules ni accents (« LÉNA » = « Léna »). */
+export const contractKey = (name: string | null | undefined): string => foldName(name);
+
 /**
  * Taux du DERNIER contrat de représentation de chaque créateur (blob `contractHistory`) :
  * taux unique si le contrat est « uniforme », sinon un taux par origine du deal.
+ * Créateur du contrat : `creator`, sinon le nom du talent saisi dans le contrat (`config.talentNom`).
  */
 export function contractRatesFrom(history: unknown): Record<string, ContractRates> {
   const out: Record<string, ContractRates> = {};
@@ -67,8 +73,8 @@ export function contractRatesFrom(history: unknown): Record<string, ContractRate
   };
   const sorted = [...history].sort((a, b) => String(a?.createdAt ?? "").localeCompare(String(b?.createdAt ?? "")));
   for (const h of sorted) {
-    const name = String(h?.creator ?? "").trim().toLowerCase();
     const c = h?.config;
+    const name = contractKey(String(h?.creator ?? "").trim() || String(c?.talentNom ?? ""));
     if (!name || !c) continue;
     const uniform = c.modeCommission === "uniforme" ? n(c.commUniforme, DEFAULT_COMMISSION) : null;
     out[name] = { uniform, agence: n(c.commApportee, DEFAULT_COMMISSION), talent: n(c.commInitiee, DEFAULT_COMMISSION), autonome: n(c.commAutonome, 0) };
@@ -78,7 +84,7 @@ export function contractRatesFrom(history: unknown): Record<string, ContractRate
 
 /** Taux du contrat pour un deal de cette origine (null : pas de contrat). */
 export function contractRateFor(name: string | null | undefined, origin: DealOrigin, rates: Record<string, ContractRates>): number | null {
-  const r = rates[(name ?? "").trim().toLowerCase()];
+  const r = rates[contractKey(name)];
   if (!r) return null;
   if (origin === "autonome") return r.autonome;
   return r.uniform ?? (origin === "talent" ? r.talent : r.agence);
