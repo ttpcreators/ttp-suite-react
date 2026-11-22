@@ -90,15 +90,22 @@ Deno.serve(async (req: Request) => {
   await db.from("agents").update({ vu_le: maintenant, ...(nouveaux ? { reglages: nouveaux } : {}) }).eq("id", alfred.id);
 
   // Les nouvelles de l'app et les demandes : remises une seule fois.
-  const { data: ev } = await db.from("evenements").select("id, type, cible, detail, lien, auteur, cree_le").is("livre_le", null).order("cree_le").limit(50);
+  // Une lecture refusée n'est plus jamais silencieuse (droits manquants découverts le 22/11) :
+  // l'erreur part dans la réponse, l'iMac la note et la signale.
+  const erreurs: string[] = [];
+  const { data: ev, error: eEv } = await db.from("evenements").select("id, type, cible, detail, lien, auteur, cree_le").is("livre_le", null).order("cree_le").limit(50);
+  if (eEv) erreurs.push(`evenements : ${eEv.message}`);
   const evenements = (ev as Record<string, any>[] | null) ?? [];
   if (evenements.length) await db.from("evenements").update({ livre_le: maintenant }).in("id", evenements.map((e) => e.id));
-  const { data: dm } = await db.from("demandes").select("id, texte, contexte, lien, auteur, cree_le").eq("statut", "nouvelle").order("cree_le").limit(10);
+  const { data: dm, error: eDm } = await db.from("demandes").select("id, texte, contexte, lien, auteur, cree_le").eq("statut", "nouvelle").order("cree_le").limit(10);
+  if (eDm) erreurs.push(`demandes : ${eDm.message}`);
   const demandes = (dm as Record<string, any>[] | null) ?? [];
   if (demandes.length) await db.from("demandes").update({ statut: "recue", recue_le: maintenant }).in("id", demandes.map((d) => d.id));
 
   // Les skills privées (hooks-viraux, structure-script, conseil) : seulement si elles ont changé.
-  const { data: sk } = await db.from("skills_privees").select("nom, fichiers, maj_le").order("nom");
+  const { data: sk, error: eSk } = await db.from("skills_privees").select("nom, fichiers, maj_le").order("nom");
+  if (eSk) erreurs.push(`skills_privees : ${eSk.message}`);
+  if (erreurs.length) console.error(`alfred-pont : ${erreurs.join(" ; ")}`);
   const skills = (sk as { nom: string; fichiers: Record<string, string>; maj_le: string }[] | null) ?? [];
   const skillsVersion = skills.map((x) => `${x.nom}@${x.maj_le}`).join(",");
 
@@ -110,5 +117,6 @@ Deno.serve(async (req: Request) => {
     reglages: reglagesPropres(reglages),
     commandes: cmd.source === "app" ? cmd : null,
     etait_hors_ligne: etaitHorsLigne,
+    ...(erreurs.length ? { erreurs } : {}),
   });
 });

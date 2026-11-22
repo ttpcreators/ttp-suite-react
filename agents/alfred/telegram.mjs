@@ -1350,6 +1350,16 @@ async function prendrePouls(env, token, chatId, here, fil) {
   const skillsVersion = existsSync(fichierSkills) ? readFileSync(fichierSkills, "utf8").trim() : "";
   const r = await pont(env, { action: "pouls", commandes: local, skills_version: skillsVersion });
   if (!r) return { demandes: [], evenements: [] };
+  // Le serveur n'a pas pu lire une table (droits, panne) : noté, et Marc prévenu une fois par jour.
+  if (Array.isArray(r.erreurs) && r.erreurs.length) {
+    console.error(`${new Date().toISOString()} pont : ${r.erreurs.join(" ; ")}`);
+    const f = join(here, "etat/pont-erreur-signalee");
+    const jour = new Date().toISOString().slice(0, 10);
+    if (!existsSync(f) || readFileSync(f, "utf8").trim() !== jour) {
+      writeFileSync(f, jour);
+      await send(token, chatId, { text: `🔴 Le pont avec l'app répond mal : ${r.erreurs.join(" ; ")}. Les nouvelles de l'app ou tes demandes peuvent ne pas m'arriver. Dis-le à Claude (session Dev).`, md: false }).catch(() => {});
+    }
+  }
   // Les skills faites pour Marc (hors du dépôt public) : écrites dans .claude/skills quand elles changent.
   if (Array.isArray(r.skills) && r.skills.length) {
     let ok = true;
