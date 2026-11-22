@@ -536,7 +536,7 @@ const tableauLundiTool: Tool = {
   name: "tableau_lundi",
   title: "Tableau de bord du lundi",
   description:
-    "Le tableau de bord du lundi de la stratégie, en deux parties : Gianni (contacts touchés par canal d'après le journal de contact des fiches, taux de réponse, contacts passés à Marc = tâches « Visio : … », créatrices approchées) et Marc (visios faites, devis envoyés, deals signés, montant moyen), pour la semaine dernière et la semaine en cours, puis le mois face aux cibles (montant HT signé, deal moyen, part de Léna, carnet traité, agences actives). À lire pour le point du lundi ; un chiffre « non mesuré » ne s'estime pas.",
+    "Le tableau de bord du lundi de la stratégie, en deux parties : Gianni (contacts touchés par canal d'après le journal de contact des fiches, taux de réponse, contacts passés à Marc = tâches « Visio : … », créatrices approchées) et Marc (visios faites, devis envoyés, deals signés, montant moyen), pour la semaine dernière et la semaine en cours, puis le mois face aux cibles (montant HT signé, deal moyen, part de Léna, carnet traité, agences actives, incidents de conformité relevés par ig-sync : mention « Collaboration commerciale » manquante ou marque concurrente pendant une exclusivité). À lire pour le point du lundi ; un chiffre « non mesuré » ne s'estime pas.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   founder: true,
   run: async (sb) => {
@@ -544,7 +544,7 @@ const tableauLundiTool: Tool = {
     const quotes = Array.isArray(st.quotes) ? (st.quotes as Json[]) : null;
     try {
       const now = new Date();
-      return ok(tableauTexte(tableauLundi(await chargerTableau(sb, now, quotes), now)));
+      return ok(tableauTexte(tableauLundi(await chargerTableau(sb, now, quotes, st.conformiteIncidents), now)));
     } catch (e) {
       return fail(`Tableau illisible : ${(e as Error).message}`);
     }

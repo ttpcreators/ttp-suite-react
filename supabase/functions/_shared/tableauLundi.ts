@@ -7,6 +7,8 @@
 //            approchées (Scouting, `creator_pool.last_contacted`).
 //   Marc   : visios faites (planning : calls et réunions passés), devis envoyés (Facturation
 //            → Devis), deals signés (étape « Signature » des collabs) et montant moyen.
+// Incidents de conformité (semaine et mois) : journal `conformiteIncidents` du blob agence,
+// rempli par ig-sync (_shared/conformite.ts), comptés à la date du post.
 // Puis le mois en cours face aux cibles : montant HT signé, deal moyen, part de Léna,
 // créatrices qui signent, carnet traité, agences actives.
 // Lu par la page Objectifs et par l'outil MCP `tableau_lundi` (Alfred). Règles PURES,
@@ -15,6 +17,7 @@
 
 import { CIBLES_MENSUELLES, VOLUMES_SEMAINE } from "./strategie.ts";
 import { amountOf } from "./reversements.ts";
+import { readJournal } from "./conformite.ts";
 
 export type Canal = "email" | "linkedin" | "instagram" | "whatsapp" | "tel" | "autre";
 export const CANAUX: { key: Canal; label: string; cible: number | null }[] = [
@@ -35,6 +38,8 @@ export type TableauIn = {
   /** null : devis illisibles (pas fondateur) → « non mesuré ». */
   quotes: { issueDate?: unknown; createdAt?: unknown; status?: unknown }[] | null;
   signatures: SignatureIn[];
+  /** Journal de conformité (date du post de chaque incident) ; null = pas encore tenu → « non mesuré ». */
+  incidents?: { at?: unknown }[] | null;
 };
 
 export type Semaine = {
@@ -51,6 +56,8 @@ export type Semaine = {
     creatricesApprochees: number;
   };
   marc: { visios: number; devisEnvoyes: number | null; dealsSignes: number; dealsPayes: number; montantHT: number; montantMoyen: number | null };
+  /** Incidents de conformité (posts publiés cette semaine-là) ; null = non mesuré. */
+  incidentsConformite: number | null;
 };
 
 export type Mois = {
@@ -65,6 +72,8 @@ export type Mois = {
   carnetTraite: number;
   carnetTotal: number;
   agencesActives: number;
+  /** Incidents de conformité du mois (posts publiés ce mois-ci) ; null = non mesuré. */
+  incidentsConformite: number | null;
 };
 
 export type Tableau = { maintenant: Semaine; precedente: Semaine; mois: Mois };
@@ -127,6 +136,10 @@ function touchesDe(c: ContactIn): { jour: string; canal: Canal; kind: string }[]
     .filter((x) => x.jour);
 }
 
+/** Incidents de conformité dont le post date de la période ; null sans journal. */
+const incidentsEntre = (d: TableauIn, du: string, au: string): number | null =>
+  d.incidents == null ? null : d.incidents.filter((i) => dans(jourDe(i.at), du, au)).length;
+
 const isLena = (s: unknown) => /^l[ée]na\b/i.test(String(s ?? "").trim());
 
 function semaine(d: TableauIn, du: string, au: string, aujourdhui: string): Semaine {
@@ -169,6 +182,7 @@ function semaine(d: TableauIn, du: string, au: string, aujourdhui: string): Sema
       montantHT: Math.round(total),
       montantMoyen: payes.length ? Math.round(total / payes.length) : null,
     },
+    incidentsConformite: incidentsEntre(d, du, au),
   };
 }
 
@@ -200,6 +214,7 @@ export function tableauLundi(d: TableauIn, now: Date): Tableau {
       carnetTraite: d.contacts.filter((c) => touchesDe(c).length > 0 || !!String(c.last_contacted ?? "").trim()).length,
       carnetTotal: d.contacts.length,
       agencesActives: agences.length,
+      incidentsConformite: incidentsEntre(d, debutMois, auj),
     },
   };
 }
@@ -214,6 +229,7 @@ function texteSemaine(s: Semaine, titre: string): string {
     `## ${titre} (du ${frJour(s.du)} au ${frJour(s.au)})`,
     `Gianni : ${CANAUX.map((c) => `${c.label} ${sur(g.parCanal[c.key].envois, c.cible)}`).join(" · ")} · contacts touchés ${g.contactsTouches} · réponses ${g.reponses}${g.tauxReponse != null ? ` (${g.tauxReponse} %)` : ""} · passés à Marc ${g.passesAMarc} · créatrices approchées ${sur(g.creatricesApprochees, VOLUMES_SEMAINE.approchesCreatrices)}`,
     `Marc : visios ${m.visios} · devis envoyés ${m.devisEnvoyes ?? "non mesuré"} · deals signés ${m.dealsSignes} (dont ${m.dealsPayes} payés) · ${eur(m.montantHT)} HT${m.montantMoyen != null ? ` · moyen ${eur(m.montantMoyen)}` : ""}`,
+    `Conformité : incidents ${s.incidentsConformite ?? "non mesuré"}`,
   ].join("\n");
 }
 
@@ -226,8 +242,8 @@ export function tableauTexte(t: Tableau): string {
     texteSemaine(t.precedente, "Semaine dernière"),
     texteSemaine(t.maintenant, "Cette semaine, à ce jour"),
     `## Mois ${m.mois}`,
-    `Montant HT signé ${eur(m.montantHT)}${m.cible ? ` sur ${eur(m.cible)} (${Math.round((m.montantHT / m.cible) * 100)} %)` : ""} · ${m.deals} deals (${m.dealsPayes} payés) · deal moyen ${m.montantMoyen != null ? eur(m.montantMoyen) : "—"} · part de Léna ${m.partLena != null ? `${m.partLena} %` : "—"} · créatrices qui signent ${m.creatricesQuiSignent} · carnet traité ${m.carnetTraite} / ${m.carnetTotal} · agences actives (réponse sur 30 jours) ${m.agencesActives}`,
-    "Non mesurés ici : contrats mensuels actifs, relations proches suivies sur WhatsApp, recrues signées, incidents de conformité.",
+    `Montant HT signé ${eur(m.montantHT)}${m.cible ? ` sur ${eur(m.cible)} (${Math.round((m.montantHT / m.cible) * 100)} %)` : ""} · ${m.deals} deals (${m.dealsPayes} payés) · deal moyen ${m.montantMoyen != null ? eur(m.montantMoyen) : "—"} · part de Léna ${m.partLena != null ? `${m.partLena} %` : "—"} · créatrices qui signent ${m.creatricesQuiSignent} · carnet traité ${m.carnetTraite} / ${m.carnetTotal} · agences actives (réponse sur 30 jours) ${m.agencesActives} · incidents de conformité ${m.incidentsConformite ?? "non mesuré"} (cible : 0)`,
+    "Non mesurés ici : contrats mensuels actifs, relations proches suivies sur WhatsApp, recrues signées.",
     "Règle : un indicateur en retard deux lundis de suite → changer de méthode, pas seulement de volume.",
   ].join("\n");
 }
@@ -259,9 +275,10 @@ type Sb = { from: (table: string) => any };
 
 /**
  * Lit tout ce qu'il faut (mêmes requêtes dans l'app et le connecteur). `quotes` : la liste
- * des devis du blob finance, ou null si l'appelant ne la voit pas.
+ * des devis du blob finance, ou null si l'appelant ne la voit pas. `journalConformite` : la
+ * clé `conformiteIncidents` du blob (absente avant le premier passage d'ig-sync).
  */
-export async function chargerTableau(sb: Sb, now: Date, quotes: TableauIn["quotes"]): Promise<TableauIn> {
+export async function chargerTableau(sb: Sb, now: Date, quotes: TableauIn["quotes"], journalConformite?: unknown): Promise<TableauIn> {
   const auj = jourParis(now);
   const depuis = [addDays(lundiDe(auj), -7), `${auj.slice(0, 7)}-01`].sort()[0];
   const depuisIso = new Date(depuis + "T00:00:00Z").toISOString();
@@ -290,6 +307,8 @@ export async function chargerTableau(sb: Sb, now: Date, quotes: TableauIn["quote
     todos: todos.data ?? [],
     events: events.data ?? [],
     quotes,
+    // Clé absente du blob (ig-sync pas encore déployé) : « non mesuré », jamais 0 inventé.
+    incidents: journalConformite == null ? null : Object.values(readJournal(journalConformite)).map((e) => ({ at: e.at })),
     signatures: ids.map((id) => {
       const c = byId.get(id) ?? {};
       return { reached_at: dates.get(id), cachet: c.cachet, creator: c.creator, brand: c.brand };
