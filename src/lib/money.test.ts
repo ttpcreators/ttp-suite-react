@@ -118,6 +118,13 @@ describe("parseAmountStrict : une saisie ambiguë ne donne jamais un nombre faux
     expect(parseAmountStrict(formatEuro(42000))).toBe(42000);
     expect(parseAmountStrict(1234.5)).toBe(1234.5);
   });
+  it("cachet en dollars ou texte d'affiliation : null (jamais lu comme des euros)", () => {
+    expect(parseAmountStrict("500 $")).toBeNull();
+    expect(parseAmountStrict("$500")).toBeNull();
+    expect(parseAmountStrict("500 USD")).toBeNull();
+    expect(parseAmountStrict("500 dollars")).toBeNull();
+    expect(parseAmountStrict("Affiliation seule, 30 % sur l'abonnement annuel à 69,99 €")).toBeNull();
+  });
 });
 
 describe("formatEuro : arrondi et valeurs limites", () => {

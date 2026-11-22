@@ -54,9 +54,13 @@ function amountTokens(s: string): number[] {
  * « 800 / 1 000 », « 500 et 300 ») : on ne devine pas le calcul, on ne calcule rien.
  * À utiliser partout où un montant faux partirait chez une marque ou un créateur
  * (budget du bilan, cachets du rapport mensuel). « 3k » → 3000, « 1,5k€ » → 1500.
+ * Montant en dollars → null aussi (pas des euros).
  */
 export function parseAmountStrict(x: unknown): number | null {
   if (typeof x === "number") return Number.isFinite(x) ? x : null;
+  // Montant en dollars (« 500 $ », « 500 USD », « 500 dollars ») : ce n'est pas des euros,
+  // on ne le lit pas comme tel (sans taux de change, aucun calcul).
+  if (/\$|\busd\b|\bdollars?\b/i.test(String(x ?? ""))) return null;
   const tokens = amountTokens(String(x ?? ""));
   if (tokens.length !== 1) return null;
   const n = Math.round(tokens[0] * 100) / 100;

@@ -8,6 +8,8 @@
  * qui donne l'historique « telle étape franchie tel jour ».
  */
 
+import { foldName } from "../../supabase/functions/_shared/exclusivites.ts";
+
 export type PhaseKey = "negociation" | "production" | "mesure" | "facturation" | "cloture";
 
 export type CollabStepDef = {
@@ -56,4 +58,32 @@ export function phaseOf(n: number): PhaseKey {
 /** Une collab est terminée quand elle atteint la dernière étape (bilan). */
 export function isDone(step: number): boolean {
   return step >= STEP_COUNT;
+}
+
+/**
+ * Collab encore « en cours » (travail à faire) : en cours ou déjà gagnée, tant qu'elle
+ * n'a pas atteint la dernière étape. Sert aux totaux, à la prochaine action et à la
+ * détection de stagnation (une collab gagnée à l'étape 5 a encore 6 étapes devant elle).
+ */
+export function isInProgress(status: string | null | undefined, step: number): boolean {
+  return (status === "active" || status === "gagnee") && !isDone(step);
+}
+
+/** Étape « Créateur payé » (versement au créateur, noté dans Reversements). */
+export const PAYOUT_STEP = 10;
+
+/**
+ * Un versement est-il noté pour ce créateur (blob `creatorPayouts`, clés sans tenir compte
+ * des majuscules ni des accents) à partir de cette date (AAAA-MM-JJ, date de la facture de
+ * la collab) ? Sans date : n'importe quel versement compte.
+ */
+export function payoutNotedSince(payouts: unknown, creator: string | null | undefined, sinceISO?: string | null): boolean {
+  const who = foldName(creator);
+  if (!who || !payouts || typeof payouts !== "object") return false;
+  const since = String(sinceISO ?? "").slice(0, 10);
+  for (const [k, list] of Object.entries(payouts as Record<string, unknown>)) {
+    if (foldName(k) !== who || !Array.isArray(list)) continue;
+    if (list.some((p) => (Number((p as { amount?: unknown })?.amount) || 0) > 0 && String((p as { date?: unknown })?.date ?? "").slice(0, 10) >= since)) return true;
+  }
+  return false;
 }

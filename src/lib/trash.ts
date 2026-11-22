@@ -125,6 +125,12 @@ export async function dbTrash(table: string, id: string, label: string, sub?: st
     console.warn(`[trash] read ${table}: ligne introuvable (${id})`);
     return false;
   }
+  // Une facture émise ne se supprime pas (numérotation continue) : elle passe « Annulée ».
+  // Statut relu en base : un écran resté ouvert sur un ancien brouillon ne la supprime pas.
+  if (table === "invoices" && row.status !== "brouillon") {
+    console.warn(`[trash] facture ${String(row.ref ?? id)} émise : suppression refusée (à passer en Annulée)`);
+    return false;
+  }
   // 2) Persister dans la corbeille AVANT de supprimer. Si l'écriture du blob échoue,
   //    on NE supprime PAS (sinon la ligne disparaît sans copie récupérable — perte
   //    silencieuse avec un faux « déplacé dans la corbeille ✓»).
@@ -145,6 +151,12 @@ export async function dbTrash(table: string, id: string, label: string, sub?: st
     // (best-effort) pour éviter un doublon fantôme dans la corbeille.
     await mutateBin({ remove: [entry.id] });
     return false;
+  }
+  // Brief supprimé : les collabs qui le désignaient (collabs.brief_id, sans clé étrangère)
+  // ne pointent plus dans le vide. Best-effort : la restauration refait le lien (collab_id).
+  if (table === "briefs") {
+    const { error: unlinkErr } = await supabase.from("collabs").update({ brief_id: null }).eq("brief_id", id);
+    if (unlinkErr) console.warn(`[trash] brief ${id} : lien des collabs non retiré`, unlinkErr.message);
   }
   pokeTeam(table); // prévient l'équipe agence (« Marc a supprimé… »)
   return true;
@@ -170,6 +182,10 @@ export async function restoreEntry(entry: TrashEntry): Promise<RestoreResult> {
     return "failed";
   }
   const linked = entry.table === "collabs" && entry.links ? await restoreCollabLinks(String(entry.data.id), entry.links).catch(() => false) : true;
+  // Brief restauré : sa collab le retrouve (lien retiré à la suppression), si elle n'en a pas d'autre.
+  if (entry.table === "briefs" && entry.data.collab_id) {
+    await supabase.from("collabs").update({ brief_id: String(entry.data.id) }).eq("id", String(entry.data.collab_id)).is("brief_id", null).then(() => undefined, () => undefined);
+  }
   const removed = await mutateBin({ remove: [entry.id] }).catch(() => false);
   if (!removed) return "partial";
   return linked ? "ok" : "unlinked";

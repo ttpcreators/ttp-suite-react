@@ -39,6 +39,7 @@ import { appliquerChiffres } from "../_shared/mediakitChiffres.ts";
 import { appelsCorrection, controlerKit, piecesKit, texteControle, type Mesure } from "../_shared/mediakitControle.ts";
 import { ENTETE_KIT, verifierKitsDuMail } from "./kitGarde.ts";
 import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
+import { taskEventTitles } from "../_shared/taskEvent.ts";
 import { CONTRACT_DRAFTS_KEY, DRAFT_OPTS, choisirCreateur, estRepresentation, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "../_shared/contractDraft.ts";
 import { ligneContrat, texteContrat, trouverContrats } from "../_shared/contractLecture.ts";
 import { cleanUser, construireBase, filtrerBase, ligneBase, type BaseMeta, type BaseRow } from "../_shared/baseCreateurs.ts";
@@ -1004,8 +1005,8 @@ const pipeline: Tool = {
 const collabs: Tool = {
   name: "collabs",
   title: "Collabs",
-  description: "Collaborations marque × créateur et leur avancement sur 11 étapes (Signature → Bilan). Filtre par créateur, marque ou statut (active, terminee, archivee).",
-  inputSchema: { type: "object", properties: { createur: { type: "string" }, marque: { type: "string" }, statut: { type: "string", enum: ["active", "terminee", "archivee", "toutes"] } }, additionalProperties: false },
+  description: "Collaborations marque × créateur et leur avancement sur 11 étapes (Signature → Bilan). Filtre par créateur, marque ou statut (active, gagnee, perdue, terminee, archivee).",
+  inputSchema: { type: "object", properties: { createur: { type: "string" }, marque: { type: "string" }, statut: { type: "string", enum: ["active", "gagnee", "perdue", "terminee", "archivee", "toutes"] } }, additionalProperties: false },
   run: async (sb, _c, a) => {
     let q = sb.from("collabs").select("id, brand, creator, title, step, status, cachet, deliverables, updated_at").order("updated_at", { ascending: false }).limit(500);
     const st = str(a.statut) || "active";
@@ -1230,7 +1231,23 @@ const cocherTache: Tool = {
     let { error: e } = await sb.from("todos").update(traced).eq("id", String(t.id));
     if (e && /done_at|done_by/i.test(e.message)) ({ error: e } = await sb.from("todos").update({ status, done }).eq("id", String(t.id)));
     if (e) return fail(`Tâche non modifiée : ${e.message}`);
-    return ok(`✓ Tâche ${done ? "cochée" : "rouverte"} : ${t.text}\n${lienApp("todo", String(t.id))}`);
+    // Tâche faite : son évènement d'agenda « Tâche : <texte> » d'aujourd'hui ou à venir est retiré
+    // (titre exact, seul lien fiable ; même tombstone que l'app, la suppression part vers Google).
+    let retires = 0;
+    const titres = done ? taskEventTitles(String(t.text ?? "")) : [];
+    if (titres.length) {
+      const { data: partis } = await sb.from("events").update({ deleted: true, deleted_at: new Date().toISOString(), sync_source: "agence" })
+        .in("title", titres).gte("date", isoDay()).eq("deleted", false).select("id");
+      retires = (partis as Json[] | null)?.length ?? 0;
+      if (retires) {
+        try {
+          triggerSync("cron");
+        } catch {
+          /* la synchro horaire le retirera de Google */
+        }
+      }
+    }
+    return ok(`✓ Tâche ${done ? "cochée" : "rouverte"} : ${t.text}${retires ? `\n(Retiré de l'agenda : ${retires} évènement${retires > 1 ? "s" : ""} « Tâche : … » à venir.)` : ""}\n${lienApp("todo", String(t.id))}`);
   },
 };
 

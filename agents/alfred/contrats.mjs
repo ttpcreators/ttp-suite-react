@@ -1579,9 +1579,11 @@ function amountTokens(s) {
 * « 800 / 1 000 », « 500 et 300 ») : on ne devine pas le calcul, on ne calcule rien.
 * À utiliser partout où un montant faux partirait chez une marque ou un créateur
 * (budget du bilan, cachets du rapport mensuel). « 3k » → 3000, « 1,5k€ » → 1500.
+* Montant en dollars → null aussi (pas des euros).
 */
 function parseAmountStrict(x) {
 	if (typeof x === "number") return Number.isFinite(x) ? x : null;
+	if (/\$|\busd\b|\bdollars?\b/i.test(String(x ?? ""))) return null;
 	const tokens = amountTokens(String(x ?? ""));
 	if (tokens.length !== 1) return null;
 	const n = Math.round(tokens[0] * 100) / 100;

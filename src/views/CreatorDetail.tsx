@@ -358,6 +358,9 @@ export function CreatorDetail({
       /* réseau : les infos sont enregistrées, pas l'exclusivité */
     }
     if (!okEx) toast("Exclusivité non enregistrée, réessaie");
+    // Même valeur dans la colonne creators.exclu (lue par d'autres écrans et le serveur) ;
+    // le blob reste la source de l'écran. Best-effort.
+    else if ((c as { exclu?: boolean | null }).exclu !== exclusive) void dbUpdate("creators", c.id, { exclu: exclusive });
     setC({ ...c, ...patch });
     setEditing(false);
     toast("Infos enregistrées ✓");

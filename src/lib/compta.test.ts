@@ -84,6 +84,11 @@ describe("compta : réglages, seuils, collabs", () => {
     const brandOnly = [invoiceLine(inv("a", "1 000 €", "payee", { collab_id: "c1" }), null, 20, "createur", S)];
     expect(collabTake(c, brandOnly, 20, "createur", S)).toMatchObject({ commission: 200, received: false, commissionToBill: true });
   });
+  it("cachet qui n'est pas un montant propre : aucune estimation", () => {
+    const affil = { id: "c2", brand: "App", creator: "Léa Test", cachet: "Affiliation seule, 30 % sur l'abonnement annuel à 69,99 €" };
+    expect(collabTake(affil, [], 20, "agence", S)).toMatchObject({ commission: 0, estimated: false, social: 0, net: 0 });
+    expect(collabTake({ ...affil, cachet: "800 $" }, [], 20, "agence", S)).toMatchObject({ commission: 0, estimated: false });
+  });
   it("mode d'encaissement : réglage de la collab, sinon agence", () => {
     const mandates = mandatesFrom([
       { creator: "Léa Test", createdAt: "2026-01-01", config: { mandatEncaissement: "true" } },

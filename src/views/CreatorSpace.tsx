@@ -17,6 +17,8 @@ import { notifyAgency, notifyAgencyChange, notifyCreator } from "@/lib/push";
 import { PushCard } from "@/components/ui/push-card";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
+import { writeTodoStatus } from "@/lib/todoStatus";
+import { namePattern, sameName } from "@/lib/nameMatch";
 import { toast } from "@/components/ui/toast";
 import { openLater } from "@/lib/openLater";
 import { consumeIgReturn, igConnect, igDisconnect, type IgCreator } from "@/lib/instagram";
@@ -845,9 +847,10 @@ export function CreatorSpace({
     });
     supabase.from("documents").select("id,name,type,size,path,created_at").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => apply(error) && setDocs((data as Doc[]) ?? []));
     // Plus récente d'abord (« Dernière facture » = invoices[0]) ; `date` est un texte, on trie sur created_at.
-    supabase.from("invoices").select("ref,party,amount,date,status").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => {
+    // Nom sans tenir compte des majuscules ni des accents (« LÉNA PASQUALE » = « Léna Pasquale »).
+    supabase.from("invoices").select("ref,party,amount,date,status,creator").ilike("creator", namePattern(name)).order("created_at", { ascending: false }).then(({ data, error }) => {
       if (alive) markReady("invoices");
-      if (apply(error)) setInvoices((data as Invoice[]) ?? []);
+      if (apply(error)) setInvoices(((data as (Invoice & { creator: string | null })[]) ?? []).filter((i) => sameName(i.creator, name)));
     });
     supabase.functions
       .invoke("creator-report", { body: { creator: name } })
@@ -1633,8 +1636,9 @@ export function CreatorSpace({
   const markTodo = async (td: Todo, next: boolean): Promise<boolean> => {
     // On écrit done ET status ensemble (comme l'agence) → l'affichage statut/kanban
     // reste cohérent des deux côtés (audit : ne pas laisser status désynchronisé).
+    // writeTodoStatus : trace du « Fait » (date, auteur) comme côté agence.
     const status = next ? "Fait" : "À faire";
-    if (await dbUpdate("todos", td.id, { done: next, status })) {
+    if (await writeTodoStatus(td.id, status)) {
       setTodos((prev) => prev.map((x) => (x.id === td.id ? { ...x, done: next, status } : x)));
       toast(next ? t("Fait ✓") : t("À refaire"));
       return true;
@@ -1679,7 +1683,7 @@ export function CreatorSpace({
     const done = status === "Fait";
     const prev = { status: td.status ?? null, done: td.done };
     setTodos((list) => list.map((x) => (x.id === td.id ? { ...x, status, done } : x)));
-    if (!(await dbUpdate("todos", td.id, { status, done }))) {
+    if (!(await writeTodoStatus(td.id, status))) {
       setTodos((list) => list.map((x) => (x.id === td.id ? { ...x, ...prev } : x)));
       toast(t("Ça n'a pas marché. Réessaie dans un instant."));
     }

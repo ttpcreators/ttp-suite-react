@@ -4,7 +4,7 @@ import { useAppState, mergeAppStateKey, formatEuro, type AppState } from "@/lib/
 import { useCreators } from "@/lib/useCreators";
 import { useIsFounder } from "@/lib/useFounder";
 import { useLiveKey } from "@/lib/useLive";
-import { collabRateFor, commissionMap, contractRatesFrom, dealOriginOf, DEAL_ORIGINS, type DealOrigin } from "@/lib/commission";
+import { collabRateFor, commissionMap, contractKey, contractRatesFrom, dealOriginOf, DEAL_ORIGINS, type DealOrigin } from "@/lib/commission";
 import { billingFor, cashModeFor, collabTake, invoiceLine, mandatesFrom, readSettings, socialRate, type Billing, type CashMode, type ComptaDetail, type ComptaInvoice } from "@/lib/compta";
 import { collabIdMissing } from "@/lib/collabLinks";
 import { HelpTip } from "@/components/ui/help-tip";
@@ -54,7 +54,7 @@ export function CollabTakeCard({ collab }: { collab: { id: string; brand: string
   // Taux du contrat signé selon l'origine du deal, sinon celui de la fiche du créateur.
   const origin = localOrigin ?? dealOriginOf(collab.id, app?.collabDealOrigin);
   const contracts = contractRatesFrom(app?.contractHistory);
-  const hasContract = !!contracts[(collab.creator ?? "").trim().toLowerCase()];
+  const hasContract = !!contracts[contractKey(collab.creator)];
   const rate = collabRateFor(collab.creator, origin, contracts, commissionMap(creators), (app?.creatorCommission as Record<string, number>) ?? {});
   const take = useMemo(() => {
     const details = (app?.invoiceDetails as Record<string, ComptaDetail>) ?? {};

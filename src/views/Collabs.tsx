@@ -22,13 +22,13 @@ import { dbInsert, dbUpdate, nextOrder } from "@/lib/db";
 import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import { AddButton, InlineForm, TextField, AutoGrowTextField, Picker } from "@/components/ui/form";
-import { ActionMenu } from "@/components/ui/action-menu";
+import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { useCreators } from "@/lib/useCreators";
 import { useLiveKey } from "@/lib/useLive";
 import { fmtDay, fmtDayAny } from "@/lib/dates";
 import { getCache, setCache } from "@/lib/viewCache";
-import { STEPS, STEP_COUNT, PHASES, stepDef, phaseOf, isDone, type PhaseKey } from "@/lib/collabs";
+import { STEPS, STEP_COUNT, PHASES, PAYOUT_STEP, stepDef, phaseOf, isDone, isInProgress, payoutNotedSince, type PhaseKey } from "@/lib/collabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { FolderTabs, type FolderTabItem } from "@/components/ui/folder-tabs";
 import { COLLAB_TABS, normalizeCollabTab, type CollabTab } from "@/lib/collabTabs";
@@ -400,7 +400,8 @@ export function Collabs() {
     return row.updated_at ?? null;
   };
   const staleDays = (row: Row): number | null => {
-    if (isDone(row.step) || row.status !== "active") return null;
+    // En cours ou déjà gagnée mais pas bouclée : il reste des étapes, elle peut stagner.
+    if (!isInProgress(row.status, row.step)) return null;
     const d = daysSince(reachedAt(row));
     return d !== null && d >= STALE_DAYS ? d : null;
   };
@@ -515,11 +516,14 @@ export function Collabs() {
     if (clamped > row.step) haptic("succes");
     stepBusy.current.add(row.id);
     const prev = row.step;
-    setRows((rs) => (rs ?? []).map((r) => (r.id === row.id ? { ...r, step: clamped } : r)));
-    const saved = await dbUpdate("collabs", row.id, { step: clamped });
+    const prevStatus = row.status;
+    // Dernière étape atteinte : une collab en cours passe « gagnée » d'elle-même.
+    const status = clamped === STEP_COUNT && row.status === "active" ? "gagnee" : row.status;
+    setRows((rs) => (rs ?? []).map((r) => (r.id === row.id ? { ...r, step: clamped, status } : r)));
+    const saved = await dbUpdate("collabs", row.id, status !== prevStatus ? { step: clamped, status } : { step: clamped });
     stepBusy.current.delete(row.id);
     if (!saved) {
-      setRows((rs) => (rs ?? []).map((r) => (r.id === row.id ? { ...r, step: prev } : r)));
+      setRows((rs) => (rs ?? []).map((r) => (r.id === row.id ? { ...r, step: prev, status: prevStatus } : r)));
       return toast("Erreur, réessaie");
     }
     // Reflète le changement dans l'historique local (pour les dates, sans re-fetch).
@@ -532,7 +536,25 @@ export function Collabs() {
           else if (r === "error") toast("Tâche de l'étape non créée");
         });
       }
+      if (clamped >= PAYOUT_STEP && prev < PAYOUT_STEP) void checkPayout(row);
     }
+  };
+
+  // « Créateur payé » sans versement noté dans Reversements (blob `creatorPayouts`) depuis
+  // la facture de la collab : on le signale, sans bloquer l'étape.
+  const [payoutAsk, setPayoutAsk] = useState<string | null>(null);
+  const checkPayout = async (row: Row) => {
+    if (!row.creator) return;
+    const [st, inv] = await Promise.all([
+      getAppState().catch(() => null),
+      supabase.from("invoices").select("date, created_at").eq("collab_id", row.id),
+    ]);
+    if (!st || inv.error) return;
+    // La marque paie le créateur (mode « créateur ») : rien à lui verser.
+    if (cashModeFor(row.id, row.creator, (st.collabCashMode as Record<string, string>) ?? {}, {}) === "createur") return;
+    const dates = ((inv.data as { date: string | null; created_at: string | null }[] | null) ?? [])
+      .map((i) => String(i.date || i.created_at || "").slice(0, 10)).filter(Boolean).sort();
+    if (!payoutNotedSince(st.creatorPayouts, row.creator, dates[0] ?? null)) setPayoutAsk(titleCase(row.creator));
   };
 
   const setStatus = async (row: Row, status: string) => {
@@ -585,7 +607,9 @@ export function Collabs() {
       items={[
         { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(row) },
         ...(row.status !== "active" ? [{ key: "reopen", label: "Remettre en cours", icon: RotateCcw, onClick: () => setStatus(row, "active") }] : []),
-        { key: "won", label: "Marquer gagnée", icon: TtpTrophy, onClick: () => setStatus(row, "gagnee") },
+        { key: "won", label: "Marquer gagnée", icon: TtpTrophy, onClick: () => setStatus(row, "gagnee"),
+          // Avant la dernière étape, « gagnée » se confirme (la dernière étape le fait d'elle-même).
+          ...(!isDone(row.step) && row.status !== "gagnee" ? { confirm: { title: "Marquer gagnée", message: `La collab « ${row.brand} » est à l'étape ${row.step} sur ${STEP_COUNT}. La marquer gagnée maintenant ?`, confirmLabel: "Marquer gagnée" } } : {}) },
         { key: "lost", label: "Marquer perdue", icon: XCircle, onClick: () => setStatus(row, "perdue") },
         { key: "archive", label: "Archiver", icon: Archive, onClick: () => setStatus(row, "archivee") },
         { key: "delete", label: "Mettre à la corbeille", icon: Trash2, danger: true, onClick: () => del(row), confirm: { title: "Mettre à la corbeille", message: `Déplacer la collab « ${row.brand} » vers la corbeille ? Tu pourras la restaurer.`, confirmLabel: "Mettre à la corbeille" } },
@@ -1035,7 +1059,7 @@ export function Collabs() {
           <div className="flex flex-col gap-3 rounded-[20px] bg-panel p-4">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-[17px] font-semibold text-foreground">{def.label}</h3>
-              {!isDone(row.step) && row.status === "active" && (
+              {isInProgress(row.status, row.step) && (
                 <StatusPill tone={stale !== null ? "wait" : "progress"}>
                   {stale !== null ? <TtpClock className="h-3 w-3" /> : null}
                   En cours{d !== null ? ` · ${d} j` : ""}
@@ -1141,7 +1165,8 @@ export function Collabs() {
     );
   }
 
-  const activeRows = (rows ?? []).filter((r) => r.status === "active");
+  // En cours = pas encore bouclée (une collab à la dernière étape n'est plus « en cours »).
+  const activeRows = (rows ?? []).filter((r) => isInProgress(r.status, r.step));
 
   const folderItems: FolderTabItem[] = [
     { value: "payees", label: "Payées" },
@@ -1260,6 +1285,19 @@ export function Collabs() {
       </>
       )}
       </FolderTabs>
+      {payoutAsk && (
+        <ConfirmDialog
+          title="Créateur payé"
+          message={`Aucun versement noté pour ${payoutAsk}. Le noter dans Reversements ?`}
+          confirmLabel="Ouvrir Reversements"
+          cancelLabel="Plus tard"
+          onCancel={() => setPayoutAsk(null)}
+          onConfirm={() => {
+            setPayoutAsk(null);
+            window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "reversements" }));
+          }}
+        />
+      )}
     </div>
   );
 }
