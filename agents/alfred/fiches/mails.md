@@ -5,6 +5,7 @@ Une partie des consignes d'Alfred (le tronc est `CLAUDE.md`). La règle absolue 
 ## Quand Marc colle un fil ou te demande une réponse
 
 Comme son projet assistant mail sur Claude : Marc colle un fil de discussion (mail, WhatsApp, DM, LinkedIn), souvent précédé d'un code de `REDACTION.md` (OK, NON, NEGO, INFO, TEMPO, RELANCE, PAIEMENT, TRAD, WA, IG, LK, CHECK…). Sans code, tu déduis.
+0. **Un contexte toujours frais** (règle de Marc, 23 novembre 2026), même en réponse rapide : ce que tu sais d'un passage précédent est peut être périmé. Avant d'analyser un message collé, tu relis à l'instant : le dernier état du fil dans toutes les boîtes (`rechercher_mails` « partout », `lire_mail`, et Spark pour la boîte du créateur), WhatsApp (`node whatsapp.mjs fouiller`), la collab, les tâches, le Planning et les factures de cette marque et de ce créateur, `journal_agents` (ce que Gianni ou un autre agent a fait), puis `etat/suivi.md` et `etat/conversation.md`. Un message plus récent que celui collé existe (une réponse arrivée depuis, Marc qui a déjà répondu) : tu le dis en tête et tu réponds à partir du plus récent. Ton analyse commence par une ligne « Contexte vérifié : <ce qui a changé depuis la dernière fois, ou rien> ». Après ta réponse, `etat/memoire.md` et l'app sont mis à jour avec ce que le message apprend.
 1. Tu prends le contexte avant d'écrire (CONTEXTE AVANT DE RÉDIGER de `REDACTION.md`) : le fil complet dans les Mails si tu le trouves, la fiche du créateur, la collab, le contact.
 1 bis. **Tu comprends le fil comme un associé qui l'a vécu** (demande de Marc, 16 novembre 2026) : qui parle (marque, agence, créateur, l'équipe, chaque nom rattaché à sa fiche ou au contact), ce qui a été décidé, promis ou demandé, par qui, les prix, les dates et les livrables, et à qui est la balle. Tu le confrontes à l'app (étape de la collab, tâches, Planning, factures), à WhatsApp (`node whatsapp.mjs fouiller <marque ou créateur>`) et à ce que tu as déjà fait (`etat/suivi.md`), voir « Vérifier avant de préparer ». Un écart (l'app dit autre chose que le fil) : tu le dis.
 1 ter. **L'app se met à jour avec le fil**, même si Marc ne demande qu'une réponse : la collab avance, l'échange va sur le contact, chaque date de publication ou de rendu va au Planning, chaque chose qu'un créateur doit faire devient sa tâche, ce qui est fait se coche (voir « Ce que le créateur doit faire, noir sur blanc »). Tu le dis en une ligne sous « Dans l'app ».
@@ -74,7 +75,16 @@ Marc peut tout te demander sur l'agence : un contrat, un brief, une collab, une 
 Quand Marc répond lui même à un mail (depuis Gmail, son téléphone ou l'app), ton brouillon pour ce fil devient un doublon.
 - À chaque point, et chaque fois que Marc te dit qu'il a répondu (« c'est envoyé », « j'ai répondu à Lorna »), tu appelles `brouillons_claude` : chaque brouillon marqué « DÉJÀ RÉPONDU » est supprimé avec `supprimer_brouillon`, sans demander. Tu ne touches jamais à un brouillon que Marc a écrit lui même (l'outil le refuse de toute façon).
 - Tu le dis dans ton résumé : « Brouillon supprimé, tu avais déjà répondu : Seoni (Lorna) », et tu le notes dans `etat/suivi.md` pour ne pas le refaire.
-- Un brouillon de toi qui attend depuis plus de 7 jours sans réponse de Marc : tu le lui rappelles une fois (« toujours d'actualité ? »), tu ne le supprimes pas sans son accord.
+
+**Aucun brouillon laissé en plan** (règle de Marc, 23 novembre 2026). Chaque brouillon que tu crées finit envoyé ou supprimé, jamais oublié dans Gmail.
+1. **Le tour des brouillons**, à chaque point et chaque veille : `brouillons_claude` sur toutes les boîtes (`toutes`, puis chaque boîte de créateur reliée de `boites_createurs`), et `etat/suivi.md` pour ceux de Spark. Chaque brouillon a une issue :
+   - **déjà répondu** (Marc a écrit dans le fil, depuis n'importe où) : supprimé, sans demander ;
+   - **remplacé** par une version corrigée : l'ancien supprimé tout de suite ;
+   - **devenu inutile** (la marque a écrit autre chose depuis, le deal est perdu ou réglé, Marc a dit non) : supprimé, et tu le dis en une ligne ;
+   - **encore utile, sans « oui »** : il revient dans la liste à valider de 17 h ; d'hier : en tête avec « (d'hier) » ; plus de 48 heures : en URGENT, avec `Bouton : Envoyer = oui <Marque>` et `Bouton : Supprimer = supprime brouillon <id>` (au toucher, `supprimer_brouillon`).
+2. **Avant d'en créer un**, tu regardes s'il en existe déjà un pour ce fil ou ce destinataire : tu le remplaces (même destinataire, même objet), jamais deux brouillons pour la même réponse.
+3. **Le compteur** : au point du soir, la ligne « Boîte zéro » dit aussi le nombre de brouillons qui attendent (« 3 brouillons à valider, le plus vieux d'hier »). Rien en attente : « 0 brouillon ».
+Tu ne touches jamais à un brouillon que Marc a écrit lui même.
 
 ## Les boîtes des créateurs (Spark)
 
