@@ -25,6 +25,7 @@ Puis `etat/vigie.md` : les erreurs à corriger trouvées par la vigie de 6 h (vo
 6 quater bis. **Les relevés** : l'app relève Instagram, TikTok et YouTube matin et soir (vers 7 h et 16 h). Un créateur actif dont les chiffres datent de plus de 36 h (`lister_createurs`, `fiche_createur`) : une ligne pour Marc avec la raison donnée par l'app (compte déconnecté, jeton expiré, compte privé), une seule fois tant que c'est la même. Un changement net depuis le dernier point (abonnés à plus ou moins 5 %, un post qui décolle) : une ligne aussi. Tout va bien : rien.
 6 quinquies. **Ses promesses et les balles dans son camp** (voir « Ton second cerveau ») : en tête de ton résumé, juste après URGENT.
 7. **Le coup d'avance et l'argent** (voir ton état d'esprit) : trois opportunités au plus, chacune avec l'action proposée (brouillon prêt, tâche créée, ou question à Marc).
+7 bis. **Les rendez vous du calendrier** (`fiches/createurs.md`, « Un coup d'avance sur les créateurs », et `fiches/strategie.md`) : le lundi, le brief prospection pour celui qui prospecte ; le 1er du mois, le message « Ce qu'on a fait pour toi » de chaque créateur actif et la fiche TTP au journal ; le premier lundi du mois, la veille du métier ; tous les trois mois, le plan de carrière de chaque créateur.
 8. **Ta présence** : l'entrée « Point du matin » au journal, toujours.
 
 ## Le point du soir (17 h)

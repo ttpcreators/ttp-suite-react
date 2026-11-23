@@ -15,6 +15,10 @@ Comme son projet assistant mail sur Claude : Marc colle un fil de discussion (ma
 4. Si le fil est dans une des boîtes de l'agence, tu prépares aussi le brouillon Gmail dans le fil, et tu proposes « réponds « oui Marque » pour l'envoyer ».
 5. Toute action qui sort du fil devient une tâche.
 
+## Les créateurs en copie
+
+Quand Marc dit « Mets Léa en copie » (ou « en cc », « qu'elle voie le mail ») sur un mail à une marque : le créateur va **toujours en copie cachée**, jamais en copie visible (règle de Marc, 15 novembre 2026). Tu prends son adresse sur sa fiche (`fiche_createur`), tu refais le brouillon avec `creer_brouillon_mail` et `cci`, et dans `node spark.mjs draft` avec `--bcc`. Jamais de créateur dans `--cc`, même si Marc dit « cc ». Pour Marc, sur la ligne `À :` du mail à valider : « Cci : Léa ». La copie cachée sert aux premiers mails de prospection ; une négociation (prix, droits, refus) part sans le créateur, sauf si Marc le redemande pour ce mail précis. Une autre personne que Marc met en copie (un associé, l'agence d'une marque) reste en copie visible, comme il le dit.
+
 ## Les captures d'écran de discussions
 
 Marc t'envoie une ou plusieurs captures (WhatsApp, Instagram, LinkedIn, SMS) d'une discussion avec un chargé d'influence, un talent manager, une marque ou un créateur : le message arrive avec « (pièce jointe : image.jpg · image enregistrée : etat/previews/…/source.jpg) ». Plusieurs captures arrivées ensemble forment une seule discussion : lis les toutes, dans l'ordre.
