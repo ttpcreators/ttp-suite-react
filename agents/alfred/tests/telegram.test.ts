@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { prendreLaPlace, ecrireSkill, ligneEvenement, messageDemande, reponseDepuis, origineTransfert, texteDuMail, ajouterCommandes, carteDepuis, cleSujet, commandeFixe, doitSonner, enHtml, extraireSujet, graphiqueHtml, ligneRemise, messageMail, aEnvoyerWhatsApp, boutonsLiens, chunks, clavier, commandesDepuis, COMMANDES_DE_BASE, menuDepuis, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "./telegram.mjs";
+import { prendreLaPlace, ecrireSkill, ligneEvenement, messageDemande, reponseDepuis, origineTransfert, texteDuMail, ajouterCommandes, carteDepuis, cleSujet, commandeFixe, doitSonner, enHtml, extraireSujet, graphiqueHtml, ligneRemise, messageMail, aEnvoyerWhatsApp, boutonsLiens, chunks, clavier, commandesDepuis, COMMANDES_DE_BASE, menuDepuis, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "../telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {

@@ -78,6 +78,20 @@ else:
     s.pop("legifrance", None)
 json.dump(d, open(p, "w"), indent=2, ensure_ascii=False)
 PY
+# Le dossier reste propre (demande de Marc le 2026-11-24) : ce qui traîne à la racine et n'est plus
+# au programme (anciennes versions, essais) part dans archives/rangement-<date>, jamais supprimé ;
+# les fichiers temporaires oubliés dans etat/ depuis plus d'un jour sont retirés.
+garde=(CLAUDE.md alfred.sh ecoute.sh installer-whatsapp.sh telegram.mjs whatsapp.mjs spark.mjs passage.mjs
+  contrats.mjs texte.mjs araignee.mjs mise-a-jour.sh config.env REDACTION.md .mcp.json .claude
+  etat fiches examen legifrance archives)
+rangement="$DEST/archives/rangement-$(date +%Y-%m-%d)"
+for f in "$DEST"/*(DN); do
+  (( ${garde[(Ie)${f:t}]} )) && continue
+  [[ ${f:t} == .DS_Store ]] && { rm -f "$f"; continue; }
+  [[ ${f:t} == .* ]] && continue
+  mkdir -p "$rangement" && mv "$f" "$rangement/" && echo "Rangé dans archives : ${f:t}"
+done
+find "$DEST/etat" -maxdepth 2 -type f \( -name '*.tmp' -o -name '.DS_Store' \) -mtime +1 -delete 2>/dev/null || true
 # La salle de l'araignée (choix de Marc le 2026-11-16) : chaque passage d'Alfred y apparaît. Alfred ne
 # charge pas les réglages globaux du Mac (--setting-sources project,local) : le hook de l'araignée est
 # donc branché dans .claude/settings.json de son dossier. Il ne fait rien tant que l'araignée n'est pas
@@ -115,7 +129,7 @@ if [[ "$1" == "--sans-horaires" ]]; then
   exit 0
 fi
 for nom in com.ttp.alfred com.ttp.alfred.ecoute com.ttp.alfred.maj; do
-  sed "s#__HOME__#$HOME#g" "$SRC/$nom.plist" > "$AGENTS/$nom.plist"
+  sed "s#__HOME__#$HOME#g" "$SRC/lancement/$nom.plist" > "$AGENTS/$nom.plist"
   # Lancé par la mise à jour automatique elle même : elle ne se relance pas en cours de route
   # (sa nouvelle version sera prise au prochain démarrage).
   [[ "$nom" == com.ttp.alfred.maj && -n "$ALFRED_MAJ" ]] && continue

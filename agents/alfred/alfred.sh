@@ -85,6 +85,9 @@ if [[ "$1" != "--reponse" ]]; then
   garder "$LOG" 3000
   garder etat/conversation.md 400
   garder etat/suivi.md 600
+  garder etat/mises-a-jour.log 500
+  # Le journal de l'écoute reste ouvert par elle : raccourci sur place (sinon elle écrirait dans le vide).
+  [ -f etat/ecoute.log ] && (( $(wc -l < etat/ecoute.log) > 3000 )) && { tail -n 3000 etat/ecoute.log > etat/ecoute.log.tmp && cat etat/ecoute.log.tmp > etat/ecoute.log; rm -f etat/ecoute.log.tmp; }
 fi
 # Les previews analysées ne sont gardées que 14 jours.
 [ -d etat/previews ] && find etat/previews -mindepth 1 -maxdepth 1 -mtime +14 -exec rm -rf {} +

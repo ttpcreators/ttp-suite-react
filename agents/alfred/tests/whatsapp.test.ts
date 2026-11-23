@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { contientMots, appleVersDate, attente, balleChezMarc, cleVocal, contenu, duree, correspond, dateVersApple, heure, ligne, lireDate, lireListe, numeroDe, trouver, lirePreparation, refusEnvoi, destinataire, ligneAutorisee, ID_ENVOI } from "./whatsapp.mjs";
+import { contientMots, appleVersDate, attente, balleChezMarc, cleVocal, contenu, duree, correspond, dateVersApple, heure, ligne, lireDate, lireListe, numeroDe, trouver, lirePreparation, refusEnvoi, destinataire, ligneAutorisee, ID_ENVOI } from "../whatsapp.mjs";
 
 describe("Alfred : discussions WhatsApp", () => {
   it("convertit les dates WhatsApp (secondes depuis 2001) à l'heure de Paris", () => {
@@ -79,7 +79,7 @@ describe("Alfred : discussions WhatsApp", () => {
 
 describe("WhatsApp : les pièces jointes", () => {
   it("donne le numéro de la pièce à ouvrir, ou dit pourquoi elle ne s'ouvre pas", async () => {
-    const { ligne, nomPiece, reperePiece } = await import("./whatsapp.mjs");
+    const { ligne, nomPiece, reperePiece } = await import("../whatsapp.mjs");
     const doc = { id: 123, type: 8, titre: "brief Nova.pdf", fichier: "Media/x/brief.pdf", date: 784_400_000, moi: 0 };
     expect(reperePiece(doc)).toBe(" · pièce 123");
     expect(ligne(doc, "Léa")).toMatch(/Léa : \[document : brief Nova\.pdf · pièce 123\]$/);
@@ -89,7 +89,7 @@ describe("WhatsApp : les pièces jointes", () => {
   });
 
   it("nomme la copie sans pouvoir sortir du dossier", async () => {
-    const { nomPiece } = await import("./whatsapp.mjs");
+    const { nomPiece } = await import("../whatsapp.mjs");
     expect(nomPiece(123, "brief Nova.pdf")).toBe("wa-123-brief_Nova.pdf");
     expect(nomPiece(7, "../../.ssh/id_rsa")).toBe("wa-7-id_rsa");
     expect(nomPiece(8, "")).toBe("wa-8-piece");

@@ -6,7 +6,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 |---|---|
 | Répond tout de suite quand Marc lui écrit | Écoute Telegram en continu, lance Claude dès qu'un message arrive ; sa réponse cite le message de Marc (comme « Répondre ») |
 | Réponse rapide | Quand Marc écrit : seulement sa demande, avec un modèle rapide (Sonnet ; Opus pour les points, la prospection et les revues ; Opus aussi quand le message parle de vente : négociation, prix, devis, contrat, refus ; réglables dans config.env avec `ALFRED_MODELE_REPONSE`, `ALFRED_MODELE_VENTE` et `ALFRED_MODELE_POINT`). Chaque message part dès qu'il est écrit (`telegram.mjs suivre`), et la réponse n'attend pas la fin d'un point en cours (verrou et dossier `etat/envoi-reponse` à part) |
-| Consignes en fiches | `CLAUDE.md` est un tronc court lu à chaque fois ; le détail par sujet est dans `fiches/` (points, mails, WhatsApp, app, créateurs, marques, argent, semaine, organisation), lu seulement quand le sujet arrive |
+| Consignes en fiches | `CLAUDE.md` est un tronc court lu à chaque fois ; le détail par sujet est dans `fiches/` (points, mails, WhatsApp, Telegram, app, créateurs, marques, vente, argent, semaine, organisation, stratégie, juridique, Instagram, araignée), lu seulement quand le sujet arrive |
 | Va à l'essentiel | Messages à Marc très courts (une ligne par point, 6 lignes pour une réponse, 12 pour un point), le détail sur demande ; les textes à copier et documents restent complets |
 | Comprend les vocaux de Marc | Transcrits sur le Mac (whisper.cpp et ffmpeg, gratuit, sans internet), puis traités comme un message écrit |
 | Le point à 9 h et 17 h en semaine | Mails des marques et DM, devis, factures en retard, créateurs, argent à aller chercher |
@@ -32,7 +32,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Compte rendu de rendez vous | Un vocal après le call : compte rendu, tâches, dates, et mail récapitulatif à la marque |
 | Mode vacances | « Je pars jusqu'au 20 » : seulement l'urgent, réponses d'attente aux marques (sur délégation), résumé au retour |
 | Trésorerie | Chaque lundi et sur demande : sur le compte, à encaisser, à reverser, à mettre de côté, fin de mois prévue |
-| Skills | Sept savoir faire chargés au bon moment (`skills/`) : influencer-marketing, cold-email, prospecting, sales-enablement, offers, comptable, copy-editing |
+| Skills | 29 savoir faire chargés au bon moment (`skills/`, liste dans `skills/LISEZ-MOI.md`) : marques et prospection, comptabilité, Instagram, juriste |
 | Boutons sur Telegram | Envoyer, Fait, Créer la facture, Rappelle-moi demain, Ajouter au calendrier (ou avec Meet, puis Envoyer l'invitation), Copier, Ouvrir dans WhatsApp (message déjà écrit) ; « Ouvrir dans l'app » ouvre TTP Suite dans Telegram (connexion une seule fois) ; chaque bouton d'action demande « Confirmer » ou « Annuler » avant d'agir |
 | Documents en PDF | Contrats, bilans et propositions partent en PDF quand Chrome est installé sur le Mac (sinon en HTML) |
 | Alerte si Alfred tombe | Chaque jour de semaine, l'app vérifie qu'Alfred a fait son point du matin ; sinon notification à Marc et Gianni |
@@ -79,7 +79,28 @@ Alfred ne peut pas modifier `config.env` ni sa liste WhatsApp. Côté connecteur
 
 ## Les fichiers
 
-Dans le dépôt (`agents/alfred/`, public, aucun secret) : `CLAUDE.md` (ses consignes), `skills/` (ses skills, sous licence libre, copiées dans `.claude/skills`), `alfred.sh` (un passage), `ecoute.sh` et `telegram.mjs` (Telegram), `whatsapp.mjs` (lecture de WhatsApp Desktop), `spark.mjs` (sa seule porte vers Spark), `araignee.mjs` (sa seule porte vers l'araignée), `passage.mjs` (le bilan de chaque passage : nouvel essai, limite de l'abonnement, raison d'un échec), deux réglages launchd, `installer.sh`.
+Dans le dépôt (`agents/alfred/`, public, aucun secret) :
+
+| Dossier ou fichier | Ce que c'est |
+|---|---|
+| `CLAUDE.md` | Le tronc de ses consignes, lu à chaque passage (40 000 caractères au plus) |
+| `fiches/` | Le détail par sujet, lu seulement quand le sujet arrive |
+| `skills/` | Ses savoir faire, sous licence libre, copiés dans `.claude/skills` sur l'iMac |
+| `examen/` | L'examen du dimanche (questions, réponses attendues, noms fictifs) |
+| `legifrance/` | Le serveur Légifrance et Judilibre, facultatif (clés PISTE) |
+| `lancement/` | Les trois réglages launchd : passages, écoute, mise à jour |
+| `tests/` | Les tests (`npm test`), jamais copiés sur l'iMac |
+| `alfred.sh` | Un passage (point, réponse, nouvelles, examen) |
+| `ecoute.sh`, `telegram.mjs` | L'écoute et tout Telegram |
+| `whatsapp.mjs`, `installer-whatsapp.sh` | La lecture de WhatsApp Desktop et le pont d'envoi |
+| `spark.mjs` | Sa seule porte vers Spark |
+| `araignee.mjs` | Sa seule porte vers l'araignée |
+| `passage.mjs` | Le bilan de chaque passage : nouvel essai, limite de l'abonnement, raison d'un échec |
+| `contrats.mjs` | Le moteur des contrats de l'app (fabriqué par `scripts/alfred-contrats.mjs`) |
+| `texte.mjs` | Sépare le texte à copier des notes pour Marc |
+| `installer.sh`, `mise-a-jour.sh` | L'installation et la mise à jour de 4 h |
+
+Chaque installation range aussi le dossier de l'iMac : ce qui traîne à sa racine et n'est plus au programme part dans `archives/rangement-<date>` (rien n'est supprimé), et les fichiers temporaires oubliés dans `etat/` sont retirés. Les journaux (`passages.log`, `ecoute.log`, `mises-a-jour.log`) sont raccourcis à chaque passage.
 
 Sur le Mac seulement (`~/Code/TTPAlfred/`) :
 - `config.env` : jeton du bot d'Alfred, identifiant Telegram de Marc, `ALFRED_SPARK_BOITES` (les boîtes Spark des créateurs qu'Alfred peut lire) et, au besoin, `ALFRED_PONT_SECRET` (le pont avec l'app, fonction `alfred-pont` : pouls chaque minute, nouvelles de l'app, demandes « Demander à Alfred », réglages). Sans lui, le pont reconnaît Alfred à l'empreinte du jeton de son bot, posé aussi côté Supabase (`ALFRED_BOT_TOKEN`) ;

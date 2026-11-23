@@ -1,13 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { renderContract } from "./contrats.mjs";
-import { fabriquer } from "../../scripts/alfred-contrats.mjs";
-import { renderContract as moteurApp } from "../../src/lib/contractRender";
+import { renderContract } from "../contrats.mjs";
+import { fabriquer } from "../../../scripts/alfred-contrats.mjs";
+import { renderContract as moteurApp } from "../../../src/lib/contractRender";
 
 describe("Alfred : les contrats avec le moteur de l'app", () => {
   it("contrats.mjs est à jour avec le moteur de l'app (sinon : npm run alfred:contrats)", async () => {
-    expect(readFileSync(join(__dirname, "contrats.mjs"), "utf8")).toBe(await fabriquer());
+    expect(readFileSync(join(__dirname, "..", "contrats.mjs"), "utf8")).toBe(await fabriquer());
   }, 30_000);
 
   it("fait le même contrat Marque × Créateur que l'app", () => {
