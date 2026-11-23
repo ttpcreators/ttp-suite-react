@@ -23,6 +23,8 @@ import { eurRateOf } from "../_shared/reversements.ts";
 import { estUuid, plageUuid } from "../_shared/idCourt.ts";
 import { normaliserCachet } from "../_shared/cachet.ts";
 import { normaliserTag } from "../_shared/contactTags.ts";
+import { apresCollabSignee, apresFacturePayee } from "../_shared/collabAutoDb.ts";
+import { gagneeHorsBilan, ligneAvance, ligneProspectSigne } from "../_shared/collabAuto.ts";
 import { listSendAs, parseMailBox, resolveSender, sendDraft, sendMail, type MailBox } from "./gmail.ts";
 import { LIEN_TTL_MS, PROJECT_URL, creatorBoxReady, listCreatorBoxes, normEmail } from "../_shared/creatorBox.ts";
 import { genNonce, signState } from "../_shared/state.ts";
@@ -139,8 +141,10 @@ const creerElement: AdminTool = {
     }
     const { data, error } = await sb.from(t.table).insert(fields).select("*").single();
     if (error) return fail(`Création refusée : ${error.message}`);
+    // Collab créée : le prospect ouvert de la marque passe « Signé » (étapes automatiques).
+    const signe = t.table === "collabs" && (data as Json).status !== "perdue" ? await apresCollabSignee(sb, String((data as Json).id)) : null;
     const exclu = t.table === "creators" && "exclu" in fields ? await copierExclu(sb, data as Json) : "";
-    return ok(`✓ ${rule.label} créé${refused.length ? ` (champs ignorés : ${refused.join(", ")})` : ""}.\n${json(readableRow(data as Json))}${exclu}`);
+    return ok(`✓ ${rule.label} créé${refused.length ? ` (champs ignorés : ${refused.join(", ")})` : ""}.${signe ? `\n${ligneProspectSigne(signe.brand)}` : ""}\n${json(readableRow(data as Json))}${exclu}`);
   },
 };
 
@@ -183,8 +187,20 @@ const modifierElement: AdminTool = {
     const { data: after, error } = await sb.from(t.table).update(patch).eq(key, id).select("*").maybeSingle();
     if (error) return fail(`Modification refusée : ${error.message}`);
     const changes = Object.keys(fields).map((k) => `- ${k} : ${JSON.stringify((before as Json)[k] ?? null)} → ${JSON.stringify((after as Json | null)?.[k] ?? null)}`);
+    // Étapes automatiques : facture passée « payée » → sa collab ; collab gagnée → prospect « Signé ».
+    const devient = (v: string) => (after as Json | null)?.status === v && (before as Json).status !== v;
+    const auto: string[] = [];
+    if (t.table === "invoices" && devient("payee")) {
+      const av = await apresFacturePayee(sb, id);
+      if (av) auto.push(ligneAvance(av));
+    }
+    // Pas une collab gagnée à l'étape 11 (bilan, renouvellement) : ce n'est plus la signature.
+    if (t.table === "collabs" && after && gagneeHorsBilan((before as Json).status, (after as Json).status, (after as Json).step)) {
+      const signe = await apresCollabSignee(sb, id);
+      if (signe) auto.push(ligneProspectSigne(signe.brand));
+    }
     const exclu = t.table === "creators" && "exclu" in fields ? await copierExclu(sb, after as Json | null) : "";
-    return ok(`✓ ${rule.label} modifié${refused.length ? ` (champs refusés : ${refused.join(", ")})` : ""}.\n${changes.join("\n")}${exclu}`);
+    return ok(`✓ ${rule.label} modifié${refused.length ? ` (champs refusés : ${refused.join(", ")})` : ""}.\n${changes.join("\n")}${auto.length ? `\n${auto.join("\n")}` : ""}${exclu}`);
   },
 };
 
@@ -388,6 +404,8 @@ const preparerFacture: AdminTool = {
     }
     const { error: e2 } = await sb.rpc("app_state_merge", { p_key: "invoiceDetails", p_set: { [id]: detail }, p_remove: [] });
     if (creator) await sb.rpc("app_state_merge", { p_key: "creatorCommission", p_set: { [creator]: commission }, p_remove: [] });
+    // Facture passée « payée » : sa collab atteint « Paiement marque reçu » (étapes automatiques).
+    const avance = summary.status === "payee" && String(row?.status ?? "") !== "payee" ? await apresFacturePayee(sb, id, str(a.collab_id) || null) : null;
     const fmt = (n: number) => euro2(n).replace(/ /g, " ");
     return ok([
       `✓ Facture ${ref} ${row ? "mise à jour" : "créée"} (${summary.status}) : ${summary.party}`,
@@ -395,6 +413,7 @@ const preparerFacture: AdminTool = {
       `HT ${fmt(tot.ht)} · TVA ${detail.franchise ? "franchise" : `${detail.vatRate} %`} ${fmt(tot.tva)} · TTC ${fmt(tot.ttc)}`,
       `Commission ${commission} % : ${fmt(tot.commission)} · reversé au créateur ${fmt(tot.reversal)} · échéance ${detail.dueDate}`,
       e2 ? `⚠️ Détails non enregistrés (${e2.message}) : ouvre la facture dans Facturation et enregistre-la.` : "À vérifier puis envoyer depuis Facturation (le PDF est fait par l'app).",
+      ...(avance ? [ligneAvance(avance)] : []),
     ].join("\n"));
   },
 };

@@ -2,6 +2,7 @@ import { peekInvoicePrefill, putInvoicePrefill, takeInvoicePrefill } from "@/lib
 import { addDaysISO, nextQuoteRef, quoteShownStatus, QUOTE_STATUS_LABEL, QUOTE_STATUS_OPTIONS, QUOTE_VALIDITY_DAYS, type QuoteShownStatus, type QuoteStatus } from "@/lib/quotes";
 import { useSetNavSub } from "@/lib/navSub";
 import { setCollabLink } from "@/lib/collabLinksDb";
+import { autoFacturePayee } from "@/lib/collabAutoDb";
 import { CollabField, ObjectCollabLink } from "@/components/collab-links";
 import { fmtDay, toISODate } from "@/lib/dates";
 import { useStickyState } from "@/lib/useStickyState";
@@ -1183,6 +1184,8 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
     if (!wasPaid && draft.status === "payee" && draft.creator) {
       notifyCreator("invoice", draft.creator, `Ta facture ${draft.ref} a été réglée 💸`);
     }
+    // Facture d'une collab passée « Payée » : la collab atteint « Paiement marque reçu » (jamais bloquant).
+    if (!wasPaid && draft.status === "payee" && id) void autoFacturePayee(id, draft.collabId).then((msgs) => msgs.forEach((m) => toast(m)));
 
     // Détails riches (blob)
     const detailPart = detailPartOf(draft);
@@ -1962,6 +1965,8 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
               }
               toast(`Facture ${r.ref} : ${metaOf(status).label}`);
               if (status === "payee" && before !== "payee" && r.creator) notifyCreator("invoice", r.creator, `Ta facture ${r.ref} a été réglée 💸`);
+              // Collab de la facture : étape « Paiement marque reçu » (jamais bloquant).
+              if (status === "payee" && before !== "payee") void autoFacturePayee(r.id).then((msgs) => msgs.forEach((m) => toast(m)));
             };
             const menuItems: ActionItem[] = [
               { key: "edit", label: "Modifier", icon: Pencil, onClick: () => void openEdit(r) },
