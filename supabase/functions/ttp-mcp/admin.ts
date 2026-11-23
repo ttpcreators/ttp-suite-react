@@ -21,6 +21,8 @@ import {
 } from "../_shared/mcpAdmin.ts";
 import { eurRateOf } from "../_shared/reversements.ts";
 import { estUuid, plageUuid } from "../_shared/idCourt.ts";
+import { normaliserCachet } from "../_shared/cachet.ts";
+import { normaliserTag } from "../_shared/contactTags.ts";
 import { apresCollabSignee, apresFacturePayee } from "../_shared/collabAutoDb.ts";
 import { gagneeHorsBilan, ligneAvance, ligneProspectSigne } from "../_shared/collabAuto.ts";
 import { listSendAs, parseMailBox, resolveSender, sendDraft, sendMail, type MailBox } from "./gmail.ts";
@@ -99,6 +101,14 @@ const lireDonnees: AdminTool = {
   },
 };
 
+// Exclusivité d'un créateur avec l'agence : l'app lit la colonne creators.exclu OU la clé de
+// blob creatorExclusive. Quand Claude écrit `exclu`, la clé du blob reçoit la même valeur.
+async function copierExclu(sb: SupabaseClient, row: Json | null | undefined): Promise<string> {
+  if (!row || typeof row.exclu !== "boolean" || !String(row.name ?? "").trim()) return "";
+  const { error } = await sb.rpc("app_state_merge", { p_key: "creatorExclusive", p_set: { [String(row.name).trim().toLowerCase()]: row.exclu }, p_remove: [] });
+  return error ? `\n⚠ Copie de l'exclusivité (réglage creatorExclusive) non faite : ${error.message}` : "";
+}
+
 // ── 2. Créer ────────────────────────────────────────────────────────────────
 const creerElement: AdminTool = {
   name: "creer_element",
@@ -121,6 +131,9 @@ const creerElement: AdminTool = {
     const { ok: fields, refused } = writableFields(t.table, obj(a.champs) ?? {});
     if (!Object.keys(fields).length) return fail("Aucun champ à enregistrer.");
     if (t.table === "events") fields.sync_source = "agence"; // poussé vers Google Agenda
+    // Cachet d'une collab : même forme que l'app (« 550 € », « 550 $ + affiliation »).
+    if (t.table === "collabs" && "cachet" in fields) fields.cachet = normaliserCachet(fields.cachet);
+    if (t.table === "contacts" && typeof fields.tag === "string") fields.tag = normaliserTag(fields.tag); // liste fermée
     // Rangé en dernier, comme dans l'app (si la table a un ordre).
     if (!("sort_order" in fields)) {
       const { data: top, error: e } = await sb.from(t.table).select("sort_order").order("sort_order", { ascending: false, nullsFirst: false }).limit(1);
@@ -130,7 +143,8 @@ const creerElement: AdminTool = {
     if (error) return fail(`Création refusée : ${error.message}`);
     // Collab créée : le prospect ouvert de la marque passe « Signé » (étapes automatiques).
     const signe = t.table === "collabs" && (data as Json).status !== "perdue" ? await apresCollabSignee(sb, String((data as Json).id)) : null;
-    return ok(`✓ ${rule.label} créé${refused.length ? ` (champs ignorés : ${refused.join(", ")})` : ""}.${signe ? `\n${ligneProspectSigne(signe.brand)}` : ""}\n${json(readableRow(data as Json))}`);
+    const exclu = t.table === "creators" && "exclu" in fields ? await copierExclu(sb, data as Json) : "";
+    return ok(`✓ ${rule.label} créé${refused.length ? ` (champs ignorés : ${refused.join(", ")})` : ""}.${signe ? `\n${ligneProspectSigne(signe.brand)}` : ""}\n${json(readableRow(data as Json))}${exclu}`);
   },
 };
 
@@ -164,6 +178,8 @@ const modifierElement: AdminTool = {
     }
     const { ok: fields, refused } = writableFields(t.table, obj(a.champs) ?? {});
     if (!Object.keys(fields).length) return fail(`Aucun champ modifiable${refused.length ? ` (refusés : ${refused.join(", ")})` : ""}.`);
+    if (t.table === "collabs" && "cachet" in fields) fields.cachet = normaliserCachet(fields.cachet);
+    if (t.table === "contacts" && typeof fields.tag === "string") fields.tag = normaliserTag(fields.tag); // liste fermée
     const { data: before, error: e1 } = await sb.from(t.table).select("*").eq(key, id).maybeSingle();
     if (e1) return fail(`Lecture impossible : ${e1.message}`);
     if (!before) return fail(`${rule.label} introuvable (${id}).`);
@@ -183,7 +199,8 @@ const modifierElement: AdminTool = {
       const signe = await apresCollabSignee(sb, id);
       if (signe) auto.push(ligneProspectSigne(signe.brand));
     }
-    return ok(`✓ ${rule.label} modifié${refused.length ? ` (champs refusés : ${refused.join(", ")})` : ""}.\n${changes.join("\n")}${auto.length ? `\n${auto.join("\n")}` : ""}`);
+    const exclu = t.table === "creators" && "exclu" in fields ? await copierExclu(sb, after as Json | null) : "";
+    return ok(`✓ ${rule.label} modifié${refused.length ? ` (champs refusés : ${refused.join(", ")})` : ""}.\n${changes.join("\n")}${auto.length ? `\n${auto.join("\n")}` : ""}${exclu}`);
   },
 };
 
@@ -277,6 +294,7 @@ const reglagesApp: AdminTool = {
       return ok(`# ${key}\n${v.length > 12000 ? `${v.slice(0, 12000)}… (coupé, ${v.length} caractères)` : v}`);
     }
     if (!key || blockedSetting(key)) return fail(key ? "Réglage protégé (jamais modifié par Claude)." : "Indique la clé à modifier.");
+    if (key === "creatorExclusive") return fail("L'exclusivité d'un créateur se change sur sa fiche : modifier_element, table creators, champ exclu (true / false). Ce réglage est mis à jour en même temps.");
     if (!("valeur" in a) && !Array.isArray(a.retirer)) return fail("Indique la nouvelle valeur.");
     const cur = st[key];
     const v = a.valeur;
