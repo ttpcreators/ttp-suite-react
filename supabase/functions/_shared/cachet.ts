@@ -19,6 +19,9 @@ export const DEVISE_SIGNE: Record<CachetDevise, string> = { EUR: "€", USD: "$"
 
 export const AFFILIATION_SEULE = "Affiliation seule";
 
+/** Message quand le montant tapé ne se lit pas (enregistrement bloqué). */
+export const CACHET_ILLISIBLE = "Cachet illisible : un seul montant, ex. 1 500";
+
 export type Cachet = { montant: number | null; devise: CachetDevise; affiliation: boolean };
 /** Lecture d'un cachet : `lisible` = la saisie se réécrit sans rien perdre. */
 export type LectureCachet = Cachet & { lisible: boolean };
@@ -45,8 +48,10 @@ const DEVISES: [CachetDevise, RegExp][] = [
   ["CHF", /\bchf\b|\bfrancs? suisses?\b/gi],
 ];
 
-// Un seul montant propre : « 550 », « 1 500 », « 1.500 », « 1 500,50 », « 1500.5 », « 3k », « 1,5k ».
+// Un seul montant propre : « 550 », « 1 500 », « 1.500 », « 1 500,50 », « 1.500,50 », « 1500.5 »,
+// « 3k », « 1,5k ». Écriture anglaise aussi : « 1,500 », « 1,500.50 » (virgule = milliers).
 const NOMBRE = /^(\d{1,3}(?:[ \u00a0\u202f.]\d{3})+|\d+)(?:,(\d{1,2})|\.(\d{1,2}))?\s*([kK])?$/;
+const NOMBRE_EN = /^(\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?\s*([kK])?$/;
 
 /**
  * Lit un cachet écrit (forme de l'app ou ancien texte libre). Montant et devise sont donnés
@@ -72,10 +77,12 @@ export function lireCachet(texte: unknown): LectureCachet {
   reste = reste.replace(/\bht\b/gi, " ").replace(/\s+/g, " ").trim();
   if (!reste) return { montant: null, devise, affiliation, lisible: affiliation && !trouvees.length };
   const m = NOMBRE.exec(reste);
-  if (!m) return { montant: null, devise, affiliation, lisible: false };
-  const ent = m[1].replace(/[ \u00a0\u202f.]/g, "");
-  const dec = m[2] ?? m[3] ?? "";
-  const n = parseFloat(dec ? `${ent}.${dec}` : ent) * (m[4] ? 1000 : 1);
+  const en = m ? null : NOMBRE_EN.exec(reste);
+  if (!m && !en) return { montant: null, devise, affiliation, lisible: false };
+  const ent = m ? m[1].replace(/[ \u00a0\u202f.]/g, "") : en![1].replace(/,/g, "");
+  const dec = (m ? (m[2] ?? m[3]) : en![2]) ?? "";
+  const k = m ? m[4] : en![3];
+  const n = parseFloat(dec ? `${ent}.${dec}` : ent) * (k ? 1000 : 1);
   if (!Number.isFinite(n)) return { montant: null, devise, affiliation, lisible: false };
   return { montant: Math.round(n * 100) / 100, devise, affiliation, lisible: true };
 }
@@ -89,4 +96,20 @@ export function normaliserCachet(texte: unknown): string | null {
   if (!t) return null;
   const l = lireCachet(t);
   return l.lisible ? (ecrireCachet(l) ?? t) : t;
+}
+
+/**
+ * Saisie du champ « Cachet » (montant tapé, devise, case Affiliation, ancien texte gardé)
+ * → texte à ranger, ou `illisible` : un montant tapé qu'on ne sait pas lire ne vide JAMAIS
+ * le cachet ; l'app garde la valeur précédente et bloque l'enregistrement.
+ */
+export function cachetSaisi(montant: string, devise: CachetDevise, affiliation: boolean, ancien = ""): { valeur: string } | { illisible: true } {
+  const tape = montant.trim();
+  let n: number | null = null;
+  if (tape) {
+    const l = lireCachet(tape);
+    if (!l.lisible || l.montant === null) return { illisible: true };
+    n = l.montant;
+  }
+  return { valeur: ecrireCachet({ montant: n, devise, affiliation }) ?? ancien };
 }

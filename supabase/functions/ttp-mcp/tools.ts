@@ -355,8 +355,8 @@ const ficheCreateur: Tool = {
       `# ${titleCase(name)}`,
       `Niche : ${c.niche ?? "?"} · plateforme : ${c.platform || "?"} · abonnés tous réseaux : ${compact(au.total)}${perPlatformText(au) ? ` (${perPlatformText(au)})` : ""} · engagement : ${c.er ?? "?"} · statut : ${c.status ?? "?"}${c.ville ? ` · ${c.ville}` : ""}`,
       ...(/^https:\/\//.test(String(c.photo_url ?? "")) ? [`Photo : ${c.photo_url}`] : []),
-      // Exclusivité avec l'agence : la colonne creators.exclu fait foi, la copie du blob en repli.
-      ...((typeof c.exclu === "boolean" ? c.exclu : (st.creatorExclusive as Json | undefined)?.[name.trim().toLowerCase()] === true) ? ["Exclusif avec l'agence (fiche roster)"] : []),
+      // Exclusivité avec l'agence : la colonne creators.exclu OU la clé de blob creatorExclusive (src/lib/creatorExclu.ts).
+      ...(c.exclu === true || (st.creatorExclusive as Json | undefined)?.[name.trim().toLowerCase()] === true ? ["Exclusif avec l'agence (fiche roster)"] : []),
       ...(aliasMail ? [`Alias mail : ${aliasMail} (pour écrire en son nom : envoyer_en_tant_que dans creer_brouillon_mail / envoyer_mail)`] : []),
       `Comptes : ${[c.handle && `@${String(c.handle).replace(/^@+/, "").trim()}`, c.instagram && `IG ${c.instagram}`, c.tiktok && `TikTok ${c.tiktok}`, c.youtube && `YouTube ${c.youtube}`, c.email_pro && `email pro ${c.email_pro}`].filter(Boolean).join(" · ") || "?"}`,
       ig && ig.followers != null

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AFFILIATION_SEULE, ecrireCachet, lireCachet, normaliserCachet } from "./cachet.ts";
+import { AFFILIATION_SEULE, cachetSaisi, ecrireCachet, lireCachet, normaliserCachet } from "./cachet.ts";
 
 describe("ecrireCachet", () => {
   it("écrit le montant et le signe de la devise", () => {
@@ -44,6 +44,16 @@ describe("lireCachet", () => {
     expect(lireCachet("affiliation")).toMatchObject({ montant: null, affiliation: true, lisible: true });
     expect(lireCachet("500 € et affiliation")).toMatchObject({ montant: 500, affiliation: true, lisible: true });
   });
+  it("lit les montants courants à virgule ou à point", () => {
+    expect(lireCachet("1,500.50")).toMatchObject({ montant: 1500.5, lisible: true });
+    expect(lireCachet("1,500")).toMatchObject({ montant: 1500, lisible: true });
+    expect(lireCachet("12,000,000")).toMatchObject({ montant: 12000000, lisible: true });
+    expect(lireCachet("1.500,50")).toMatchObject({ montant: 1500.5, lisible: true });
+    expect(lireCachet("1 500,50")).toMatchObject({ montant: 1500.5, lisible: true });
+    expect(lireCachet("1500,5")).toMatchObject({ montant: 1500.5, lisible: true });
+    expect(lireCachet("1,5")).toMatchObject({ montant: 1.5, lisible: true });
+    for (const t of ["1,50,0", "1.2.3,4", "1,500,50", "12,34.5"]) expect(lireCachet(t).lisible).toBe(false);
+  });
   it("ne devine pas : texte gardé tel quel", () => {
     for (const t of ["300 € + produits offerts", "Gifting", "2 x 500 €", "800 / 1 000 €", "Affiliation + Repas", "500 € ou 600 $", "Affiliation seule, 30 % sur l'abonnement"]) {
       expect(lireCachet(t).lisible).toBe(false);
@@ -63,5 +73,21 @@ describe("normaliserCachet", () => {
     expect(normaliserCachet("affiliation seule")).toBe(AFFILIATION_SEULE);
     expect(normaliserCachet("Gifting")).toBe("Gifting");
     expect(normaliserCachet("  ")).toBeNull();
+  });
+});
+
+describe("cachetSaisi", () => {
+  it("montant lisible : la forme de l'app", () => {
+    expect(cachetSaisi("1,500.50", "USD", false)).toEqual({ valeur: "1 500,50 $" });
+    expect(cachetSaisi("1.500,50", "EUR", true)).toEqual({ valeur: "1 500,50 € + affiliation" });
+    expect(cachetSaisi("", "EUR", true)).toEqual({ valeur: AFFILIATION_SEULE });
+  });
+  it("montant illisible : jamais de cachet vidé", () => {
+    expect(cachetSaisi("1,2,3.4.5", "EUR", false, "Gifting")).toEqual({ illisible: true });
+    expect(cachetSaisi("1.50.0", "EUR", false)).toEqual({ illisible: true });
+  });
+  it("rien de saisi : l'ancien texte est gardé", () => {
+    expect(cachetSaisi("  ", "EUR", false, "300 € + produits offerts")).toEqual({ valeur: "300 € + produits offerts" });
+    expect(cachetSaisi("", "EUR", false)).toEqual({ valeur: "" });
   });
 });

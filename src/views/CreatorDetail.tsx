@@ -17,7 +17,7 @@ import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useLiveKey } from "@/lib/useLive";
 import { invoiceHT, type InvoiceDetailLike } from "@/lib/invoice";
-import { EXCLU_BLOB_KEY, estExclusif, excluKey, hasExcluColumn } from "@/lib/creatorExclu";
+import { EXCLU_BLOB_KEY, estExclusif, excluAEcrire, excluKey, hasExcluColumn } from "@/lib/creatorExclu";
 import { SEUIL_FICHE, contratsSignes, ficheCompletude, type ChampFiche } from "@/lib/ficheComplete";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TONE_SOFT } from "@/lib/statusTone";
@@ -230,6 +230,8 @@ export function CreatorDetail({
   const [form, setForm] = useState<Coord>(() => coordOf(null));
   const [editing, setEditing] = useState(false);
   const [exclusive, setExclusive] = useState(false);
+  // L'interrupteur a-t-il été changé pendant cette édition ? Sinon l'exclusivité n'est pas réécrite.
+  const [exclusiveTouched, setExclusiveTouched] = useState(false);
   const editingRef = useRef(editing);
   editingRef.current = editing;
   // Édition inline du contrat (écrit dans le blob `contractDeadlines`, partagé avec Échéances).
@@ -354,9 +356,11 @@ export function CreatorDetail({
     // Date de naissance legacy en texte libre illisible : le champ date arrive
     // vide (toISODate a renvoyé "") → on la PRÉSERVE au lieu de l'effacer.
     if (!form.birth && c.birth && !toISODate(c.birth)) delete patch.birth;
-    // Exclusivité : la colonne creators.exclu fait foi, écrite avec le reste de la fiche.
+    // Exclusivité : écrite seulement si l'interrupteur a été changé, alors dans la colonne
+    // (avec le reste de la fiche) ET dans la copie du blob (src/lib/creatorExclu.ts).
     const withColumn = hasExcluColumn(c);
-    if (withColumn) patch.exclu = exclusive;
+    const ex = excluAEcrire(exclusiveTouched, exclusive, withColumn);
+    if (ex.column !== null) patch.exclu = ex.column;
     const ok = await dbUpdate("creators", c.id, patch);
     if (!ok) {
       toast("Erreur, réessaie");
@@ -364,14 +368,17 @@ export function CreatorDetail({
     }
     // Copie dans le blob agence (repli des écrans sans la colonne) : n'envoie QUE l'entrée
     // de ce créateur (fusion côté base), les autres créateurs ne sont jamais réécrits.
-    let okEx = false;
-    try {
-      okEx = await mergeAppStateKey(EXCLU_BLOB_KEY, { [exKey]: exclusive });
-    } catch {
-      /* réseau : la fiche est enregistrée, pas la copie */
+    if (ex.blob !== null) {
+      let okEx = false;
+      try {
+        okEx = await mergeAppStateKey(EXCLU_BLOB_KEY, { [exKey]: ex.blob });
+      } catch {
+        /* réseau : la fiche est enregistrée, pas la copie */
+      }
+      // Lecture « colonne OU blob » : un blob resté à oui garderait l'exclusivité, ça se dit.
+      if (!okEx) toast("Exclusivité non enregistrée partout, réessaie");
     }
-    // Sans la colonne, la copie est la seule trace : son échec se dit.
-    if (!okEx && !withColumn) toast("Exclusivité non enregistrée, réessaie");
+    setExclusiveTouched(false);
     setC({ ...c, ...patch });
     setEditing(false);
     toast("Infos enregistrées ✓");
@@ -380,6 +387,7 @@ export function CreatorDetail({
   const cancel = () => {
     if (c) setForm(coordOf(c));
     setExclusive(estExclusif(c, exclusiveMap, name));
+    setExclusiveTouched(false);
     setEditing(false);
   };
 
@@ -788,7 +796,10 @@ export function CreatorDetail({
                     type="button"
                     role="switch"
                     aria-checked={exclusive}
-                    onClick={() => setExclusive((x) => !x)}
+                    onClick={() => {
+                      setExclusive((x) => !x);
+                      setExclusiveTouched(true);
+                    }}
                     className={"relative h-5 w-9 shrink-0 rounded-full transition-colors " + (exclusive ? "bg-primary" : "bg-faint/40")}
                     title="Basculer l'exclusivité"
                   >

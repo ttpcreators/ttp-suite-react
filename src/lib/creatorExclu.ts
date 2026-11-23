@@ -1,10 +1,12 @@
 /**
  * Créateur en exclusivité avec l'agence (interrupteur « Créateur en exclusivité » de la fiche).
- * Source : la colonne `creators.exclu`, lue aussi par le serveur et le connecteur Claude.
- * La clé de blob `creatorExclusive` (nom en minuscules → oui / non) n'est qu'une copie,
- * réécrite à chaque enregistrement ; elle sert de repli si la colonne manque (ligne lue
- * sans elle, valeur jamais posée). Les exclusivités de MARQUE (dates, concurrents,
- * contrat) sont une autre chose : clé `exclusivites`, page Exclusivités.
+ * Deux traces : la colonne `creators.exclu` (défaut false, lue par le serveur et le connecteur
+ * Claude) et la clé de blob `creatorExclusive` (nom en minuscules → oui / non), la plus
+ * ancienne. La colonne n'en est la copie que depuis peu : un créateur exclusif dans l'une OU
+ * l'autre est exclusif (jamais d'exclusivité perdue en silence). Les deux sont réécrites
+ * ensemble quand on change l'interrupteur ; sql/2026-11-23-exclu-rattrapage.sql recopie le
+ * blob dans la colonne. Les exclusivités de MARQUE (dates, concurrents, contrat) sont une
+ * autre chose : clé `exclusivites`, page Exclusivités.
  */
 export const EXCLU_BLOB_KEY = "creatorExclusive";
 
@@ -16,8 +18,17 @@ export function hasExcluColumn(row: object | null | undefined): boolean {
   return !!row && "exclu" in row;
 }
 
-/** Exclusif ou non : la colonne d'abord, la copie du blob en repli. */
+/** Exclusif : la colonne OU la clé du blob dit oui. */
 export function estExclusif(row: { exclu?: boolean | null } | null | undefined, blob: Record<string, boolean> | null | undefined, name: string): boolean {
-  if (row && typeof row.exclu === "boolean") return row.exclu;
-  return blob?.[excluKey(name)] === true;
+  return row?.exclu === true || blob?.[excluKey(name)] === true;
+}
+
+/**
+ * Ce qu'il faut écrire à l'enregistrement de la fiche : rien si l'interrupteur n'a pas été
+ * touché (un enregistrement des coordonnées n'efface jamais une exclusivité), sinon la
+ * même valeur dans la colonne (si elle existe) et dans le blob.
+ */
+export function excluAEcrire(touched: boolean, value: boolean, withColumn: boolean): { column: boolean | null; blob: boolean | null } {
+  if (!touched) return { column: null, blob: null };
+  return { column: withColumn ? value : null, blob: value };
 }

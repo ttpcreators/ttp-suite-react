@@ -99,8 +99,8 @@ const lireDonnees: AdminTool = {
   },
 };
 
-// Exclusivité d'un créateur avec l'agence : la colonne creators.exclu fait foi, la clé de
-// blob creatorExclusive (repli de l'app) en garde une copie, réécrite ici à chaque écriture.
+// Exclusivité d'un créateur avec l'agence : l'app lit la colonne creators.exclu OU la clé de
+// blob creatorExclusive. Quand Claude écrit `exclu`, la clé du blob reçoit la même valeur.
 async function copierExclu(sb: SupabaseClient, row: Json | null | undefined): Promise<string> {
   if (!row || typeof row.exclu !== "boolean" || !String(row.name ?? "").trim()) return "";
   const { error } = await sb.rpc("app_state_merge", { p_key: "creatorExclusive", p_set: { [String(row.name).trim().toLowerCase()]: row.exclu }, p_remove: [] });
@@ -183,7 +183,7 @@ const modifierElement: AdminTool = {
     const { data: after, error } = await sb.from(t.table).update(patch).eq(key, id).select("*").maybeSingle();
     if (error) return fail(`Modification refusée : ${error.message}`);
     const changes = Object.keys(fields).map((k) => `- ${k} : ${JSON.stringify((before as Json)[k] ?? null)} → ${JSON.stringify((after as Json | null)?.[k] ?? null)}`);
-    const exclu = t.table === "creators" && ("exclu" in fields || "name" in fields) ? await copierExclu(sb, after as Json | null) : "";
+    const exclu = t.table === "creators" && "exclu" in fields ? await copierExclu(sb, after as Json | null) : "";
     return ok(`✓ ${rule.label} modifié${refused.length ? ` (champs refusés : ${refused.join(", ")})` : ""}.\n${changes.join("\n")}${exclu}`);
   },
 };
@@ -278,7 +278,7 @@ const reglagesApp: AdminTool = {
       return ok(`# ${key}\n${v.length > 12000 ? `${v.slice(0, 12000)}… (coupé, ${v.length} caractères)` : v}`);
     }
     if (!key || blockedSetting(key)) return fail(key ? "Réglage protégé (jamais modifié par Claude)." : "Indique la clé à modifier.");
-    if (key === "creatorExclusive") return fail("L'exclusivité d'un créateur se change sur sa fiche : modifier_element, table creators, champ exclu (true / false). Ce réglage n'en est qu'une copie, mise à jour toute seule.");
+    if (key === "creatorExclusive") return fail("L'exclusivité d'un créateur se change sur sa fiche : modifier_element, table creators, champ exclu (true / false). Ce réglage est mis à jour en même temps.");
     if (!("valeur" in a) && !Array.isArray(a.retirer)) return fail("Indique la nouvelle valeur.");
     const cur = st[key];
     const v = a.valeur;

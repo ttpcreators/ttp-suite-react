@@ -28,6 +28,7 @@ import { StatsBento } from "@/components/ui/stats-bento";
 import { BrandTile, DetailRows, MasterList } from "@/components/brand-tile";
 import { Picker } from "@/components/ui/form";
 import { CachetField } from "@/components/cachet-field";
+import { CACHET_ILLISIBLE } from "../../supabase/functions/_shared/cachet.ts";
 import { NewMailDialog } from "@/components/mail-tools";
 import { priceRange } from "@/lib/pricingForm";
 import { formatEuro } from "@/lib/money";
@@ -132,15 +133,18 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
   };
   const [cvDeliv, setCvDeliv] = useState("");
   const [cvCachet, setCvCachet] = useState("");
+  const [cvCachetBad, setCvCachetBad] = useState(false);
   const startConvert = (r: Row) => {
     setConvert(r);
     setCvCreator(r.creator ?? r.proposal?.creator ?? "");
     setCvDeliv(r.deliverables ?? r.proposal?.deliverables ?? "");
     setCvCachet(cachetOf(r));
+    setCvCachetBad(false);
   };
   const submitConvert = async () => {
     const r = convert;
     if (!r) return;
+    if (cvCachetBad) return toast(CACHET_ILLISIBLE);
     // Déjà signé par un collègue entre-temps : on ouvre sa collab au lieu d'en créer une deuxième.
     const already = await prospectCollabId(r.id);
     if (already) {
@@ -267,7 +271,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
     >
       <CreatorPickerField label="Créateur" value={cvCreator} onChange={setCvCreator} creators={creators} blocked={blockedCv} />
       <TextField label="Livrables" value={cvDeliv} onChange={setCvDeliv} placeholder="ex. 2 reels Instagram" />
-      <CachetField value={cvCachet} onChange={setCvCachet} />
+      <CachetField value={cvCachet} onChange={setCvCachet} onInvalid={setCvCachetBad} />
     </InlineForm>
   );
 

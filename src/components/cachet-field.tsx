@@ -2,13 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { Picker } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import { CACHET_DEVISES, DEVISE_SIGNE, ecrireCachet, lireCachet, type CachetDevise } from "../../supabase/functions/_shared/cachet.ts";
+import { TONE_TEXT } from "@/lib/statusTone";
+import { CACHET_DEVISES, CACHET_ILLISIBLE, DEVISE_SIGNE, cachetSaisi, lireCachet, type CachetDevise } from "../../supabase/functions/_shared/cachet.ts";
 
 /**
  * Champ « Cachet » d'une collab : un montant, une devise (EUR par défaut) et une case
  * « Affiliation ». La colonne reste un texte, écrit sous UNE forme (« 550 € »,
  * « 550 $ + affiliation », « Affiliation seule » : supabase/functions/_shared/cachet.ts).
  * Un ancien texte illisible reste affiché et gardé tel quel tant qu'on ne saisit rien.
+ * Un montant tapé illisible ne change jamais la valeur : `onInvalid(true)` prévient le
+ * formulaire, qui bloque l'enregistrement (CACHET_ILLISIBLE).
  */
 type State = { amount: string; devise: CachetDevise; affiliation: boolean; legacy: string };
 
@@ -20,16 +23,16 @@ function stateOf(value: string): State {
   return { amount: l.montant != null ? montantTexte(l.montant) : "", devise: l.devise, affiliation: l.affiliation, legacy: "" };
 }
 
-/** Montant tapé → nombre, null si vide ou illisible. */
-function montantOf(amount: string): number | null {
-  if (!amount.trim()) return null;
-  const l = lireCachet(amount);
-  return l.lisible ? l.montant : null;
-}
-
 const DEVISE_OPTIONS = CACHET_DEVISES.map((d) => ({ value: d, label: d === "CHF" ? "CHF" : `${DEVISE_SIGNE[d]} ${d}` }));
 
-export function CachetField({ value, onChange, label = "Cachet", className }: { value: string; onChange: (v: string) => void; label?: string; className?: string }) {
+export function CachetField({ value, onChange, onInvalid, label = "Cachet", className }: {
+  value: string;
+  onChange: (v: string) => void;
+  /** Montant tapé illisible (true) ou de nouveau lisible (false). */
+  onInvalid?: (bad: boolean) => void;
+  label?: string;
+  className?: string;
+}) {
   const [st, setSt] = useState<State>(() => stateOf(value));
   // Dernière valeur envoyée au parent : une autre valeur (formulaire vidé, autre collab) recharge le champ.
   const sent = useRef(value);
@@ -37,18 +40,24 @@ export function CachetField({ value, onChange, label = "Cachet", className }: { 
     if (value === sent.current) return;
     sent.current = value;
     setSt(stateOf(value));
+    onInvalid?.(false);
+    // onInvalid : fonction du parent, pas une donnée à suivre.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   const update = (patch: Partial<State>) => {
     const next = { ...st, ...patch };
     setSt(next);
-    const out = ecrireCachet({ montant: montantOf(next.amount), devise: next.devise, affiliation: next.affiliation }) ?? next.legacy;
-    sent.current = out;
-    onChange(out);
+    const r = cachetSaisi(next.amount, next.devise, next.affiliation, next.legacy);
+    onInvalid?.("illisible" in r);
+    // Montant illisible : la valeur précédente reste, rien n'est envoyé.
+    if ("illisible" in r) return;
+    sent.current = r.valeur;
+    onChange(r.valeur);
   };
 
-  const unreadable = st.amount.trim() !== "" && montantOf(st.amount) === null;
-  const replaced = st.legacy !== "" && (montantOf(st.amount) !== null || st.affiliation);
+  const unreadable = "illisible" in cachetSaisi(st.amount, st.devise, st.affiliation, st.legacy);
+  const replaced = st.legacy !== "" && !unreadable && (st.amount.trim() !== "" || st.affiliation);
   return (
     <div className={cn("flex min-w-0 flex-1 flex-col gap-1.5 sm:min-w-[260px]", className)}>
       <span className="text-[12px] font-medium text-muted-foreground">{label}</span>
@@ -69,7 +78,7 @@ export function CachetField({ value, onChange, label = "Cachet", className }: { 
         <Checkbox checked={st.affiliation} onCheckedChange={(v) => update({ affiliation: v === true })} />
         {st.amount.trim() ? "+ affiliation" : "Affiliation seule"}
       </label>
-      {unreadable && <span className="text-[11px] text-muted-foreground">Montant illisible : un seul nombre, ex. 1 500</span>}
+      {unreadable && <span className={cn("text-[11px]", TONE_TEXT.wait)}>{CACHET_ILLISIBLE}</span>}
       {st.legacy && (
         <span className="text-[11px] leading-snug text-muted-foreground [overflow-wrap:anywhere]">
           Ancien cachet : « {st.legacy} ». {replaced ? "Remplacé par ta saisie." : "Gardé tel quel tant que rien n'est saisi."}
