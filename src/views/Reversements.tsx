@@ -9,6 +9,7 @@ import { cents } from "@/lib/invoice";
 import { mandatesFrom, noPayoutIds, type ComptaDetail } from "@/lib/compta";
 import { collabIdMissing } from "@/lib/collabLinks";
 import { openCollab } from "@/lib/collabLinksDb";
+import { autoVersement } from "@/lib/collabAutoDb";
 import { owesMoney, overpaid, reversementRows, type Payout, type PayoutsMap, type RevInvoice, type RevRow } from "@/lib/reversements";
 import { titleCase } from "@/lib/utils";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
@@ -150,6 +151,13 @@ export function Reversements() {
       if (ok) {
         setOpenFor(null);
         toast("Paiement enregistré ✓");
+        // Factures que ce versement solde : leur collab atteint « Créateur payé » (jamais bloquant).
+        void autoVersement({
+          createur: r.creator,
+          lignes: r.lines.map((l) => ({ id: l.id, collabId: l.collabId, paidOn: l.paidOn, du: l.du, party: l.brand })),
+          dejaVerse: r.reverse,
+          montant: n,
+        }).then((msgs) => msgs.forEach((m) => toast(m)));
       }
     } finally {
       busyRef.current = false;

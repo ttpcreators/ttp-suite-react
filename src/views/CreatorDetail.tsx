@@ -17,6 +17,10 @@ import { toast } from "@/components/ui/toast";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { useLiveKey } from "@/lib/useLive";
 import { invoiceHT, type InvoiceDetailLike } from "@/lib/invoice";
+import { EXCLU_BLOB_KEY, estExclusif, excluAEcrire, excluKey, hasExcluColumn } from "@/lib/creatorExclu";
+import { SEUIL_FICHE, contratsSignes, ficheCompletude, type ChampFiche } from "@/lib/ficheComplete";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { TONE_SOFT } from "@/lib/statusTone";
 import { useAppState, mergeAppStateKey, listAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 
 const CreatorMailsAgency = lazy(lazyImport(() => import("./CreatorMails").then((m) => ({ default: m.CreatorMailsAgency }))));
@@ -100,8 +104,10 @@ type Creator = {
   ig?: IgCreator | null; // chiffres Instagram du jour (ig-sync, après la migration 2026-10-13)
   tt?: TtCreator | null; // TikTok connecté par la créatrice (tt-sync, après la migration 2026-10-14)
   yt?: YtCreator | null; // chaîne YouTube connectée par la créatrice (yt-sync)
-  mediakit?: { platforms?: { key?: string }[] } | null;
+  mediakit?: { platforms?: { key?: string }[]; bio?: string } | null;
   email_pro: string | null;
+  /** Exclusivité avec l'agence : la colonne fait foi (src/lib/creatorExclu.ts). */
+  exclu?: boolean | null;
 };
 /** Le media kit a-t-il une ligne YouTube ? (carte YouTube affichée même sans @). */
 const hasKitYouTube = (mk: Creator["mediakit"]) => !!mk?.platforms?.some((p) => p?.key === "youtube");
@@ -224,6 +230,8 @@ export function CreatorDetail({
   const [form, setForm] = useState<Coord>(() => coordOf(null));
   const [editing, setEditing] = useState(false);
   const [exclusive, setExclusive] = useState(false);
+  // L'interrupteur a-t-il été changé pendant cette édition ? Sinon l'exclusivité n'est pas réécrite.
+  const [exclusiveTouched, setExclusiveTouched] = useState(false);
   const editingRef = useRef(editing);
   editingRef.current = editing;
   // Édition inline du contrat (écrit dans le blob `contractDeadlines`, partagé avec Échéances).
@@ -256,6 +264,8 @@ export function CreatorDetail({
   const { data: deadlinesRemote } = useAppState<CtDeadline[]>((s: AppState) => (s["contractDeadlines"] as CtDeadline[]) ?? []);
   // Contrats de représentation enregistrés (pour l'alerte « contrat manquant »).
   const { data: repHistory } = useAppState<{ creator?: string }[]>((s: AppState) => (s["contractHistory"] as { creator?: string }[]) ?? []);
+  // Contrats (les deux historiques) : « contrat de représentation signé » de la complétude.
+  const { data: ctHist } = useAppState<{ brand: unknown; repr: unknown }>((s: AppState) => ({ brand: s["brandContractHistory"], repr: s["contractHistory"] }));
   // Copie locale prioritaire après enregistrement du contrat (le blob ne se
   // resynchronise qu'au prochain tick live, ~20 s) — effacée dès que le remote arrive.
   const [deadlinesLocal, setDeadlinesLocal] = useState<CtDeadline[] | null>(null);
@@ -263,8 +273,9 @@ export function CreatorDetail({
     setDeadlinesLocal(null);
   }, [deadlinesRemote]);
   const deadlines = deadlinesLocal ?? deadlinesRemote;
+  // Copie de l'exclusivité (repli si la colonne creators.exclu manque).
   const { data: exclusiveMap } = useAppState<Record<string, boolean>>(
-    (s: AppState) => (s["creatorExclusive"] as Record<string, boolean>) ?? {},
+    (s: AppState) => (s[EXCLU_BLOB_KEY] as Record<string, boolean>) ?? {},
   );
   // Dernière mesure PAR PLATEFORME (la fiche principale n'affiche que la
   // plateforme principale — ce bloc montre toutes celles mesurées, datées).
@@ -282,11 +293,12 @@ export function CreatorDetail({
     }
     return [...byPlat.values()];
   })();
-  const exKey = name.toLowerCase();
-  // Reflète l'exclusivité stockée (sauf en cours d'édition, où l'utilisateur la modifie).
+  const exKey = excluKey(name);
+  // Reflète l'exclusivité stockée : la colonne de la fiche, sinon la copie du blob
+  // (sauf en cours d'édition, où l'utilisateur la modifie).
   useEffect(() => {
-    if (!editingRef.current && exclusiveMap) setExclusive(exclusiveMap[exKey] === true);
-  }, [exclusiveMap, exKey]);
+    if (!editingRef.current) setExclusive(estExclusif(c, exclusiveMap, name));
+  }, [c, exclusiveMap, name]);
 
   // Date de fin du dernier contrat suivi (connecté à la page Échéances).
   let contractEnd: Date | null = null;
@@ -344,23 +356,29 @@ export function CreatorDetail({
     // Date de naissance legacy en texte libre illisible : le champ date arrive
     // vide (toISODate a renvoyé "") → on la PRÉSERVE au lieu de l'effacer.
     if (!form.birth && c.birth && !toISODate(c.birth)) delete patch.birth;
+    // Exclusivité : écrite seulement si l'interrupteur a été changé, alors dans la colonne
+    // (avec le reste de la fiche) ET dans la copie du blob (src/lib/creatorExclu.ts).
+    const withColumn = hasExcluColumn(c);
+    const ex = excluAEcrire(exclusiveTouched, exclusive, withColumn);
+    if (ex.column !== null) patch.exclu = ex.column;
     const ok = await dbUpdate("creators", c.id, patch);
     if (!ok) {
       toast("Erreur, réessaie");
       return;
     }
-    // Exclusivité : blob agence — n'envoie QUE l'entrée de ce créateur (fusion côté
-    // base) : les flags des autres créateurs ne sont jamais réécrits.
-    let okEx = false;
-    try {
-      okEx = await mergeAppStateKey("creatorExclusive", { [exKey]: exclusive });
-    } catch {
-      /* réseau : les infos sont enregistrées, pas l'exclusivité */
+    // Copie dans le blob agence (repli des écrans sans la colonne) : n'envoie QUE l'entrée
+    // de ce créateur (fusion côté base), les autres créateurs ne sont jamais réécrits.
+    if (ex.blob !== null) {
+      let okEx = false;
+      try {
+        okEx = await mergeAppStateKey(EXCLU_BLOB_KEY, { [exKey]: ex.blob });
+      } catch {
+        /* réseau : la fiche est enregistrée, pas la copie */
+      }
+      // Lecture « colonne OU blob » : un blob resté à oui garderait l'exclusivité, ça se dit.
+      if (!okEx) toast("Exclusivité non enregistrée partout, réessaie");
     }
-    if (!okEx) toast("Exclusivité non enregistrée, réessaie");
-    // Même valeur dans la colonne creators.exclu (lue par d'autres écrans et le serveur) ;
-    // le blob reste la source de l'écran. Best-effort.
-    else if ((c as { exclu?: boolean | null }).exclu !== exclusive) void dbUpdate("creators", c.id, { exclu: exclusive });
+    setExclusiveTouched(false);
     setC({ ...c, ...patch });
     setEditing(false);
     toast("Infos enregistrées ✓");
@@ -368,7 +386,8 @@ export function CreatorDetail({
 
   const cancel = () => {
     if (c) setForm(coordOf(c));
-    setExclusive(exclusiveMap?.[exKey] === true);
+    setExclusive(estExclusif(c, exclusiveMap, name));
+    setExclusiveTouched(false);
     setEditing(false);
   };
 
@@ -446,6 +465,7 @@ export function CreatorDetail({
     <div>
       <div className="mb-1.5 text-[11px] font-medium text-muted-foreground">{label}</div>
       <input
+        id={`fiche-${key}`}
         type={type}
         value={form[key] ?? ""}
         onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
@@ -563,6 +583,51 @@ export function CreatorDetail({
 
   // Les 4 sections de la fiche (mêmes que le sélecteur du téléphone). Toutes restent
   // montées : seule la section choisie est visible, une saisie en cours n'est pas perdue.
+  // Fiche complète à X % (src/lib/ficheComplete.ts) : chaque manque mène au bon champ.
+  const completude = c ? ficheCompletude(c, ctHist ? contratsSignes(ctHist.brand, ctHist.repr) : null) : null;
+  const FIELD_OF: Partial<Record<ChampFiche, keyof Coord>> = { email: "email", phone: "phone", platform: "platform", commission: "commission" };
+  const goToMissing = (k: ChampFiche) => {
+    const f = FIELD_OF[k];
+    if (f) {
+      setPhoneSeg("infos");
+      setEditing(true);
+      // Le formulaire s'ouvre au rendu suivant : on y place le curseur ensuite.
+      requestAnimationFrame(() => requestAnimationFrame(() => document.getElementById(`fiche-${f}`)?.focus()));
+    } else if (k === "contrat") window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "contrats" }));
+    else if (k === "mediakit") window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "mediakit" }));
+  };
+  const completudeChip = completude && completude.pct < 100 ? (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          title="Ce qui manque à la fiche"
+          className={cn(
+            "rounded-full px-2.5 py-0.5 text-[11px] font-medium tabular-nums transition-opacity hover:opacity-80",
+            completude.pct < SEUIL_FICHE ? TONE_SOFT.wait : "bg-muted text-muted-foreground",
+          )}
+        >
+          Fiche {completude.pct} %
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-[min(16rem,calc(100vw-2rem))] p-3 text-[12px]">
+        <div className="mb-1.5 text-[13px] font-semibold text-foreground">Manque</div>
+        <div className="flex flex-col">
+          {completude.manque.map((m) =>
+            m.key === "photo" ? (
+              <span key={m.key} className="px-1.5 py-1 text-muted-foreground">Photo : clique sur l'avatar</span>
+            ) : (
+              <button key={m.key} type="button" onClick={() => goToMissing(m.key)} className="flex items-center justify-between gap-2 rounded-md px-1.5 py-1 text-left text-foreground transition-colors hover:bg-rowhover">
+                {m.label}
+                <ArrowUpRight className="h-3.5 w-3.5 shrink-0 text-faint" />
+              </button>
+            ),
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  ) : null;
+
   const sections = (
     <>
       {/* Accompagnement : suivi éditorial, suivi du mois, rapport, journal */}
@@ -731,7 +796,10 @@ export function CreatorDetail({
                     type="button"
                     role="switch"
                     aria-checked={exclusive}
-                    onClick={() => setExclusive((x) => !x)}
+                    onClick={() => {
+                      setExclusive((x) => !x);
+                      setExclusiveTouched(true);
+                    }}
                     className={"relative h-5 w-9 shrink-0 rounded-full transition-colors " + (exclusive ? "bg-primary" : "bg-faint/40")}
                     title="Basculer l'exclusivité"
                   >
@@ -1024,6 +1092,7 @@ export function CreatorDetail({
                 {c?.status ? titleCase(c.status) : "Actif"}
               </AnimatedBadge>
               {exclusive && <span className="rounded-full border border-foreground/20 px-2.5 py-0.5 text-[11px] font-medium text-foreground">Exclusif</span>}
+              {completudeChip}
             </div>
             <div className="mt-4 flex w-full gap-2">
               {actions.map((a) =>
@@ -1064,6 +1133,7 @@ export function CreatorDetail({
                   Exclusif
                 </span>
               )}
+              {completudeChip}
             </div>
             <div className="mt-1 text-[13px] text-muted-foreground">
               {[c?.handle, c?.niche, c?.platform].filter(Boolean).join(" · ") || "—"}

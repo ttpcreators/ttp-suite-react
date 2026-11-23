@@ -15,6 +15,7 @@ import { meetEventBody, meetLinkOf, parseMeetRequest } from "../_shared/meetEven
 import { doublonPlanning, type Candidat, type PlanEvent } from "../_shared/planningDoublon.ts";
 import { readAppState } from "../_shared/appState.ts";
 import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
+import { CONTACT_TAGS, normaliserTag } from "../_shared/contactTags.ts";
 import type { Ctx } from "./oauth.ts";
 import { boxAddress, boxesFor, createDraft, parseMailBox, deleteClaudeDraft, draftRefs, listClaudeDrafts, listSendAs, PARTOUT, attachmentFromThread, markThreadRead, readThread, resolveSender, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { findSendAs, type SendAs } from "../_shared/sendAs.ts";
@@ -31,6 +32,8 @@ import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCart
 import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
 import { ciblesEchange, requeteEchange, texteEchanges } from "../_shared/dejaEchange.ts";
 import { cleDuCreateur, dateVersement, versementEnDouble } from "../_shared/versement.ts";
+import { apresVersement } from "../_shared/collabAutoDb.ts";
+import { ligneAvance } from "../_shared/collabAuto.ts";
 import { estUuid, plageUuid } from "../_shared/idCourt.ts";
 import { nomPropre, problemePieces, typeDuNom, type Piece } from "../_shared/piecesJointes.ts";
 import { CATEGORIES_MODELES, objectifsDuMois, problemeModele, type Objectif } from "../_shared/alfredOutils.ts";
@@ -48,6 +51,7 @@ import { genererDisposDuMois } from "../_shared/disposDuMoisDb.ts";
 import { REGLES_OFFRE, STRATEGIE_VERSION, strategieTexte } from "../_shared/strategie.ts";
 import { chargerTableau, tableauLundi, tableauTexte } from "../_shared/tableauLundi.ts";
 import { devisARelancer } from "../_shared/devisRelances.ts";
+import { IGNORES_KEY, controler, ligneProbleme, lireIgnores, sansIgnores, type ControleInput } from "../_shared/controle.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
 type Json = Record<string, unknown>;
@@ -354,6 +358,8 @@ const ficheCreateur: Tool = {
       `# ${titleCase(name)}`,
       `Niche : ${c.niche ?? "?"} · plateforme : ${c.platform || "?"} · abonnés tous réseaux : ${compact(au.total)}${perPlatformText(au) ? ` (${perPlatformText(au)})` : ""} · engagement : ${c.er ?? "?"} · statut : ${c.status ?? "?"}${c.ville ? ` · ${c.ville}` : ""}`,
       ...(/^https:\/\//.test(String(c.photo_url ?? "")) ? [`Photo : ${c.photo_url}`] : []),
+      // Exclusivité avec l'agence : la colonne creators.exclu OU la clé de blob creatorExclusive (src/lib/creatorExclu.ts).
+      ...(c.exclu === true || (st.creatorExclusive as Json | undefined)?.[name.trim().toLowerCase()] === true ? ["Exclusif avec l'agence (fiche roster)"] : []),
       ...(aliasMail ? [`Alias mail : ${aliasMail} (pour écrire en son nom : envoyer_en_tant_que dans creer_brouillon_mail / envoyer_mail)`] : []),
       `Comptes : ${[c.handle && `@${String(c.handle).replace(/^@+/, "").trim()}`, c.instagram && `IG ${c.instagram}`, c.tiktok && `TikTok ${c.tiktok}`, c.youtube && `YouTube ${c.youtube}`, c.email_pro && `email pro ${c.email_pro}`].filter(Boolean).join(" · ") || "?"}`,
       ig && ig.followers != null
@@ -475,6 +481,7 @@ const noterReversement: Tool = {
       note: { type: "string", description: "D'où vient la preuve (« Telegram de Marc 16/11 », « facture JNPR 2026-186 »)" },
       forcer: { type: "boolean", description: "true : noter même si un versement du même montant existe déjà à 5 jours près (deux virements réels)" },
       retirer: { type: "string", description: "Annuler : l'id d'un versement noté par erreur (donné quand il a été noté) ; il est retiré, montant et date ignorés" },
+      collab: { type: "string", description: "Facultatif : id de la collab que ce versement paie (outil collabs), si la preuve la désigne. Elle passe à l'étape 10 « Créateur payé ». Sans lui, seules les collabs dont la facture est soldée par ce versement avancent." },
     },
     required: ["createur", "montant", "note"],
     additionalProperties: false,
@@ -508,15 +515,104 @@ const noterReversement: Tool = {
     const frais = ((await appState(sb)).creatorPayouts ?? {}) as Record<string, unknown[]>;
     const { error } = await sb.rpc("app_state_merge", { p_key: "creatorPayouts", p_set: { [k]: [entree, ...(Array.isArray(frais[k]) ? frais[k] : [])] }, p_remove: [] });
     if (error) return fail(`Versement non noté : ${error.message}`);
-    return ok(`✓ Versement noté dans Reversements : ${eur(montant)} à ${titleCase(k)} le ${frDay(date)}${note ? ` (${note})` : ""} [id ${entree.id}, pour l'annuler : retirer]. Relis le reste avec reversements.`);
+    // Étapes automatiques : les collabs que ce versement paie passent « Créateur payé ».
+    const avances = await collabsPayees(sb, st, k, montant, str(a.collab, 40) || null);
+    return ok(`✓ Versement noté dans Reversements : ${eur(montant)} à ${titleCase(k)} le ${frDay(date)}${note ? ` (${note})` : ""} [id ${entree.id}, pour l'annuler : retirer]. Relis le reste avec reversements.${avances.map((l) => `\n${l}`).join("")}`);
   },
 };
+
+/**
+ * Versement noté : la collab désignée, sinon celles dont la facture est soldée par ce versement
+ * (même calcul que la page Reversements, `st` = blob lu AVANT le versement), atteignent
+ * l'étape 10 « Créateur payé » (_shared/collabAuto.ts). Jamais bloquant : [] en cas d'échec.
+ */
+async function collabsPayees(sb: SupabaseClient, st: Json, cle: string, montant: number, collab: string | null): Promise<string[]> {
+  try {
+    const cols = "id, amount, status, creator, collab_id, party, date";
+    let inv: { data: unknown; error: unknown } = await sb.from("invoices").select(`${cols}, paid_at`).eq("status", "payee").limit(5000);
+    if (inv.error) inv = await sb.from("invoices").select(cols).eq("status", "payee").limit(5000);
+    if (inv.error) return [];
+    const { data: cr } = await sb.from("creators").select("name, commission");
+    const roster: Record<string, number> = {};
+    for (const c of (cr as Json[] | null) ?? []) {
+      const v = pctOf(c.commission);
+      if (v != null) roster[String(c.name)] = v;
+    }
+    const rows = reversementRows({
+      invoices: (inv.data as unknown as { id: string; amount: unknown; status: unknown; creator: unknown }[]) ?? [],
+      details: (st.invoiceDetails ?? {}) as Record<string, Detail>,
+      payouts: (st.creatorPayouts ?? {}) as Record<string, Payout[]>,
+      rosterRates: roster,
+      savedRates: (st.creatorCommission ?? {}) as Record<string, number>,
+      collabModes: (st.collabCashMode ?? {}) as Record<string, string>,
+      contractHistory: st.contractHistory,
+    });
+    const row = rows.find((r) => r.creator.trim().toLowerCase() === cle.trim().toLowerCase());
+    const avances = await apresVersement(sb, { createur: row?.creator ?? cle, lignes: row?.lignes ?? [], dejaVerse: row?.reverse ?? 0, montant, collab });
+    return avances.map(ligneAvance);
+  } catch {
+    return [];
+  }
+}
 
 // ── Objectifs du mois et modèles de mails (demande de Marc, 18 novembre 2026) ──
 /** Le 1er du mois suivant (« 2026-12-01 » pour « 2026-11 »), borne de fin d'un mois. */
 const moisSuivant = (mois: string) => {
   const [a, m] = mois.split("-").map(Number);
   return m === 12 ? `${a + 1}-01-01` : `${a}-${String(m + 1).padStart(2, "0")}-01`;
+};
+
+// ── Contrôle qualité des données (même code que la section « À corriger » d'Aujourd'hui) ──
+const controleDonnees: Tool = {
+  name: "controle_donnees",
+  title: "Contrôle qualité des données",
+  description:
+    "Les incohérences des données de TTP Suite, comme la section « À corriger » de la page Aujourd'hui : facture en brouillon échue, collab publiée depuis plus de 14 jours sans facture, facture payée ou créateur payé alors que la collab n'a pas suivi (et facture payée avant la publication, souvent un acompte), créateur absent du roster, prospect resté ouvert alors que la collab existe, cachet illisible, lien de brief cassé, tâche cochée pas « Fait », fiche créateur incomplète, étiquettes de contacts libres. Chaque ligne : gravité, titre, détail, correction sûre s'il y en a une, si elle demande une décision de Marc, lien et id [controle …]. Les problèmes masqués (« Ignorer ») sont retirés. Lecture seule. Les règles d'argent sont réservées aux fondateurs.",
+  inputSchema: { type: "object", properties: { inclure_ignores: { type: "boolean", description: "true : aussi les problèmes masqués dans l'app" } }, additionalProperties: false },
+  run: async (sb, ctx, a) => {
+    const today = isoDay();
+    // Une table illisible passe à null : ses règles sont sautées (jamais de fausse alerte).
+    const read = async (table: string, cols: string): Promise<Json[] | null> => {
+      let r = await sb.from(table).select(cols).limit(20000);
+      if (r.error) r = await sb.from(table).select("*").limit(20000);
+      return r.error ? null : ((r.data as unknown as Json[] | null) ?? []);
+    };
+    const [collabs, collabSteps, invoices, creators, briefs, prospects, todos, contacts] = await Promise.all([
+      read("collabs", "id, brand, creator, step, status, brief_id, cachet, created_at"),
+      read("collab_steps", "collab_id, step, reached_at"),
+      ctx.founder ? read("invoices", "id, ref, party, amount, date, status, creator, collab_id, paid_at") : Promise.resolve(null),
+      read("creators", "name, status, email, email_pro, phone, photo_url, platform"),
+      read("briefs", "id"),
+      read("prospects", "id, brand, stage, creator, collab_id, proposal, created_at"),
+      read("todos", "id, text, done, status"),
+      read("contacts", "id, tag"),
+    ]);
+    const st = await appState(sb).catch(() => null);
+    const input = {
+      aujourdhui: today,
+      collabs,
+      collabSteps,
+      invoices,
+      creators,
+      briefs,
+      prospects,
+      todos,
+      contacts,
+      payouts: ctx.founder && st ? ((st.creatorPayouts ?? {}) as Record<string, unknown>) : null,
+      cashModes: st ? ((st.collabCashMode ?? {}) as Record<string, string>) : null,
+      contractHistory: st ? (st.contractHistory ?? []) : null,
+    } as unknown as ControleInput;
+    const all = controler(input);
+    const list = a.inclure_ignores === true ? all : sansIgnores(all, lireIgnores(st?.[IGNORES_KEY]));
+    const nonLu = [collabs ? null : "collabs", creators ? null : "roster", briefs ? null : "briefs", prospects ? null : "prospects", todos ? null : "tâches", contacts ? null : "contacts", st ? null : "blob", ctx.founder && !invoices ? "factures" : null].filter(Boolean);
+    const decisions = list.filter((p) => p.decision).length;
+    return ok([
+      `# Contrôle des données du ${frDay(today)} · ${list.length} problème(s), dont ${decisions} à décider par Marc`,
+      nonLu.length ? `Non vérifié (lecture impossible) : ${nonLu.join(", ")}.` : "",
+      ctx.founder ? "" : "Règles d'argent (factures, reversements) réservées aux fondateurs : non vérifiées.",
+      lines(list.map(ligneProbleme), "Rien à corriger."),
+    ].filter(Boolean).join("\n"));
+  },
 };
 
 const strategie: Tool = {
@@ -672,8 +768,8 @@ const isStale = (r: Json) => /^\s*p[ée]rim[ée]/i.test(String(r.contexte ?? "")
 const aValider: Tool = {
   name: "a_valider",
   title: "File « À valider » des agents",
-  description: "Propositions des agents qui attendent la validation de l'équipe (page Agents → À valider) : messages WhatsApp ou mails à envoyer, alertes. Les propositions marquées périmées par l'agent sont listées à part. Donne l'id pour ecarter_proposition.",
-  inputSchema: { type: "object", properties: { agent: { type: "string", description: "Nom de l'agent (facultatif)" } }, additionalProperties: false },
+  description: "Propositions des agents qui attendent la validation de l'équipe (page Agents → À valider) : messages WhatsApp ou mails à envoyer, alertes, étapes de collab à avancer. Les propositions marquées périmées par l'agent sont listées à part. Donne l'id pour ecarter_proposition. Avec « modifications » : aussi les textes que Marc a corrigés avant de valider (avant / après), pour en tirer des leçons.",
+  inputSchema: { type: "object", properties: { agent: { type: "string", description: "Nom de l'agent (facultatif)" }, modifications: { type: "boolean", description: "true : ajoute les dernières corrections de Marc (texte avant / après) sur les propositions de cet agent" }, jours: { type: "number", description: "Pour modifications : nombre de jours (défaut 14, 60 au plus)" } }, additionalProperties: false },
   founder: true,
   run: async (sb, _c, a) => {
     const db = sb.schema("agent");
@@ -691,11 +787,26 @@ const aValider: Tool = {
     const live = rows.filter((r) => r.statut !== "valide" && !isStale(r));
     const stale = rows.filter((r) => r.statut !== "valide" && isStale(r));
     const line = (r: Json) => `- [${r.type}] ${r.cible ?? ""} · ${nameOf(r)} · ${frDay(String(r.cree_le))} [proposition ${r.id}]${r.contexte ? `\n  Contexte : ${String(r.contexte).slice(0, 300)}` : ""}${r.contenu ? `\n  Message : ${String(r.contenu).slice(0, 500)}` : ""}`;
+    // Les corrections de Marc (journal `marc_modifie`, écrit par la page Agents quand il modifie
+    // un texte avant de le valider) : l'agent les relit pour apprendre.
+    let modifs = "";
+    if (a.modifications === true) {
+      const jours = int(a.jours, 14, 1, 60);
+      let q = db.from("journal").select("detail, cree_le, agent_id").eq("action", "marc_modifie").gte("cree_le", new Date(Date.now() - jours * 86400000).toISOString()).order("cree_le", { ascending: false }).limit(30);
+      if (want) {
+        const ids = [...agents.values()].filter((x) => String(x.nom ?? "").toLowerCase().includes(want)).map((x) => String(x.id));
+        q = ids.length ? q.in("agent_id", ids) : q.eq("agent_id", "00000000-0000-0000-0000-000000000000");
+      }
+      const { data: mods } = await q;
+      const list = (mods as Json[] | null) ?? [];
+      modifs = `\n## Textes corrigés par Marc avant validation (${jours} j) · ${list.length}\n${lines(list.map((m) => `- ${frDay(String(m.cree_le))} · ${String(m.detail ?? "").replace(/\n/g, "\n  ")}`), "Aucune correction.")}`;
+    }
     return ok([
       `# À valider · ${live.length} proposition(s)${stale.length ? ` (+ ${stale.length} périmée(s) à écarter)` : ""}`,
       ...(valides.length ? [`\n## Validées dans l'app, à envoyer maintenant (puis ecarter_proposition avec statut « envoye »)\n${valides.map(line).join("\n")}\n`] : []),
       lines(live.map(line), "Rien à valider."),
       stale.length ? `\n## Périmées (l'agent les a remplacées : à écarter)\n${stale.map(line).join("\n")}` : "",
+      modifs,
     ].filter(Boolean).join("\n"));
   },
 };
@@ -1768,7 +1879,7 @@ const ajouterContact: Tool = {
   write: true,
   inputSchema: {
     type: "object",
-    properties: { marque: { type: "string" }, personne: { type: "string" }, role: { type: "string" }, email: { type: "string" }, instagram: { type: "string" }, telephone: { type: "string" }, categorie: { type: "string" } },
+    properties: { marque: { type: "string" }, personne: { type: "string" }, role: { type: "string" }, email: { type: "string" }, instagram: { type: "string" }, telephone: { type: "string" }, categorie: { type: "string", description: `Une de : ${CONTACT_TAGS.join(", ")} (Marque par défaut ; une autre valeur est rapprochée, sinon Autre)` } },
     required: ["marque"],
     additionalProperties: false,
   },
@@ -1782,7 +1893,7 @@ const ajouterContact: Tool = {
       if (s) return ok(`Contact déjà présent : ${s.brand} [contact ${s.id}].`);
     }
     const { data, error } = await sb.from("contacts").insert({
-      brand: str(a.marque, 120), person: str(a.personne, 120) || null, role: str(a.role, 80) || null, email: email || null, instagram: ig || null, phone: str(a.telephone, 40) || null, tag: str(a.categorie, 60) || null, tone: "cyan",
+      brand: str(a.marque, 120), person: str(a.personne, 120) || null, role: str(a.role, 80) || null, email: email || null, instagram: ig || null, phone: str(a.telephone, 40) || null, tag: normaliserTag(str(a.categorie, 60), "Marque"), tone: "cyan",
     }).select("id").single<{ id: string }>();
     return error ? fail(`Contact non créé : ${error.message}`) : ok(`Contact ajouté : ${str(a.marque, 120)} [contact ${data.id}].`);
   },
@@ -2021,6 +2132,7 @@ const lireAgent: Tool = {
     if (!ag.actif) return ok(`${ag.emoji} ${ag.nom} est en pause dans l'app : préviens Marc avant d'agir en son nom.`);
     const { data: lec } = await sb.schema("agent").from("lecons").select("module, lecon, agent_id, cree_le").or(`agent_id.eq.${ag.id},agent_id.is.null`).order("cree_le", { ascending: false }).limit(60);
     const { count } = await sb.schema("agent").from("actions").select("id", { count: "exact", head: true }).eq("statut", "a_valider").eq("agent_id", ag.id);
+    const { count: corrections } = await sb.schema("agent").from("journal").select("id", { count: "exact", head: true }).eq("action", "marc_modifie").eq("agent_id", ag.id).gte("cree_le", new Date(Date.now() - 7 * 86400000).toISOString());
     await agentJournal(sb, ag.id, "agent_session", "Consignes relues");
     return ok([
       `# ${ag.emoji} ${ag.nom}`,
@@ -2030,39 +2142,68 @@ const lireAgent: Tool = {
       lines(((lec as Json[] | null) ?? []).map((l) => `- ${l.module ? `[${l.module}] ` : ""}${l.lecon}`), "Aucune pour l'instant."),
       ag.routines?.length ? `\n## Routines\n${ag.routines.map((r) => `- ${r.nom} (${r.quand}) : ${r.consigne}`).join("\n")}` : "",
       `\n${count ?? 0} proposition(s) de cet agent attendent la validation de Marc.`,
+      corrections ? `Marc a corrigé ${corrections} de tes textes ces 7 derniers jours avant de les valider : relis les (a_valider avec modifications) et retiens la leçon d'un motif qui revient.` : "",
     ].filter(Boolean).join("\n"));
   },
 };
 
+/** Lien d'une proposition « avancer la collab » : la collab et l'étape, lus par l'app (src/lib/aValider.ts). */
+const lienAvance = (collab: string, etape: number) => `https://app.ttpcreators.pro/?open=view&view=collabs&item=${collab}&avancer=1&etape=${etape}`;
+const ACTION_TYPES = ["whatsapp", "instagram", "linkedin", "brouillon_mail", "alerte", "avancer_collab"];
+
 const proposerAction: Tool = {
   name: "proposer_action",
   title: "Proposer une action à valider",
-  description: "Dépose une proposition dans la file « À valider » de l'app (section Agents) : message WhatsApp, DM Instagram, message LinkedIn, alerte, ou mail (préférer creer_brouillon_mail pour un mail). Marc la copie, l'ouvre et l'envoie lui-même, ou l'écarte.",
+  description: "Dépose une proposition dans la file « À valider » de l'app (section Agents) : message WhatsApp, DM Instagram, message LinkedIn, alerte, ou mail (préférer creer_brouillon_mail pour un mail). Marc la copie, l'ouvre et l'envoie lui-même, ou l'écarte. Type « avancer_collab » : proposer de passer une collab à une étape (donner « collab », l'id de l'outil collabs, et « etape », 1 à 11, plus loin que l'étape actuelle ; « contenu » = la preuve, par exemple la phrase du mail de la marque) ; quand Marc clique Valider, l'app fait avancer la collab elle même, rien d'autre ne part. Une même collab à la même étape n'est proposée qu'une fois.",
   write: true,
   founder: true,
   inputSchema: {
     type: "object",
     properties: {
       agent: { type: "string", description: "Nom de l'agent qui propose (ex. Talent manager)" },
-      type: { type: "string", enum: ["whatsapp", "instagram", "linkedin", "brouillon_mail", "alerte"] },
-      cible: { type: "string", description: "À qui (marque, créateur, @, numéro)" },
+      type: { type: "string", enum: ACTION_TYPES },
+      cible: { type: "string", description: "À qui (marque, créateur, @, numéro) ; pour avancer_collab, rempli d'office (Marque × Créateur)" },
       contexte: { type: "string", description: "Pourquoi, en une ou deux phrases" },
-      contenu: { type: "string", description: "Le message prêt à envoyer (ou le texte de l'alerte)" },
+      contenu: { type: "string", description: "Le message prêt à envoyer (ou le texte de l'alerte, ou la preuve pour avancer_collab)" },
       lien: { type: "string", description: "Lien utile (profil, fil, document) facultatif" },
+      collab: { type: "string", description: "avancer_collab : id de la collab (outil collabs)" },
+      etape: { type: "number", description: "avancer_collab : étape à atteindre (5 Validation marque, 6 Publication, 7 Stats à 7 jours, 9 Paiement marque reçu…)" },
     },
     required: ["agent", "type", "contenu"],
     additionalProperties: false,
   },
   run: async (sb, _c, a) => {
     const ag = await findAgent(sb, str(a.agent, 80));
-    const type = ["whatsapp", "instagram", "linkedin", "brouillon_mail", "alerte"].includes(str(a.type)) ? str(a.type) : "alerte";
-    const lien = /^https?:\/\//i.test(str(a.lien, 500)) ? str(a.lien, 500) : null;
-    const { data, error } = await sb.schema("agent").from("actions").insert({
-      type, cible: str(a.cible, 200) || null, contexte: str(a.contexte, 1000) || null, contenu: str(a.contenu, 6000), lien_spark: lien, statut: "a_valider", agent_id: ag?.id ?? null,
-    }).select("id").single();
+    let type = ACTION_TYPES.includes(str(a.type)) ? str(a.type) : "alerte";
+    let lien = /^https?:\/\//i.test(str(a.lien, 500)) ? str(a.lien, 500) : null;
+    let cible = str(a.cible, 200) || null;
+    let contexte = str(a.contexte, 1000) || null;
+    if (type === "avancer_collab") {
+      const id = str(a.collab, 40);
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return fail("avancer_collab : donne l'id de la collab (outil collabs).");
+      const etape = int(a.etape, 0, 1, 11);
+      if (!etape) return fail("avancer_collab : étape entre 1 et 11.");
+      const { data: col } = await sb.from("collabs").select("brand, creator, step").eq("id", id).maybeSingle<{ brand: string; creator: string | null; step: number }>();
+      if (!col) return fail("Collab introuvable.");
+      if (Number(col.step) >= etape) return fail(`${col.brand} × ${titleCase(col.creator)} est déjà à l'étape ${col.step} « ${COLLAB_STEPS[Number(col.step) - 1] ?? ""} » : rien à proposer.`);
+      lien = lienAvance(id, etape);
+      const { data: deja } = await sb.schema("agent").from("actions").select("id").eq("statut", "a_valider").eq("lien_spark", lien).limit(1);
+      const dejaId = ((deja as Json[] | null) ?? [])[0]?.id;
+      if (dejaId) return fail(`Déjà proposé (proposition ${dejaId}) : Marc ne l'a pas encore validé.`);
+      cible = `${col.brand} × ${titleCase(col.creator)}`.slice(0, 200);
+      contexte = `Étape ${col.step} → ${etape} « ${COLLAB_STEPS[etape - 1]} »${contexte ? ` · ${contexte}` : ""}`.slice(0, 1000);
+    }
+    const row = { type, cible, contexte, contenu: str(a.contenu, 6000), lien_spark: lien, statut: "a_valider", agent_id: ag?.id ?? null };
+    let { data, error } = await sb.schema("agent").from("actions").insert(row).select("id").single();
+    // Avant le SQL du 23/11/2026, la base refuse le type « avancer_collab » : déposée en alerte,
+    // l'app la reconnaît à son lien et fait avancer la collab de la même façon.
+    if (error && type === "avancer_collab" && (error.code === "23514" || /check/i.test(error.message))) {
+      type = "alerte";
+      ({ data, error } = await sb.schema("agent").from("actions").insert({ ...row, type }).select("id").single());
+    }
     if (error) return fail(`Proposition non déposée : ${error.message}`);
-    await agentJournal(sb, ag?.id ?? null, "proposition", `${type} · ${str(a.cible, 120)}`);
-    return ok(`Déposé dans « À valider » (${type}${str(a.cible) ? ` pour ${str(a.cible, 120)}` : ""}) [proposition ${(data as Json)?.id}]. Marc le verra dans l'app, section Agents, et dans la liste de 17 h.`);
+    await agentJournal(sb, ag?.id ?? null, "proposition", `${type} · ${cible ?? ""}`.slice(0, 160));
+    return ok(`Déposé dans « À valider » (${type === "alerte" && lien?.includes("avancer=1") ? "avancer_collab" : type}${cible ? ` pour ${cible.slice(0, 120)}` : ""}) [proposition ${(data as Json)?.id}]. Marc le verra dans l'app, section Agents, et dans la liste de 17 h.`);
   },
 };
 
@@ -2913,7 +3054,7 @@ const lireContrat: Tool = {
 };
 
 export const TOOLS: Tool[] = [
-  pointDuJour, strategie, tableauLundiTool, devisRelancer, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
+  pointDuJour, controleDonnees, strategie, tableauLundiTool, devisRelancer, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
   creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief, lireContrat,

@@ -4,7 +4,9 @@ import { typeHandle } from "@/lib/touches";
 import { supabase } from "@/lib/supabase";
 import { cn, titleCase } from "@/lib/utils";
 import { parseAmount, formatEuro } from "@/lib/money";
-import { getAppState } from "@/lib/appState";
+import { getAppState, useAppState, type AppState } from "@/lib/appState";
+import { SEUIL_FICHE, contratsSignes, ficheCompletude, type FicheLite } from "@/lib/ficheComplete";
+import { TONE_TEXT } from "@/lib/statusTone";
 import { invoiceHT, type InvoiceDetailLike } from "@/lib/invoice";
 import { fmtCompact } from "@/lib/timeSeries";
 import { useSearch, matchQuery, matchWords } from "@/lib/search";
@@ -36,6 +38,11 @@ type CreatorRow = {
   photo_url: string | null;
   sort_order: number | null;
   stats_month: string | null;
+  email?: string | null;
+  email_pro?: string | null;
+  phone?: string | null;
+  commission?: string | null;
+  mediakit?: unknown;
 };
 
 type Creator = {
@@ -51,6 +58,8 @@ type Creator = {
   photo: string;
   sort_order: number | null;
   statsMonth: string;
+  /** Champs lus par la complétude de la fiche (src/lib/ficheComplete.ts). */
+  fiche: FicheLite;
 };
 
 function mapCreator(r: CreatorRow): Creator {
@@ -67,6 +76,7 @@ function mapCreator(r: CreatorRow): Creator {
     photo: r.photo_url ?? "",
     sort_order: r.sort_order,
     statsMonth: r.stats_month ?? "",
+    fiche: { name: r.name, email: r.email, email_pro: r.email_pro, phone: r.phone, photo_url: r.photo_url, platform: r.platform, commission: r.commission, mediakit: r.mediakit },
   };
 }
 
@@ -157,6 +167,9 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
   // (mesures d'engagement, blob `engagementHistory`). Clé = nom en minuscules.
   // Instagram : le chiffre du jour donné par Meta (ig-sync) remplace la mesure.
   const cumFollowers = useRosterAudience();
+  // Contrats de représentation signés (complétude des fiches, discrète sous le nom).
+  const { data: ctHist } = useAppState<{ brand: unknown; repr: unknown }>((s: AppState) => ({ brand: s["brandContractHistory"], repr: s["contractHistory"] }));
+  const signes = ctHist ? contratsSignes(ctHist.brand, ctHist.repr) : null;
 
   if (error && !rows) {
     return (
@@ -410,6 +423,17 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
                     <div className="truncate text-xs text-faint">
                       {c.handle}
                       {c.niche && <span className="md:hidden"> · {c.niche}</span>}
+                      {(() => {
+                        // Fiche incomplète : « Fiche 57 % » (orange sous le seuil), détail dans la fiche.
+                        if (!c.fiche) return null; // roster en cache d'une version précédente
+                        const f = ficheCompletude(c.fiche, signes);
+                        if (f.pct >= 100) return null;
+                        return (
+                          <span className={cn("tabular-nums", f.pct < SEUIL_FICHE && TONE_TEXT.wait)} title={`Manque : ${f.manque.map((m) => m.label.toLowerCase()).join(", ")}`}>
+                            {c.handle || c.niche ? " · " : ""}Fiche {f.pct} %
+                          </span>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

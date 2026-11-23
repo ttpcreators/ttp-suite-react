@@ -21,6 +21,10 @@ import {
 } from "../_shared/mcpAdmin.ts";
 import { eurRateOf } from "../_shared/reversements.ts";
 import { estUuid, plageUuid } from "../_shared/idCourt.ts";
+import { normaliserCachet } from "../_shared/cachet.ts";
+import { normaliserTag } from "../_shared/contactTags.ts";
+import { apresCollabSignee, apresFacturePayee } from "../_shared/collabAutoDb.ts";
+import { gagneeHorsBilan, ligneAvance, ligneProspectSigne } from "../_shared/collabAuto.ts";
 import { listSendAs, parseMailBox, resolveSender, sendDraft, sendMail, type MailBox } from "./gmail.ts";
 import { LIEN_TTL_MS, PROJECT_URL, creatorBoxReady, listCreatorBoxes, normEmail } from "../_shared/creatorBox.ts";
 import { genNonce, signState } from "../_shared/state.ts";
@@ -97,6 +101,14 @@ const lireDonnees: AdminTool = {
   },
 };
 
+// Exclusivité d'un créateur avec l'agence : l'app lit la colonne creators.exclu OU la clé de
+// blob creatorExclusive. Quand Claude écrit `exclu`, la clé du blob reçoit la même valeur.
+async function copierExclu(sb: SupabaseClient, row: Json | null | undefined): Promise<string> {
+  if (!row || typeof row.exclu !== "boolean" || !String(row.name ?? "").trim()) return "";
+  const { error } = await sb.rpc("app_state_merge", { p_key: "creatorExclusive", p_set: { [String(row.name).trim().toLowerCase()]: row.exclu }, p_remove: [] });
+  return error ? `\n⚠ Copie de l'exclusivité (réglage creatorExclusive) non faite : ${error.message}` : "";
+}
+
 // ── 2. Créer ────────────────────────────────────────────────────────────────
 const creerElement: AdminTool = {
   name: "creer_element",
@@ -119,6 +131,9 @@ const creerElement: AdminTool = {
     const { ok: fields, refused } = writableFields(t.table, obj(a.champs) ?? {});
     if (!Object.keys(fields).length) return fail("Aucun champ à enregistrer.");
     if (t.table === "events") fields.sync_source = "agence"; // poussé vers Google Agenda
+    // Cachet d'une collab : même forme que l'app (« 550 € », « 550 $ + affiliation »).
+    if (t.table === "collabs" && "cachet" in fields) fields.cachet = normaliserCachet(fields.cachet);
+    if (t.table === "contacts" && typeof fields.tag === "string") fields.tag = normaliserTag(fields.tag); // liste fermée
     // Rangé en dernier, comme dans l'app (si la table a un ordre).
     if (!("sort_order" in fields)) {
       const { data: top, error: e } = await sb.from(t.table).select("sort_order").order("sort_order", { ascending: false, nullsFirst: false }).limit(1);
@@ -126,7 +141,10 @@ const creerElement: AdminTool = {
     }
     const { data, error } = await sb.from(t.table).insert(fields).select("*").single();
     if (error) return fail(`Création refusée : ${error.message}`);
-    return ok(`✓ ${rule.label} créé${refused.length ? ` (champs ignorés : ${refused.join(", ")})` : ""}.\n${json(readableRow(data as Json))}`);
+    // Collab créée : le prospect ouvert de la marque passe « Signé » (étapes automatiques).
+    const signe = t.table === "collabs" && (data as Json).status !== "perdue" ? await apresCollabSignee(sb, String((data as Json).id)) : null;
+    const exclu = t.table === "creators" && "exclu" in fields ? await copierExclu(sb, data as Json) : "";
+    return ok(`✓ ${rule.label} créé${refused.length ? ` (champs ignorés : ${refused.join(", ")})` : ""}.${signe ? `\n${ligneProspectSigne(signe.brand)}` : ""}\n${json(readableRow(data as Json))}${exclu}`);
   },
 };
 
@@ -160,6 +178,8 @@ const modifierElement: AdminTool = {
     }
     const { ok: fields, refused } = writableFields(t.table, obj(a.champs) ?? {});
     if (!Object.keys(fields).length) return fail(`Aucun champ modifiable${refused.length ? ` (refusés : ${refused.join(", ")})` : ""}.`);
+    if (t.table === "collabs" && "cachet" in fields) fields.cachet = normaliserCachet(fields.cachet);
+    if (t.table === "contacts" && typeof fields.tag === "string") fields.tag = normaliserTag(fields.tag); // liste fermée
     const { data: before, error: e1 } = await sb.from(t.table).select("*").eq(key, id).maybeSingle();
     if (e1) return fail(`Lecture impossible : ${e1.message}`);
     if (!before) return fail(`${rule.label} introuvable (${id}).`);
@@ -167,7 +187,20 @@ const modifierElement: AdminTool = {
     const { data: after, error } = await sb.from(t.table).update(patch).eq(key, id).select("*").maybeSingle();
     if (error) return fail(`Modification refusée : ${error.message}`);
     const changes = Object.keys(fields).map((k) => `- ${k} : ${JSON.stringify((before as Json)[k] ?? null)} → ${JSON.stringify((after as Json | null)?.[k] ?? null)}`);
-    return ok(`✓ ${rule.label} modifié${refused.length ? ` (champs refusés : ${refused.join(", ")})` : ""}.\n${changes.join("\n")}`);
+    // Étapes automatiques : facture passée « payée » → sa collab ; collab gagnée → prospect « Signé ».
+    const devient = (v: string) => (after as Json | null)?.status === v && (before as Json).status !== v;
+    const auto: string[] = [];
+    if (t.table === "invoices" && devient("payee")) {
+      const av = await apresFacturePayee(sb, id);
+      if (av) auto.push(ligneAvance(av));
+    }
+    // Pas une collab gagnée à l'étape 11 (bilan, renouvellement) : ce n'est plus la signature.
+    if (t.table === "collabs" && after && gagneeHorsBilan((before as Json).status, (after as Json).status, (after as Json).step)) {
+      const signe = await apresCollabSignee(sb, id);
+      if (signe) auto.push(ligneProspectSigne(signe.brand));
+    }
+    const exclu = t.table === "creators" && "exclu" in fields ? await copierExclu(sb, after as Json | null) : "";
+    return ok(`✓ ${rule.label} modifié${refused.length ? ` (champs refusés : ${refused.join(", ")})` : ""}.\n${changes.join("\n")}${auto.length ? `\n${auto.join("\n")}` : ""}${exclu}`);
   },
 };
 
@@ -261,6 +294,7 @@ const reglagesApp: AdminTool = {
       return ok(`# ${key}\n${v.length > 12000 ? `${v.slice(0, 12000)}… (coupé, ${v.length} caractères)` : v}`);
     }
     if (!key || blockedSetting(key)) return fail(key ? "Réglage protégé (jamais modifié par Claude)." : "Indique la clé à modifier.");
+    if (key === "creatorExclusive") return fail("L'exclusivité d'un créateur se change sur sa fiche : modifier_element, table creators, champ exclu (true / false). Ce réglage est mis à jour en même temps.");
     if (!("valeur" in a) && !Array.isArray(a.retirer)) return fail("Indique la nouvelle valeur.");
     const cur = st[key];
     const v = a.valeur;
@@ -370,6 +404,8 @@ const preparerFacture: AdminTool = {
     }
     const { error: e2 } = await sb.rpc("app_state_merge", { p_key: "invoiceDetails", p_set: { [id]: detail }, p_remove: [] });
     if (creator) await sb.rpc("app_state_merge", { p_key: "creatorCommission", p_set: { [creator]: commission }, p_remove: [] });
+    // Facture passée « payée » : sa collab atteint « Paiement marque reçu » (étapes automatiques).
+    const avance = summary.status === "payee" && String(row?.status ?? "") !== "payee" ? await apresFacturePayee(sb, id, str(a.collab_id) || null) : null;
     const fmt = (n: number) => euro2(n).replace(/ /g, " ");
     return ok([
       `✓ Facture ${ref} ${row ? "mise à jour" : "créée"} (${summary.status}) : ${summary.party}`,
@@ -377,6 +413,7 @@ const preparerFacture: AdminTool = {
       `HT ${fmt(tot.ht)} · TVA ${detail.franchise ? "franchise" : `${detail.vatRate} %`} ${fmt(tot.tva)} · TTC ${fmt(tot.ttc)}`,
       `Commission ${commission} % : ${fmt(tot.commission)} · reversé au créateur ${fmt(tot.reversal)} · échéance ${detail.dueDate}`,
       e2 ? `⚠️ Détails non enregistrés (${e2.message}) : ouvre la facture dans Facturation et enregistre-la.` : "À vérifier puis envoyer depuis Facturation (le PDF est fait par l'app).",
+      ...(avance ? [ligneAvance(avance)] : []),
     ].join("\n"));
   },
 };

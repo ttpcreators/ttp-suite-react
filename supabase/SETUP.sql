@@ -1629,6 +1629,10 @@ create table if not exists agent.actions (
   cree_le timestamptz default now(), traite_le timestamptz
 );
 create index if not exists agent_actions_statut_idx on agent.actions (statut);
+-- Types de proposition (2026-11-23, sql/2026-11-23-a-valider-avancer-collab.sql) : + avancer_collab.
+alter table agent.actions drop constraint if exists actions_type_check;
+alter table agent.actions add constraint actions_type_check
+  check (type = any (array['brouillon_mail', 'whatsapp', 'linkedin', 'instagram', 'alerte', 'avancer_collab']));
 create table if not exists agent.prospects (
   id uuid primary key default gen_random_uuid(),
   marque text not null, signal text, signal_date date, contact text, contact_role text,
@@ -2883,3 +2887,21 @@ drop trigger if exists collab_posts_advance on public.collab_posts;
 create trigger collab_posts_advance after insert or update on public.collab_posts
   for each row execute function public.collab_posts_advance();
 
+-- Exclusivité : rattrapage de creators.exclu depuis la clé de blob creatorExclusive
+-- (2026-11-23, sql/2026-11-23-exclu-rattrapage.sql). N'ajoute que des exclusivités.
+-- ════════════════════════════════════════════════════════════════════════════
+with blob as (
+  select coalesce(nullif(a, ''), '{}')::jsonb -> 'creatorExclusive' as x
+    from public.module_rows
+   where module = '__app_state__'
+), noms as (
+  select distinct lower(trim(e.nom)) as nom
+    from blob,
+         jsonb_each_text(case when jsonb_typeof(blob.x) = 'object' then blob.x else '{}'::jsonb end) as e(nom, valeur)
+   where e.valeur = 'true'
+)
+update public.creators c
+   set exclu = true
+  from noms
+ where lower(trim(c.name)) = noms.nom
+   and coalesce(c.exclu, false) = false;
