@@ -5,7 +5,7 @@ import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
 import { NewDot } from "@/components/ui/new-dot";
 import { AnimatedBadge } from "@/components/ui/be-ui-animated-badge";
 import { cn, titleCase } from "@/lib/utils";
-import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, FileDown, Paperclip, FileText, UserRound, CheckCircle2 } from "@/components/icons";
+import { CalendarClock, Wallet, Target, Package, Pencil, X, Columns3, List as ListIcon, Trash2, FileDown, Paperclip, FileText, UserRound, CheckCircle2, ChevronRight } from "@/components/icons";
 import { FilterPanel, type FilterGroup } from "@/components/ui/filter-panel";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { StatsBento } from "@/components/ui/stats-bento";
@@ -35,6 +35,7 @@ import { guessCollabId } from "@/lib/collabLinks";
 import { briefDealKind } from "@/lib/dealKind";
 import { DealBadge } from "@/components/ui/deal-badge";
 import { useIntent } from "@/lib/openIntent";
+import { colKey, filled, sortByAction } from "@/lib/briefStatus";
 
 type Row = {
   id: string;
@@ -57,31 +58,12 @@ type Row = {
 };
 const BRIEF_COLS = "id, brand, creator, deliverables, due, status, budget, objectif, consignes, sort_order, pdf";
 const RESUME_EMPTY: Record<ResumeKey, string> = { faire: "", eviter: "", livrables: "", mentions: "" };
-type BadgeStatus = "success" | "warning" | "danger" | "neutral" | "info" | "loading";
-
 const STATUS_OPTS: StatusOption[] = [
   { value: "attente", label: "En attente", dot: "bg-wait" },
   { value: "valider", label: "À valider", dot: "bg-info" },
   { value: "cours", label: "En cours", dot: "bg-progress" },
   { value: "terminé", label: "Terminé", dot: "bg-ok" },
 ];
-
-/** Colonne (canonique) d'un brief selon son statut stocké. */
-function colKey(status: string): string {
-  // Insensible aux accents : "terminé" (é précomposé) ne contient PAS "termine".
-  const s = String(status).toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
-  if (s.includes("termin")) return "terminé";
-  if (s.includes("cours")) return "cours";
-  if (s.includes("valider")) return "valider";
-  return "attente";
-}
-function statusMeta(status: string): { variant: BadgeStatus; label: string } {
-  const k = colKey(status);
-  if (k === "terminé") return { variant: "success", label: "Terminé" };
-  if (k === "cours") return { variant: "info", label: "En cours" };
-  if (k === "valider") return { variant: "warning", label: "À valider" };
-  return { variant: "warning", label: "En attente" };
-}
 
 function escHtml(s: string): string {
   return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -126,6 +108,8 @@ export function Briefs() {
 
   const [view, setView] = useStickyState("briefs:vue", ["board", "list"] as const, "list");
   const [statusFilter, setStatusFilter] = useStickyState<string>("briefs:statut", ["__all__", ...STATUS_OPTS.map((o) => o.value)], "__all__");
+  // Section « Terminés » de la liste : repliée par défaut, choix gardé sur l'appareil.
+  const [doneOpen, setDoneOpen] = useStickyState<"0" | "1">("briefs:termines", ["0", "1"], "0");
   const [creatorFilter, setCreatorFilter] = useState<string>("");
   const [formOpen, setFormOpen] = useState(false);
   const [brand, setBrand] = useState("");
@@ -424,7 +408,7 @@ export function Briefs() {
   const filtered = filteredBase.filter((row) => statusFilter === ALL || colKey(row.status) === statusFilter);
 
   // ---- rendu d'une carte (compacte pour le board, riche pour la liste) ----
-  const renderCard = (row: Row, compact: boolean): ReactElement => {
+  const renderCard = (row: Row): ReactElement => {
     if (editId === row.id) {
       return (
         <div key={row.id} className="flex flex-col rounded-2xl border border-border bg-card p-4 shadow-sm">
@@ -471,13 +455,20 @@ export function Briefs() {
         </div>
       );
     }
-    const meta = statusMeta(row.status);
+    const done = colKey(row.status) === "terminé";
+    const deliverables = filled(row.deliverables);
+    const budget = filled(row.budget);
+    const objectif = filled(row.objectif);
+    const due = fmtDayAny(row.due);
+    const creatorName = filled(row.creator);
+    // Carte terminée : l'essentiel sur une ligne (livrables, budget, échéance).
+    const doneLine = [deliverables, budget, due && `Échéance ${due}`].filter(Boolean).join(" · ");
     return (
       <div
         key={row.id}
         // Un clic sur le brief efface son repère « nouveau ».
         onClickCapture={() => activity.keys.has(`brief:${row.id}`) && void markActivityRead("brief", row.id)}
-        className="flex flex-col rounded-2xl border border-border bg-card p-4 shadow-sm transition-colors hover:bg-rowhover"
+        className={cn("flex flex-col rounded-2xl border border-border bg-card shadow-sm transition-colors hover:bg-rowhover", done ? "p-3.5" : "p-4")}
       >
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
@@ -485,17 +476,14 @@ export function Briefs() {
               {activity.keys.has(`brief:${row.id}`) && <NewDot label="Du nouveau d'un créateur" />}
               <span className="truncate">{row.brand}</span>
             </h2>
-            <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
-              <span className="truncate">{row.creator ? titleCase(row.creator) : "—"}</span>
-              <DealBadge kind={briefKind(row)} />
-            </p>
+            {(creatorName || briefKind(row)) && (
+              <p className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[11px] text-muted-foreground">
+                {creatorName && <span className="truncate">{titleCase(creatorName)}</span>}
+                <DealBadge kind={briefKind(row)} />
+              </p>
+            )}
           </div>
           <div className="flex shrink-0 items-center gap-1">
-            {!compact && (
-              <AnimatedBadge status={meta.variant} size="sm">
-                {meta.label}
-              </AnimatedBadge>
-            )}
             <ActionMenu
               items={[
                 { key: "edit", label: "Modifier", icon: Pencil, onClick: () => startEdit(row) },
@@ -513,50 +501,72 @@ export function Briefs() {
           </div>
         </div>
 
-        <div className="mt-3 rounded-xl bg-panel px-3 py-2">
-          <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-            <Package className="h-3 w-3" /> Livrables
-          </div>
-          <div className="mt-1 text-[12px] font-medium leading-snug text-foreground">{row.deliverables || "—"}</div>
-        </div>
+        {done ? (
+          doneLine && <p className="mt-2 truncate text-[12px] text-muted-foreground" title={doneLine}>{doneLine}</p>
+        ) : (
+          <>
+            {deliverables && (
+              <div className="mt-3 rounded-xl bg-panel px-3 py-2">
+                <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                  <Package className="h-3 w-3" /> Livrables
+                </div>
+                <div className="mt-1 text-[12px] font-medium leading-snug text-foreground">{deliverables}</div>
+              </div>
+            )}
 
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          <div className="rounded-xl bg-panel px-3 py-2">
-            <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-              <Wallet className="h-3 w-3" /> Budget
-            </div>
-            <div className="mt-1 truncate text-[12px] font-medium text-foreground">{row.budget || "—"}</div>
-          </div>
-          <div className="rounded-xl bg-panel px-3 py-2">
-            <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-              <Target className="h-3 w-3" /> Objectif
-            </div>
-            <div className="mt-1 truncate text-[12px] font-medium text-foreground">{row.objectif || "—"}</div>
-          </div>
-        </div>
+            {(budget || objectif) && (
+              <div className={cn("mt-2 grid gap-2", budget && objectif ? "grid-cols-2" : "grid-cols-1")}>
+                {budget && (
+                  <div className="min-w-0 rounded-xl bg-panel px-3 py-2">
+                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                      <Wallet className="h-3 w-3" /> Budget
+                    </div>
+                    <div className="mt-1 truncate text-[12px] font-medium text-foreground">{budget}</div>
+                  </div>
+                )}
+                {objectif && (
+                  <div className="min-w-0 rounded-xl bg-panel px-3 py-2">
+                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                      <Target className="h-3 w-3" /> Objectif
+                    </div>
+                    <div className="mt-1 truncate text-[12px] font-medium text-foreground">{objectif}</div>
+                  </div>
+                )}
+              </div>
+            )}
 
-        <div className="mt-2 rounded-xl bg-panel px-3 py-2.5">
-          <div className="mb-1.5 flex items-center justify-between gap-2">
-            <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
-              <span className="truncate">Pour le créateur</span>
-              <HelpTip title="Résumé pour le créateur">
-                <p>À faire, à ne pas faire, livrables et mentions : Claude lit le brief et le PDF de la marque, puis le résumé arrive ici tout seul.</p>
-              </HelpTip>
-            </span>
-            <ResumeClaudeButton has={hasResume(row.resume)} waiting={claude.waitingId === row.id} onClick={() => claude.ask(row)} onCancel={claude.cancel} />
-          </div>
-          {hasResume(row.resume) ? (
-            <BriefResumeView resume={row.resume} dense />
-          ) : (
-            <p className="text-[12px] leading-snug text-faint">Aucun résumé</p>
-          )}
-        </div>
+            {/* Résumé pour le créateur : le bloc s'affiche quand il existe ; sinon une ligne
+                discrète garde le bouton qui le demande à Claude. */}
+            {hasResume(row.resume) ? (
+              <div className="mt-2 rounded-xl bg-panel px-3 py-2.5">
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+                    <span className="truncate">Pour le créateur</span>
+                    <HelpTip title="Résumé pour le créateur">
+                      <p>À faire, à ne pas faire, livrables et mentions : Claude lit le brief et le PDF de la marque, puis le résumé arrive ici tout seul.</p>
+                    </HelpTip>
+                  </span>
+                  <ResumeClaudeButton has waiting={claude.waitingId === row.id} onClick={() => claude.ask(row)} onCancel={claude.cancel} />
+                </div>
+                <BriefResumeView resume={row.resume} dense />
+              </div>
+            ) : (
+              <div className="mt-2.5 flex items-center gap-1.5 px-1">
+                <ResumeClaudeButton has={false} waiting={claude.waitingId === row.id} onClick={() => claude.ask(row)} onCancel={claude.cancel} />
+                <HelpTip title="Résumé pour le créateur">
+                  <p>À faire, à ne pas faire, livrables et mentions : Claude lit le brief et le PDF de la marque, puis le résumé arrive ici tout seul.</p>
+                </HelpTip>
+              </div>
+            )}
+          </>
+        )}
 
-        <div className="mt-3">
+        {/* Le statut s'affiche une seule fois : dans son menu. */}
+        <div className={done ? "mt-2.5" : "mt-3"}>
           <StatusSelect value={colKey(row.status)} options={STATUS_OPTS} onChange={(v) => changeStatus(row.id, v)} />
         </div>
 
-        {row.pdf && (
+        {row.pdf && !done && (
           <button
             type="button"
             onClick={() => openPdf(row)}
@@ -568,10 +578,12 @@ export function Briefs() {
           </button>
         )}
 
-        <div className="mt-3 flex items-center gap-1.5 border-t border-border pt-2.5 text-[11px] text-muted-foreground">
-          <CalendarClock className="h-3.5 w-3.5 shrink-0 text-faint" />
-          <span className="truncate">Échéance {fmtDayAny(row.due) || "—"}</span>
-        </div>
+        {due && !done && (
+          <div className="mt-3 flex items-center gap-1.5 border-t border-border pt-2.5 text-[11px] text-muted-foreground">
+            <CalendarClock className="h-3.5 w-3.5 shrink-0 text-faint" />
+            <span className="truncate">Échéance {due}</span>
+          </div>
+        )}
       </div>
     );
   };
@@ -603,7 +615,7 @@ export function Briefs() {
                 {items.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border px-3 py-6 text-center text-[11px] text-faint">Aucun brief</div>
                 ) : (
-                  items.map((r) => renderCard(r, true))
+                  items.map((r) => renderCard(r))
                 )}
               </div>
             </div>
@@ -614,7 +626,32 @@ export function Briefs() {
   } else if (filtered.length === 0) {
     content = <div className="rounded-xl border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground shadow-sm">{query.trim() ? `Aucun résultat pour « ${query} »` : "Aucun brief pour ces filtres."}</div>;
   } else {
-    content = <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">{filtered.map((r) => renderCard(r, false))}</div>;
+    // Liste : ce qui demande une action d'abord (À valider, en cours, en attente) ; les
+    // terminés à la fin, repliés dans leur propre section.
+    const sorted = sortByAction(filtered);
+    const open = sorted.filter((r) => colKey(r.status) !== "terminé");
+    const done = sorted.filter((r) => colKey(r.status) === "terminé");
+    const grid = "grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3";
+    content =
+      open.length === 0 || done.length === 0 ? (
+        <div className={grid}>{sorted.map((r) => renderCard(r))}</div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <div className={grid}>{open.map((r) => renderCard(r))}</div>
+          <section>
+            <button
+              type="button"
+              onClick={() => setDoneOpen(doneOpen === "1" ? "0" : "1")}
+              aria-expanded={doneOpen === "1"}
+              className="flex items-center gap-1.5 rounded-lg px-1 py-1 text-[13px] font-semibold text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ChevronRight className={cn("h-4 w-4 transition-transform duration-200", doneOpen === "1" && "rotate-90")} />
+              Terminés ({done.length})
+            </button>
+            {doneOpen === "1" && <div className={cn(grid, "mt-3")}>{done.map((r) => renderCard(r))}</div>}
+          </section>
+        </div>
+      );
   }
 
   return (

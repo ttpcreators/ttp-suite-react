@@ -206,8 +206,6 @@ export const EN_CREATORSPACE: Record<string, string> = {
   "Ton évolution n'a pas pu être récupérée.": "We couldn't load your growth.",
   "Réessayer": "Try again",
   "Chargement…": "Loading…",
-  "La courbe apparaîtra dès que ton agence aura enregistré 2 relevés d'abonnés.":
-    "The chart will appear once your agency has recorded 2 follower readings.",
   "À retenir": "Key takeaway",
   "Mes stats du mois": "My monthly stats",
   "Envoie les captures de tes 30 derniers jours en début de mois\u00A0: c'est ce qui prouve ton audience aux marques.":

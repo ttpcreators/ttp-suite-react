@@ -1799,14 +1799,16 @@ export function Contacts() {
                 </div>
                 <span className="text-[12px] text-muted-foreground">{contactedPct} % du répertoire</span>
               </div>
-              <div className={cn(kpiCell, "border-r border-border", TONE_SOFT.wait)}>
-                <span className="text-[12px] font-medium">À relancer, {relanceDays} j et plus</span>
-                <span className={cn(kpiValue, TONE_TEXT.wait)}>{relancerCount}</span>
+              {/* Même case que les autres (pas d'aplat) : le chiffre en couleur et le lien
+                  « Afficher » suffisent à la faire ressortir. */}
+              <div className={cn(kpiCell, "border-r border-border")}>
+                <span className={kpiLabel}>À relancer, {relanceDays} j et plus</span>
+                <span className={cn(kpiValue, relancerCount > 0 && TONE_TEXT.wait)}>{relancerCount}</span>
                 <button
                   type="button"
                   onClick={() => setContactFilter(contactFilter === "relancer" ? "all" : "relancer")}
                   aria-pressed={contactFilter === "relancer"}
-                  className="self-start text-[12px] font-semibold underline-offset-2 hover:underline"
+                  className={cn("self-start text-[12px] font-semibold underline-offset-2 hover:underline", relancerCount > 0 ? TONE_TEXT.wait : "text-muted-foreground")}
                 >
                   {contactFilter === "relancer" ? "Tout afficher" : "Afficher"}
                 </button>
