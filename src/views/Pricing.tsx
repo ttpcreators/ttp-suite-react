@@ -36,6 +36,7 @@ import { kitRatesFromPrices, mergeRates, type KitRate, type RatesMerge } from "@
 import { readKit, writeKitRates } from "@/lib/mediakitRatesDb";
 import { KitRatesDialog } from "@/components/kit-rates-dialog";
 import { CheckRow, QualityBlock, Stepper, T_INPUT, TarifDetail, TarifGridEditor, TarifPrice, TarifWarnings, type Justifs } from "./PricingTarif";
+import { normaliserCachet } from "../../supabase/functions/_shared/cachet.ts";
 
 /** Créateur choisi : aucun (recherche), saisie libre, ou l'id d'un créateur du roster. */
 const NONE = "";
@@ -308,7 +309,7 @@ export function Pricing() {
 
   // Livrables et cachet écrits dans la collab (forme lue par la page Collabs).
   const collabDeliverables = mode === "influence" ? deliverablesText(infRows) : ugcDeliverablesText(ugcRows.map((r) => ({ label: UGC_TYPES.find((t) => t.key === r.type)?.label ?? r.type, qty: r.qty })));
-  const collabCachet = formatEuro(price.mid);
+  const collabCachet = normaliserCachet(formatEuro(price.mid)) ?? formatEuro(price.mid);
 
   const loadCollabs = () => {
     setCollabs(null);

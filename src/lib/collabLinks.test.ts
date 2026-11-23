@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { autoTaskFor, cachetAmount, cachetCurrency, collabChoices, collabIdMissing, collabLabel, concernsCreator, guessCollabId, hasAutoTask, linkGroups, mentionsBrand, type CollabLite } from "./collabLinks";
+import { parseAmountStrict } from "./money";
+import { dealKind } from "./dealKind";
+import { ecrireCachet } from "../../supabase/functions/_shared/cachet.ts";
 
 const nutri: CollabLite = { id: "c1", brand: "Nutripure", creator: "LÉNA TEST", step: 2, status: "active" };
 
@@ -91,5 +94,26 @@ describe("cachetCurrency", () => {
     expect(cachetCurrency("300 £")).toBe("GBP");
     expect(cachetCurrency("1500€")).toBe("EUR");
     expect(cachetCurrency(null)).toBe("EUR");
+  });
+});
+
+describe("cachet saisi dans l'app (forme de _shared/cachet.ts)", () => {
+  it("se relit sans ambiguïté : montant, devise, gifting", () => {
+    const eur = ecrireCachet({ montant: 1500, devise: "EUR", affiliation: false });
+    expect(parseAmountStrict(eur)).toBe(1500);
+    expect(cachetCurrency(eur)).toBe("EUR");
+    expect(cachetAmount(eur)).toBe(1500);
+    const usd = ecrireCachet({ montant: 550, devise: "USD", affiliation: false });
+    expect(parseAmountStrict(usd)).toBeNull(); // dollars : jamais lus comme des euros
+    expect(cachetCurrency(usd)).toBe("USD");
+    expect(cachetAmount(usd)).toBe(550);
+    expect(cachetCurrency(ecrireCachet({ montant: 300, devise: "GBP", affiliation: false }))).toBe("GBP");
+    expect(cachetCurrency(ecrireCachet({ montant: 800, devise: "CHF", affiliation: false }))).toBe("CHF");
+    const mix = ecrireCachet({ montant: 550, devise: "EUR", affiliation: true });
+    expect(parseAmountStrict(mix)).toBe(550);
+    expect(dealKind(mix)).toBe("paid");
+    expect(parseAmountStrict(ecrireCachet({ montant: 1250.5, devise: "EUR", affiliation: false }))).toBe(1250.5);
+    expect(parseAmountStrict(ecrireCachet({ montant: null, devise: "EUR", affiliation: true }))).toBeNull();
+    expect(dealKind(ecrireCachet({ montant: 0, devise: "EUR", affiliation: false }))).toBe("gifting");
   });
 });

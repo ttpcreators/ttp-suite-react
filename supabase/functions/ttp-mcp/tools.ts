@@ -15,6 +15,7 @@ import { meetEventBody, meetLinkOf, parseMeetRequest } from "../_shared/meetEven
 import { doublonPlanning, type Candidat, type PlanEvent } from "../_shared/planningDoublon.ts";
 import { readAppState } from "../_shared/appState.ts";
 import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
+import { CONTACT_TAGS, normaliserTag } from "../_shared/contactTags.ts";
 import type { Ctx } from "./oauth.ts";
 import { boxAddress, boxesFor, createDraft, parseMailBox, deleteClaudeDraft, draftRefs, listClaudeDrafts, listSendAs, PARTOUT, attachmentFromThread, markThreadRead, readThread, resolveSender, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { findSendAs, type SendAs } from "../_shared/sendAs.ts";
@@ -31,6 +32,8 @@ import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCart
 import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
 import { ciblesEchange, requeteEchange, texteEchanges } from "../_shared/dejaEchange.ts";
 import { cleDuCreateur, dateVersement, versementEnDouble } from "../_shared/versement.ts";
+import { apresVersement } from "../_shared/collabAutoDb.ts";
+import { ligneAvance } from "../_shared/collabAuto.ts";
 import { estUuid, plageUuid } from "../_shared/idCourt.ts";
 import { nomPropre, problemePieces, typeDuNom, type Piece } from "../_shared/piecesJointes.ts";
 import { CATEGORIES_MODELES, objectifsDuMois, problemeModele, type Objectif } from "../_shared/alfredOutils.ts";
@@ -48,6 +51,7 @@ import { genererDisposDuMois } from "../_shared/disposDuMoisDb.ts";
 import { REGLES_OFFRE, STRATEGIE_VERSION, strategieTexte } from "../_shared/strategie.ts";
 import { chargerTableau, tableauLundi, tableauTexte } from "../_shared/tableauLundi.ts";
 import { devisARelancer } from "../_shared/devisRelances.ts";
+import { IGNORES_KEY, controler, ligneProbleme, lireIgnores, sansIgnores, type ControleInput } from "../_shared/controle.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
 type Json = Record<string, unknown>;
@@ -354,6 +358,8 @@ const ficheCreateur: Tool = {
       `# ${titleCase(name)}`,
       `Niche : ${c.niche ?? "?"} · plateforme : ${c.platform || "?"} · abonnés tous réseaux : ${compact(au.total)}${perPlatformText(au) ? ` (${perPlatformText(au)})` : ""} · engagement : ${c.er ?? "?"} · statut : ${c.status ?? "?"}${c.ville ? ` · ${c.ville}` : ""}`,
       ...(/^https:\/\//.test(String(c.photo_url ?? "")) ? [`Photo : ${c.photo_url}`] : []),
+      // Exclusivité avec l'agence : la colonne creators.exclu OU la clé de blob creatorExclusive (src/lib/creatorExclu.ts).
+      ...(c.exclu === true || (st.creatorExclusive as Json | undefined)?.[name.trim().toLowerCase()] === true ? ["Exclusif avec l'agence (fiche roster)"] : []),
       ...(aliasMail ? [`Alias mail : ${aliasMail} (pour écrire en son nom : envoyer_en_tant_que dans creer_brouillon_mail / envoyer_mail)`] : []),
       `Comptes : ${[c.handle && `@${String(c.handle).replace(/^@+/, "").trim()}`, c.instagram && `IG ${c.instagram}`, c.tiktok && `TikTok ${c.tiktok}`, c.youtube && `YouTube ${c.youtube}`, c.email_pro && `email pro ${c.email_pro}`].filter(Boolean).join(" · ") || "?"}`,
       ig && ig.followers != null
@@ -475,6 +481,7 @@ const noterReversement: Tool = {
       note: { type: "string", description: "D'où vient la preuve (« Telegram de Marc 16/11 », « facture JNPR 2026-186 »)" },
       forcer: { type: "boolean", description: "true : noter même si un versement du même montant existe déjà à 5 jours près (deux virements réels)" },
       retirer: { type: "string", description: "Annuler : l'id d'un versement noté par erreur (donné quand il a été noté) ; il est retiré, montant et date ignorés" },
+      collab: { type: "string", description: "Facultatif : id de la collab que ce versement paie (outil collabs), si la preuve la désigne. Elle passe à l'étape 10 « Créateur payé ». Sans lui, seules les collabs dont la facture est soldée par ce versement avancent." },
     },
     required: ["createur", "montant", "note"],
     additionalProperties: false,
@@ -508,15 +515,104 @@ const noterReversement: Tool = {
     const frais = ((await appState(sb)).creatorPayouts ?? {}) as Record<string, unknown[]>;
     const { error } = await sb.rpc("app_state_merge", { p_key: "creatorPayouts", p_set: { [k]: [entree, ...(Array.isArray(frais[k]) ? frais[k] : [])] }, p_remove: [] });
     if (error) return fail(`Versement non noté : ${error.message}`);
-    return ok(`✓ Versement noté dans Reversements : ${eur(montant)} à ${titleCase(k)} le ${frDay(date)}${note ? ` (${note})` : ""} [id ${entree.id}, pour l'annuler : retirer]. Relis le reste avec reversements.`);
+    // Étapes automatiques : les collabs que ce versement paie passent « Créateur payé ».
+    const avances = await collabsPayees(sb, st, k, montant, str(a.collab, 40) || null);
+    return ok(`✓ Versement noté dans Reversements : ${eur(montant)} à ${titleCase(k)} le ${frDay(date)}${note ? ` (${note})` : ""} [id ${entree.id}, pour l'annuler : retirer]. Relis le reste avec reversements.${avances.map((l) => `\n${l}`).join("")}`);
   },
 };
+
+/**
+ * Versement noté : la collab désignée, sinon celles dont la facture est soldée par ce versement
+ * (même calcul que la page Reversements, `st` = blob lu AVANT le versement), atteignent
+ * l'étape 10 « Créateur payé » (_shared/collabAuto.ts). Jamais bloquant : [] en cas d'échec.
+ */
+async function collabsPayees(sb: SupabaseClient, st: Json, cle: string, montant: number, collab: string | null): Promise<string[]> {
+  try {
+    const cols = "id, amount, status, creator, collab_id, party, date";
+    let inv: { data: unknown; error: unknown } = await sb.from("invoices").select(`${cols}, paid_at`).eq("status", "payee").limit(5000);
+    if (inv.error) inv = await sb.from("invoices").select(cols).eq("status", "payee").limit(5000);
+    if (inv.error) return [];
+    const { data: cr } = await sb.from("creators").select("name, commission");
+    const roster: Record<string, number> = {};
+    for (const c of (cr as Json[] | null) ?? []) {
+      const v = pctOf(c.commission);
+      if (v != null) roster[String(c.name)] = v;
+    }
+    const rows = reversementRows({
+      invoices: (inv.data as unknown as { id: string; amount: unknown; status: unknown; creator: unknown }[]) ?? [],
+      details: (st.invoiceDetails ?? {}) as Record<string, Detail>,
+      payouts: (st.creatorPayouts ?? {}) as Record<string, Payout[]>,
+      rosterRates: roster,
+      savedRates: (st.creatorCommission ?? {}) as Record<string, number>,
+      collabModes: (st.collabCashMode ?? {}) as Record<string, string>,
+      contractHistory: st.contractHistory,
+    });
+    const row = rows.find((r) => r.creator.trim().toLowerCase() === cle.trim().toLowerCase());
+    const avances = await apresVersement(sb, { createur: row?.creator ?? cle, lignes: row?.lignes ?? [], dejaVerse: row?.reverse ?? 0, montant, collab });
+    return avances.map(ligneAvance);
+  } catch {
+    return [];
+  }
+}
 
 // ── Objectifs du mois et modèles de mails (demande de Marc, 18 novembre 2026) ──
 /** Le 1er du mois suivant (« 2026-12-01 » pour « 2026-11 »), borne de fin d'un mois. */
 const moisSuivant = (mois: string) => {
   const [a, m] = mois.split("-").map(Number);
   return m === 12 ? `${a + 1}-01-01` : `${a}-${String(m + 1).padStart(2, "0")}-01`;
+};
+
+// ── Contrôle qualité des données (même code que la section « À corriger » d'Aujourd'hui) ──
+const controleDonnees: Tool = {
+  name: "controle_donnees",
+  title: "Contrôle qualité des données",
+  description:
+    "Les incohérences des données de TTP Suite, comme la section « À corriger » de la page Aujourd'hui : facture en brouillon échue, collab publiée depuis plus de 14 jours sans facture, facture payée ou créateur payé alors que la collab n'a pas suivi (et facture payée avant la publication, souvent un acompte), créateur absent du roster, prospect resté ouvert alors que la collab existe, cachet illisible, lien de brief cassé, tâche cochée pas « Fait », fiche créateur incomplète, étiquettes de contacts libres. Chaque ligne : gravité, titre, détail, correction sûre s'il y en a une, si elle demande une décision de Marc, lien et id [controle …]. Les problèmes masqués (« Ignorer ») sont retirés. Lecture seule. Les règles d'argent sont réservées aux fondateurs.",
+  inputSchema: { type: "object", properties: { inclure_ignores: { type: "boolean", description: "true : aussi les problèmes masqués dans l'app" } }, additionalProperties: false },
+  run: async (sb, ctx, a) => {
+    const today = isoDay();
+    // Une table illisible passe à null : ses règles sont sautées (jamais de fausse alerte).
+    const read = async (table: string, cols: string): Promise<Json[] | null> => {
+      let r = await sb.from(table).select(cols).limit(20000);
+      if (r.error) r = await sb.from(table).select("*").limit(20000);
+      return r.error ? null : ((r.data as unknown as Json[] | null) ?? []);
+    };
+    const [collabs, collabSteps, invoices, creators, briefs, prospects, todos, contacts] = await Promise.all([
+      read("collabs", "id, brand, creator, step, status, brief_id, cachet, created_at"),
+      read("collab_steps", "collab_id, step, reached_at"),
+      ctx.founder ? read("invoices", "id, ref, party, amount, date, status, creator, collab_id, paid_at") : Promise.resolve(null),
+      read("creators", "name, status, email, email_pro, phone, photo_url, platform"),
+      read("briefs", "id"),
+      read("prospects", "id, brand, stage, creator, collab_id, proposal, created_at"),
+      read("todos", "id, text, done, status"),
+      read("contacts", "id, tag"),
+    ]);
+    const st = await appState(sb).catch(() => null);
+    const input = {
+      aujourdhui: today,
+      collabs,
+      collabSteps,
+      invoices,
+      creators,
+      briefs,
+      prospects,
+      todos,
+      contacts,
+      payouts: ctx.founder && st ? ((st.creatorPayouts ?? {}) as Record<string, unknown>) : null,
+      cashModes: st ? ((st.collabCashMode ?? {}) as Record<string, string>) : null,
+      contractHistory: st ? (st.contractHistory ?? []) : null,
+    } as unknown as ControleInput;
+    const all = controler(input);
+    const list = a.inclure_ignores === true ? all : sansIgnores(all, lireIgnores(st?.[IGNORES_KEY]));
+    const nonLu = [collabs ? null : "collabs", creators ? null : "roster", briefs ? null : "briefs", prospects ? null : "prospects", todos ? null : "tâches", contacts ? null : "contacts", st ? null : "blob", ctx.founder && !invoices ? "factures" : null].filter(Boolean);
+    const decisions = list.filter((p) => p.decision).length;
+    return ok([
+      `# Contrôle des données du ${frDay(today)} · ${list.length} problème(s), dont ${decisions} à décider par Marc`,
+      nonLu.length ? `Non vérifié (lecture impossible) : ${nonLu.join(", ")}.` : "",
+      ctx.founder ? "" : "Règles d'argent (factures, reversements) réservées aux fondateurs : non vérifiées.",
+      lines(list.map(ligneProbleme), "Rien à corriger."),
+    ].filter(Boolean).join("\n"));
+  },
 };
 
 const strategie: Tool = {
@@ -1772,7 +1868,7 @@ const ajouterContact: Tool = {
   write: true,
   inputSchema: {
     type: "object",
-    properties: { marque: { type: "string" }, personne: { type: "string" }, role: { type: "string" }, email: { type: "string" }, instagram: { type: "string" }, telephone: { type: "string" }, categorie: { type: "string" } },
+    properties: { marque: { type: "string" }, personne: { type: "string" }, role: { type: "string" }, email: { type: "string" }, instagram: { type: "string" }, telephone: { type: "string" }, categorie: { type: "string", description: `Une de : ${CONTACT_TAGS.join(", ")} (Marque par défaut ; une autre valeur est rapprochée, sinon Autre)` } },
     required: ["marque"],
     additionalProperties: false,
   },
@@ -1786,7 +1882,7 @@ const ajouterContact: Tool = {
       if (s) return ok(`Contact déjà présent : ${s.brand} [contact ${s.id}].`);
     }
     const { data, error } = await sb.from("contacts").insert({
-      brand: str(a.marque, 120), person: str(a.personne, 120) || null, role: str(a.role, 80) || null, email: email || null, instagram: ig || null, phone: str(a.telephone, 40) || null, tag: str(a.categorie, 60) || null, tone: "cyan",
+      brand: str(a.marque, 120), person: str(a.personne, 120) || null, role: str(a.role, 80) || null, email: email || null, instagram: ig || null, phone: str(a.telephone, 40) || null, tag: normaliserTag(str(a.categorie, 60), "Marque"), tone: "cyan",
     }).select("id").single<{ id: string }>();
     return error ? fail(`Contact non créé : ${error.message}`) : ok(`Contact ajouté : ${str(a.marque, 120)} [contact ${data.id}].`);
   },
@@ -2947,7 +3043,7 @@ const lireContrat: Tool = {
 };
 
 export const TOOLS: Tool[] = [
-  pointDuJour, strategie, tableauLundiTool, devisRelancer, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
+  pointDuJour, controleDonnees, strategie, tableauLundiTool, devisRelancer, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
   creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief, lireContrat,

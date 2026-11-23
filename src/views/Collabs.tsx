@@ -45,7 +45,11 @@ import { CreatorPickerField } from "@/components/ui/creator-picker";
 import { useBlockedCreators } from "@/lib/useExclusivites";
 import { CollabLinkedPanel, useCollabAutoTasks } from "@/components/collab-links";
 import { CollabExcluPanel } from "@/components/exclu-alert";
+import { CachetField } from "@/components/cachet-field";
+import { CACHET_ILLISIBLE } from "../../supabase/functions/_shared/cachet.ts";
 import { createStepTask } from "@/lib/collabLinksDb";
+import { autoCollabSignee } from "@/lib/collabAutoDb";
+import { gagneeHorsBilan } from "@/lib/collabAuto";
 import { autoTaskFor, cachetAmount, cachetCurrency } from "@/lib/collabLinks";
 import { dealKind } from "@/lib/dealKind";
 import { DealBadge } from "@/components/ui/deal-badge";
@@ -205,6 +209,8 @@ export function Collabs() {
   const [title, setTitle] = useState("");
   const [deliverables, setDeliverables] = useState("");
   const [cachet, setCachet] = useState("");
+  // Montant tapé illisible dans le champ Cachet : enregistrement bloqué (cachet jamais vidé).
+  const [cachetBad, setCachetBad] = useState(false);
   const [note, setNote] = useState("");
 
   // édition
@@ -217,6 +223,7 @@ export function Collabs() {
   const [eTitle, setETitle] = useState("");
   const [eDeliverables, setEDeliverables] = useState("");
   const [eCachet, setECachet] = useState("");
+  const [eCachetBad, setECachetBad] = useState(false);
   const [eCreator, setECreator] = useState("");
   const [eNote, setENote] = useState("");
   const [eSite, setESite] = useState("");
@@ -407,11 +414,12 @@ export function Collabs() {
   };
 
   const resetForm = () => {
-    setBrand(""); setCreator(""); setContact(""); setTitle(""); setDeliverables(""); setCachet(""); setNote("");
+    setBrand(""); setCreator(""); setContact(""); setTitle(""); setDeliverables(""); setCachet(""); setCachetBad(false); setNote("");
   };
 
   const submit = async () => {
     if (!brand.trim()) return toast("Renseigne la marque");
+    if (cachetBad) return toast(CACHET_ILLISIBLE);
     const row = {
       brand: brand.trim(), creator: creator || null, contact: contact.trim() || null,
       title: title.trim() || null, deliverables: deliverables.trim() || null,
@@ -426,6 +434,8 @@ export function Collabs() {
     const st = await getAppState().catch(() => ({}) as AppState);
     void mergeAppStateKey("collabCashMode", { [(created as unknown as Row).id]: readSettings(st.comptaSettings).encaissement });
     toast("Collab créée ✓");
+    // Prospect ouvert de la marque : passe « Signé », relié à la collab (jamais bloquant).
+    void autoCollabSignee((created as unknown as Row).id).then((msgs) => msgs.forEach((m) => toast(m)));
     setFormOpen(false);
     resetForm();
   };
@@ -437,12 +447,14 @@ export function Collabs() {
     setETitle(row.title ?? "");
     setEDeliverables(row.deliverables ?? "");
     setECachet(row.cachet ?? "");
+    setECachetBad(false);
     setECreator(row.creator ?? "");
     setENote(row.note ?? "");
     setESite(siteOf(row.brand));
   };
   const saveEdit = async (id: string) => {
     if (!eBrand.trim()) return toast("Renseigne la marque");
+    if (eCachetBad) return toast(CACHET_ILLISIBLE);
     const patch = {
       brand: eBrand.trim(), contact: eContact.trim() || null, title: eTitle.trim() || null,
       deliverables: eDeliverables.trim() || null, cachet: eCachet.trim() || null,
@@ -564,6 +576,10 @@ export function Collabs() {
     if (!(await dbUpdate("collabs", row.id, { status }))) {
       setRows((rs) => (rs ?? []).map((r) => (r.id === row.id ? { ...r, status: prev } : r)));
       toast("Erreur, réessaie");
+    } else if (gagneeHorsBilan(prev, status, row.step)) {
+      // Gagnée à la main avant le bilan : le prospect de la marque passe « Signé ». Pas après
+      // l'étape 11 (bilan, renouvellement) : ce n'est plus la signature.
+      void autoCollabSignee(row.id).then((msgs) => msgs.forEach((m) => toast(m)));
     }
   };
 
@@ -725,7 +741,7 @@ export function Collabs() {
             <TextField label="Libellé de la collab" value={eTitle} onChange={setETitle} placeholder="ex Campagne été" />
             <TextField label="Contact marque" value={eContact} onChange={setEContact} />
             <TextField label="Livrables" value={eDeliverables} onChange={setEDeliverables} placeholder="ex 3 posts · 1 reel" />
-            <TextField label="Cachet" value={eCachet} onChange={setECachet} />
+            <CachetField value={eCachet} onChange={setECachet} onInvalid={setECachetBad} />
             <TextField label="Site de la marque (pour son logo)" value={eSite} onChange={setESite} placeholder="ex. seoni.fr" />
             <AutoGrowTextField label="Note" value={eNote} onChange={setENote} placeholder="Contexte, angle, points d'attention…" mentions={creators} />
             <button
@@ -1277,7 +1293,7 @@ export function Collabs() {
         <TextField label="Libellé de la collab" value={title} onChange={setTitle} placeholder="ex Campagne été" />
         <TextField label="Contact marque" value={contact} onChange={setContact} />
         <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" />
-        <TextField label="Cachet" value={cachet} onChange={setCachet} />
+        <CachetField value={cachet} onChange={setCachet} onInvalid={setCachetBad} />
         <AutoGrowTextField label="Note" value={note} onChange={setNote} placeholder="Contexte, angle, points d'attention…" className="min-w-full" mentions={creators} />
       </InlineForm>
 

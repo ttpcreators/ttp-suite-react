@@ -2757,3 +2757,23 @@ create table if not exists public.creator_mail_boxes (
 );
 alter table public.creator_mail_boxes enable row level security;
 revoke all on public.creator_mail_boxes from anon, authenticated;
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- Exclusivité : rattrapage de creators.exclu depuis la clé de blob creatorExclusive
+-- (2026-11-23, sql/2026-11-23-exclu-rattrapage.sql). N'ajoute que des exclusivités.
+-- ════════════════════════════════════════════════════════════════════════════
+with blob as (
+  select coalesce(nullif(a, ''), '{}')::jsonb -> 'creatorExclusive' as x
+    from public.module_rows
+   where module = '__app_state__'
+), noms as (
+  select distinct lower(trim(e.nom)) as nom
+    from blob,
+         jsonb_each_text(case when jsonb_typeof(blob.x) = 'object' then blob.x else '{}'::jsonb end) as e(nom, valeur)
+   where e.valeur = 'true'
+)
+update public.creators c
+   set exclu = true
+  from noms
+ where lower(trim(c.name)) = noms.nom
+   and coalesce(c.exclu, false) = false;
