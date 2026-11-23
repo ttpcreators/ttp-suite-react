@@ -241,6 +241,7 @@ function GmailLogo({ className = "h-4 w-4" }: { className?: string }) {
 const TAG_OPTIONS = [
   { value: "Marque", label: "Marque" },
   { value: "Agence", label: "Agence" },
+  { value: "Agence RP", label: "Agence RP" },
   { value: "Média", label: "Média" },
   { value: "PME", label: "PME" },
   { value: "Freelance", label: "Freelance" },
