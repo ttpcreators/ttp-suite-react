@@ -33,8 +33,12 @@ const champ = (t: EventTarget | null) => {
   return el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName);
 };
 
-const btn = "flex h-[30px] items-center gap-1.5 rounded-lg border border-border px-2.5 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-40";
-const iconBtn = "grid size-[30px] place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground";
+// Téléphone (moins de 768 px, comme useIsPhone) : 44 px sous le doigt ; ordinateur : 30 px, inchangé.
+const btn = "flex h-11 items-center gap-1.5 rounded-lg border border-border px-3.5 text-[13px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-40 md:h-[30px] md:px-2.5 md:text-[11px]";
+const iconBtn = "grid size-11 place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground md:size-[30px]";
+const validerBtn = "flex h-11 items-center gap-1.5 rounded-full bg-primary px-4 text-[13px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50 md:h-[30px] md:px-3.5 md:text-[11px]";
+// Case à cocher dans un <label> de 44 px sur téléphone (la case garde son dessin de 16 px).
+const caseLabel = "grid size-11 shrink-0 cursor-pointer place-items-center md:size-auto";
 
 export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopier, onValider, onEcarter, onSelectionFaite }: Props) {
   // Proposition courante retenue par son id : une nouvelle arrivée en tête ne change pas la cible.
@@ -155,10 +159,14 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopi
   return (
     <div ref={rootRef} className="flex flex-col gap-2">
       <div className="flex min-h-[32px] flex-wrap items-center gap-2 px-1 text-[11px] text-muted-foreground">
-        <input type="checkbox" aria-label="Tout cocher" checked={toutCoche}
-          onChange={() => setCoches(toutCoche ? new Set() : new Set(items.map((a) => a.id)))}
-          className="size-4 accent-[var(--primary)]" />
-        <span>{selection.length ? `${selection.length} cochée${selection.length > 1 ? "s" : ""}` : "Tout cocher"}</span>
+        <label className="-ml-3 flex min-h-11 cursor-pointer items-center md:ml-0 md:min-h-0">
+          <span className={caseLabel}>
+            <input type="checkbox" aria-label="Tout cocher" checked={toutCoche}
+              onChange={() => setCoches(toutCoche ? new Set() : new Set(items.map((a) => a.id)))}
+              className="size-4 accent-[var(--primary)]" />
+          </span>
+          <span className="md:ml-2">{selection.length ? `${selection.length} cochée${selection.length > 1 ? "s" : ""}` : "Tout cocher"}</span>
+        </label>
         <span className="ml-auto hidden items-center gap-1.5 text-faint md:flex"
           title="V valide, M modifie, E écarte, flèches ou J / K pour passer de l'une à l'autre, Espace coche, Maj + V valide la sélection">
           <Keyboard className="h-3.5 w-3.5" /> V · M · E · ↑ ↓
@@ -166,7 +174,7 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopi
         {selection.length > 0 && (
           <button type="button" onClick={() => void validerSelection()} disabled={lot || !!edition || !enLot.length}
             title={enLot.length < selection.length ? "Les messages à copier (WhatsApp, DM, LinkedIn) se valident un par un" : "Maj + V"}
-            className="flex h-[30px] items-center gap-1.5 rounded-full bg-primary px-3.5 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+            className={validerBtn}>
             <Check className="h-3.5 w-3.5" /> Valider ({enLot.length})
           </button>
         )}
@@ -194,8 +202,10 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopi
               busy && "opacity-60",
             )}>
             <div className="flex min-w-0 items-center gap-2">
-              <input type="checkbox" aria-label="Cocher" checked={coches.has(a.id)} onChange={() => cocher(a)}
-                onClick={(e) => e.stopPropagation()} className="size-4 shrink-0 accent-[var(--primary)]" />
+              <label className={cn(caseLabel, "-my-2.5 -ml-3 md:m-0")} onClick={(e) => e.stopPropagation()}>
+                <input type="checkbox" aria-label="Cocher" checked={coches.has(a.id)} onChange={() => cocher(a)}
+                  className="size-4 shrink-0 accent-[var(--primary)]" />
+              </label>
               <span className={cn("flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold", m.alerte ? "bg-amber/15 text-amber" : "bg-primary/10 text-primary")}>
                 <MIcon className="h-3 w-3" /> {m.label}
               </span>
@@ -215,7 +225,7 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopi
             ) : a.contenu ? (
               <div className={cn("mt-1.5 whitespace-pre-wrap rounded-lg bg-panel px-3 py-2 text-[12px] leading-relaxed text-foreground", !active && "line-clamp-2")}>{a.contenu}</div>
             ) : null}
-            <div className="mt-2 flex items-center gap-1.5">
+            <div className="mt-2 flex flex-wrap items-center gap-2.5 md:gap-1.5">
               {!ed && a.contenu && (
                 <button type="button" title="Copier le message" aria-label="Copier le message" onClick={(e) => { e.stopPropagation(); onCopier(a); }} className={iconBtn}>
                   {copied === a.id ? <Check className="h-3.5 w-3.5 text-signal" /> : <Copy className="h-3.5 w-3.5" />}
@@ -226,14 +236,14 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopi
                   <ExternalLink className="h-3.5 w-3.5" />
                 </a>
               )}
-              <div className="ml-auto flex items-center gap-1.5">
+              <div className="ml-auto flex flex-wrap items-center justify-end gap-2.5 md:gap-1.5">
                 {ed ? (
                   <button type="button" onClick={(e) => { e.stopPropagation(); setEdition(null); }} className={btn} title="Échap">
                     Annuler
                   </button>
                 ) : (
                   <>
-                    <button type="button" onClick={(e) => { e.stopPropagation(); void ecarter(a); }} disabled={busy} className={btn} title="Écarter (E)">
+                    <button type="button" onClick={(e) => { e.stopPropagation(); void ecarter(a); }} disabled={busy} className={cn(btn, "max-md:mr-3")} title="Écarter (E)">
                       <X className="h-3.5 w-3.5" /> Écarter
                     </button>
                     <button type="button" onClick={(e) => { e.stopPropagation(); modifier(a); }} disabled={!mode || busy} className={btn}
@@ -244,7 +254,7 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopi
                 )}
                 <button type="button" onClick={(e) => { e.stopPropagation(); void valider(a, ed?.texte); }} disabled={busy || (!!ed && !ed.texte.trim())}
                   title={ed ? "Valider le texte modifié (Cmd + Entrée)" : titreValider}
-                  className="flex h-[30px] items-center gap-1.5 rounded-full bg-primary px-3.5 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
+                  className={validerBtn}>
                   {geste === "alfred_envoie" ? <Send className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />} Valider
                 </button>
               </div>

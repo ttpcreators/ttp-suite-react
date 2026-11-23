@@ -16,7 +16,7 @@ import { ActionMenu } from "@/components/ui/action-menu";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { MotionTabs, MotionTabsList, MotionTabsTrigger } from "@/components/ui/motion-tabs";
-import { Overlay } from "@/components/mobile/ios-sheet";
+import { IosActionSheet, Overlay, useIosPhone } from "@/components/mobile/ios-sheet";
 import { ContractRelanceDialog } from "@/components/contracts/contract-relance";
 import {
   CT_TYPES,
@@ -544,7 +544,10 @@ function Cell({ label, children }: { label: string; children: ReactNode }) {
 function StatusButton({ value, onChange }: { value: ContractStatus; onChange: (s: ContractStatus) => void }) {
   const [rect, setRect] = useState<DOMRect | null>(null);
   const btn = useRef<HTMLButtonElement>(null);
+  // Téléphone : feuille d'actions iOS (lignes de 57 px), comme ActionMenu / StatusSelect.
+  const ios = useIosPhone();
   const meta = STATUS_META[value];
+  const statusLabel = (s: ContractStatus) => (s === "pending" ? "En attente de signature" : STATUS_META[s].label);
   const W = 200;
   const vw = typeof window !== "undefined" ? window.innerWidth : 1024;
   const vh = typeof window !== "undefined" ? window.innerHeight : 768;
@@ -564,7 +567,26 @@ function StatusButton({ value, onChange }: { value: ContractStatus; onChange: (s
         <span className="truncate">{meta.label}</span>
         <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
       </button>
+      {rect && ios && (
+        <span className="contents" onClick={(e) => e.stopPropagation()}>
+          <IosActionSheet
+            title="Changer le statut"
+            actions={STATUSES.map((s) => ({
+              key: s,
+              label: statusLabel(s),
+              dot: STATUS_META[s].dot,
+              selected: s === value,
+              onClick: () => {
+                setRect(null);
+                onChange(s);
+              },
+            }))}
+            onCancel={() => setRect(null)}
+          />
+        </span>
+      )}
       {rect &&
+        !ios &&
         createPortal(
           <>
             <div className="fixed inset-0 z-[70]" onClick={() => setRect(null)} />
@@ -585,7 +607,7 @@ function StatusButton({ value, onChange }: { value: ContractStatus; onChange: (s
                   className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] text-foreground transition-colors hover:bg-rowhover"
                 >
                   <span className={cn("h-2 w-2 shrink-0 rounded-full", STATUS_META[s].dot)} />
-                  <span className="flex-1">{s === "pending" ? "En attente de signature" : STATUS_META[s].label}</span>
+                  <span className="flex-1">{statusLabel(s)}</span>
                   {s === value && <Check className="h-3.5 w-3.5 text-primary" />}
                 </button>
               ))}

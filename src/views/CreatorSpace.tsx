@@ -78,7 +78,7 @@ import { invoiceTone, netGains, netShare, partyBrand, payoutStatus, realGains, t
 import { OWED_LABEL, owedByCollab, type OwedInvoice } from "@/lib/creatorOwed";
 import { cleanConcept, CONCEPT_MAX, conceptState, type BriefConcept } from "@/lib/briefConcept";
 import { loadBriefConcepts, markBriefRead, proposeConcept } from "@/lib/briefConceptDb";
-import { hasStats, isSocialPostLink, normalizeLink, parseMetric, platformLabel, POST_METRICS, postStepTarget, statsDueDay, type CollabPost, type PostMetric } from "@/lib/collabPosts";
+import { hasStats, isSocialPostLink, metricAmbigu, normalizeLink, parseMetric, platformLabel, POST_METRICS, postStepTarget, statsDueDay, type CollabPost, type PostMetric } from "@/lib/collabPosts";
 import { addCollabPost, loadCollabPosts, saveCollabPostStats } from "@/lib/collabPostsDb";
 import { DEFAULT_COMMISSION, parseCommissionPct } from "@/lib/commission";
 import { daysBetween as daysBetweenIso, type AujDeadline } from "@/lib/aujourdhui";
@@ -1075,6 +1075,8 @@ export function CreatorSpace({
   const savePostStats = async (p: CollabPost, m: Mission) => {
     const vals = {} as Record<PostMetric, number | null>;
     for (const { key, label } of POST_METRICS) {
+      // « 12,5 » sans K/M : on n'enregistre pas 13 en douce, le créateur précise d'abord.
+      if (metricAmbigu(statsForm[key])) return toast(t("Précise {field} : ajoute K pour des milliers (ex. 12,5K)", { field: t(label).toLowerCase() }));
       const v = parseMetric(statsForm[key]);
       if (v !== null && Number.isNaN(v)) return toast(t("Chiffre illisible : {field}", { field: t(label) }));
       vals[key] = v;
@@ -3823,17 +3825,37 @@ export function CreatorSpace({
                             {statsFor === p.id ? (
                               <div className="mt-3 flex flex-col gap-2">
                                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                                  {POST_METRICS.map(({ key, label }) => (
-                                    <label key={key} className="flex flex-col gap-1">
-                                      <span className="text-[12px] font-medium text-muted-foreground">{t(label)}</span>
-                                      <input
-                                        inputMode="decimal"
-                                        value={statsForm[key]}
-                                        onChange={(e) => setStatsForm((f) => ({ ...f, [key]: e.target.value }))}
-                                        className="h-10 w-full rounded-[12px] border border-border bg-field px-3 text-[15px] tabular-nums outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
-                                      />
-                                    </label>
-                                  ))}
+                                  {POST_METRICS.map(({ key, label }) => {
+                                    // Clavier texte (le pavé décimal de l'iPhone n'a ni K ni M) ;
+                                    // « 12,5 » sans K/M est signalé sous le champ et bloque l'envoi.
+                                    const raw = statsForm[key].trim();
+                                    const ambigu = metricAmbigu(raw);
+                                    return (
+                                      <label key={key} className="flex flex-col gap-1">
+                                        <span className="text-[12px] font-medium text-muted-foreground">{t(label)}</span>
+                                        <input
+                                          inputMode="text"
+                                          autoCapitalize="off"
+                                          autoCorrect="off"
+                                          autoComplete="off"
+                                          spellCheck={false}
+                                          placeholder={key === "views" ? t("ex. 12,5K") : undefined}
+                                          aria-invalid={ambigu || undefined}
+                                          value={statsForm[key]}
+                                          onChange={(e) => setStatsForm((f) => ({ ...f, [key]: e.target.value }))}
+                                          className={cn(
+                                            "h-10 w-full rounded-[12px] border border-border bg-field px-3 text-[15px] tabular-nums outline-none placeholder:text-faint focus:border-primary focus:ring-2 focus:ring-primary/15",
+                                            ambigu && "border-danger focus:border-danger focus:ring-danger/15",
+                                          )}
+                                        />
+                                        {ambigu && (
+                                          <span role="alert" className="text-[12px] leading-snug text-dangertext">
+                                            {t("{value} {field} ? Tape {value}K si c'est des milliers", { value: raw, field: t(label).toLowerCase() })}
+                                          </span>
+                                        )}
+                                      </label>
+                                    );
+                                  })}
                                 </div>
                                 <label className="flex h-10 w-fit max-w-full cursor-pointer items-center gap-1.5 rounded-full border border-border px-4 text-[14px] font-semibold text-foreground transition-colors hover:bg-rowhover">
                                   <ImageIcon className="h-4 w-4 shrink-0" />
@@ -3844,7 +3866,7 @@ export function CreatorSpace({
                                   <button
                                     type="button"
                                     onClick={() => void savePostStats(p, m)}
-                                    disabled={postBusy}
+                                    disabled={postBusy || POST_METRICS.some(({ key }) => metricAmbigu(statsForm[key]))}
                                     className="flex h-10 items-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
                                   >
                                     <Check className="h-4 w-4" /> {postBusy ? t("Envoi…") : t("Enregistrer")}
