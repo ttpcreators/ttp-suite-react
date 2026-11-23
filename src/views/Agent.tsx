@@ -29,9 +29,10 @@ import { avancerCollabDepuisFile, noterModification } from "@/lib/aValiderDb";
  * Section « Agents » (Espace Agence, fondateurs) : les agents de TTP, créés et réglés
  * dans l'app (agent.agents : nom, emoji, rôle, consignes, routines, en pause ou non).
  * « Joué par Claude » = Claude via le connecteur TTP Suite (il relit ses consignes avec
- * lire_agent) ; « Programme externe » = Megan (rôle ttp_agent). Onglets : vue d'ensemble,
- * à valider (file commune, avec l'agent qui propose), agents, Megan (cockpit, prospection,
- * cercle), mémoire (créateurs + leçons), journal. Les validations de Marc écrivent dans
+ * lire_agent) ; « Programme externe » = un agent hors de l'app (rôle ttp_agent). Onglets :
+ * vue d'ensemble, à valider (file commune, avec l'agent qui propose), agents, prospection
+ * (marques et cercle proposés par un agent, affiché seulement s'il y a des données),
+ * mémoire (créateurs + leçons), journal. Les validations de Marc écrivent dans
  * les MÊMES tables : l'agent les relit à son passage suivant.
  *
  * Textes visibles : ponctuation française propre, pas de tirets (spec).
@@ -61,7 +62,7 @@ type Memoire = {
 };
 type Lecon = { id: string; module: string | null; lecon: string; cree_le: string; agent_id?: string | null };
 type Journal = { id: string; action: string; detail: string | null; cree_le: string; agent_id?: string | null };
-type Tab = "apercu" | "valider" | "agents" | "megan" | "memoire" | "journal";
+type Tab = "apercu" | "valider" | "agents" | "prospection" | "memoire" | "journal";
 const NEW_AGENT: AgentDraft = { nom: "", emoji: "🤖", role: "", moteur: "claude", consignes: "", routines: [], actif: true };
 
 const ACTION_META: Record<string, { label: string; icon: LucideIcon }> = {
@@ -225,7 +226,7 @@ export function AgentView() {
   // Agents configurables (agent.agents) : absents tant que le SQL n'est pas lancé.
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [agentsMissing, setAgentsMissing] = useState(false);
-  const [tab, setTab] = useStickyState<Tab>("agents:onglet", ["apercu", "valider", "agents", "megan", "memoire", "journal"], "apercu");
+  const [tabPicked, setTab] = useStickyState<Tab>("agents:onglet", ["apercu", "valider", "agents", "prospection", "memoire", "journal"], "apercu");
   // Ordinateur (≥ 768 px) : onglets « morphing » ; ordre choisi au glisser, gardé sur l'appareil.
   const [wide, setWide] = useState(() => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches);
   useEffect(() => {
@@ -308,10 +309,6 @@ export function AgentView() {
     // part qu'à la souscription (un simple `void` ne l'enverrait jamais).
     supabase.schema("agent").from("journal").insert({ action, detail }).then(() => {}, () => {});
   };
-
-  // ── état de l'agent : actif si trace dans le journal depuis 26 h ──
-  const lastAct = journal.find((j) => !j.action.startsWith("marc_"))?.cree_le ?? journal[0]?.cree_le;
-  const agentActif = !!lastAct && Date.now() - new Date(lastAct).getTime() < 26 * 3600e3;
 
   const cockpitJour = cockpits.find((c) => c.jour === todayISO()) ?? null;
   const dernierCockpit = cockpitJour ?? cockpits[0] ?? null;
@@ -597,11 +594,16 @@ export function AgentView() {
 
   // Onglets de la page : « morphing » sur ordinateur (réordonnables au glisser, ordre
   // gardé sur l'appareil), onglets simples sur téléphone. Le contenu n'est monté qu'une fois.
+  const hasProspection = proposes.length + suivis.length + cercleProposes.length + cercleValides.length > 0;
+  // Onglet gardé sur l'appareil mais plus affiché (prospection vide) : retour à la vue d'ensemble.
+  const tab: Tab = tabPicked === "prospection" && !hasProspection ? "apercu" : tabPicked;
   const tabItems: { value: Tab; label: string; count?: number }[] = [
     { value: "apercu", label: "Vue d'ensemble" },
     { value: "valider", label: "À valider", count: queue.length || undefined },
     { value: "agents", label: "Agents", count: agents.length || undefined },
-    { value: "megan", label: "Megan" },
+    // Ancien onglet « Megan » écrit en dur (Megan arrêtée le 6 novembre 2026). Il garde les
+    // marques et le cercle déjà proposés par un agent, et n'apparaît que s'il en reste.
+    ...(hasProspection ? [{ value: "prospection" as const, label: "Prospection", count: proposes.length + cercleProposes.length || undefined }] : []),
     { value: "memoire", label: "Mémoire" },
     { value: "journal", label: "Journal" },
   ];
@@ -699,35 +701,11 @@ export function AgentView() {
 
       {tab === "agents" && agentsTab}
 
-      {tab === "megan" && (
+      {tab === "prospection" && (
         <>
-      {/* En-tête : état de l'agent */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-border bg-card px-4 py-3 shadow-sm">
-        <span className="relative flex h-2.5 w-2.5">
-          {agentActif && <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-signal opacity-60 motion-reduce:hidden" />}
-          <span className={cn("relative inline-flex h-2.5 w-2.5 rounded-full", agentActif ? "bg-signal" : "bg-muted-foreground/50")} />
-        </span>
-        <span className="text-[13px] font-semibold text-foreground">{agentActif ? "Megan active" : "Megan en veille"}</span>
-        {lastAct && <span className="text-[11px] text-muted-foreground">Dernière activité : {fmtDT(lastAct)}</span>}
-        <span className="ml-auto flex items-center gap-3 text-[11px] tabular-nums text-muted-foreground">
-          <span>{queue.length} à valider</span>
-          <span>{proposes.length + suivis.length} prospects</span>
-        </span>
-      </div>
-
-      {/* 1) Le cockpit du jour */}
-      <Section icon={Gauge} title="Cockpit du jour">
-        {dernierCockpit ? (
-          <div>
-            {!cockpitJour && (
-              <div className="mb-2 text-[11px] text-amber">Pas encore de cockpit aujourd'hui, voici le dernier ({fmtDayAny(dernierCockpit.jour)}).</div>
-            )}
-            <div className="whitespace-pre-wrap rounded-xl bg-panel px-4 py-3 text-[13px] leading-relaxed text-foreground">{dernierCockpit.contenu}</div>
-          </div>
-        ) : (
-          <Empty text="L'agent n'a pas encore déposé de cockpit. Il apparaîtra ici à son premier passage." />
-        )}
-      </Section>
+      <p className="px-1 text-[12px] leading-relaxed text-muted-foreground">
+        Marques et relations proposées par un agent, et leur suivi.
+      </p>
 
       {/* 3) La prospection */}
       <Section icon={Search} title="Marques proposées par l'agent" count={proposes.length}>

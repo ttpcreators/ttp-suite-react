@@ -6,6 +6,7 @@ import { Spin } from "@/components/ui/loader";
 import { motion, AnimatePresence } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { fmtCompact } from "@/lib/timeSeries";
+import { cumulativeFollowers, type LiveOther } from "@/lib/rosterAudience";
 import { LayoutDashboard, ListChecks, SquareCheckBig, ChevronRight, Camera, PenLine, CircleCheck, FileText, MessageSquare, Sparkles, Globe2, CalendarDays, Files, Image as ImageIcon, Receipt, Upload, Mail, ShieldCheck, Package, LogOut, Moon, Sun, Pencil, Check, Trash2, TrendingUp, ExternalLink, BarChart3, Contact, X, Copy, List, Columns3, PanelLeftOpen, Share2, Plus, Eye, ArrowLeft } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { titleCase, cn, initials } from "@/lib/utils";
@@ -1749,19 +1750,16 @@ export function CreatorSpace({
     }
     return [...m.values()].sort((a, b) => (toNum(b.followers) ?? 0) - (toNum(a.followers) ?? 0));
   })();
-  // Total abonnés = dernière valeur CONNUE (> 0) de chaque réseau, additionnée
-  // (même règle que la courbe de l'accueil : un relevé à 0 n'efface pas le réseau).
+  // Total abonnés : MÊME calcul que le Roster et les Stats (lib/rosterAudience) : dernière
+  // mesure de chaque réseau, le chiffre du jour d'Instagram à la place de la mesure
+  // Instagram, TikTok et YouTube du jour quand il n'y a pas de mesure. Avant, l'espace
+  // créateur n'additionnait que les mesures de l'agence (630K ici, 637K dans le Roster).
   const totalFollowers = (() => {
-    const last = new Map<string, { t: number; f: number }>();
-    for (const e of mySuivi ?? []) {
-      const t = frTime(e.date);
-      const f = toNum(e.followers) ?? 0;
-      const k = (e.platform || "").toLowerCase();
-      if (!t || f <= 0 || !k) continue;
-      const prev = last.get(k);
-      if (!prev || prev.t <= t) last.set(k, { t, f });
-    }
-    return [...last.values()].reduce((a, x) => a + x.f, 0);
+    const k = "me";
+    const hist = (mySuivi ?? []).map((e) => ({ creator: k, platform: e.platform, followers: e.followers, date: e.date }));
+    const ig: Record<string, { followers?: number | null }> = creator?.ig?.followers ? { [k]: { followers: creator.ig.followers } } : {};
+    const other: Record<string, LiveOther> = creator?.tt || creator?.yt ? { [k]: { tt: creator?.tt as LiveOther["tt"], yt: creator?.yt as LiveOther["yt"] } } : {};
+    return cumulativeFollowers(hist, ig, other)[k] ?? 0;
   })();
   // Évolution des abonnés (mesures agence) — UNE série par PLATEFORME (IG/TikTok/…),
   // pour distinguer les réseaux ; si le créateur n'en a qu'un, ça reste une courbe.
@@ -2658,8 +2656,9 @@ export function CreatorSpace({
               .sort((a, b) => (toISODate(a.due) || "").localeCompare(toISODate(b.due) || ""))[0];
             const lastInv = invoices[0];
             const topEr = platformLatest[0]?.er ?? creator?.er ?? null;
-            // Même total que la courbe et le delta (dernier point cumulé), sinon la fiche.
-            const followersNow = lastTotal || totalFollowers || toNum(creator?.followers) || 0;
+            // Même total que le Roster (chiffres du jour compris), sinon le dernier point de la
+            // courbe, sinon la fiche.
+            const followersNow = totalFollowers || lastTotal || toNum(creator?.followers) || 0;
             const hi = (s: string) => <span className="text-foreground">{s}</span>;
             const insight: ReactNode = statsStale ? (
               rich(t("Pense à {a} : ton agence s'en sert pour te proposer aux marques."), { a: hi(t("envoyer tes stats du mois")) })
@@ -2919,8 +2918,10 @@ export function CreatorSpace({
               </div>
 
               <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-                {/* Colonne principale : courbe + à retenir + stats du mois */}
+                {/* Colonne principale : courbe + à retenir + stats du mois. Sans courbe (moins de
+                    2 relevés), pas de grand cadre vide : le chiffre est déjà dans « Abonnés ». */}
                 <DashPanel className="flex flex-col xl:col-span-8">
+                  {totalPts.length >= 2 ? (
                   <div className="px-5 pb-3 pt-5">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
@@ -2932,33 +2933,28 @@ export function CreatorSpace({
                       <Delta value={followersDelta} suffix={t("vs relevé préc.")} />
                     </div>
                     <div className="mt-4">
-                      {totalPts.length >= 2 ? (
-                        <Suspense fallback={<div className="h-[240px] animate-pulse rounded-xl bg-panel/60" />}>
-                          <DashArea points={totalPts} name={t("Abonnés")} format={(n) => fmtCompact(n)} height={240} />
-                        </Suspense>
-                      ) : (
-                        <div className="grid h-[180px] place-items-center rounded-xl border border-dashed border-border px-4 text-center text-[12px] text-faint">
-                          {mySuivi === null && suiviErr ? (
-                            // creator-history en échec : on le dit (sinon « Chargement… » à vie) + Réessayer.
-                            <div>
-                              {t("Ton évolution n'a pas pu être récupérée.")}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSuiviErr(false);
-                                  setSuiviRetry((n) => n + 1);
-                                }}
-                                className="mx-auto mt-2 block rounded-full border border-border px-4 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
-                              >
-                                {t("Réessayer")}
-                              </button>
-                            </div>
-                          ) : mySuivi === null ? t("Chargement…") : t("La courbe apparaîtra dès que ton agence aura enregistré 2 relevés d'abonnés.")}
-                        </div>
-                      )}
+                      <Suspense fallback={<div className="h-[240px] animate-pulse rounded-xl bg-panel/60" />}>
+                        <DashArea points={totalPts} name={t("Abonnés")} format={(n) => fmtCompact(n)} height={240} />
+                      </Suspense>
                     </div>
                   </div>
-                  <div className="grid flex-1 grid-cols-1 divide-y divide-border border-t border-border md:grid-cols-2 md:divide-x md:divide-y-0">
+                  ) : mySuivi === null && suiviErr ? (
+                    // creator-history en échec : une ligne discrète + Réessayer (sinon « Chargement… » à vie).
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-3 text-[12px] text-muted-foreground">
+                      <span>{t("Ton évolution n'a pas pu être récupérée.")}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSuiviErr(false);
+                          setSuiviRetry((n) => n + 1);
+                        }}
+                        className="font-medium text-primary transition-opacity hover:opacity-80"
+                      >
+                        {t("Réessayer")}
+                      </button>
+                    </div>
+                  ) : null}
+                  <div className={cn("grid flex-1 grid-cols-1 divide-y divide-border md:grid-cols-2 md:divide-x md:divide-y-0", (totalPts.length >= 2 || (mySuivi === null && suiviErr)) && "border-t border-border")}>
                     <div className="px-5 py-5">
                       <DashSectionTitle icon={Sparkles}>{t("À retenir")}</DashSectionTitle>
                       <p className="line-clamp-4 text-[19px] leading-snug text-muted-foreground md:text-[21px]">{insight}</p>

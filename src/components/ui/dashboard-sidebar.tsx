@@ -133,7 +133,7 @@ function Row({
   hasChildren?: boolean;
   open?: boolean;
   onToggle?: () => void;
-  /** Page en favoris → étoile pleine, toujours visible. */
+  /** Page en favoris → étoile pleine (au survol, pour la retirer). */
   pinned?: boolean;
   /** Épingle/détache au survol (étoile). Absent = pas d'étoile. */
   onTogglePin?: () => void;
@@ -187,7 +187,8 @@ function Row({
           </button>
         )
       )}
-      {/* Étoile d'épingle : pleine & permanente si épinglée, sinon révélée au survol. */}
+      {/* Étoile d'épingle : révélée au survol seulement (pleine si la page est en favoris,
+          pour la retirer). Toujours affichée, elle faisait du bruit dans la section Favoris. */}
       {onTogglePin && (
         <button
           type="button"
@@ -202,7 +203,7 @@ function Row({
             "absolute right-8 focus-visible:opacity-100",
             ghostBtn,
             active && ON_PILL_BTN,
-            pinned ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+            "opacity-0 group-hover:opacity-100",
           )}
         >
           {/* Épinglée : étoile à la couleur d'accent (dégradé compris, cf. ACCENT_GRAD_ID) */}
@@ -322,7 +323,7 @@ function ItemBlock({
                         title={pinnedChild ? t("Retirer des favoris") : t("Ajouter aux favoris")}
                         aria-label={pinnedChild ? t("Retirer des favoris") : t("Ajouter aux favoris")}
                         aria-pressed={pinnedChild}
-                        className={cn("absolute right-1.5 focus-visible:opacity-100", ghostBtn, pinnedChild ? "opacity-100" : "opacity-0 group-hover:opacity-100")}
+                        className={cn("absolute right-1.5 opacity-0 focus-visible:opacity-100 group-hover:opacity-100", ghostBtn)}
                       >
                         <Star className="h-3.5 w-3.5" style={pinnedChild ? { stroke: `url(#${ACCENT_GRAD_ID})`, fill: `url(#${ACCENT_GRAD_ID})` } : undefined} />
                       </button>

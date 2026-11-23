@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { siteSlugify, siteSlugFor, type MkRow } from "@/lib/mediakitSlug";
-import { Plus, Trash2, Save, ExternalLink, Wand2, Image as ImageIcon, Check, Sparkles, Euro, UserRound, Users, BarChart3, Share2, ListChecks, Store, Languages, type LucideIcon } from "@/components/icons";
+import { Plus, Trash2, Save, ExternalLink, ChevronLeft, Wand2, Image as ImageIcon, Check, Sparkles, Euro, UserRound, Users, BarChart3, Share2, ListChecks, Store, Languages, type LucideIcon } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
 import { ImageField } from "@/components/ui/image-field";
 import { dbUpdate } from "@/lib/db";
@@ -19,6 +19,7 @@ import { KitRatesDialog } from "@/components/kit-rates-dialog";
 import { PublishSiteButton } from "@/components/publish-site-button";
 import { holdUpdate } from "@/lib/appUpdate";
 import { KitCheckAlert, useMesures } from "@/components/kit-check";
+import { MediakitRoster } from "@/components/mediakit-roster";
 import { appliquerCorrections, controlerKit } from "../../supabase/functions/_shared/mediakitControle.ts";
 
 /**
@@ -473,7 +474,19 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
   return (
     <div className="space-y-4">
       {/* En-tête : créatrice + voir + enregistrer */}
+      {/* Kit standard sans créateur choisi : la liste du roster tient lieu de menu. */}
+      {(selId || mode !== "standard") && (
       <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+        {mode === "standard" && (
+          <button
+            type="button"
+            onClick={() => changeCreator("")}
+            className="flex items-center gap-1 rounded-full px-2 py-2 text-[12px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" /> Tous les créateurs
+          </button>
+        )}
         <Select value={selId} onValueChange={changeCreator}>
           <SelectTrigger className="h-9 w-auto min-w-[220px] rounded-lg bg-surface" placeholder="Choisir un créateur" />
           <SelectContent>
@@ -484,6 +497,7 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
             ))}
           </SelectContent>
         </Select>
+        </div>
 
         {selId && (
           <div className="flex flex-wrap items-center gap-2">
@@ -535,10 +549,13 @@ export function MediakitEditor({ mode = "standard" }: { mode?: "standard" | "ugc
           </div>
         )}
       </div>
+      )}
 
       {controle && mode === "standard" && <KitCheckAlert controle={controle} onUpdate={putRealNumbers} verifier />}
 
-      {!selId ? (
+      {!selId && mode === "standard" ? (
+        <MediakitRoster creators={creators} siteRows={siteRows} mesures={mesures} onOpen={changeCreator} />
+      ) : !selId ? (
         <div className="rounded-2xl border border-border bg-surface p-10 text-center">
           <ImageIcon className="mx-auto h-8 w-8 text-faint" />
           <div className="mt-3 text-sm font-medium text-foreground">Choisis un créateur</div>
