@@ -1,6 +1,6 @@
 # Légifrance et Judilibre pour Alfred
 
-Le serveur MCP de [jmtanguy/droit-francais-mcp](https://github.com/jmtanguy/droit-francais-mcp) (licence MIT, voir `LICENSE`, version du 21 novembre 2025, commit `f79a9ae`), copié sans modification à part `requirements.txt` (réécrit en UTF-8) et `lancer.sh` (ajouté). Il lit les codes, lois et décrets en vigueur (Légifrance) et les décisions de justice (Judilibre) par les API publiques de l'État (PISTE). Il ne parle qu'à `piste.gouv.fr`.
+Le serveur MCP de [jmtanguy/droit-francais-mcp](https://github.com/jmtanguy/droit-francais-mcp) (licence MIT, voir `LICENSE`, version du 21 novembre 2025, commit `f79a9ae`), copié sans modification à part `requirements.txt` (réécrit en UTF-8 ; versions montées le 23 novembre 2026 pour corriger les alertes de sécurité : fastmcp 3.4.11, requests 2.34.2, python-dotenv 1.2.4) et `lancer.sh` (ajouté). Il lit les codes, lois et décrets en vigueur (Légifrance) et les décisions de justice (Judilibre) par les API publiques de l'État (PISTE). Il ne parle qu'à `piste.gouv.fr`.
 
 Outils pour Alfred : `rechercher_legifrance`, `consulter_legifrance`, `rechercher_jurisprudence_judilibre`, `consulter_decision_judilibre`, `obtenir_taxonomie_judilibre` (voir `fiches/juridique.md`, « Le raisonnement juridique »).
 
