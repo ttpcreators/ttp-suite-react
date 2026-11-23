@@ -29,6 +29,8 @@ export type AujTodo = {
   creator: string | null;
   done_at?: string | null;
   subtasks?: { done: boolean }[] | null;
+  /** Étiquette (« Mail », « AGENCE »…) : aide à choisir l'icône de la ligne. */
+  tag?: string | null;
 };
 export type AujEvent = { id: string; date: string | null; day: number | null; time: string | null; title: string | null; type: string | null; who: string | null };
 export type AujBrief = { id: string; brand: string | null; creator: string | null; due: string | null; status: string | null; deliverables: string | null };
@@ -59,6 +61,8 @@ export type TodayItem = {
   meta: string;
   metaSub?: string;
   metaTone?: StatusTone;
+  /** Teinte de la valeur principale (« 13 j de retard ») ; sinon couleur du texte. */
+  metaMainTone?: StatusTone;
   /** Teinte de la tuile d'icône (le rouge `late` est réservé à l'argent en retard). */
   tone: StatusTone;
   /** Le verbe de la ligne (« Relancer », « Terminer »…). */
@@ -348,9 +352,11 @@ export function buildToday(input: TodayInput): TodayResult {
       section: "today",
       title: t.text,
       sub: [t.creator ? titleCase(t.creator) : "Agence", t.priority === "haute" ? "priorité haute" : null].filter(Boolean).join(" · "),
-      meta: subs.length ? `${subs.filter((s) => s.done).length} / ${subs.length}` : late > 0 ? "En retard" : "Aujourd'hui",
-      metaSub: late > 0 ? `${late} j de retard` : subs.length ? "aujourd'hui" : undefined,
+      // Le retard n'est écrit qu'une fois : « 13 j de retard » (teinte attente) ou « Aujourd'hui ».
+      meta: subs.length ? `${subs.filter((s) => s.done).length} / ${subs.length}` : late > 0 ? `${late} j de retard` : "Aujourd'hui",
+      metaSub: subs.length ? (late > 0 ? `${late} j de retard` : "aujourd'hui") : undefined,
       metaTone: late > 0 ? "wait" : undefined,
+      metaMainTone: !subs.length && late > 0 ? "wait" : undefined,
       tone: "wait",
       verb: "Terminer",
       minutes: MINUTES.todo,
@@ -475,3 +481,73 @@ export function summaryLine(items: TodayItem[]): string {
 
 const KIND_SINGULAR: Record<ItemKind, string> = { relance: "relance", event: "rendez-vous", todo: "tâche", brief: "brief", mails: "boîte mail", echeance: "échéance", contrat: "contrat", collab: "collab", stats: "stats" };
 const KIND_PLURAL: Record<ItemKind, string> = { relance: "relances", event: "rendez-vous", todo: "tâches", brief: "briefs", mails: "boîtes mail", echeance: "échéances", contrat: "contrats", collab: "collabs", stats: "stats" };
+
+// ── Genre d'une ligne : l'icône dit de quoi on parle (24 nov. 2026) ─────────
+/** Genre affiché par l'icône de la ligne. Une tâche reprend le genre de ce qu'elle concerne. */
+export type ItemGenre = "tache" | "facture" | "mail" | "collab" | "conformite" | "contrat" | "brief" | "stats" | "prospection" | "rdv";
+
+const fold = (s: string | null | undefined) => (s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+/**
+ * Genre d'une tâche, lu dans son texte et son étiquette (les tâches d'Alfred et de l'agence
+ * n'ont pas de type) : « Conformité : … » → conformité, « Vérifier le paiement… » → facture,
+ * étiquette « Mail » ou « Répondre à… » → mail, « Marque × Créateur : … » → collab.
+ */
+export function todoGenre(text: string | null | undefined, tag?: string | null): ItemGenre {
+  const s = fold(text);
+  const has = (re: RegExp) => re.test(s);
+  if (has(/^conformite\b/) || has(/mention (manquante|a verifier)/)) return "conformite";
+  if (has(/\b(factur\w*|paiement|payee?s?|payer|virement|reversement\w*|encaiss\w*|devis)\b/)) return "facture";
+  if (has(/\bcontrat\b/)) return "contrat";
+  if (has(/\bbrief\b/)) return "brief";
+  if (has(/\b(stats?|statistiques?)\b/)) return "stats";
+  if (has(/\bprospect\w*/)) return "prospection";
+  if (fold(tag) === "mail" || has(/\b(mails?|e-?mail|repondre|relancer|relance)\b/)) return "mail";
+  if (has(/\s[x\u00d7]\s/)) return "collab";
+  return "tache";
+}
+
+/** Genre de n'importe quelle ligne d'Aujourd'hui. */
+export function genreOf(it: Pick<TodayItem, "kind" | "title" | "todo">): ItemGenre {
+  switch (it.kind) {
+    case "relance":
+    case "echeance":
+      return "facture";
+    case "mails":
+      return "mail";
+    case "brief":
+      return "brief";
+    case "contrat":
+      return "contrat";
+    case "collab":
+      return "collab";
+    case "stats":
+      return "stats";
+    case "event":
+      return "rdv";
+    case "todo":
+      return todoGenre(it.todo?.text ?? it.title, it.todo?.tag);
+  }
+}
+
+/** Tuile d'icône : grise, sauf l'argent en retard (rouge). Le retard d'une tâche se lit à droite. */
+export function tileTone(it: Pick<TodayItem, "kind">): StatusTone | undefined {
+  return it.kind === "relance" ? "late" : undefined;
+}
+
+/**
+ * La ligne demande-t-elle un geste maintenant ? Non pour une facture pas encore échue (rien à
+ * faire si la marque paie à temps), ni pour ce qui est prévu demain ou plus tard (sauf retard).
+ * Sert à choisir la ligne ouverte d'office dans le panneau de droite.
+ */
+export function needsAction(it: Pick<TodayItem, "kind" | "section" | "lateDays" | "daysLeft">): boolean {
+  if (it.kind === "echeance") return false;
+  if (it.section === "argent" || it.section === "today" || it.section === "collabs") return true;
+  if (it.kind === "collab") return true;
+  return (it.lateDays ?? 0) > 0 || (it.daysLeft ?? 0) < 0;
+}
+
+/** Première ligne (dans l'ordre affiché) qui demande un geste, sinon null : le panneau reste fermé. */
+export function firstActionable<T extends Pick<TodayItem, "kind" | "section" | "lateDays" | "daysLeft">>(list: T[]): T | null {
+  return list.find(needsAction) ?? null;
+}

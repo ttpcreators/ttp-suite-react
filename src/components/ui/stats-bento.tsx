@@ -10,19 +10,20 @@ import { PhoneStrip } from "@/components/ui/phone-bar";
  * est restée identique, donc toutes les pages qui l'utilisent ont basculé seules.)
  *
  *   primary → chiffre principal + légende
- *   bars    → chiffre + mini-barres de répartition (monochromes, max en valeur)
- *   small   → chiffre simple
- *   accent  → chiffre avec icône
+ *   bars    → chiffre + légende ; mini-barres seulement si `series` est donné (pages
+ *             anciennes : une case de chiffre n'a plus de graphique décoratif, nov. 2026)
+ *   small   → chiffre simple (+ légende)
+ *   accent  → chiffre avec icône (+ légende)
  *
  * Responsive : 2 colonnes sur mobile, 4 dès lg. Tokens uniquement (clair/sombre).
  */
 
 export type StatsBentoProps = {
   primary: { eyebrow: string; value: string; caption?: string };
-  /** Cellule à barres : un intitulé, une valeur en avant, et la série à tracer. */
-  bars: { label: string; value: string; series: number[] };
-  small: { value: string; label: string };
-  accent: { value: string; label: string; icon?: LucideIcon };
+  /** Deuxième cellule : un intitulé, une valeur, une légende ; la série (mini-barres) est facultative. */
+  bars: { label: string; value: string; series?: number[]; caption?: string };
+  small: { value: string; label: string; caption?: string };
+  accent: { value: string; label: string; icon?: LucideIcon; caption?: string };
   className?: string;
   /** Téléphone : bande compacte qui défile (une ligne) au lieu de 2 × 2 (pages agence). */
   phoneStrip?: boolean;
@@ -33,13 +34,15 @@ const cell = "flex min-w-0 flex-col px-4 py-4 sm:px-5 sm:py-5";
 // d'une même rangée restent alignés même si un seul libellé passe à la ligne.
 const label = "line-clamp-2 min-h-[2lh] text-[12px] leading-snug text-muted-foreground sm:text-[13px] lg:min-h-0";
 const big = "mt-2 line-clamp-2 break-words text-[20px] font-semibold leading-tight tracking-tight sm:truncate sm:leading-none tabular-nums text-foreground sm:text-[26px]";
+const foot = "mt-3 line-clamp-2 text-[12px] leading-snug text-muted-foreground";
 
 export function StatsBento({ primary, bars, small, accent, className, phoneStrip }: StatsBentoProps) {
-  const finite = bars.series.filter((n) => Number.isFinite(n));
+  const series = bars.series ?? [];
+  const finite = series.filter((n) => Number.isFinite(n));
   const max = Math.max(1, ...finite);
   // Série toute à 0 : aucune barre mise en avant (sinon une barre pleine contredit le « 0 »).
   const empty = !finite.some((n) => n > 0);
-  const top = empty ? -1 : bars.series.indexOf(Math.max(...finite));
+  const top = empty ? -1 : series.indexOf(Math.max(...finite));
   const AccentIcon = accent.icon;
   const ios = useIosPhone();
   // Mode iPhone : quatre tuiles compactes en 2 × 2, toutes visibles (rien de coupé au bord).
@@ -71,17 +74,24 @@ export function StatsBento({ primary, bars, small, accent, className, phoneStrip
       <div className={cell}>
         <span className={label}>{primary.eyebrow}</span>
         <span className={big}>{primary.value}</span>
-        {primary.caption && <span className="mt-3 line-clamp-2 text-[12px] leading-snug text-muted-foreground">{primary.caption}</span>}
+        {primary.caption && <span className={foot}>{primary.caption}</span>}
       </div>
 
-      {/* Répartition (mini-barres) */}
+      {/* Deuxième chiffre (mini-barres seulement si une série est donnée) */}
+      {series.length === 0 ? (
+        <div className={cn(cell, "border-l border-border")}>
+          <span className={label}>{bars.label}</span>
+          <span className={big}>{bars.value}</span>
+          {bars.caption && <span className={foot}>{bars.caption}</span>}
+        </div>
+      ) : (
       <div className={cn(cell, "border-l border-border")}>
         <span className={label}>{bars.label}</span>
         {/* Mobile : barres SOUS le chiffre (sinon il est tronqué dans une case étroite). */}
         <div className="mt-2 flex flex-col items-start gap-2 sm:flex-row sm:items-end sm:justify-between sm:gap-3">
           <span className="line-clamp-2 max-w-full break-words text-[20px] font-semibold leading-tight tracking-tight tabular-nums text-foreground sm:truncate sm:text-[26px] sm:leading-none">{bars.value}</span>
           <div className="flex h-6 shrink-0 items-end gap-[3px] sm:h-8" aria-hidden>
-            {bars.series.map((h, i) => (
+            {series.map((h, i) => (
               <span
                 key={i}
                 className={cn("w-1.5 rounded-full", i === top ? "bg-foreground/70" : h > 0 ? "bg-foreground/20" : "bg-foreground/10")}
@@ -90,12 +100,15 @@ export function StatsBento({ primary, bars, small, accent, className, phoneStrip
             ))}
           </div>
         </div>
+        {bars.caption && <span className={foot}>{bars.caption}</span>}
       </div>
+      )}
 
       {/* Chiffre simple */}
       <div className={cn(cell, "border-t border-border lg:border-l lg:border-t-0")}>
         <span className={label}>{small.label}</span>
         <span className={big}>{small.value}</span>
+        {small.caption && <span className={foot}>{small.caption}</span>}
       </div>
 
       {/* Chiffre avec icône */}
@@ -105,6 +118,7 @@ export function StatsBento({ primary, bars, small, accent, className, phoneStrip
           <span className="line-clamp-2">{accent.label}</span>
         </span>
         <span className={big}>{accent.value}</span>
+        {accent.caption && <span className={foot}>{accent.caption}</span>}
       </div>
     </section>
   );

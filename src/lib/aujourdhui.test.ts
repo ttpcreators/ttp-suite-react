@@ -4,7 +4,12 @@ import {
   commissionRateFor,
   creatorShare,
   filterItems,
+  firstActionable,
+  genreOf,
   invoiceTitle,
+  needsAction,
+  tileTone,
+  todoGenre,
   isSnoozed,
   mailMinutes,
   parseSnooze,
@@ -227,5 +232,55 @@ describe("« C'est fait » (Aujourd'hui)", () => {
     expect(handledToday(m, "2026-10-21")).toEqual([]);
     expect(parseHandled("pas du json")).toEqual({});
     expect(parseHandled(JSON.stringify({ a: { day: "2026-10-21", label: "x" }, b: { day: "hier" } }))).toEqual({ a: { day: "2026-10-21", label: "x" } });
+  });
+});
+
+describe("ligne d'Aujourd'hui : retard écrit une fois, icône par genre (24 nov. 2026)", () => {
+  it("tâche en retard sans sous-tâche : « 13 j de retard » seul, en teinte attente", () => {
+    const { items } = buildToday({ ...base, todos: [{ id: "a", text: "Appeler la marque", due: "2026-10-07", done: false, priority: null, creator: null }] });
+    expect(items[0]).toMatchObject({ meta: "13 j de retard", metaMainTone: "wait" });
+    expect(items[0].metaSub).toBeUndefined();
+  });
+  it("tâche du jour : « Aujourd'hui », sans teinte", () => {
+    const { items } = buildToday({ ...base, todos: [{ id: "a", text: "Appeler la marque", due: "2026-10-20", done: false, priority: null, creator: null }] });
+    expect(items[0]).toMatchObject({ meta: "Aujourd'hui" });
+    expect(items[0].metaMainTone).toBeUndefined();
+    expect(items[0].metaSub).toBeUndefined();
+  });
+
+  it("genre d'une tâche lu dans son texte (noms fictifs)", () => {
+    expect(todoGenre("Conformité : Zoé Test · Marque A · mention manquante")).toBe("conformite");
+    expect(todoGenre("Vérifier le paiement de Marque A")).toBe("facture");
+    expect(todoGenre("Renvoyer la question facturation à l'équipe")).toBe("facture");
+    expect(todoGenre("Marque A × Zoé : lire le contrat de gifting")).toBe("contrat");
+    expect(todoGenre("Demander le brief et le budget à Marque A")).toBe("brief");
+    expect(todoGenre("Envoyer les stats à Marque B", "Mail")).toBe("stats");
+    expect(todoGenre("Relances J+4 des 16 mails de prospection")).toBe("prospection");
+    expect(todoGenre("Appliquer les retours de Marque C", "Mail")).toBe("mail");
+    expect(todoGenre("Répondre à Camille sur le jeu")).toBe("mail");
+    expect(todoGenre("Marque D × Zoé : donner une date de V1")).toBe("collab");
+    expect(todoGenre("Trouver des idées de noms de série")).toBe("tache");
+  });
+
+  it("genre des autres lignes, et tuile grise sauf argent en retard", () => {
+    expect(genreOf({ kind: "relance", title: "x" })).toBe("facture");
+    expect(genreOf({ kind: "event", title: "x" })).toBe("rdv");
+    expect(genreOf({ kind: "todo", title: "x", todo: { id: "a", text: "Conformité : A · B", due: null, done: false, priority: null, creator: null } })).toBe("conformite");
+    expect(tileTone({ kind: "relance" })).toBe("late");
+    expect(tileTone({ kind: "todo" })).toBeUndefined();
+    expect(tileTone({ kind: "collab" })).toBeUndefined();
+  });
+
+  it("panneau ouvert d'office sur la première ligne qui demande un geste, jamais sur une échéance à venir", () => {
+    const echeance = { kind: "echeance" as const, section: "later" as const, daysLeft: 27 };
+    const tacheDemain = { kind: "todo" as const, section: "tomorrow" as const, daysLeft: 1 };
+    const tacheDuJour = { kind: "todo" as const, section: "today" as const, lateDays: 0 };
+    expect(needsAction(echeance)).toBe(false);
+    expect(needsAction({ ...echeance, section: "tomorrow", daysLeft: 0 })).toBe(false);
+    expect(needsAction(tacheDemain)).toBe(false);
+    expect(needsAction(tacheDuJour)).toBe(true);
+    expect(needsAction({ kind: "contrat", section: "week", daysLeft: -3 })).toBe(true);
+    expect(firstActionable([echeance, tacheDemain, tacheDuJour])).toBe(tacheDuJour);
+    expect(firstActionable([echeance, tacheDemain])).toBeNull();
   });
 });

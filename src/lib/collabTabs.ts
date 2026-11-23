@@ -54,8 +54,13 @@ export function sortDiscussions(list: readonly CreatorDiscussion[]): CreatorDisc
   return [...list].sort((a, b) => rank(a.stage) - rank(b.stage) || String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
 }
 
-/** Compteurs de l'onglet Négociations : en cours (pas signées), en négociation, signées, valeur proposée. */
-export function negotiationCounts(list: readonly { stage: string | null; proposal?: { target?: number } | null; value?: string | null }[]): { open: number; negotiating: number; signed: number; proposed: number } {
+/**
+ * Compteurs de l'onglet Négociations : pistes ouvertes (pas signées : repérées, contactées ou en
+ * négociation), dont chaque stade, signées, valeur proposée. « En négociation » est un SOUS-ENSEMBLE
+ * des pistes ouvertes : la page l'écrit « dont en négociation » (avant : « Négociations en cours :
+ * 21 » à côté de « En négociation : 0 » se contredisaient).
+ */
+export function negotiationCounts(list: readonly { stage: string | null; proposal?: { target?: number } | null; value?: string | null }[]): { open: number; spotted: number; contacted: number; negotiating: number; signed: number; proposed: number } {
   let proposed = 0;
   for (const r of list) {
     if (r.stage === "Signé") continue;
@@ -66,6 +71,9 @@ export function negotiationCounts(list: readonly { stage: string | null; proposa
   }
   return {
     open: list.filter((r) => r.stage !== "Signé").length,
+    // Stade inconnu ou vide : compté comme repéré (premier stade), pour que les trois fassent le total.
+    spotted: list.filter((r) => r.stage !== "Signé" && r.stage !== "Contact" && r.stage !== "Négociation").length,
+    contacted: list.filter((r) => r.stage === "Contact").length,
     negotiating: list.filter((r) => r.stage === "Négociation").length,
     signed: list.filter((r) => r.stage === "Signé").length,
     proposed: Math.round(proposed),

@@ -29,7 +29,7 @@ describe("onglets de Collabs et de Missions", () => {
       { stage: "Négociation", proposal: { target: 900 } },
       { stage: "Contact", proposal: null, value: "—" },
       { stage: "Signé", proposal: { target: 5000 } },
-    ])).toEqual({ open: 2, negotiating: 1, signed: 1, proposed: 900 });
+    ])).toEqual({ open: 2, spotted: 0, contacted: 1, negotiating: 1, signed: 1, proposed: 900 });
   });
   it("valeur proposée : le montant saisi à la main compte aussi", () => {
     expect(negotiationCounts([

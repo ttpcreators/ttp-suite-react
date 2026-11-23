@@ -1,6 +1,6 @@
 import { fmtDay } from "@/lib/dates";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { TtpBrief, TtpCollabs, TtpContract, TtpInvoice, TtpMail, TtpPhone, TtpPlanning, TtpSpark, TtpStats, TtpTodo } from "@/components/icons/ttp-icons";
+import { TtpBrief, TtpChecklist, TtpCollabs, TtpContract, TtpInvoice, TtpMail, TtpPhone, TtpPipeline, TtpPlanning, TtpSpark, TtpStats, TtpTodo } from "@/components/icons/ttp-icons";
 import { createPortal } from "react-dom";
 import { ArrowUpRight, Check, ChevronRight, Pencil, Plus, X, type LucideIcon } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
@@ -17,7 +17,7 @@ import { useNavActionSlot } from "@/lib/navAction";
 import { requestIntent } from "@/lib/openIntent";
 import { openCommandPalette } from "@/lib/commandPalette";
 import { useRestrictedViews } from "@/lib/restrictedViews";
-import { parseDueDate, relanceEmail, relanceMailto, type Reminders } from "@/lib/relance";
+import { parseDueDate, rappelEcheanceEmail, relanceEmail, relanceMailto, type Reminders } from "@/lib/relance";
 import { recordReminder, useRelanceInvoices } from "@/lib/useRelanceInvoices";
 import { writeTodoStatus } from "@/lib/todoStatus";
 import { useMailUnread } from "@/lib/useMailUnread";
@@ -32,6 +32,10 @@ import {
   eventISO,
   eventTypeLabel,
   filterItems,
+  firstActionable,
+  genreOf,
+  tileTone,
+  type ItemGenre,
   localISO,
   parseSnooze,
   parseHandled,
@@ -122,16 +126,22 @@ const isoToDate = (iso: string) => {
   return new Date(y, m - 1, d);
 };
 
+/** Une icône par genre (icônes de l'app) : une tâche prend celle de ce qu'elle concerne. */
+const GENRE_ICON: Record<ItemGenre, LucideIcon> = {
+  tache: TtpTodo,
+  facture: TtpInvoice,
+  mail: TtpMail,
+  collab: TtpCollabs,
+  conformite: TtpChecklist,
+  contrat: TtpContract,
+  brief: TtpBrief,
+  stats: TtpStats,
+  prospection: TtpPipeline,
+  rdv: TtpPlanning,
+};
 function iconOf(it: TodayItem): LucideIcon {
-  if (it.kind === "relance") return TtpInvoice;
-  if (it.kind === "todo") return TtpTodo;
-  if (it.kind === "mails") return TtpMail;
-  if (it.kind === "brief") return TtpBrief;
-  if (it.kind === "echeance") return TtpInvoice;
-  if (it.kind === "contrat") return TtpContract;
-  if (it.kind === "collab") return TtpCollabs;
-  if (it.kind === "stats") return TtpStats;
-  return it.event?.type === "call" ? TtpPhone : TtpPlanning;
+  if (it.kind === "event" && it.event?.type === "call") return TtpPhone;
+  return GENRE_ICON[genreOf(it)];
 }
 
 /** Sections d'anticipation repliables (« Voir les N autres »), état gardé sur l'appareil. */
@@ -152,7 +162,8 @@ function primaryLabel(it: TodayItem): string {
     case "mails":
       return "Trier les mails";
     case "echeance":
-      return "Préparer la relance";
+      // Pas encore échue : rien à relancer, la relance n'est qu'une action discrète.
+      return "Ouvrir la facture";
     case "contrat":
       return "Voir dans Échéances";
     case "collab":
@@ -177,18 +188,19 @@ function Row({ it, selected, onSelect, onVerb }: { it: TodayItem; selected: bool
         selected ? "bg-primary/[0.06] ring-[1.5px] ring-primary" : "hover:bg-rowhover",
       )}
     >
-      <IconTile tone={it.tone}>
+      <IconTile tone={tileTone(it)}>
         <Icon />
       </IconTile>
       <div className="min-w-0 flex-1">
-        <div className="flex min-w-0 items-center gap-1.5">
-          {it.priority && <span aria-label="Priorité haute" title="Priorité haute" className="h-2 w-2 shrink-0 rounded-full bg-priority" />}
-          <span className="min-w-0 truncate text-[15px] font-semibold leading-snug text-foreground">{it.title}</span>
+        <div className="flex min-w-0 items-start gap-1.5">
+          {it.priority && <span aria-label="Priorité haute" title="Priorité haute" className="mt-[7px] h-2 w-2 shrink-0 rounded-full bg-priority" />}
+          {/* Deux lignes avant les « … » : le titre se lit en entier la plupart du temps. */}
+          <span className="line-clamp-2 min-w-0 text-[15px] font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{it.title}</span>
         </div>
         <div className="truncate text-[13px] leading-snug text-muted-foreground">{it.sub}</div>
       </div>
-      <div className="shrink-0 text-right">
-        <div className="text-[15px] font-semibold leading-snug tabular-nums text-foreground">{it.meta}</div>
+      <div className="max-w-[40%] shrink-0 text-right">
+        <div className={cn("text-[15px] font-semibold leading-snug tabular-nums", it.metaMainTone ? TONE_TEXT[it.metaMainTone] : "text-foreground")}>{it.meta}</div>
         {it.metaSub && (
           <div className={cn("text-[12.5px] font-semibold leading-snug tabular-nums", it.metaTone ? TONE_TEXT[it.metaTone] : "text-muted-foreground")}>{it.metaSub}</div>
         )}
@@ -241,11 +253,13 @@ type InspectorProps = {
   onSnooze: () => void;
   /** « C'est fait » : pour tout ce que le bouton principal ne termine pas lui-même. */
   onHandled?: () => void;
+  /** Facture pas encore échue : rappel en douceur, action discrète (lien sous les boutons). */
+  onRappel?: () => void;
   onClose: () => void;
   onOpenSource: () => void;
 };
 
-function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onPrimary, onSnooze, onHandled, onClose, onOpenSource }: InspectorProps) {
+function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onPrimary, onSnooze, onHandled, onRappel, onClose, onOpenSource }: InspectorProps) {
   const [editing, setEditing] = useState(false);
   useEffect(() => setEditing(false), [it.id]);
   const iv = it.invoice;
@@ -416,6 +430,11 @@ function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onP
           </button>
         </div>
         {mail && <p className="text-center text-[12.5px] text-muted-foreground">S'ouvre dans ta messagerie, puis la relance est notée.</p>}
+        {onRappel && (
+          <button type="button" onClick={onRappel} className="mx-auto flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:text-foreground">
+            <TtpMail className="h-3.5 w-3.5" /> Écrire un rappel
+          </button>
+        )}
       </div>
     </div>
   );
@@ -596,20 +615,29 @@ export function Aujourdhui() {
   const selected = flat.find((i) => i.id === selectedId) ?? null;
   // Vrai dès que l'utilisateur a choisi une ligne lui-même (clic, J/K).
   const pickedByUser = useRef(false);
+  // Ouverture d'office faite (ou panneau fermé à la main) : on ne rouvre plus tout seul.
+  const autoOpened = useRef(false);
+  const dataReady = todos !== null && events !== null && briefs !== null && (!money || invoices !== null);
   useEffect(() => {
     const i = flat.findIndex((x) => x.id === selectedId);
     if (i >= 0) {
       lastIndex.current = i;
       return;
     }
-    // La ligne traitée disparaît : on passe à la suivante (comme une boîte mail).
-    if (selectedId) setSelectedId(flat.length ? flat[Math.min(lastIndex.current, flat.length - 1)].id : null);
-    // Ordinateur : la fiche montre d'emblée la première action (pas de panneau vide).
-    else if (isLg && flat.length) {
-      pickedByUser.current = false; // sélection d'office : les raccourcis E et R ne s'y appliquent pas
-      setSelectedId(flat[0].id);
+    // La ligne traitée disparaît : on passe à la suivante qui demande un geste (comme une boîte
+    // mail), sinon le panneau se ferme (jamais sur une facture pas encore échue).
+    if (selectedId) setSelectedId(firstActionable(flat.slice(lastIndex.current))?.id ?? null);
+    // Ordinateur : la fiche s'ouvre d'office, une seule fois, sur la première ligne qui demande
+    // un geste (jamais sur une facture pas encore échue) ; s'il n'y en a pas, elle reste fermée.
+    else if (isLg && dataReady && !autoOpened.current) {
+      const first = firstActionable(flat);
+      autoOpened.current = true;
+      if (first) {
+        pickedByUser.current = false; // sélection d'office : les raccourcis E et R ne s'y appliquent pas
+        setSelectedId(first.id);
+      }
     }
-  }, [flat, selectedId, isLg]);
+  }, [flat, selectedId, isLg, dataReady]);
   useEffect(() => {
     if (!selected) setSheetOpen(false);
   }, [selected]);
@@ -667,6 +695,15 @@ export function Aujourdhui() {
     }
     setLocalRem(next);
     toast("Relance enregistrée ✓");
+  };
+
+  // Facture pas encore échue : rappel doux dans la messagerie (rien n'est noté comme relance).
+  const sendRappel = (it: TodayItem) => {
+    const iv = it.invoice;
+    if (!iv) return;
+    const due = parseDueDate(iv.date);
+    const { subject, body } = rappelEcheanceEmail(iv, due ? fmtDay(due) : "prévue");
+    window.location.href = relanceMailto(details[iv.id]?.clientEmail ?? "", subject, body);
   };
 
   const finishTodo = async (it: TodayItem) => {
@@ -825,6 +862,7 @@ export function Aujourdhui() {
       onPrimary={() => act(selected)}
       onSnooze={() => doSnooze(selected)}
       onHandled={selected.kind === "todo" ? undefined : () => doHandled(selected)}
+      onRappel={selected.kind === "echeance" && selected.invoice ? () => sendRappel(selected) : undefined}
       onClose={() => {
         setSelectedId(null);
         setSheetOpen(false);

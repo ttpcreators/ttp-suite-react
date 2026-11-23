@@ -671,7 +671,7 @@ export function Briefs() {
           <StatsBento phoneStrip
             className="mb-5"
             primary={{ eyebrow: "À valider", value: String(valider), caption: `sur ${rows.length} brief${rows.length > 1 ? "s" : ""} au total.` }}
-            bars={{ label: "Par statut", value: `${cours} en cours`, series: [attente, valider, cours, termine] }}
+            bars={{ label: "En cours", value: String(cours) }}
             small={{ value: String(attente), label: "En attente" }}
             accent={{ value: String(termine), label: "Terminés", icon: CheckCircle2 }}
           />

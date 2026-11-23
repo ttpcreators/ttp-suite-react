@@ -19,8 +19,6 @@ import {
   Undo2,
   Settings2,
   Landmark,
-  Wallet,
-  AlertTriangle,
   X,
   EyeOff,
   ChevronRight,
@@ -28,6 +26,7 @@ import {
   FileSignature,
 } from "@/components/icons";
 import { StatsBento } from "@/components/ui/stats-bento";
+import { brouillonsLegende, encaisserLegende, encaisserResume } from "@/lib/facturationResume";
 import { supabase } from "@/lib/supabase";
 import { useSearch, matchQuery } from "@/lib/search";
 import { cn, titleCase } from "@/lib/utils";
@@ -901,9 +900,10 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
   const finBilled = sumFin(billed);
   const finPaid = sumFin(billed.filter((r) => r.status === "payee"));
   const margePct = finBilled.ht > 0 ? (finBilled.commission / finBilled.ht) * 100 : 0;
-  const unpaid = scope.filter((r) => r.status === "attente" || r.status === "retard");
-  const aEncaisser = unpaid.reduce((s, r) => s + parseAmount(r.amount), 0);
-  const nbRetard = scope.filter(isLate).length; // même règle que le badge « En retard »
+  // À encaisser (TTC), en retard (même règle que le badge) et brouillons : src/lib/facturationResume.ts.
+  const resume = encaisserResume(scope);
+  // Nombre de factures réglées derrière la case « Encaissé HT ce mois » (ou de la plage).
+  const barsCount = paidScope.filter((r) => ymPaid(r)?.y === bentoY && (periodRange && !focusYm ? true : ymPaid(r)?.m === bentoM)).length;
 
   // ── Éditeur ──
   function openCreate() {
@@ -1874,13 +1874,18 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
           bars={{
             label: barsLabel,
             value: formatEuro(barsValue),
-            series: monthly,
+            caption: barsCount === 0 ? "Aucune facture réglée" : `${barsCount} facture${barsCount > 1 ? "s" : ""} réglée${barsCount > 1 ? "s" : ""}`,
           }}
-          small={{ value: String(unpaid.length), label: period ? `À encaisser TTC · ${periodName}` : "À encaisser TTC · toutes périodes" }}
+          small={{
+            value: formatEuro(resume.aEncaisser),
+            label: period ? `À encaisser TTC · ${periodName}` : "À encaisser TTC · toutes périodes",
+            caption: encaisserLegende(resume),
+          }}
           accent={{
-            value: formatEuro(aEncaisser),
-            label: nbRetard > 0 ? `dont ${nbRetard} en retard` : "En attente de paiement",
-            icon: nbRetard > 0 ? AlertTriangle : Wallet,
+            value: formatEuro(resume.brouillons),
+            label: "Brouillons TTC",
+            icon: FileText,
+            caption: brouillonsLegende(resume.nbBrouillons),
           }}
         />
       )}

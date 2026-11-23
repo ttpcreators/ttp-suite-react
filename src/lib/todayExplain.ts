@@ -67,7 +67,7 @@ export function explainItem(it: ItemLike): Explain | null {
     case "echeance":
       return {
         meaning: `Cette facture de ${brand} arrive bientôt à échéance. Elle n'est pas encore en retard.`,
-        action: "Rien à faire si la marque paie à temps. Tu peux la prévenir en douceur.",
+        action: "Rien à faire si la marque paie à temps. Si tu veux, écris-lui un rappel en douceur.",
       };
     case "contrat": {
       const name = first(it.contract?.creator) || "ce créateur";

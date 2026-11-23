@@ -26,7 +26,7 @@ import { guessEventKind } from "../_shared/eventKind.ts";
 import { comptaSummary, parisDay, type ComptaInv } from "../_shared/compta.ts";
 import { activityText } from "../_shared/activityText.ts";
 import { upcomingBirthdays } from "../_shared/birthdays.ts";
-import { amountOf, contractList, invoiceTotals, owesMoney, pctOf, reversementRows, type Detail, type Payout } from "../_shared/reversements.ts";
+import { activeRosterNames, amountOf, contractList, invoiceTotals, pctOf, reversementRows, reversementsTexte, type Detail, type Payout, type RevInvoice } from "../_shared/reversements.ts";
 import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/audience.ts";
 import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCartonnent, type DroitUsage, type PostCourt } from "../_shared/alfredSuivi.ts";
 import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
@@ -394,7 +394,7 @@ const ficheCreateur: Tool = {
 async function formerCreator(sb: SupabaseClient, ctx: Ctx, n: string, notFound: string): Promise<ToolResult> {
   const pat = like(n);
   const [inv, br, gi] = await Promise.all([
-    ctx.founder ? sb.from("invoices").select("ref, party, amount, date, status, creator").ilike("creator", pat).order("created_at", { ascending: false }).limit(30) : Promise.resolve({ data: [] }),
+    ctx.founder ? sb.from("invoices").select("id, ref, party, amount, date, status, creator, collab_id").ilike("creator", pat).order("created_at", { ascending: false }).limit(30) : Promise.resolve({ data: [] }),
     sb.from("briefs").select("brand, creator, status, due").ilike("creator", pat).limit(20),
     sb.from("gifting").select("brand, product, creator, received_on").ilike("creator", pat).limit(20),
   ]);
@@ -408,8 +408,8 @@ async function formerCreator(sb: SupabaseClient, ctx: Ctx, n: string, notFound: 
   if (ctx.founder) {
     const st = await appState(sb).catch(() => ({} as Json));
     const rows = reversementRows({
-      invoices: invs as unknown as { id: string; amount: unknown; status: unknown; creator: unknown }[],
-      details: {},
+      invoices: invs as unknown as RevInvoice[],
+      details: (st.invoiceDetails ?? {}) as Record<string, Detail>,
       payouts: (st.creatorPayouts ?? {}) as Record<string, Payout[]>,
       rosterRates: {},
       savedRates: (st.creatorCommission ?? {}) as Record<string, number>,
@@ -429,40 +429,33 @@ const eur = (n: number) => `${n.toLocaleString("fr-FR", { minimumFractionDigits:
 const reversements: Tool = {
   name: "reversements",
   title: "Reversements créateurs",
-  description: "Ce que l'agence doit à chaque créateur (réservé aux fondateurs) : part créateur des factures payées par la marque, déjà versé, reste à verser, dernier virement. Mêmes chiffres que la page Reversements. Filtre facultatif par créateur.",
+  description: "Ce que l'agence doit à chaque créateur (réservé aux fondateurs) : part créateur des factures payées par la marque, déjà versé, reste à verser, dernier virement. Mêmes chiffres que la page Reversements (même calcul, _shared/reversements.ts), anciens créateurs sortis du roster compris : l'argent qu'on leur doit reste dû. Filtre facultatif par créateur : la ligne du créateur, plus le total de l'agence.",
   inputSchema: { type: "object", properties: { createur: { type: "string" }, tous: { type: "boolean", description: "Aussi les créateurs à jour (défaut : seulement ceux à qui on doit de l'argent)" } }, additionalProperties: false },
   founder: true,
   run: async (sb, _c, a) => {
     const [{ data: inv, error }, { data: cr }] = await Promise.all([
       sb.from("invoices").select("id, amount, status, creator, collab_id").eq("status", "payee").limit(5000),
-      sb.from("creators").select("name, commission"),
+      sb.from("creators").select("name, commission, status"),
     ]);
     if (error) return fail(`Factures illisibles : ${error.message}`);
     const st = await appState(sb);
+    const creators = (cr as Json[] | null) ?? [];
     const roster: Record<string, number> = {};
-    for (const c of (cr as Json[] | null) ?? []) {
+    for (const c of creators) {
       const v = pctOf(c.commission);
       if (v != null) roster[String(c.name)] = v;
     }
-    let rows = reversementRows({
-      invoices: (inv as unknown as { id: string; amount: unknown; status: unknown; creator: unknown; collab_id: unknown }[]) ?? [],
+    const all = reversementRows({
+      invoices: (inv as unknown as RevInvoice[]) ?? [],
       details: (st.invoiceDetails ?? {}) as Record<string, Detail>,
       payouts: (st.creatorPayouts ?? {}) as Record<string, Payout[]>,
       rosterRates: roster,
       savedRates: (st.creatorCommission ?? {}) as Record<string, number>,
       collabModes: (st.collabCashMode ?? {}) as Record<string, string>,
       contractHistory: st.contractHistory,
+      activeNames: activeRosterNames(creators),
     });
-    const who = str(a.createur, 80).toLowerCase();
-    if (who) rows = rows.filter((r) => r.creator.toLowerCase().includes(who));
-    const owing = rows.filter(owesMoney);
-    const shown = a.tous === true || who ? rows : owing;
-    const total = owing.reduce((s, r) => s + r.reste, 0);
-    return ok([
-      `# Reversements · reste à verser ${eur(total)} à ${owing.length} créateur(s)`,
-      ...shown.map((r) => `- ${titleCase(r.creator)} · reste ${eur(r.reste)} · dû ${eur(r.du)} (factures payées ${eur(r.encaisse)} TTC, commission ${r.rate} %) · versé ${eur(r.reverse)}${r.lastPayout ? ` · dernier virement ${frDay(r.lastPayout)}` : ""}`),
-      shown.length ? "" : "Tout est à jour.",
-    ].filter(Boolean).join("\n"));
+    return ok(reversementsTexte(all, { createur: str(a.createur, 80), tous: a.tous === true }, frDay));
   },
 };
 
@@ -539,7 +532,7 @@ async function collabsPayees(sb: SupabaseClient, st: Json, cle: string, montant:
       if (v != null) roster[String(c.name)] = v;
     }
     const rows = reversementRows({
-      invoices: (inv.data as unknown as { id: string; amount: unknown; status: unknown; creator: unknown }[]) ?? [],
+      invoices: (inv.data as unknown as RevInvoice[]) ?? [],
       details: (st.invoiceDetails ?? {}) as Record<string, Detail>,
       payouts: (st.creatorPayouts ?? {}) as Record<string, Payout[]>,
       rosterRates: roster,
