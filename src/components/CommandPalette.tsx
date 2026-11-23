@@ -26,12 +26,12 @@ import { toast } from "@/components/ui/toast";
  *     tâche, nouvelle collab, trier les mails ;
  *   • Aller à : les pages du menu (sans les pages rangées ni celles du profil fondateur) ;
  *   • Résultats : la recherche globale (créateurs, contacts, factures, briefs…) ;
- *   • Demander à Megan : ouvre la page Agents.
- * ↑ ↓ naviguer, ↵ ouvrir, ⌘ ↵ exécuter sans ouvrir (relance), Échap fermer, ⌘ J Megan.
+ *   • Demander à Alfred : ouvre la page Agents.
+ * ↑ ↓ naviguer, ↵ ouvrir, ⌘ ↵ exécuter sans ouvrir (relance), Échap fermer, ⌘ J Alfred.
  * Classement et libellés : lib/commandPalette.ts (testés).
  */
 
-type Group = "actions" | "pages" | "results" | "megan";
+type Group = "actions" | "pages" | "results" | "agent";
 type Entry = {
   key: string;
   group: Group;
@@ -47,7 +47,7 @@ type Entry = {
   exec?: () => void;
 };
 
-const GROUP_LABEL: Record<Group, string> = { actions: "Actions", pages: "Aller à", results: "Résultats", megan: "Demander à Megan" };
+const GROUP_LABEL: Record<Group, string> = { actions: "Actions", pages: "Aller à", results: "Résultats", agent: "Demander à Alfred" };
 
 const go = (id: string) => window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: id }));
 
@@ -63,7 +63,7 @@ export function CommandPalette({
   onSelect: (id: ViewId) => void;
   /** Pages hors menu pour ce profil (fondateur + rangées) : pas proposées. */
   hidden: readonly ViewId[];
-  /** Pages que ce profil ne peut pas ouvrir (actions argent et Megan masquées). */
+  /** Pages que ce profil ne peut pas ouvrir (actions argent et Alfred masquées). */
   restricted: readonly ViewId[];
   /** Ouvre la page d'un résultat de recherche (garde la requête pour filtrer). */
   onGoto: (id: ViewId) => void;
@@ -86,7 +86,7 @@ export function CommandPalette({
     setIndex(0);
   };
 
-  // ⌘K ouvre / ferme, ⌘J ouvre Megan (page Agents), partout dans l'espace agence.
+  // ⌘K ouvre / ferme, ⌘J ouvre Alfred (page Agents), partout dans l'espace agence.
   const state = useRef({ open, canAgent });
   state.current = { open, canAgent };
   useEffect(() => {
@@ -221,9 +221,9 @@ export function CommandPalette({
       }
     }
 
-    // ── Megan ──
+    // ── Alfred ──
     if (canAgent && query) {
-      out.push({ key: "megan", group: "megan", label: `« ${query} »`, meta: "⌘ J", icon: TtpSpark, tone: "info", run: () => go("agent") });
+      out.push({ key: "agent", group: "agent", label: `« ${query} »`, meta: "⌘ J", icon: TtpSpark, tone: "info", run: () => go("agent") });
     }
     return out;
   }, [q, invoices, money, canAgent, hidden, rawHits, app, liveRem, localRem, onSelect, onGoto, onOpenCreator, setQuery]);
@@ -342,7 +342,7 @@ export function CommandPalette({
               <span>↑ ↓ naviguer</span>
               <span>↵ ouvrir</span>
               <span>⌘ ↵ exécuter sans ouvrir</span>
-              {canAgent && <span className="ml-auto">Megan : ⌘ J</span>}
+              {canAgent && <span className="ml-auto">Alfred : ⌘ J</span>}
             </div>
           </motion.div>
         </div>

@@ -31,7 +31,7 @@ export const PAGE_ALIASES: Partial<Record<ViewId, string[]>> = {
   stats: ["statistiques", "analytics"],
   debrief: ["bilan", "rapport"],
   acces: ["mot de passe", "identifiants", "login"],
-  agent: ["megan", "agents", "ia", "assistant"],
+  agent: ["alfred", "agents", "ia", "assistant"],
   corbeille: ["poubelle", "supprime"],
 };
 

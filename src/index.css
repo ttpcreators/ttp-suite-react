@@ -117,7 +117,7 @@
   --st-ok: #1e7b34;
   --st-progress-bg: var(--field); /* en cours, envoyé */
   --st-progress: #0a5fc2;
-  --st-info-bg: var(--field); /* brief, idée, Megan */
+  --st-info-bg: var(--field); /* brief, idée, agent */
   --st-info: #0b6f7a;
   --st-wait-bg: var(--field); /* à relancer, en attente */
   --st-wait: #9a5b00;

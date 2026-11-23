@@ -1289,7 +1289,7 @@ export default function App() {
       <Toaster />
       <AgencySignatureSync />
       <UndoSendBar />
-      {/* Palette ⌘K : actions, pages, recherche et Megan, depuis n'importe quelle page. */}
+      {/* Palette ⌘K : actions, pages, recherche et Alfred, depuis n'importe quelle page. */}
       <CommandPalette hidden={navHidden} restricted={hiddenIds} onSelect={select} onGoto={gotoSearch} onOpenCreator={openDetail} setQuery={setQuery} />
     </NavSubSetContext.Provider>
     </SearchContext.Provider>

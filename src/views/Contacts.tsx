@@ -484,7 +484,7 @@ export function Contacts() {
 
   // ── Journal de contact multi-canal (« touches ») : WhatsApp, insta, tél… ──
   // Chaque prise de contact manuelle est datée dans contacts.touches (jsonb) ;
-  // last_contacted est synchronisé pour tout l'existant (bento, alerte, Megan).
+  // last_contacted est synchronisé pour tout l'existant (bento, alerte, Alfred).
   // Écrit via updateTouches (relit la ligne avant) : pas d'écrasement des touches
   // ajoutées ailleurs (autre appareil, cron Gmail). Optimiste puis valeurs serveur.
   const saveTouches = async (row: Row, change: TouchChange) => {

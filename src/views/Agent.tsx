@@ -459,7 +459,6 @@ export function AgentView() {
 
   // ── agents ──
   const agentOf = (id: string | null | undefined) => (id ? agents.find((a) => a.id === id) ?? null : null);
-  const megan = agents.find((a) => a.slug === "megan") ?? null;
   // Photos de profil : figurines (lib/agentAvatars), choix enregistrés dans le blob `agentAvatars`.
   const { data: chosenFigs } = useAgentAppState<Record<string, string>>((st) => (st["agentAvatars"] as Record<string, string>) ?? {});
   const figs = useMemo(() => assignFigurines(agents, chosenFigs), [agents, chosenFigs]);
@@ -494,11 +493,9 @@ export function AgentView() {
   };
   const lastActivity = (a: AgentRow) => {
     const own = journal.find((j) => j.agent_id === a.id && !j.action.startsWith("marc_"))?.cree_le;
-    // Megan écrivait avant les fiches agents : ses traces sans agent comptent pour elle.
-    if (a.slug === "megan") return own ?? journal.find((j) => !j.agent_id && !j.action.startsWith("marc_"))?.cree_le ?? null;
     return own ?? null;
   };
-  const queueOf = (a: AgentRow) => queue.filter((x) => x.agent_id === a.id || (a.slug === "megan" && !x.agent_id)).length;
+  const queueOf = (a: AgentRow) => queue.filter((x) => x.agent_id === a.id).length;
 
   // ── rendus ──
   if (!loaded) {
@@ -522,7 +519,7 @@ export function AgentView() {
 
   const relanceDepassee = (d: string | null) => !!d && d < todayISO();
 
-  const shownQueue = agentFilter === "tous" ? queue : queue.filter((a) => (a.agent_id ?? megan?.id ?? "") === agentFilter);
+  const shownQueue = agentFilter === "tous" ? queue : queue.filter((a) => (a.agent_id ?? "") === agentFilter);
 
   const overview = (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -601,8 +598,7 @@ export function AgentView() {
     { value: "apercu", label: "Vue d'ensemble" },
     { value: "valider", label: "À valider", count: queue.length || undefined },
     { value: "agents", label: "Agents", count: agents.length || undefined },
-    // Ancien onglet « Megan » écrit en dur (Megan arrêtée le 6 novembre 2026). Il garde les
-    // marques et le cercle déjà proposés par un agent, et n'apparaît que s'il en reste.
+    // Marques et cercle déjà proposés par un agent : l'onglet n'apparaît que s'il en reste.
     ...(hasProspection ? [{ value: "prospection" as const, label: "Prospection", count: proposes.length + cercleProposes.length || undefined }] : []),
     { value: "memoire", label: "Mémoire" },
     { value: "journal", label: "Journal" },
@@ -680,7 +676,7 @@ export function AgentView() {
               return { label: m.label, icon: m.icon, alerte: t === "alerte" };
             }}
             agentBadge={(a) => {
-              const ag = agentOf(a.agent_id) ?? (!a.agent_id ? megan : null);
+              const ag = agentOf(a.agent_id);
               return ag ? (
                 <span className="flex items-center gap-1.5 rounded-full bg-muted py-0.5 pl-0.5 pr-2 text-[10px] font-medium text-muted-foreground">
                   <AgentAvatar figurine={figOf(ag.id)} className="h-4 w-4 rounded-full" /> {ag.nom}

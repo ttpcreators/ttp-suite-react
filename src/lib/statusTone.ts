@@ -2,7 +2,7 @@
  * Statuts : UN sens par couleur dans toute l'app (jetons --st-* de index.css).
  *   ok        payé, signé, à jour, validé
  *   progress  en cours, envoyé
- *   info      brief, idée, Megan, nouveau
+ *   info      brief, idée, agent, nouveau
  *   wait      à relancer, en attente, à vérifier
  *   late      argent en retard UNIQUEMENT
  *   closed    clôturé, écarté, refusé
