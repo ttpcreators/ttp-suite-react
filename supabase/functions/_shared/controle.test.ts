@@ -76,14 +76,24 @@ describe("facture en brouillon échue", () => {
 
 describe("étapes en retard sur l'argent", () => {
   const payee = { id: "i1", ref: "2026-90", status: "payee", collab_id: "c1", paid_at: "2026-11-10T10:00:00Z", creator: "LEA TEST" };
-  it("facture payée, collab avant l'étape 9", () => {
-    const out = controler(base({ collabs: [collab({ step: 8 })], invoices: [payee] }));
+  it("facture payée, collab publiée mais avant l'étape 9", () => {
+    const out = controler(base({ collabs: [collab({ step: 6 })], invoices: [payee] }));
     expect(out.map((p) => p.regle)).toEqual(["etape_paiement"]);
     expect(out[0].detail).toContain("étape 9");
   });
-  it("versement noté depuis le paiement : étape 10 attendue (une seule ligne)", () => {
-    const out = controler(base({ collabs: [collab({ step: 8 })], invoices: [payee], payouts: { "LÉA TEST": [{ date: "2026-11-15", amount: 600 }] } }));
+  it("payée avant la publication (acompte) : ligne à part, gravité basse, pas de décision", () => {
+    const out = controler(base({ collabs: [collab({ step: 4 })], invoices: [payee] }));
+    expect(out.map((p) => p.regle)).toEqual(["paiement_avant_publication"]);
+    expect(out[0].gravite).toBe("basse");
+    expect(out[0].decision).toBe(false);
+  });
+  it("versement noté depuis le paiement, collab à l'étape 9 : étape 10 attendue (une seule ligne)", () => {
+    const out = controler(base({ collabs: [collab({ step: 9 })], invoices: [payee], payouts: { "LÉA TEST": [{ date: "2026-11-15", amount: 600 }] } }));
     expect(out.map((p) => p.regle)).toEqual(["etape_reversement"]);
+  });
+  it("versement noté mais collab avant l'étape 9 : seulement l'étape 9 réclamée", () => {
+    const out = controler(base({ collabs: [collab({ step: 8 })], invoices: [payee], payouts: { "LÉA TEST": [{ date: "2026-11-15", amount: 600 }] } }));
+    expect(out.map((p) => p.regle)).toEqual(["etape_paiement"]);
   });
   it("versement plus ancien que le paiement : pas compté", () => {
     expect(regles({ collabs: [collab({ step: 9 })], invoices: [payee], payouts: { "LEA TEST": [{ date: "2026-10-01", amount: 600 }] } })).toEqual([]);
@@ -117,21 +127,40 @@ describe("collab publiée sans facture", () => {
 });
 
 describe("prospect resté ouvert", () => {
-  it("une seule collab de la marque : correction sûre « Signé »", () => {
-    const out = controler(base({ collabs: [collab({ status: "gagnee" })], prospects: [{ id: "p1", brand: "marque alpha", stage: "Négociation" }] }));
+  const datee = (o: Partial<CtrlCollab>) => collab({ created_at: "2026-11-10T10:00:00Z", ...o });
+  it("une seule collab en cours, prospect créé avant : correction sûre « Signé »", () => {
+    const out = controler(base({ collabs: [datee({ status: "gagnee" })], prospects: [{ id: "p1", brand: "marque alpha", stage: "Négociation", created_at: "2026-11-01T09:00:00Z" }] }));
     expect(out[0].regle).toBe("prospect_ouvert");
     expect(out[0].correction).toMatchObject({ type: "prospect_signe", prospectId: "p1", collabId: "c1" });
     expect(out[0].decision).toBe(false);
   });
-  it("plusieurs collabs possibles : pas de correction, décision de Marc", () => {
-    const out = controler(base({ collabs: [collab({}), collab({ id: "c2" })], prospects: [{ id: "p1", brand: "Marque Alpha", stage: "Contact" }] }));
+  it("dates inconnues : signalé, mais pas de « Corriger »", () => {
+    const out = controler(base({ collabs: [collab({})], prospects: [{ id: "p1", brand: "Marque Alpha", stage: "Contact" }] }));
     expect(out[0].correction).toBeNull();
     expect(out[0].decision).toBe(true);
   });
-  it("prospect signé ou perdu, autre créateur, collab perdue : rien", () => {
-    expect(regles({ collabs: [collab({})], prospects: [{ id: "p1", brand: "Marque Alpha", stage: "Signé" }, { id: "p2", brand: "Marque Alpha", stage: "Perdue" }] })).toEqual([]);
-    expect(regles({ collabs: [collab({})], prospects: [{ id: "p1", brand: "Marque Alpha", stage: "Contact", creator: "Autre Nom" }] })).toEqual([]);
-    expect(regles({ collabs: [collab({ status: "perdue" })], prospects: [{ id: "p1", brand: "Marque Alpha", stage: "Contact" }] })).toEqual([]);
+  it("plusieurs collabs possibles : pas de correction, décision de Marc", () => {
+    const out = controler(base({ collabs: [datee({}), datee({ id: "c2" })], prospects: [{ id: "p1", brand: "Marque Alpha", stage: "Contact", created_at: "2026-11-01" }] }));
+    expect(out[0].correction).toBeNull();
+    expect(out[0].decision).toBe(true);
+  });
+  it("prospect créé après la collab (renouvellement) : rien", () => {
+    expect(regles({ collabs: [datee({})], prospects: [{ id: "p1", brand: "Marque Alpha", stage: "Contact", created_at: "2026-11-20T09:00:00Z" }] })).toEqual([]);
+  });
+  it("collab bouclée (étape 11, terminée, archivée, perdue) : rien", () => {
+    for (const c of [datee({ step: 11 }), datee({ status: "terminee" }), datee({ status: "archivee" }), datee({ status: "perdue" })]) {
+      expect(regles({ collabs: [c], prospects: [{ id: "p1", brand: "Marque Alpha", stage: "Contact", created_at: "2026-11-01" }] })).toEqual([]);
+    }
+  });
+  it("prospect proposé pour un autre créateur (colonne ou proposition) : rien", () => {
+    expect(regles({ collabs: [datee({})], prospects: [{ id: "p1", brand: "Marque Alpha", stage: "Contact", creator: "Autre Nom" }] })).toEqual([]);
+    expect(regles({ collabs: [datee({})], prospects: [{ id: "p1", brand: "Marque Alpha", stage: "Contact", proposal: { creator: "Autre Nom" } }] })).toEqual([]);
+  });
+  it("prospect relié à une collab bouclée : rien", () => {
+    expect(regles({ collabs: [datee({ step: 11 })], prospects: [{ id: "p1", brand: "Marque Alpha", stage: "Négociation", collab_id: "c1" }] })).toEqual([]);
+  });
+  it("prospect signé ou perdu : rien", () => {
+    expect(regles({ collabs: [datee({})], prospects: [{ id: "p1", brand: "Marque Alpha", stage: "Signé" }, { id: "p2", brand: "Marque Alpha", stage: "Perdue" }] })).toEqual([]);
   });
 });
 
@@ -153,13 +182,23 @@ describe("cachet", () => {
     expect(lectureCachet("0 €")).toBe("gifting");
     expect(lectureCachet("")).toBe("vide");
     expect(lectureCachet("—")).toBe("vide");
-    expect(lectureCachet("affiliation")).toBe("illisible");
+    expect(lectureCachet("à définir")).toBe("illisible");
+    expect(lectureCachet("affiliation")).toBe("ok");
     expect(lectureCachet("10 % des ventes")).toBe("illisible");
     expect(lectureCachet("800 € x 2")).toBe("illisible");
     expect(lectureCachet("2000 AED")).toBe("devise");
+    // Formes standard du champ cachet de l'app : jamais illisibles.
+    expect(lectureCachet("Affiliation seule")).toBe("ok");
+    expect(lectureCachet("550 € + affiliation")).toBe("ok");
+    expect(lectureCachet("1 500 $")).toBe("ok");
+    expect(lectureCachet("300 £ + affiliation")).toBe("ok");
+    expect(lectureCachet("800 CHF")).toBe("ok");
+    expect(lectureCachet("Produits offerts")).toBe("gifting");
+    expect(lectureCachet("produits offerts (2 x 50 €)")).toBe("gifting");
+    expect(lectureCachet("Gifting")).toBe("gifting");
   });
   it("une ligne par collab vivante au cachet illisible", () => {
-    const out = controler(base({ collabs: [collab({ cachet: "affiliation" }), collab({ id: "c2", cachet: "2000 AED" }), collab({ id: "c3", cachet: "affiliation", status: "archivee" })] }));
+    const out = controler(base({ collabs: [collab({ cachet: "selon perfs" }), collab({ id: "c2", cachet: "2000 AED" }), collab({ id: "c3", cachet: "selon perfs", status: "archivee" }), collab({ id: "c4", cachet: "Affiliation seule" })] }));
     expect(out.map((p) => p.id)).toEqual(["cachet_illisible:c1", "cachet_illisible:c2"]);
     expect(out[1].titre.startsWith("Devise inconnue")).toBe(true);
   });
@@ -183,7 +222,7 @@ describe("fiche créateur incomplète", () => {
 
 describe("étiquettes de contacts", () => {
   it("une seule ligne, avec les étiquettes libres comptées", () => {
-    const out = controler(base({ contacts: [{ id: "1", tag: "Marque" }, { id: "2", tag: "marque" }, { id: "3", tag: "influence" }, { id: "4", tag: "marque" }, { id: "5", tag: null }] }));
+    const out = controler(base({ contacts: [{ id: "1", tag: "Marque" }, { id: "2", tag: "marque" }, { id: "3", tag: "influence" }, { id: "4", tag: "marque" }, { id: "5", tag: null }, { id: "6", tag: "Perso" }, { id: "7", tag: "Lead site" }] }));
     expect(out).toHaveLength(1);
     expect(out[0].titre).toBe("3 contacts avec une étiquette libre");
     expect(out[0].detail).toContain("« marque » (2)");

@@ -23,6 +23,7 @@ export type RegleId =
   | "publiee_sans_facture"
   | "etape_paiement"
   | "etape_reversement"
+  | "paiement_avant_publication"
   | "createur_hors_roster"
   | "prospect_ouvert"
   | "cachet_illisible"
@@ -64,6 +65,7 @@ export type CtrlCollab = {
   status: string | null;
   brief_id?: string | null;
   cachet?: string | null;
+  created_at?: string | null;
 };
 export type CtrlStep = { collab_id: string; step: number; reached_at: string | null };
 export type CtrlInvoice = {
@@ -87,7 +89,16 @@ export type CtrlCreator = {
   photo_url?: string | null;
   platform?: string | null;
 };
-export type CtrlProspect = { id: string; brand: string | null; stage: string | null; creator?: string | null; collab_id?: string | null };
+export type CtrlProspect = {
+  id: string;
+  brand: string | null;
+  stage: string | null;
+  creator?: string | null;
+  collab_id?: string | null;
+  /** Proposition faite depuis Tarifs : son créateur compte quand `creator` est vide. */
+  proposal?: { creator?: string | null } | null;
+  created_at?: string | null;
+};
 export type CtrlTodo = { id: string; text: string | null; done: boolean | null; status?: string | null };
 export type CtrlContact = { id: string; tag?: string | null };
 
@@ -124,6 +135,8 @@ export const ETAPE_REVERSEMENT = 10;
 export const IGNORES_KEY = "controleIgnores";
 /** Étiquettes de la page Contacts (src/views/Contacts.tsx, TAG_OPTIONS). */
 export const ETIQUETTES_CONTACTS = ["Marque", "Agence", "Agence RP", "Média", "PME", "Freelance", "Autre"];
+/** Étiquettes posées par l'app elle-même (contact d'un créateur, demande reçue par le site). */
+export const ETIQUETTES_SYSTEME = ["Perso", "Lead site"];
 /** Étapes de prospect closes (Signé, ou perdu). */
 const PROSPECT_CLOS = new Set(["signe", "perdue", "perdu"]);
 
@@ -139,6 +152,7 @@ const ORDRE_REGLE: RegleId[] = [
   "brief_casse",
   "tache_cochee",
   "fiche_incomplete",
+  "paiement_avant_publication",
   "etiquettes_contacts",
 ];
 
@@ -241,15 +255,26 @@ const GIFT = /\b(gift(ing|ed)?|offert|offerte|offerts|cadeau|produits?|en [ée]c
 /** Devise étrangère que l'app ne sait pas lire (elle préparerait la facture en euros). */
 const DEVISE_INCONNUE = /\b(cad|aud|aed|mad|jpy|cny|sek|nok|dkk|pln|sar|qar|tnd|dzd|xof|brl|mxn|inr|hkd|sgd|try|dirhams?|dinars?|yens?|yuans?|riyals?|reais|couronnes?|zlotys?)\b|[¥₹₺₩]/i;
 
+/** « + affiliation », « affiliation seule » (même lecture que le champ cachet de l'app). */
+const AFFILIATION = /\s*(?:\+|\bet\b|\bavec\b|,)?\s*\baffiliation\b(?:\s+seule(?:ment)?)?\s*/i;
+
 /** Lecture d'un cachet : « gifting », « vide », « ok », « illisible » ou « devise ». */
 export function lectureCachet(cachet: string | null | undefined): "vide" | "gifting" | "ok" | "illisible" | "devise" {
   const t = txt(cachet);
   if (!t || /^[—–-]+$/.test(t)) return "vide";
-  // « 10 % », « 15% des ventes » : une affiliation, pas un montant.
+  // Formes du champ cachet de l'app : « Affiliation seule », « 550 € + affiliation ».
+  const sansAffiliation = t.replace(AFFILIATION, " ").replace(/\s+/g, " ").trim();
+  if (sansAffiliation !== t) {
+    if (!sansAffiliation) return "ok";
+    if (/\baffiliation\b/i.test(sansAffiliation)) return "illisible";
+    return lectureCachet(sansAffiliation);
+  }
+  // « 10 % », « 15% des ventes » : un pourcentage, pas un montant.
   if (/%/.test(t)) return "illisible";
   const strict = parseAmountStrict(t);
   if (strict === 0) return "gifting";
-  if (GIFT.test(t) && strict == null && !/\d/.test(t)) return "gifting";
+  // Gifting, produits offerts : rien à lire, sauf un montant unique à côté (« 300 € + produits offerts »).
+  if (GIFT.test(t) && !(strict != null && strict > 0)) return "gifting";
   if (cachetCurrency(t) !== "EUR") return /\d/.test(t) ? "ok" : "illisible";
   if (DEVISE_INCONNUE.test(t)) return "devise";
   if (strict != null && strict > 0) return "ok";
@@ -286,6 +311,8 @@ export function createursSousContrat(history: unknown): Set<string> {
 // ── Le contrôle ──────────────────────────────────────────────────────────────
 const collabVivante = (c: CtrlCollab) => c.status !== "archivee" && c.status !== "perdue";
 const collabEnCours = (c: CtrlCollab) => c.status === "active" || c.status === "gagnee";
+/** Collab encore en cours de travail : active ou gagnée, avant l'étape 11 (bilan). */
+const collabOuverte = (c: CtrlCollab) => collabEnCours(c) && (Number(c.step) || 0) < 11;
 
 export function controler(input: ControleInput): Probleme[] {
   const out: Probleme[] = [];
@@ -361,7 +388,7 @@ export function controler(input: ControleInput): Probleme[] {
       const createurPaie = input.cashModes?.[c.id] === "createur";
       const verse = !createurPaie && input.payouts != null && versementDepuis(input.payouts, c.creator, paidDay || null);
       const refs = payees.map((iv) => txt(iv.ref)).filter(Boolean).join(", ");
-      if (verse) {
+      if (verse && step >= ETAPE_PAIEMENT) {
         add({
           id: `etape_reversement:${c.id}`,
           regle: "etape_reversement",
@@ -372,7 +399,7 @@ export function controler(input: ControleInput): Probleme[] {
           correction: null,
           decision: true,
         });
-      } else if (step < ETAPE_PAIEMENT) {
+      } else if (step >= ETAPE_PUBLICATION && step < ETAPE_PAIEMENT) {
         add({
           id: `etape_paiement:${c.id}`,
           regle: "etape_paiement",
@@ -382,6 +409,18 @@ export function controler(input: ControleInput): Probleme[] {
           lien: collabLien(c),
           correction: null,
           decision: true,
+        });
+      } else if (step < ETAPE_PUBLICATION) {
+        // Avant la publication, c'est souvent un acompte : à savoir, pas une erreur.
+        add({
+          id: `paiement_avant_publication:${c.id}`,
+          regle: "paiement_avant_publication",
+          gravite: "basse",
+          titre: `Payée avant publication : ${nomCollab(c)}`,
+          detail: `La facture${refs ? ` ${refs}` : ""} est payée${paidDay ? ` (${jourCourt(paidDay)})` : ""} alors que la collab n'est qu'à l'étape ${step}. Un acompte : rien à faire ; sinon, avancer la collab.`,
+          lien: collabLien(c),
+          correction: null,
+          decision: false,
         });
       }
     }
@@ -411,25 +450,34 @@ export function controler(input: ControleInput): Probleme[] {
     }
   }
 
-  // 5. Prospect encore ouvert alors qu'une collab active ou gagnée existe pour la marque.
+  // 5. Prospect encore ouvert alors qu'une collab en cours existe pour la marque et le créateur.
+  // Pas une erreur : une collab bouclée (étape 11, terminée, archivée), un prospect créé APRÈS
+  // la collab (un renouvellement), un prospect proposé pour un autre créateur.
   if (input.prospects && input.collabs) {
+    const jour = (v: unknown) => txt(v).slice(0, 10);
     for (const p of input.prospects) {
       if (PROSPECT_CLOS.has(foldName(p.stage))) continue;
-      const linked = p.collab_id ? collabs.find((c) => c.id === p.collab_id && collabVivante(c)) : null;
-      const matches = linked
-        ? [linked]
-        : collabs.filter((c) => collabEnCours(c) && memeMarque(c.brand, p.brand) && (!txt(p.creator) || foldName(p.creator) === foldName(c.creator)));
-      if (!matches.length || (p.collab_id && !linked)) continue;
+      const pour = txt(p.creator) || txt(p.proposal?.creator);
+      const candidate = (c: CtrlCollab) =>
+        collabOuverte(c) &&
+        (!pour || foldName(pour) === foldName(c.creator)) &&
+        !(jour(p.created_at) && jour(c.created_at) && jour(p.created_at) > jour(c.created_at));
+      const linked = p.collab_id ? collabs.find((c) => c.id === p.collab_id) ?? null : null;
+      if (p.collab_id && !(linked && candidate(linked))) continue;
+      const matches = linked ? [linked] : collabs.filter((c) => memeMarque(c.brand, p.brand) && candidate(c));
+      if (!matches.length) continue;
       const one = matches.length === 1 ? matches[0] : null;
+      // « Corriger » seulement si l'ordre est sûr : prospect daté, créé le jour de la collab ou avant.
+      const sure = !!one && !!jour(p.created_at) && !!jour(one.created_at);
       add({
         id: `prospect_ouvert:${p.id}`,
         regle: "prospect_ouvert",
         gravite: "moyenne",
         titre: `Prospect encore ouvert : ${txt(p.brand)}`,
-        detail: `Le prospect ${txt(p.brand)} est encore « ${txt(p.stage) || "sans étape"} » alors que ${one ? `la collab ${nomCollab(one)} existe` : `${matches.length} collabs de la marque sont en cours`}. ${one ? "Le passer en « Signé » et le relier à cette collab." : "Le passer en « Signé » sur la bonne collab, depuis Prospection."}`,
+        detail: `Le prospect ${txt(p.brand)} est encore « ${txt(p.stage) || "sans étape"} » alors que ${one ? `la collab ${nomCollab(one)} est en cours` : `${matches.length} collabs de la marque sont en cours`}. ${sure ? "Le passer en « Signé » et le relier à cette collab." : "Le passer en « Signé » sur la bonne collab depuis Prospection, si c'est bien ce deal."}`,
         lien: { vue: "prospection" },
-        correction: one ? { type: "prospect_signe", prospectId: p.id, collabId: one.id, texte: `Passer le prospect en « Signé », relié à ${nomCollab(one)}` } : null,
-        decision: !one,
+        correction: sure && one ? { type: "prospect_signe", prospectId: p.id, collabId: one.id, texte: `Passer le prospect en « Signé », relié à ${nomCollab(one)}` } : null,
+        decision: !sure,
       });
     }
   }
@@ -519,7 +567,7 @@ export function controler(input: ControleInput): Probleme[] {
     const hors = new Map<string, number>();
     for (const c of input.contacts) {
       const t = txt(c.tag);
-      if (!t || ETIQUETTES_CONTACTS.includes(t)) continue;
+      if (!t || ETIQUETTES_CONTACTS.includes(t) || ETIQUETTES_SYSTEME.includes(t)) continue;
       hors.set(t, (hors.get(t) ?? 0) + 1);
     }
     if (hors.size) {

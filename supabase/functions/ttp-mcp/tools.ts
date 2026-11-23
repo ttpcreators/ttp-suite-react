@@ -525,7 +525,7 @@ const controleDonnees: Tool = {
   name: "controle_donnees",
   title: "Contrôle qualité des données",
   description:
-    "Les incohérences des données de TTP Suite, comme la section « À corriger » de la page Aujourd'hui : facture en brouillon échue, collab publiée depuis plus de 14 jours sans facture, facture payée ou créateur payé alors que la collab n'a pas suivi, créateur absent du roster, prospect resté ouvert alors que la collab existe, cachet illisible, lien de brief cassé, tâche cochée pas « Fait », fiche créateur incomplète, étiquettes de contacts libres. Chaque ligne : gravité, titre, détail, correction sûre s'il y en a une, si elle demande une décision de Marc, lien et id [controle …]. Les problèmes masqués (« Ignorer ») sont retirés. Lecture seule. Les règles d'argent sont réservées aux fondateurs.",
+    "Les incohérences des données de TTP Suite, comme la section « À corriger » de la page Aujourd'hui : facture en brouillon échue, collab publiée depuis plus de 14 jours sans facture, facture payée ou créateur payé alors que la collab n'a pas suivi (et facture payée avant la publication, souvent un acompte), créateur absent du roster, prospect resté ouvert alors que la collab existe, cachet illisible, lien de brief cassé, tâche cochée pas « Fait », fiche créateur incomplète, étiquettes de contacts libres. Chaque ligne : gravité, titre, détail, correction sûre s'il y en a une, si elle demande une décision de Marc, lien et id [controle …]. Les problèmes masqués (« Ignorer ») sont retirés. Lecture seule. Les règles d'argent sont réservées aux fondateurs.",
   inputSchema: { type: "object", properties: { inclure_ignores: { type: "boolean", description: "true : aussi les problèmes masqués dans l'app" } }, additionalProperties: false },
   run: async (sb, ctx, a) => {
     const today = isoDay();
@@ -536,12 +536,12 @@ const controleDonnees: Tool = {
       return r.error ? null : ((r.data as unknown as Json[] | null) ?? []);
     };
     const [collabs, collabSteps, invoices, creators, briefs, prospects, todos, contacts] = await Promise.all([
-      read("collabs", "id, brand, creator, step, status, brief_id, cachet"),
+      read("collabs", "id, brand, creator, step, status, brief_id, cachet, created_at"),
       read("collab_steps", "collab_id, step, reached_at"),
       ctx.founder ? read("invoices", "id, ref, party, amount, date, status, creator, collab_id, paid_at") : Promise.resolve(null),
       read("creators", "name, status, email, email_pro, phone, photo_url, platform"),
       read("briefs", "id"),
-      read("prospects", "id, brand, stage, creator, collab_id"),
+      read("prospects", "id, brand, stage, creator, collab_id, proposal, created_at"),
       read("todos", "id, text, done, status"),
       read("contacts", "id, tag"),
     ]);

@@ -24,12 +24,12 @@ async function lire<T>(table: string, cols: string): Promise<T[] | null> {
 /** Toutes les données du contrôle. `founder` = false : ni factures ni versements (règles d'argent sautées). */
 export async function chargerControle(founder: boolean, aujourdhui: string): Promise<ControleInput> {
   const [collabs, collabSteps, invoices, creators, briefs, prospects, todos, contacts, st] = await Promise.all([
-    lire<NonNullable<ControleInput["collabs"]>[number]>("collabs", "id,brand,creator,step,status,brief_id,cachet"),
+    lire<NonNullable<ControleInput["collabs"]>[number]>("collabs", "id,brand,creator,step,status,brief_id,cachet,created_at"),
     lire<NonNullable<ControleInput["collabSteps"]>[number]>("collab_steps", "collab_id,step,reached_at"),
     founder ? lire<NonNullable<ControleInput["invoices"]>[number]>("invoices", "id,ref,party,amount,date,status,creator,collab_id,paid_at") : Promise.resolve(null),
     lire<NonNullable<ControleInput["creators"]>[number]>("creators", "name,status,email,email_pro,phone,photo_url,platform"),
     lire<{ id: string }>("briefs", "id"),
-    lire<NonNullable<ControleInput["prospects"]>[number]>("prospects", "id,brand,stage,creator,collab_id"),
+    lire<NonNullable<ControleInput["prospects"]>[number]>("prospects", "id,brand,stage,creator,collab_id,proposal,created_at"),
     lire<NonNullable<ControleInput["todos"]>[number]>("todos", "id,text,done,status"),
     lire<NonNullable<ControleInput["contacts"]>[number]>("contacts", "id,tag"),
     getAppState().catch(() => null),

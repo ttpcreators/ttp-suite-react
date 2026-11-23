@@ -25,6 +25,7 @@ const ICON: Record<RegleId, LucideIcon> = {
   publiee_sans_facture: Receipt,
   etape_paiement: Receipt,
   etape_reversement: Receipt,
+  paiement_avant_publication: Receipt,
   createur_hors_roster: Users,
   prospect_ouvert: Handshake,
   cachet_illisible: Wallet,
