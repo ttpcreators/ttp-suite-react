@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Check, Copy, ExternalLink, Pencil, Send, X, Keyboard, type LucideIcon } from "@/components/icons";
 import { fmtDayTime } from "@/lib/dates";
-import { gesteClavier, gesteValider, modeModifier, positionVoisine, type PropositionLite } from "@/lib/aValider";
+import { gesteClavier, gesteValider, modeModifier, positionCourante, positionVoisine, validablesEnLot, type PropositionLite } from "@/lib/aValider";
 
 /**
  * La file « À valider » de la page Agents, faite pour aller vite : une carte compacte par
@@ -37,7 +37,10 @@ const btn = "flex h-[30px] items-center gap-1.5 rounded-lg border border-border 
 const iconBtn = "grid size-[30px] place-items-center rounded-lg border border-border text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground";
 
 export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopier, onValider, onEcarter, onSelectionFaite }: Props) {
-  const [pos, setPos] = useState(0);
+  // Proposition courante retenue par son id : une nouvelle arrivée en tête ne change pas la cible.
+  const [courantId, setCourantId] = useState<string | null>(null);
+  const dernierePos = useRef(0);
+  const rootRef = useRef<HTMLDivElement>(null);
   const [coches, setCoches] = useState<Set<string>>(() => new Set());
   const [edition, setEdition] = useState<{ id: string; texte: string } | null>(null);
   const [occupe, setOccupe] = useState<Set<string>>(() => new Set());
@@ -45,10 +48,19 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopi
   const cartes = useRef(new Map<string, HTMLDivElement>());
 
   const n = items.length;
-  const i = Math.min(pos, Math.max(0, n - 1));
+  const i = positionCourante(items.map((a) => a.id), courantId, dernierePos.current);
+  dernierePos.current = i;
   const courante = items[i] ?? null;
+  const viser = (k: number) => setCourantId(items[k]?.id ?? null);
   // Cochées encore dans la file (une proposition traitée ailleurs sort de la sélection).
   const selection = items.filter((a) => coches.has(a.id));
+  // « Valider (n) » : jamais les messages à copier (ils restent dans la file, un par un).
+  const enLot = validablesEnLot(selection, alfredId);
+
+  // La courante a quitté la file (validée, écartée) : la cible devient celle qui a pris sa place.
+  useEffect(() => {
+    if (courante && courante.id !== courantId) setCourantId(courante.id);
+  }, [courante, courantId]);
 
   useEffect(() => {
     if (!courante) return;
@@ -92,33 +104,37 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopi
     return x;
   });
   const validerSelection = async () => {
-    if (lot || !selection.length) return;
+    // Pendant une modification, le texte d'origine partirait : on attend.
+    if (lot || edition || !enLot.length) return;
     setLot(true);
     let ok = 0;
+    const faites: string[] = [];
     // Une à une, dans l'ordre de la file : chacune garde son propre circuit.
-    for (const a of selection) {
+    for (const a of enLot) {
       marquer(a.id, true);
-      if (await onValider(a, { silencieux: true })) ok++;
+      if (await onValider(a, { silencieux: true })) { ok++; faites.push(a.id); }
       marquer(a.id, false);
     }
     setLot(false);
-    setCoches(new Set());
-    onSelectionFaite(ok, selection.length);
+    setCoches((s) => { const x = new Set(s); for (const id of faites) x.delete(id); return x; });
+    onSelectionFaite(ok, enLot.length);
   };
 
   // Raccourcis : la file n'est montée que sur l'onglet « À valider ».
-  const ref = useRef({ courante, i, n, edition, valider, ecarter, modifier, cocher, validerSelection });
-  ref.current = { courante, i, n, edition, valider, ecarter, modifier, cocher, validerSelection };
+  const ref = useRef({ courante, i, n, edition, valider, ecarter, modifier, cocher, validerSelection, viser });
+  ref.current = { courante, i, n, edition, valider, ecarter, modifier, cocher, validerSelection, viser };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const s = ref.current;
-      if (s.edition || e.defaultPrevented) return;
+      // Les pages restent montées (cache d'App.tsx) : seulement quand la file est à l'écran.
+      if (!rootRef.current?.getClientRects().length) return;
+      if (e.repeat || s.edition || e.defaultPrevented) return;
       if (document.querySelector("[role='dialog'], [role='alertdialog']")) return;
       const g = gesteClavier({ key: e.key, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, altKey: e.altKey, dansUnChamp: champ(e.target) });
       if (!g) return;
       if (g === "suivante" || g === "precedente") {
         e.preventDefault();
-        setPos(positionVoisine(s.i, s.n, g === "suivante" ? 1 : -1));
+        s.viser(positionVoisine(s.i, s.n, g === "suivante" ? 1 : -1));
         return;
       }
       if (g === "valider_selection") { e.preventDefault(); void s.validerSelection(); return; }
@@ -137,7 +153,7 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopi
   const toutCoche = n > 0 && selection.length === n;
 
   return (
-    <div className="flex flex-col gap-2">
+    <div ref={rootRef} className="flex flex-col gap-2">
       <div className="flex min-h-[32px] flex-wrap items-center gap-2 px-1 text-[11px] text-muted-foreground">
         <input type="checkbox" aria-label="Tout cocher" checked={toutCoche}
           onChange={() => setCoches(toutCoche ? new Set() : new Set(items.map((a) => a.id)))}
@@ -148,9 +164,10 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopi
           <Keyboard className="h-3.5 w-3.5" /> V · M · E · ↑ ↓
         </span>
         {selection.length > 0 && (
-          <button type="button" onClick={() => void validerSelection()} disabled={lot}
+          <button type="button" onClick={() => void validerSelection()} disabled={lot || !!edition || !enLot.length}
+            title={enLot.length < selection.length ? "Les messages à copier (WhatsApp, DM, LinkedIn) se valident un par un" : "Maj + V"}
             className="flex h-[30px] items-center gap-1.5 rounded-full bg-primary px-3.5 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50">
-            <Check className="h-3.5 w-3.5" /> Valider ({selection.length})
+            <Check className="h-3.5 w-3.5" /> Valider ({enLot.length})
           </button>
         )}
       </div>
@@ -169,7 +186,7 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopi
           : "Marque comme fait (V)";
         return (
           <div key={a.id} ref={(el) => { if (el) cartes.current.set(a.id, el); else cartes.current.delete(a.id); }}
-            onClick={() => setPos(k)}
+            onClick={() => setCourantId(a.id)}
             className={cn(
               "rounded-xl border bg-surface px-3 py-2.5 transition-colors",
               active ? "border-primary/50 ring-1 ring-primary/30" : "border-border",

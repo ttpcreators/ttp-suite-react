@@ -24,6 +24,8 @@ export type PropositionLite = {
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Seul hôte accepté pour un lien « avancer la collab » (celui que construit proposer_action). */
+export const HOTE_APP = "app.ttpcreators.pro";
 
 /**
  * Proposition « avancer la collab » : type `avancer_collab`, ou `alerte` déposée avant le SQL
@@ -33,12 +35,14 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export function avanceCollabOf(a: Pick<PropositionLite, "type" | "lien_spark">): { collabId: string; etape: number } | null {
   if (a.type !== "avancer_collab" && a.type !== "alerte") return null;
   if (!a.lien_spark) return null;
-  let q: URLSearchParams;
+  let u: URL;
   try {
-    q = new URL(a.lien_spark).searchParams;
+    u = new URL(a.lien_spark);
   } catch {
     return null;
   }
+  if (u.protocol !== "https:" || u.hostname !== HOTE_APP) return null;
+  const q = u.searchParams;
   if (q.get("avancer") !== "1" || q.get("view") !== "collabs") return null;
   const collabId = q.get("item") ?? "";
   const etape = Number(q.get("etape"));
@@ -110,10 +114,12 @@ export function detailModification(a: Pick<PropositionLite, "id" | "type" | "cib
 }
 
 /**
- * Nouvelle étape d'une collab validée depuis la file : jamais en arrière ni sur place (null).
+ * Nouvelle étape d'une collab validée depuis la file : jamais en arrière ni sur place, jamais
+ * une collab perdue ou archivée (null).
  * La dernière étape passe une collab en cours à « gagnée », comme dans la page Collabs.
  */
 export function patchEtape(cur: { step: number; status: string | null }, etape: number): { step: number; status?: string } | null {
+  if (cur.status === "perdue" || cur.status === "archivee") return null;
   const step = Math.min(STEP_COUNT, Math.max(1, Math.round(etape)));
   if (!Number.isFinite(step) || step <= cur.step) return null;
   return step === STEP_COUNT && cur.status === "active" ? { step, status: "gagnee" } : { step };
@@ -145,4 +151,23 @@ export function gesteClavier(e: { key: string; shiftKey?: boolean; ctrlKey?: boo
 export function positionVoisine(i: number, n: number, sens: 1 | -1): number {
   if (n <= 0) return 0;
   return Math.min(n - 1, Math.max(0, i + sens));
+}
+
+/**
+ * Propositions cochées que « Valider (n) » peut traiter d'un coup : jamais celles dont la
+ * validation copie un texte (WhatsApp, DM, LinkedIn), qui restent dans la file.
+ */
+export function validablesEnLot<T extends PropositionLite>(cochees: T[], alfredId: string | null): T[] {
+  return cochees.filter((a) => gesteValider(a, alfredId) !== "copier_envoye");
+}
+
+/**
+ * Position de la proposition courante, retrouvée par son id (une nouvelle proposition arrivée
+ * en tête ne change pas de cible). Disparue (validée, écartée) : celle qui a pris sa place.
+ */
+export function positionCourante(ids: string[], courantId: string | null, dernierePosition: number): number {
+  if (!ids.length) return 0;
+  const k = courantId ? ids.indexOf(courantId) : -1;
+  if (k >= 0) return k;
+  return Math.min(ids.length - 1, Math.max(0, dernierePosition));
 }

@@ -1,5 +1,4 @@
 import { supabase } from "./supabase";
-import { dbUpdate } from "./db";
 import { getAppState } from "./appState";
 import { createStepTask } from "./collabLinksDb";
 import { stepDef } from "./collabs";
@@ -11,19 +10,29 @@ import { detailModification, patchEtape, type PropositionLite } from "./aValider
  */
 
 /**
- * « Valider » sur une proposition « avancer la collab » : même écriture que le bouton d'étape de
- * la page Collabs (colonne `step`, le trigger date l'étape dans `collab_steps`, « gagnée » à la
- * dernière étape) et la tâche de l'étape si le réglage d'équipe est actif.
+ * « Valider » sur une proposition « avancer la collab » : la colonne `step` (le trigger date
+ * l'étape dans `collab_steps`), « gagnée » à la dernière étape, et la tâche de l'étape si le
+ * réglage d'équipe est actif. Mise à jour conditionnelle (étape plus basse, collab ni perdue
+ * ni archivée) : si rien n'a bougé, `ok` est faux et le message dit pourquoi.
  */
 export async function avancerCollabDepuisFile(collabId: string, etape: number): Promise<{ ok: boolean; message: string }> {
   const { data, error } = await supabase.from("collabs").select("id, brand, creator, step, status").eq("id", collabId).maybeSingle<{ id: string; brand: string; creator: string | null; step: number; status: string }>();
   if (error) return { ok: false, message: "Erreur, réessaie" };
-  if (!data) return { ok: false, message: "Collab introuvable" };
-  const patch = patchEtape({ step: data.step, status: data.status }, etape);
+  if (!data) return { ok: false, message: "Collab introuvable : écarte la proposition" };
   const nom = `${data.brand}${data.creator ? ` × ${titleCase(data.creator)}` : ""}`;
-  // Déjà à cette étape ou plus loin : rien à écrire, la proposition peut partir.
-  if (!patch) return { ok: true, message: `${nom} est déjà à l'étape ${data.step}` };
-  if (!(await dbUpdate("collabs", data.id, patch))) return { ok: false, message: "Erreur, réessaie" };
+  const patch = patchEtape({ step: data.step, status: data.status }, etape);
+  if (!patch) {
+    return {
+      ok: false,
+      message: data.status === "perdue" || data.status === "archivee"
+        ? `${nom} est ${data.status === "perdue" ? "perdue" : "archivée"} : rien n'avance, écarte la proposition`
+        : `${nom} est déjà à l'étape ${data.step} : rien n'avance, écarte la proposition`,
+    };
+  }
+  const { data: up, error: e2 } = await supabase.from("collabs").update(patch)
+    .eq("id", data.id).lt("step", patch.step).not("status", "in", "(perdue,archivee)").select("id");
+  if (e2) return { ok: false, message: "Erreur, réessaie" };
+  if (!up?.length) return { ok: false, message: `${nom} a changé entre temps : rien n'avance, recharge la page` };
   const st = await getAppState().catch(() => null);
   if (st && st["collabAutoTasks"] !== false) {
     void createStepTask({ id: data.id, brand: data.brand, creator: data.creator, step: patch.step, status: patch.status ?? data.status }, patch.step);

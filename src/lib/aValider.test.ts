@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   avanceCollabOf, detailModification, gesteClavier, gesteValider, modeModifier, patchEtape,
-  positionVoisine, statutApresValidation, texteModifie, typeAffiche, type PropositionLite,
+  positionCourante, positionVoisine, statutApresValidation, texteModifie, typeAffiche, validablesEnLot, type PropositionLite,
 } from "./aValider";
 
 const COLLAB = "11111111-2222-3333-4444-555555555555";
@@ -118,5 +118,37 @@ describe("raccourcis clavier", () => {
     expect(positionVoisine(2, 3, 1)).toBe(2);
     expect(positionVoisine(1, 3, 1)).toBe(2);
     expect(positionVoisine(0, 0, 1)).toBe(0);
+  });
+});
+
+describe("corrections de relecture", () => {
+  it("un lien avancer=1 n'est accepté que sur l'hôte de l'app, en https", () => {
+    expect(avanceCollabOf({ type: "avancer_collab", lien_spark: lien(9).replace("app.ttpcreators.pro", "evil.example.com") })).toBeNull();
+    expect(avanceCollabOf({ type: "avancer_collab", lien_spark: lien(9).replace("app.ttpcreators.pro", "app.ttpcreators.pro.evil.test") })).toBeNull();
+    expect(avanceCollabOf({ type: "alerte", lien_spark: lien(9).replace("https:", "http:") })).toBeNull();
+    expect(avanceCollabOf({ type: "alerte", lien_spark: lien(9) })).not.toBeNull();
+  });
+  it("une collab perdue ou archivée n'avance pas", () => {
+    expect(patchEtape({ step: 6, status: "perdue" }, 9)).toBeNull();
+    expect(patchEtape({ step: 6, status: "archivee" }, 9)).toBeNull();
+  });
+  it("Valider (n) laisse dans la file les messages à copier", () => {
+    const items = [
+      p({ id: "w", type: "whatsapp" }),
+      p({ id: "m", type: "brouillon_mail", agent_id: ALFRED }),
+      p({ id: "c", type: "avancer_collab", lien_spark: lien(9) }),
+      p({ id: "i", type: "instagram" }),
+      p({ id: "a", type: "alerte", contenu: "Facture à créer" }),
+    ];
+    expect(validablesEnLot(items, ALFRED).map((x) => x.id)).toEqual(["m", "c", "a"]);
+  });
+  it("la proposition courante se retrouve par son id", () => {
+    // Une nouvelle proposition arrive en tête : la cible reste la même carte.
+    expect(positionCourante(["neuve", "a", "b", "c"], "b", 1)).toBe(2);
+    // La courante a été validée : celle qui a pris sa place.
+    expect(positionCourante(["a", "c"], "b", 1)).toBe(1);
+    expect(positionCourante(["a"], "b", 4)).toBe(0);
+    expect(positionCourante([], "b", 2)).toBe(0);
+    expect(positionCourante(["a", "b"], null, 0)).toBe(0);
   });
 });
