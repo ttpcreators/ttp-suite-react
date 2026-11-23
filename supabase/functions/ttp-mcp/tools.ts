@@ -1368,7 +1368,8 @@ const creerTache: Tool = {
       details: { type: "string" },
       echeance: { type: "string", description: "AAAA-MM-JJ (facultatif)" },
       createur: { type: "string", description: "Créateur concerné (facultatif)" },
-      createurs: { type: "array", items: { type: "string" }, maxItems: 20, description: "Plusieurs créateurs concernés (facultatif) : tâche partagée, visible dans l'espace de chacun" },
+      createurs: { type: "array", items: { type: "string" }, maxItems: 20, description: "Plusieurs créateurs concernés (facultatif)" },
+      visible_createur: { type: "boolean", description: "true SEULEMENT pour une tâche que le créateur doit voir ou faire lui-même dans son espace (ex. « Envoie tes stats »). Par défaut false : tâche interne de l'agence (relance de marque, négociation, suivi), invisible pour le créateur." },
       priorite: { type: "string", enum: ["haute", "moyenne", "basse"] },
       forcer: { type: "boolean", description: "true seulement si une tâche proche existe mais que c'est vraiment une autre tâche" },
     },
@@ -1404,6 +1405,8 @@ const creerTache: Tool = {
       text: titre, descr: str(a.details, 2000) || null, due: due ?? "—", creator: names[0] ?? null,
       priority: ["haute", "moyenne", "basse"].includes(str(a.priorite)) ? str(a.priorite) : "moyenne",
       source: "agency", status: "À faire", sort_order: order, tag: ctx.name ? `Claude · ${ctx.name}` : "Claude",
+      // Interne par défaut (colonne SQL 2026-11-24, défaut false) : n'envoyée que si true.
+      ...(a.visible_createur === true ? { visible_createur: true } : {}),
     };
     let { data: cree, error } = await sb.from("todos").insert({ ...row, creators: names }).select("id").maybeSingle();
     // Colonne `creators` absente (SQL pas encore lancé) : seul le premier créateur est enregistré.
@@ -1414,7 +1417,8 @@ const creerTache: Tool = {
     }
     if (error) return fail(`Tâche non créée : ${error.message}`);
     const pour = names.length ? ` pour ${names.map((n) => titleCase(n)).join(", ")}` : "";
-    return ok(`Tâche créée : « ${titre} »${pour}${due ? `, échéance le ${frDay(due)}` : ""}.${(cree as Json | null)?.id ? `\n${lienApp("todo", String((cree as Json).id))}` : ""}${onlyFirst ? ` (Seul ${titleCase(names[0])} est enregistré : la base n'a pas encore la mise à jour « plusieurs créateurs ».)` : ""}`);
+    const vue = names.length ? (a.visible_createur === true ? " Visible dans l'espace du créateur." : " Interne : le créateur ne la voit pas.") : "";
+    return ok(`Tâche créée : « ${titre} »${pour}${due ? `, échéance le ${frDay(due)}` : ""}.${(cree as Json | null)?.id ? `\n${lienApp("todo", String((cree as Json).id))}` : ""}${vue}${onlyFirst ? ` (Seul ${titleCase(names[0])} est enregistré : la base n'a pas encore la mise à jour « plusieurs créateurs ».)` : ""}`);
   },
 };
 
@@ -1445,6 +1449,7 @@ const creerEvenement: Tool = {
       type: { type: "string", enum: ["call", "reunion", "collab", "shoot", "event", "voyage", "deadline"] },
       createur: { type: "string", description: "Créateur concerné (facultatif)" },
       details: { type: "string" },
+      interne: { type: "boolean", description: "true pour un rappel interne (relance, suivi, « Tâche : … ») que le créateur ne doit pas voir dans son planning. false (défaut) pour un rendez-vous avec lui : tournage, call, date de publication." },
       forcer: FORCER,
     },
     required: ["titre", "date"],
@@ -1465,6 +1470,8 @@ const creerEvenement: Tool = {
     const { error } = await sb.from("events").insert({
       date, time, title: str(a.titre, 200), type: ["call", "reunion", "collab", "shoot", "event", "voyage", "deadline"].includes(str(a.type)) ? str(a.type) : guessEventKind(str(a.titre, 200)),
       who, description: str(a.details, 2000) || null, source: "agency", sync_source: "agence",
+      // Interne (SQL 2026-11-24) : demandé, ou recopié d'une tâche (« Tâche : … »).
+      ...(a.interne === true || /^\s*t[âa]che\s*:/i.test(str(a.titre, 200)) ? { interne: true } : {}),
     });
     if (error) return fail(`Rendez-vous non créé : ${error.message}`);
     try {

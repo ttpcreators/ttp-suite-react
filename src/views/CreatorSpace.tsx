@@ -71,6 +71,7 @@ import { creatorSteps, whenLabel, type NextStep } from "@/lib/creatorNextStep";
 import { CreatorToday } from "@/components/CreatorToday";
 import { sharedWithText } from "@/lib/todoCreators";
 import { selectTodosFor } from "@/lib/todoCreatorsDb";
+import { evenementInterne, visibiliteColumnMissing, visiblePourCreateur } from "@/lib/todoVisibility";
 import { agencyAwaits, progressColumnMissing } from "@/lib/todoProgress";
 import { CreatorTodos } from "@/components/CreatorTodos";
 import { invoiceHT } from "@/lib/invoice";
@@ -815,11 +816,18 @@ export function CreatorSpace({
       });
     // Ses tâches + celles partagées avec lui (todos.creators) ; repli sur `creator` sans le SQL.
     // Points d'avancement (`progress`, SQL 2026-10-22) : sans la colonne, on recharge sans elle.
+    // Tâches internes de l'agence (pas cochées « Visible par le créateur ») : jamais ici,
+    // même dans l'aperçu agence (lib/todoVisibility). Sans la colonne : toutes cachées.
     const TODO_COLS = "id,text,descr,due,priority,done,status,sort_order,subtasks,attachments,created_at,source";
-    void selectTodosFor<Todo>(name, `${TODO_COLS},progress`).then(async ({ data, error }) => {
+    const loadTodos = async (cols: string) => {
+      let r = await selectTodosFor<Todo>(name, `${cols},visible_createur`);
+      if (r.error && visibiliteColumnMissing(r.error)) r = await selectTodosFor<Todo>(name, cols);
+      return { data: r.data ? r.data.filter(visiblePourCreateur) : r.data, error: r.error };
+    };
+    void loadTodos(`${TODO_COLS},progress`).then(async ({ data, error }) => {
       if (error && progressColumnMissing(error)) {
         if (alive) setProgressOn(false);
-        const r = await selectTodosFor<Todo>(name, TODO_COLS);
+        const r = await loadTodos(TODO_COLS);
         if (apply(r.error)) setTodos(r.data ?? []);
         return;
       }
@@ -845,10 +853,13 @@ export function CreatorSpace({
       if (!alive) return;
       setDiscussions(error ? [] : sortDiscussions((data as CreatorDiscussion[]) ?? []));
     });
-    supabase.from("events").select("id,date,day,time,title,type,who,description").or("deleted.is.null,deleted.eq.false").then(({ data, error }) => {
+    // Rendez-vous internes (case `interne`, ou recopiés d'une tâche « Tâche : … ») : cachés.
+    const EV_COLS = "id,date,day,time,title,type,who,description";
+    const eventsQ = (cols: string) => supabase.from("events").select(cols).or("deleted.is.null,deleted.eq.false");
+    void eventsQ(`${EV_COLS},interne`).then((r) => (r.error && visibiliteColumnMissing(r.error) ? eventsQ(EV_COLS) : r)).then(({ data, error }) => {
       if (!apply(error)) return;
-      const rows = (data as Ev[]) ?? [];
-      setEvents(rows.filter((e) => (e.who ?? "").split(", ").includes(name)));
+      const rows = (data as unknown as (Ev & { interne?: boolean | null })[]) ?? [];
+      setEvents(rows.filter((e) => (e.who ?? "").split(", ").includes(name) && !evenementInterne(e)));
     });
     supabase.from("documents").select("id,name,type,size,path,created_at").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => apply(error) && setDocs((data as Doc[]) ?? []));
     // Plus récente d'abord (« Dernière facture » = invoices[0]) ; `date` est un texte, on trie sur created_at.
@@ -1448,6 +1459,8 @@ export function CreatorSpace({
       creator: name,
       priority: tdPrio,
       source: src,
+      // Ajoutée par l'agence DEPUIS l'espace du créateur : c'est pour lui, donc visible.
+      ...(preview ? { visible_createur: true } : {}),
       done: false,
       sort_order: nextOrder(todos),
     };

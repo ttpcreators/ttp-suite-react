@@ -41,6 +41,8 @@ import { insertMention, mentionAt, mentionSuggestions, parseQuickAdd } from "@/l
 import { creatorsLabel, creatorsPatch, hasCreator, joinNames, todoCreators } from "@/lib/todoCreators";
 import { CollabField, ObjectCollabLink, linkNewToCollab } from "@/components/collab-links";
 import { noteCreatorsColumn, todosHaveCreators } from "@/lib/todoCreatorsDb";
+import { visiblePourCreateur } from "@/lib/todoVisibility";
+import { Checkbox } from "@/components/ui/checkbox";
 import { appendPoint, latestPoint, parsePoints, progressColumnMissing } from "@/lib/todoProgress";
 import { TONE_DOT, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
 import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
@@ -91,7 +93,12 @@ type Row = {
   done_by?: string | null;
   /** Points d'avancement, visibles du créateur (SQL 2026-10-22 ; avant : blob `itemNotes`). */
   progress?: string | null;
+  /** Tâche de l'agence que le créateur voit dans son espace (SQL 2026-11-24 ; défaut : interne). */
+  visible_createur?: boolean | null;
 };
+
+/** Créateurs qui VOIENT la tâche (et reçoivent ses notifications) : aucun si elle est interne. */
+const shownTo = (r: Pick<Row, "source" | "visible_createur" | "creator" | "creators">): string[] => (visiblePourCreateur(r) ? todoCreators(r) : []);
 
 let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
@@ -336,7 +343,7 @@ export function Todo() {
     if (await saveNote(row.id, appendPoint(base, t, new Date(), "Agence"))) {
       setPointInput("");
       toast("Point d'avancement ajouté ✓");
-      notifyCreatorsChange("todo", todoCreators(row), "progress", row.text, row.id);
+      notifyCreatorsChange("todo", shownTo(row), "progress", row.text, row.id);
     } else {
       toast("Avancement non enregistré, réessaie");
     }
@@ -406,7 +413,7 @@ export function Todo() {
     if (!t) return;
     setSubInput("");
     void changeSubtasks(todo.id, (list) => [...list, { id: stid(), text: t, done: false }]);
-    notifyCreatorsChange("todo", todoCreators(todo), "subtask", todo.text, todo.id);
+    notifyCreatorsChange("todo", shownTo(todo), "subtask", todo.text, todo.id);
   };
   const toggleSubtask = (todo: Row, sid: string) => {
     // Le sens voulu est celui vu à l'écran (pas l'inverse de ce qu'un autre vient d'écrire).
@@ -467,9 +474,18 @@ export function Todo() {
     }
   });
 
+  // « Visible par le créateur » : la tâche de l'agence apparaît (ou disparaît) de son espace.
+  // En la rendant visible, le créateur est prévenu comme pour une nouvelle tâche.
+  const setVisibleCreateur = async (row: Row, on: boolean) => {
+    const ok = await patchTodo(row.id, () => ({ visible_createur: on }));
+    if (!ok) return;
+    if (on) for (const name of todoCreators(row)) notifyCreator("task", name, row.text);
+    toast(on ? `Visible par ${creatorsLabel(todoCreators(row))} ✓` : "Tâche redevenue interne ✓");
+  };
+
   // Prévient le créateur (si notifs activées) quand SA tâche/demande est terminée.
   const notifyTaskDone = (row: Row, status: string) => {
-    if (status === "Fait") for (const name of todoCreators(row)) notifyCreator("task-done", name, `✅ Ta demande est faite : « ${row.text} »`);
+    if (status === "Fait") for (const name of shownTo(row)) notifyCreator("task-done", name, `✅ Ta demande est faite : « ${row.text} »`);
   };
 
   /**
@@ -556,7 +572,7 @@ export function Todo() {
     // Du nouveau pour les créateurs de la tâche (texte ou description).
     const changed: ActivityWhat | null =
       (patch.descr ?? "") !== (row.descr ?? "") && patch.descr ? "description" : patch.text !== row.text ? "text" : null;
-    if (changed) notifyCreatorsChange("todo", editCreators, changed, patch.text, row.id);
+    if (changed && visiblePourCreateur(row)) notifyCreatorsChange("todo", editCreators, changed, patch.text, row.id);
     setEditingId(null);
     toast(noteOk ? "Tâche modifiée ✓" : "Tâche modifiée, avancement non enregistré : réessaie");
   };
@@ -623,8 +639,8 @@ export function Todo() {
     setRows((prev) => [createdRow, ...(prev ?? [])]);
     // Le commentaire ne bloque jamais la réinitialisation du formulaire (saveNote ne lève pas).
     if (f.note.trim() && !(await saveNote(createdRow.id, f.note))) toast("Avancement non enregistré, réessaie");
-    // Push à chaque créateur concerné (s'il a activé les notifs sur son téléphone).
-    for (const name of todoCreators({ creators: f.creators })) notifyCreator("task", name, f.text.trim());
+    // Pas de push : une tâche de l'agence est interne tant qu'elle n'est pas cochée
+    // « Visible par le créateur » (fiche de la tâche) ; le push part à ce moment-là.
     toast("Tâche ajoutée ✓");
     return createdRow;
   };
@@ -1090,6 +1106,20 @@ export function Todo() {
             </InfoRow>
             {created && !Number.isNaN(created.getTime()) && <InfoRow label="Créée le">{fmtDay(created)}</InfoRow>}
             <InfoRow label="Demandée par">{row.source === "creator" ? "Le créateur" : "L'agence"}</InfoRow>
+            {row.source !== "creator" && todoCreators(row).length > 0 && (
+              <InfoRow label="Côté créateur">
+                <label className="flex min-h-9 cursor-pointer items-center gap-2 font-medium">
+                  <Checkbox
+                    checked={row.visible_createur === true}
+                    onCheckedChange={(v) => void setVisibleCreateur(row, v === true)}
+                    aria-label={`Visible par ${creatorsLabel(todoCreators(row))}`}
+                  />
+                  <span className={row.visible_createur ? "text-foreground" : "text-muted-foreground"}>
+                    {row.visible_createur ? `Visible par ${creatorsLabel(todoCreators(row))}` : "Interne, cachée au créateur"}
+                  </span>
+                </label>
+              </InfoRow>
+            )}
             <ObjectCollabLink table="todos" id={row.id} creator={row.creator} asRow />
             {row.done && formatDone(row) && <InfoRow label="Faite">{formatDone(row)}</InfoRow>}
           </dl>
