@@ -768,8 +768,8 @@ const isStale = (r: Json) => /^\s*p[ée]rim[ée]/i.test(String(r.contexte ?? "")
 const aValider: Tool = {
   name: "a_valider",
   title: "File « À valider » des agents",
-  description: "Propositions des agents qui attendent la validation de l'équipe (page Agents → À valider) : messages WhatsApp ou mails à envoyer, alertes. Les propositions marquées périmées par l'agent sont listées à part. Donne l'id pour ecarter_proposition.",
-  inputSchema: { type: "object", properties: { agent: { type: "string", description: "Nom de l'agent (facultatif)" } }, additionalProperties: false },
+  description: "Propositions des agents qui attendent la validation de l'équipe (page Agents → À valider) : messages WhatsApp ou mails à envoyer, alertes, étapes de collab à avancer. Les propositions marquées périmées par l'agent sont listées à part. Donne l'id pour ecarter_proposition. Avec « modifications » : aussi les textes que Marc a corrigés avant de valider (avant / après), pour en tirer des leçons.",
+  inputSchema: { type: "object", properties: { agent: { type: "string", description: "Nom de l'agent (facultatif)" }, modifications: { type: "boolean", description: "true : ajoute les dernières corrections de Marc (texte avant / après) sur les propositions de cet agent" }, jours: { type: "number", description: "Pour modifications : nombre de jours (défaut 14, 60 au plus)" } }, additionalProperties: false },
   founder: true,
   run: async (sb, _c, a) => {
     const db = sb.schema("agent");
@@ -787,11 +787,26 @@ const aValider: Tool = {
     const live = rows.filter((r) => r.statut !== "valide" && !isStale(r));
     const stale = rows.filter((r) => r.statut !== "valide" && isStale(r));
     const line = (r: Json) => `- [${r.type}] ${r.cible ?? ""} · ${nameOf(r)} · ${frDay(String(r.cree_le))} [proposition ${r.id}]${r.contexte ? `\n  Contexte : ${String(r.contexte).slice(0, 300)}` : ""}${r.contenu ? `\n  Message : ${String(r.contenu).slice(0, 500)}` : ""}`;
+    // Les corrections de Marc (journal `marc_modifie`, écrit par la page Agents quand il modifie
+    // un texte avant de le valider) : l'agent les relit pour apprendre.
+    let modifs = "";
+    if (a.modifications === true) {
+      const jours = int(a.jours, 14, 1, 60);
+      let q = db.from("journal").select("detail, cree_le, agent_id").eq("action", "marc_modifie").gte("cree_le", new Date(Date.now() - jours * 86400000).toISOString()).order("cree_le", { ascending: false }).limit(30);
+      if (want) {
+        const ids = [...agents.values()].filter((x) => String(x.nom ?? "").toLowerCase().includes(want)).map((x) => String(x.id));
+        q = ids.length ? q.in("agent_id", ids) : q.eq("agent_id", "00000000-0000-0000-0000-000000000000");
+      }
+      const { data: mods } = await q;
+      const list = (mods as Json[] | null) ?? [];
+      modifs = `\n## Textes corrigés par Marc avant validation (${jours} j) · ${list.length}\n${lines(list.map((m) => `- ${frDay(String(m.cree_le))} · ${String(m.detail ?? "").replace(/\n/g, "\n  ")}`), "Aucune correction.")}`;
+    }
     return ok([
       `# À valider · ${live.length} proposition(s)${stale.length ? ` (+ ${stale.length} périmée(s) à écarter)` : ""}`,
       ...(valides.length ? [`\n## Validées dans l'app, à envoyer maintenant (puis ecarter_proposition avec statut « envoye »)\n${valides.map(line).join("\n")}\n`] : []),
       lines(live.map(line), "Rien à valider."),
       stale.length ? `\n## Périmées (l'agent les a remplacées : à écarter)\n${stale.map(line).join("\n")}` : "",
+      modifs,
     ].filter(Boolean).join("\n"));
   },
 };
@@ -2106,6 +2121,7 @@ const lireAgent: Tool = {
     if (!ag.actif) return ok(`${ag.emoji} ${ag.nom} est en pause dans l'app : préviens Marc avant d'agir en son nom.`);
     const { data: lec } = await sb.schema("agent").from("lecons").select("module, lecon, agent_id, cree_le").or(`agent_id.eq.${ag.id},agent_id.is.null`).order("cree_le", { ascending: false }).limit(60);
     const { count } = await sb.schema("agent").from("actions").select("id", { count: "exact", head: true }).eq("statut", "a_valider").eq("agent_id", ag.id);
+    const { count: corrections } = await sb.schema("agent").from("journal").select("id", { count: "exact", head: true }).eq("action", "marc_modifie").eq("agent_id", ag.id).gte("cree_le", new Date(Date.now() - 7 * 86400000).toISOString());
     await agentJournal(sb, ag.id, "agent_session", "Consignes relues");
     return ok([
       `# ${ag.emoji} ${ag.nom}`,
@@ -2115,39 +2131,68 @@ const lireAgent: Tool = {
       lines(((lec as Json[] | null) ?? []).map((l) => `- ${l.module ? `[${l.module}] ` : ""}${l.lecon}`), "Aucune pour l'instant."),
       ag.routines?.length ? `\n## Routines\n${ag.routines.map((r) => `- ${r.nom} (${r.quand}) : ${r.consigne}`).join("\n")}` : "",
       `\n${count ?? 0} proposition(s) de cet agent attendent la validation de Marc.`,
+      corrections ? `Marc a corrigé ${corrections} de tes textes ces 7 derniers jours avant de les valider : relis les (a_valider avec modifications) et retiens la leçon d'un motif qui revient.` : "",
     ].filter(Boolean).join("\n"));
   },
 };
 
+/** Lien d'une proposition « avancer la collab » : la collab et l'étape, lus par l'app (src/lib/aValider.ts). */
+const lienAvance = (collab: string, etape: number) => `https://app.ttpcreators.pro/?open=view&view=collabs&item=${collab}&avancer=1&etape=${etape}`;
+const ACTION_TYPES = ["whatsapp", "instagram", "linkedin", "brouillon_mail", "alerte", "avancer_collab"];
+
 const proposerAction: Tool = {
   name: "proposer_action",
   title: "Proposer une action à valider",
-  description: "Dépose une proposition dans la file « À valider » de l'app (section Agents) : message WhatsApp, DM Instagram, message LinkedIn, alerte, ou mail (préférer creer_brouillon_mail pour un mail). Marc la copie, l'ouvre et l'envoie lui-même, ou l'écarte.",
+  description: "Dépose une proposition dans la file « À valider » de l'app (section Agents) : message WhatsApp, DM Instagram, message LinkedIn, alerte, ou mail (préférer creer_brouillon_mail pour un mail). Marc la copie, l'ouvre et l'envoie lui-même, ou l'écarte. Type « avancer_collab » : proposer de passer une collab à une étape (donner « collab », l'id de l'outil collabs, et « etape », 1 à 11, plus loin que l'étape actuelle ; « contenu » = la preuve, par exemple la phrase du mail de la marque) ; quand Marc clique Valider, l'app fait avancer la collab elle même, rien d'autre ne part. Une même collab à la même étape n'est proposée qu'une fois.",
   write: true,
   founder: true,
   inputSchema: {
     type: "object",
     properties: {
       agent: { type: "string", description: "Nom de l'agent qui propose (ex. Talent manager)" },
-      type: { type: "string", enum: ["whatsapp", "instagram", "linkedin", "brouillon_mail", "alerte"] },
-      cible: { type: "string", description: "À qui (marque, créateur, @, numéro)" },
+      type: { type: "string", enum: ACTION_TYPES },
+      cible: { type: "string", description: "À qui (marque, créateur, @, numéro) ; pour avancer_collab, rempli d'office (Marque × Créateur)" },
       contexte: { type: "string", description: "Pourquoi, en une ou deux phrases" },
-      contenu: { type: "string", description: "Le message prêt à envoyer (ou le texte de l'alerte)" },
+      contenu: { type: "string", description: "Le message prêt à envoyer (ou le texte de l'alerte, ou la preuve pour avancer_collab)" },
       lien: { type: "string", description: "Lien utile (profil, fil, document) facultatif" },
+      collab: { type: "string", description: "avancer_collab : id de la collab (outil collabs)" },
+      etape: { type: "number", description: "avancer_collab : étape à atteindre (5 Validation marque, 6 Publication, 7 Stats à 7 jours, 9 Paiement marque reçu…)" },
     },
     required: ["agent", "type", "contenu"],
     additionalProperties: false,
   },
   run: async (sb, _c, a) => {
     const ag = await findAgent(sb, str(a.agent, 80));
-    const type = ["whatsapp", "instagram", "linkedin", "brouillon_mail", "alerte"].includes(str(a.type)) ? str(a.type) : "alerte";
-    const lien = /^https?:\/\//i.test(str(a.lien, 500)) ? str(a.lien, 500) : null;
-    const { data, error } = await sb.schema("agent").from("actions").insert({
-      type, cible: str(a.cible, 200) || null, contexte: str(a.contexte, 1000) || null, contenu: str(a.contenu, 6000), lien_spark: lien, statut: "a_valider", agent_id: ag?.id ?? null,
-    }).select("id").single();
+    let type = ACTION_TYPES.includes(str(a.type)) ? str(a.type) : "alerte";
+    let lien = /^https?:\/\//i.test(str(a.lien, 500)) ? str(a.lien, 500) : null;
+    let cible = str(a.cible, 200) || null;
+    let contexte = str(a.contexte, 1000) || null;
+    if (type === "avancer_collab") {
+      const id = str(a.collab, 40);
+      if (!/^[0-9a-f-]{36}$/i.test(id)) return fail("avancer_collab : donne l'id de la collab (outil collabs).");
+      const etape = int(a.etape, 0, 1, 11);
+      if (!etape) return fail("avancer_collab : étape entre 1 et 11.");
+      const { data: col } = await sb.from("collabs").select("brand, creator, step").eq("id", id).maybeSingle<{ brand: string; creator: string | null; step: number }>();
+      if (!col) return fail("Collab introuvable.");
+      if (Number(col.step) >= etape) return fail(`${col.brand} × ${titleCase(col.creator)} est déjà à l'étape ${col.step} « ${COLLAB_STEPS[Number(col.step) - 1] ?? ""} » : rien à proposer.`);
+      lien = lienAvance(id, etape);
+      const { data: deja } = await sb.schema("agent").from("actions").select("id").eq("statut", "a_valider").eq("lien_spark", lien).limit(1);
+      const dejaId = ((deja as Json[] | null) ?? [])[0]?.id;
+      if (dejaId) return fail(`Déjà proposé (proposition ${dejaId}) : Marc ne l'a pas encore validé.`);
+      cible = `${col.brand} × ${titleCase(col.creator)}`.slice(0, 200);
+      contexte = `Étape ${col.step} → ${etape} « ${COLLAB_STEPS[etape - 1]} »${contexte ? ` · ${contexte}` : ""}`.slice(0, 1000);
+    }
+    const row = { type, cible, contexte, contenu: str(a.contenu, 6000), lien_spark: lien, statut: "a_valider", agent_id: ag?.id ?? null };
+    let { data, error } = await sb.schema("agent").from("actions").insert(row).select("id").single();
+    // Avant le SQL du 23/11/2026, la base refuse le type « avancer_collab » : déposée en alerte,
+    // l'app la reconnaît à son lien et fait avancer la collab de la même façon.
+    if (error && type === "avancer_collab" && (error.code === "23514" || /check/i.test(error.message))) {
+      type = "alerte";
+      ({ data, error } = await sb.schema("agent").from("actions").insert({ ...row, type }).select("id").single());
+    }
     if (error) return fail(`Proposition non déposée : ${error.message}`);
-    await agentJournal(sb, ag?.id ?? null, "proposition", `${type} · ${str(a.cible, 120)}`);
-    return ok(`Déposé dans « À valider » (${type}${str(a.cible) ? ` pour ${str(a.cible, 120)}` : ""}) [proposition ${(data as Json)?.id}]. Marc le verra dans l'app, section Agents, et dans la liste de 17 h.`);
+    await agentJournal(sb, ag?.id ?? null, "proposition", `${type} · ${cible ?? ""}`.slice(0, 160));
+    return ok(`Déposé dans « À valider » (${type === "alerte" && lien?.includes("avancer=1") ? "avancer_collab" : type}${cible ? ` pour ${cible.slice(0, 120)}` : ""}) [proposition ${(data as Json)?.id}]. Marc le verra dans l'app, section Agents, et dans la liste de 17 h.`);
   },
 };
 
