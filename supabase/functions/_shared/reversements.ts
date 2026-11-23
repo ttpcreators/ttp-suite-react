@@ -99,9 +99,11 @@ export function cashModeFor(collabId: unknown, _creator: unknown, collabModes: R
   return set === "createur" ? "createur" : "agence";
 }
 
-export type RevInvoice = { id: string; amount: unknown; status: unknown; creator: unknown; collab_id?: unknown };
+export type RevInvoice = { id: string; amount: unknown; status: unknown; creator: unknown; collab_id?: unknown; party?: unknown; date?: unknown; paid_at?: unknown };
 export type Payout = { date?: string; amount?: unknown; note?: string };
-export type RevRow = { creator: string; encaisse: number; ht: number; rate: number; commission: number; du: number; reverse: number; reste: number; lastPayout: string | null };
+/** Part du créateur sur une facture payée (comme les lignes de la page Reversements). */
+export type RevLigne = { id: string; collabId: string | null; party: string; paidOn: string; du: number };
+export type RevRow = { creator: string; encaisse: number; ht: number; rate: number; commission: number; du: number; reverse: number; reste: number; lastPayout: string | null; lignes: RevLigne[] };
 
 export function reversementRows(input: {
   invoices: RevInvoice[];
@@ -119,13 +121,13 @@ export function reversementRows(input: {
   const rateOf = (k: string) => roster.get(k)?.rate ?? saved.get(k) ?? DEFAULT_COMMISSION;
   const mandates = mandatesFrom(input.contractHistory);
 
-  type Acc = { name: string; encaisse: number; ht: number; commission: number; du: number; keys: string[] };
+  type Acc = { name: string; encaisse: number; ht: number; commission: number; du: number; keys: string[]; lignes: RevLigne[] };
   const acc = new Map<string, Acc>();
   const bump = (raw: string): Acc => {
     const k = key(raw);
     let a = acc.get(k);
     if (!a) {
-      a = { name: roster.get(k)?.name ?? raw.trim(), encaisse: 0, ht: 0, commission: 0, du: 0, keys: [] };
+      a = { name: roster.get(k)?.name ?? raw.trim(), encaisse: 0, ht: 0, commission: 0, du: 0, keys: [], lignes: [] };
       acc.set(k, a);
     }
     return a;
@@ -140,7 +142,9 @@ export function reversementRows(input: {
     a.encaisse += t.ttc;
     a.ht += t.ht;
     a.commission += t.commission;
-    a.du += t.reversal + (d?.onBehalf ? t.tva : 0);
+    const part = t.reversal + (d?.onBehalf ? t.tva : 0);
+    a.du += part;
+    a.lignes.push({ id: iv.id, collabId: iv.collab_id ? String(iv.collab_id) : null, party: String(iv.party ?? "").trim(), paidOn: String(iv.paid_at ?? iv.date ?? "").slice(0, 10), du: cents(part) });
   }
   for (const [k, list] of Object.entries(input.payouts ?? {})) {
     if (!key(k) || !Array.isArray(list)) continue;
@@ -154,7 +158,7 @@ export function reversementRows(input: {
     const commission = cents(a.commission);
     const du = cents(a.du);
     const last = payouts.map((p) => String(p?.date ?? "")).filter(Boolean).sort().pop() ?? null;
-    out.push({ creator: a.name, encaisse: cents(a.encaisse), ht, rate: ht > 0 ? Math.round((commission / ht) * 100) : rateOf(k), commission, du, reverse, reste: cents(du - reverse), lastPayout: last });
+    out.push({ creator: a.name, encaisse: cents(a.encaisse), ht, rate: ht > 0 ? Math.round((commission / ht) * 100) : rateOf(k), commission, du, reverse, reste: cents(du - reverse), lastPayout: last, lignes: a.lignes });
   }
   return out.sort((x, y) => y.reste - x.reste);
 }

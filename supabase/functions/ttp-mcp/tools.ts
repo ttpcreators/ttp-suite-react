@@ -31,6 +31,8 @@ import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCart
 import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
 import { ciblesEchange, requeteEchange, texteEchanges } from "../_shared/dejaEchange.ts";
 import { cleDuCreateur, dateVersement, versementEnDouble } from "../_shared/versement.ts";
+import { apresVersement } from "../_shared/collabAutoDb.ts";
+import { ligneAvance } from "../_shared/collabAuto.ts";
 import { estUuid, plageUuid } from "../_shared/idCourt.ts";
 import { nomPropre, problemePieces, typeDuNom, type Piece } from "../_shared/piecesJointes.ts";
 import { CATEGORIES_MODELES, objectifsDuMois, problemeModele, type Objectif } from "../_shared/alfredOutils.ts";
@@ -475,6 +477,7 @@ const noterReversement: Tool = {
       note: { type: "string", description: "D'où vient la preuve (« Telegram de Marc 16/11 », « facture JNPR 2026-186 »)" },
       forcer: { type: "boolean", description: "true : noter même si un versement du même montant existe déjà à 5 jours près (deux virements réels)" },
       retirer: { type: "string", description: "Annuler : l'id d'un versement noté par erreur (donné quand il a été noté) ; il est retiré, montant et date ignorés" },
+      collab: { type: "string", description: "Facultatif : id de la collab que ce versement paie (outil collabs), si la preuve la désigne. Elle passe à l'étape 10 « Créateur payé ». Sans lui, seules les collabs dont la facture est soldée par ce versement avancent." },
     },
     required: ["createur", "montant", "note"],
     additionalProperties: false,
@@ -508,9 +511,45 @@ const noterReversement: Tool = {
     const frais = ((await appState(sb)).creatorPayouts ?? {}) as Record<string, unknown[]>;
     const { error } = await sb.rpc("app_state_merge", { p_key: "creatorPayouts", p_set: { [k]: [entree, ...(Array.isArray(frais[k]) ? frais[k] : [])] }, p_remove: [] });
     if (error) return fail(`Versement non noté : ${error.message}`);
-    return ok(`✓ Versement noté dans Reversements : ${eur(montant)} à ${titleCase(k)} le ${frDay(date)}${note ? ` (${note})` : ""} [id ${entree.id}, pour l'annuler : retirer]. Relis le reste avec reversements.`);
+    // Étapes automatiques : les collabs que ce versement paie passent « Créateur payé ».
+    const avances = await collabsPayees(sb, st, k, montant, str(a.collab, 40) || null);
+    return ok(`✓ Versement noté dans Reversements : ${eur(montant)} à ${titleCase(k)} le ${frDay(date)}${note ? ` (${note})` : ""} [id ${entree.id}, pour l'annuler : retirer]. Relis le reste avec reversements.${avances.map((l) => `\n${l}`).join("")}`);
   },
 };
+
+/**
+ * Versement noté : la collab désignée, sinon celles dont la facture est soldée par ce versement
+ * (même calcul que la page Reversements, `st` = blob lu AVANT le versement), atteignent
+ * l'étape 10 « Créateur payé » (_shared/collabAuto.ts). Jamais bloquant : [] en cas d'échec.
+ */
+async function collabsPayees(sb: SupabaseClient, st: Json, cle: string, montant: number, collab: string | null): Promise<string[]> {
+  try {
+    const cols = "id, amount, status, creator, collab_id, party, date";
+    let inv: { data: unknown; error: unknown } = await sb.from("invoices").select(`${cols}, paid_at`).eq("status", "payee").limit(5000);
+    if (inv.error) inv = await sb.from("invoices").select(cols).eq("status", "payee").limit(5000);
+    if (inv.error) return [];
+    const { data: cr } = await sb.from("creators").select("name, commission");
+    const roster: Record<string, number> = {};
+    for (const c of (cr as Json[] | null) ?? []) {
+      const v = pctOf(c.commission);
+      if (v != null) roster[String(c.name)] = v;
+    }
+    const rows = reversementRows({
+      invoices: (inv.data as unknown as { id: string; amount: unknown; status: unknown; creator: unknown }[]) ?? [],
+      details: (st.invoiceDetails ?? {}) as Record<string, Detail>,
+      payouts: (st.creatorPayouts ?? {}) as Record<string, Payout[]>,
+      rosterRates: roster,
+      savedRates: (st.creatorCommission ?? {}) as Record<string, number>,
+      collabModes: (st.collabCashMode ?? {}) as Record<string, string>,
+      contractHistory: st.contractHistory,
+    });
+    const row = rows.find((r) => r.creator.trim().toLowerCase() === cle.trim().toLowerCase());
+    const avances = await apresVersement(sb, { createur: row?.creator ?? cle, lignes: row?.lignes ?? [], dejaVerse: row?.reverse ?? 0, montant, collab });
+    return avances.map(ligneAvance);
+  } catch {
+    return [];
+  }
+}
 
 // ── Objectifs du mois et modèles de mails (demande de Marc, 18 novembre 2026) ──
 /** Le 1er du mois suivant (« 2026-12-01 » pour « 2026-11 »), borne de fin d'un mois. */
