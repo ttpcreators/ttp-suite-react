@@ -5,8 +5,8 @@ import { Picker } from "@/components/ui/form";
 import { cn, titleCase } from "@/lib/utils";
 import {
   Gauge, Send, Search, HeartHandshake, BookOpen, GraduationCap, ScrollText,
-  Mail, MessageCircle, BriefcaseBusiness, AtSign, TriangleAlert, Copy, Check, X,
-  ChevronDown, Trash2, Plus, AlarmClock, ExternalLink, UserRound, Settings2,
+  Mail, MessageCircle, BriefcaseBusiness, AtSign, TriangleAlert, Check, X,
+  ChevronDown, Trash2, Plus, AlarmClock, UserRound, Settings2, ListChecks,
   type LucideIcon,
 } from "@/components/icons";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
@@ -21,6 +21,9 @@ import { AgentAvatar } from "@/components/agent-avatar";
 import { AlfredStatut, DemanderAlfred, ReglagesAlfredCarte, useAlfred } from "@/components/alfred-app";
 import { assignFigurines, figurineSrc, type AgentFigurine } from "@/lib/agentAvatars";
 import { mergeAppStateKey, useAppState as useAgentAppState } from "@/lib/appState";
+import { AValiderFile } from "@/components/a-valider-file";
+import { avanceCollabOf, gesteValider, statutApresValidation, texteModifie, typeAffiche } from "@/lib/aValider";
+import { avancerCollabDepuisFile, noterModification } from "@/lib/aValiderDb";
 
 /**
  * Section « Agents » (Espace Agence, fondateurs) : les agents de TTP, créés et réglés
@@ -67,6 +70,7 @@ const ACTION_META: Record<string, { label: string; icon: LucideIcon }> = {
   linkedin: { label: "LinkedIn", icon: BriefcaseBusiness },
   instagram: { label: "Instagram", icon: AtSign },
   alerte: { label: "Alerte", icon: TriangleAlert },
+  avancer_collab: { label: "Étape de collab", icon: ListChecks },
 };
 
 const PROSPECT_OPTS: StatusOption[] = [
@@ -106,6 +110,9 @@ const JOURNAL_LABELS: Record<string, string> = {
   proposition: "Proposition déposée",
   lecon: "Leçon retenue",
   marc_agent: "Agent modifié",
+  marc_valide: "Validé dans l'app",
+  marc_modifie: "Texte modifié",
+  marc_etape: "Étape de collab avancée",
 };
 /** Code inconnu : « mon_code » → « Mon code ». */
 function journalLabel(code: string): string {
@@ -344,15 +351,49 @@ export function AgentView() {
       toast("Copie impossible, sélectionne le texte à la main");
     }
   };
-  const traiter = async (a: Action, statut: "envoye" | "ecarte" | "valide") => {
+  const traiter = async (a: Action, statut: "envoye" | "ecarte" | "valide", opts: { message?: string | null; trace?: [string, string] } = {}): Promise<boolean> => {
     const patch = { statut, traite_le: new Date().toISOString() };
     setActions((xs) => xs.map((x) => (x.id === a.id ? { ...x, ...patch } : x)));
     if (!(await upd("actions", a.id, patch))) {
       setActions((xs) => xs.map((x) => (x.id === a.id ? a : x)));
-      return;
+      return false;
     }
-    log(statut === "envoye" ? "marc_envoye" : statut === "valide" ? "marc_valide" : "marc_ecarte", `${ACTION_META[a.type]?.label ?? a.type} · ${a.cible ?? ""}`);
-    toast(statut === "envoye" ? "Marqué envoyé ✓" : statut === "valide" ? "Validé ✓ Alfred l'envoie dans la minute." : "Écarté ✓");
+    const [code, detail] = opts.trace ?? [statut === "envoye" ? "marc_envoye" : statut === "valide" ? "marc_valide" : "marc_ecarte", `${ACTION_META[typeAffiche(a)]?.label ?? a.type} · ${a.cible ?? ""}`];
+    log(code, detail);
+    const msg = opts.message !== undefined ? opts.message : statut === "envoye" ? "Marqué envoyé ✓" : statut === "valide" ? "Validé ✓ Alfred l'envoie dans la minute." : "Écarté ✓";
+    if (msg) toast(msg);
+    return true;
+  };
+  // « Valider » dans la file : même statut et même circuit qu'avant (aValider.ts) ; un texte
+  // modifié par Marc remplace le contenu, et l'avant / après part au journal pour l'agent.
+  const valider = async (a: Action, opts: { texte?: string; silencieux?: boolean } = {}): Promise<boolean> => {
+    const geste = gesteValider(a, alfred?.id ?? null);
+    const texte = opts.texte !== undefined && texteModifie(a.contenu, opts.texte) ? opts.texte.trim() : null;
+    // Copie dans le geste lui même (avant tout await : Safari l'exige).
+    if (geste === "copier_envoye" && !opts.silencieux) {
+      navigator.clipboard?.writeText(texte ?? a.contenu ?? "").then(() => {}, () => {});
+    }
+    let cur = a;
+    if (texte !== null) {
+      setActions((xs) => xs.map((x) => (x.id === a.id ? { ...x, contenu: texte } : x)));
+      if (!(await upd("actions", a.id, { contenu: texte }))) {
+        setActions((xs) => xs.map((x) => (x.id === a.id ? a : x)));
+        return false;
+      }
+      void noterModification(a, a.contenu ?? "", texte);
+      cur = { ...a, contenu: texte };
+    }
+    const quiet = opts.silencieux ? { message: null } : {};
+    if (geste === "avancer_collab") {
+      const av = avanceCollabOf(a);
+      if (!av) return false;
+      const r = await avancerCollabDepuisFile(av.collabId, av.etape);
+      if (!r.ok) { toast(r.message); return false; }
+      return traiter(cur, "envoye", { ...(opts.silencieux ? { message: null } : { message: r.message }), trace: ["marc_etape", `${a.cible ?? ""} · étape ${av.etape}`] });
+    }
+    const statut = statutApresValidation(geste);
+    if (statut === "valide") return traiter(cur, "valide", quiet);
+    return traiter(cur, "envoye", opts.silencieux ? quiet : { message: geste === "copier_envoye" ? "Validé ✓ Message copié" : "Validé ✓" });
   };
   const deciderProspect = async (p: Prospect, statut: "valide" | "ecarte") => {
     setProspects((xs) => xs.map((x) => (x.id === p.id ? { ...x, statut } : x)));
@@ -628,65 +669,28 @@ export function AgentView() {
         {shownQueue.length === 0 ? (
           <Empty text={traiteesSemaine > 0 ? `Rien à valider. ${traiteesSemaine} action${traiteesSemaine > 1 ? "s" : ""} traitée${traiteesSemaine > 1 ? "s" : ""} ces 7 derniers jours.` : "Rien à valider pour le moment."} />
         ) : (
-          <div className="flex flex-col gap-3">
-            {shownQueue.map((a) => {
-              const meta = ACTION_META[a.type] ?? { label: a.type, icon: Send };
-              const MIcon = meta.icon;
-              return (
-                <div key={a.id} className={cn("rounded-xl border border-border bg-surface p-3", a.type === "alerte" && "border-amber/40")}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className={cn("flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[10px] font-semibold", a.type === "alerte" ? "bg-amber/15 text-amber" : "bg-primary/10 text-primary")}>
-                      <MIcon className="h-3 w-3" /> {meta.label}
-                    </span>
-                    {a.cible && <span className="text-[12px] font-semibold uppercase tracking-wide text-foreground">{a.cible}</span>}
-                    {(agentOf(a.agent_id) ?? (!a.agent_id ? megan : null)) && (
-                      <span className="flex items-center gap-1.5 rounded-full bg-muted py-0.5 pl-0.5 pr-2 text-[10px] font-medium text-muted-foreground">
-                        <AgentAvatar figurine={figOf((agentOf(a.agent_id) ?? megan)!.id)} className="h-4 w-4 rounded-full" /> {(agentOf(a.agent_id) ?? megan)!.nom}
-                      </span>
-                    )}
-                    <span className="ml-auto text-[10px] text-faint">{fmtDT(a.cree_le)}</span>
-                  </div>
-                  {a.contexte && <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">{a.contexte}</p>}
-                  {a.contenu && (
-                    <div className="mt-2 whitespace-pre-wrap rounded-lg bg-panel px-3 py-2.5 text-[12px] leading-relaxed text-foreground">{a.contenu}</div>
-                  )}
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    {a.contenu && (
-                      <button type="button" onClick={() => copier(a)}
-                        className="flex h-[34px] items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-                        {copied === a.id ? <Check className="h-3.5 w-3.5 text-signal" /> : <Copy className="h-3.5 w-3.5" />} Copier le message
-                      </button>
-                    )}
-                    {a.lien_spark && (
-                      <a href={a.lien_spark} target="_blank" rel="noreferrer"
-                        className="flex h-[34px] items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-                        <ExternalLink className="h-3.5 w-3.5" /> {a.agent_id && agentOf(a.agent_id)?.slug !== "megan" ? "Ouvrir le lien" : "Ouvrir le brouillon (Spark)"}
-                      </a>
-                    )}
-                    <div className="ml-auto flex items-center gap-2">
-                      <button type="button" onClick={() => traiter(a, "ecarte")}
-                        className="flex h-[34px] items-center gap-1.5 rounded-lg border border-border px-3 text-[11px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground">
-                        <X className="h-3.5 w-3.5" /> Écarter
-                      </button>
-                      {/* Un mail d'Alfred : « Valider » vaut le « oui » de Marc ; Alfred l'envoie dans la minute
-                          et la liste de 17 h sur Telegram le retire (une seule liste, demande de Marc le 17/11/2026). */}
-                      {a.type === "brouillon_mail" && alfred && a.agent_id === alfred.id ? (
-                        <button type="button" onClick={() => traiter(a, "valide")}
-                          className="flex h-[34px] items-center gap-1.5 rounded-full bg-primary px-4 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
-                          <Send className="h-3.5 w-3.5" /> Valider, Alfred l'envoie
-                        </button>
-                      ) : (
-                        <button type="button" onClick={() => traiter(a, "envoye")}
-                          className="flex h-[34px] items-center gap-1.5 rounded-full bg-primary px-4 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
-                          <Check className="h-3.5 w-3.5" /> Marquer envoyé
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <AValiderFile
+            items={shownQueue}
+            alfredId={alfred?.id ?? null}
+            meta={(a) => {
+              const t = typeAffiche(a);
+              const m = ACTION_META[t] ?? { label: a.type, icon: Send };
+              return { label: m.label, icon: m.icon, alerte: t === "alerte" };
+            }}
+            agentBadge={(a) => {
+              const ag = agentOf(a.agent_id) ?? (!a.agent_id ? megan : null);
+              return ag ? (
+                <span className="flex items-center gap-1.5 rounded-full bg-muted py-0.5 pl-0.5 pr-2 text-[10px] font-medium text-muted-foreground">
+                  <AgentAvatar figurine={figOf(ag.id)} className="h-4 w-4 rounded-full" /> {ag.nom}
+                </span>
+              ) : null;
+            }}
+            copied={copied}
+            onCopier={(a) => void copier(a as Action)}
+            onValider={(a, opts) => valider(a as Action, opts)}
+            onEcarter={(a) => traiter(a as Action, "ecarte")}
+            onSelectionFaite={(ok, total) => toast(ok === total ? `${ok} validée${ok > 1 ? "s" : ""} ✓` : `${ok} validée${ok > 1 ? "s" : ""} sur ${total}, réessaie pour les autres`)}
+          />
         )}
       </Section>
 

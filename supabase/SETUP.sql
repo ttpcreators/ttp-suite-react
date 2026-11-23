@@ -1629,6 +1629,10 @@ create table if not exists agent.actions (
   cree_le timestamptz default now(), traite_le timestamptz
 );
 create index if not exists agent_actions_statut_idx on agent.actions (statut);
+-- Types de proposition (2026-11-23, sql/2026-11-23-a-valider-avancer-collab.sql) : + avancer_collab.
+alter table agent.actions drop constraint if exists actions_type_check;
+alter table agent.actions add constraint actions_type_check
+  check (type = any (array['brouillon_mail', 'whatsapp', 'linkedin', 'instagram', 'alerte', 'avancer_collab']));
 create table if not exists agent.prospects (
   id uuid primary key default gen_random_uuid(),
   marque text not null, signal text, signal_date date, contact text, contact_role text,
