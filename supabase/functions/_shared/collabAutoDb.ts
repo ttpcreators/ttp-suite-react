@@ -118,13 +118,17 @@ export async function apresVersement(sb: Sb, v: { createur: string; lignes: read
  * Collab créée ou gagnée : le prospect ouvert de la marque passe « Signé » et garde le lien
  * vers la collab (colonne `collab_id`, si elle existe). Jamais un prospect perdu.
  */
-export async function apresCollabSignee(sb: Sb, collab: Pick<CollabAuto, "id" | "brand" | "creator" | "cachet">): Promise<{ id: string; brand: string } | null> {
+export async function apresCollabSignee(sb: Sb, collabId: string): Promise<{ id: string; brand: string } | null> {
   try {
+    // La collab relue en base : sa date de création (le prospect doit être plus ancien).
+    const { data: c, error: ec } = await sb.from("collabs").select("id, brand, creator, cachet, created_at").eq("id", collabId).maybeSingle();
+    if (ec || !c) return null;
+    const collab = c as CollabAuto;
     let full = true;
-    let r = await sb.from("prospects").select("id, brand, stage, creator, collab_id").limit(2000);
+    let r = await sb.from("prospects").select("id, brand, stage, created_at, creator, collab_id").limit(2000);
     if (r.error && colonneAbsente(r.error, /creator|collab_id/)) {
       full = false;
-      r = await sb.from("prospects").select("id, brand, stage").limit(2000);
+      r = await sb.from("prospects").select("id, brand, stage, created_at").limit(2000);
     }
     if (r.error) return null;
     const p = prospectASigner((r.data as ProspectAuto[] | null) ?? [], collab);

@@ -40,8 +40,8 @@ export async function autoVersement(v: { createur: string; lignes: readonly Lign
   return out;
 }
 
-/** Collab créée ou gagnée : le prospect ouvert de la marque passe « Signé ». */
-export async function autoCollabSignee(c: { id: string; brand: string; creator: string | null; cachet?: string | null }): Promise<string[]> {
-  const p = await apresCollabSignee(supabase, c);
+/** Collab créée, ou marquée gagnée hors étape 11 : le prospect ouvert de la marque passe « Signé ». */
+export async function autoCollabSignee(collabId: string): Promise<string[]> {
+  const p = await apresCollabSignee(supabase, collabId);
   return p ? [texteProspectSigne(p.brand)] : [];
 }

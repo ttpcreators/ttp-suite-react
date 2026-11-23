@@ -22,7 +22,7 @@ import {
 import { eurRateOf } from "../_shared/reversements.ts";
 import { estUuid, plageUuid } from "../_shared/idCourt.ts";
 import { apresCollabSignee, apresFacturePayee } from "../_shared/collabAutoDb.ts";
-import { ligneAvance, ligneProspectSigne } from "../_shared/collabAuto.ts";
+import { gagneeHorsBilan, ligneAvance, ligneProspectSigne } from "../_shared/collabAuto.ts";
 import { listSendAs, parseMailBox, resolveSender, sendDraft, sendMail, type MailBox } from "./gmail.ts";
 import { LIEN_TTL_MS, PROJECT_URL, creatorBoxReady, listCreatorBoxes, normEmail } from "../_shared/creatorBox.ts";
 import { genNonce, signState } from "../_shared/state.ts";
@@ -129,7 +129,7 @@ const creerElement: AdminTool = {
     const { data, error } = await sb.from(t.table).insert(fields).select("*").single();
     if (error) return fail(`Création refusée : ${error.message}`);
     // Collab créée : le prospect ouvert de la marque passe « Signé » (étapes automatiques).
-    const signe = t.table === "collabs" && (data as Json).status !== "perdue" ? await apresCollabSignee(sb, data as { id: string; brand: string; creator: string | null; cachet?: string | null }) : null;
+    const signe = t.table === "collabs" && (data as Json).status !== "perdue" ? await apresCollabSignee(sb, String((data as Json).id)) : null;
     return ok(`✓ ${rule.label} créé${refused.length ? ` (champs ignorés : ${refused.join(", ")})` : ""}.${signe ? `\n${ligneProspectSigne(signe.brand)}` : ""}\n${json(readableRow(data as Json))}`);
   },
 };
@@ -178,8 +178,9 @@ const modifierElement: AdminTool = {
       const av = await apresFacturePayee(sb, id);
       if (av) auto.push(ligneAvance(av));
     }
-    if (t.table === "collabs" && devient("gagnee")) {
-      const signe = await apresCollabSignee(sb, after as { id: string; brand: string; creator: string | null; cachet?: string | null });
+    // Pas une collab gagnée à l'étape 11 (bilan, renouvellement) : ce n'est plus la signature.
+    if (t.table === "collabs" && after && gagneeHorsBilan((before as Json).status, (after as Json).status, (after as Json).step)) {
+      const signe = await apresCollabSignee(sb, id);
       if (signe) auto.push(ligneProspectSigne(signe.brand));
     }
     return ok(`✓ ${rule.label} modifié${refused.length ? ` (champs refusés : ${refused.join(", ")})` : ""}.\n${changes.join("\n")}${auto.length ? `\n${auto.join("\n")}` : ""}`);

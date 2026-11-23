@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  cachetGifting, collabDeFacture, collabsSoldees, etapeAAtteindre, memeMarque, prospectASigner, prospectOuvert, texteAvance, texteProspectSigne,
+  cachetGifting, collabDeFacture, gagneeHorsBilan, collabsSoldees, etapeAAtteindre, memeMarque, prospectASigner, prospectOuvert, texteAvance, texteProspectSigne,
   type LigneDue, type ProspectAuto,
 } from "./collabAuto";
 import { ligneAvance, ligneProspectSigne } from "../../supabase/functions/_shared/collabAuto.ts";
@@ -12,12 +12,19 @@ import { dealKind } from "./dealKind";
 describe("étape à atteindre", () => {
   it("avance, jamais en arrière, jamais une collab perdue ou archivée", () => {
     expect(etapeAAtteindre({ step: 8, status: "active" }, 9)).toBe(9);
-    expect(etapeAAtteindre({ step: 3, status: "gagnee" }, 9)).toBe(9);
+    expect(etapeAAtteindre({ step: 6, status: "gagnee" }, 9)).toBe(9);
+    expect(etapeAAtteindre({ step: 9, status: "active" }, 10)).toBe(10);
     expect(etapeAAtteindre({ step: 9, status: "active" }, 9)).toBeNull();
     expect(etapeAAtteindre({ step: 11, status: "active" }, 10)).toBeNull();
     expect(etapeAAtteindre({ step: 2, status: "perdue" }, 9)).toBeNull();
     expect(etapeAAtteindre({ step: 2, status: "archivee" }, 9)).toBeNull();
     expect(etapeAAtteindre(null, 9)).toBeNull();
+  });
+  it("étape plancher : acompte payé trop tôt, versement avant le paiement de la marque", () => {
+    expect(etapeAAtteindre({ step: 2, status: "active" }, 9)).toBeNull(); // facture d'acompte payée à l'étape 2
+    expect(etapeAAtteindre({ step: 5, status: "active" }, 9)).toBeNull();
+    expect(etapeAAtteindre({ step: 4, status: "active" }, 10)).toBeNull(); // versement à l'étape 4
+    expect(etapeAAtteindre({ step: 8, status: "active" }, 10)).toBeNull();
   });
 });
 
@@ -69,8 +76,8 @@ describe("versement au créateur : collabs soldées", () => {
 });
 
 describe("collab signée : prospect de la marque", () => {
-  const p = (x: Partial<ProspectAuto>): ProspectAuto => ({ id: "p1", brand: "Nutripure", stage: "Négociation", ...x });
-  const collab = { id: "c1", brand: "NUTRIPURE", creator: "Léna Test", cachet: "800 €" };
+  const p = (x: Partial<ProspectAuto>): ProspectAuto => ({ id: "p1", brand: "Nutripure", stage: "Négociation", created_at: "2026-11-01T09:00:00Z", ...x });
+  const collab = { id: "c1", brand: "NUTRIPURE", creator: "Léna Test", cachet: "800 €", created_at: "2026-11-10T09:00:00Z" };
   it("normalisation des marques identique à la fiche marque", () => {
     for (const [x, y] of [["Décathlon", "decathlon"], ["Alo Yoga", "aloyoga"], ["L'Oréal", "LOreal"], ["Nike", "Nikes"], ["", ""]]) {
       expect(memeMarque(x, y)).toBe(sameBrand(x, y));
@@ -97,6 +104,20 @@ describe("collab signée : prospect de la marque", () => {
     expect(prospectASigner([p({ creator: "Ana Test" })], collab)).toBeNull();
     expect(prospectASigner([p({ brand: "Autre" })], collab)).toBeNull();
     expect(prospectASigner([p({})], { ...collab, cachet: "gifting" })).toBeNull();
+  });
+  it("jamais un prospect d'un autre créateur, jamais un prospect plus récent que la collab", () => {
+    expect(prospectASigner([p({ creator: "LÉNA TEST" })], collab)?.id).toBe("p1");
+    expect(prospectASigner([p({ creator: "Ana Test" })], { ...collab, creator: null })).toBeNull();
+    expect(prospectASigner([p({ created_at: "2026-11-12T09:00:00Z" })], collab)).toBeNull();
+    expect(prospectASigner([p({ created_at: null })], collab)).toBeNull();
+    expect(prospectASigner([p({})], { ...collab, created_at: null })).toBeNull();
+    expect(prospectASigner([p({ created_at: collab.created_at })], collab)?.id).toBe("p1");
+  });
+  it("gagnée à la main avant le bilan seulement : pas le renouvellement après l'étape 11", () => {
+    expect(gagneeHorsBilan("active", "gagnee", 5)).toBe(true);
+    expect(gagneeHorsBilan("active", "gagnee", 11)).toBe(false);
+    expect(gagneeHorsBilan("gagnee", "gagnee", 5)).toBe(false);
+    expect(gagneeHorsBilan("active", "perdue", 5)).toBe(false);
   });
   it("plusieurs prospects : celui du même créateur s'il est seul, sinon rien", () => {
     expect(prospectASigner([p({}), p({ id: "p2", creator: "LÉNA TEST" })], collab)?.id).toBe("p2");
@@ -181,7 +202,7 @@ describe("écritures des étapes automatiques", () => {
   it("erreur réseau : rien, sans lever", async () => {
     const db = fakeDb({ collabs: [{ id: "c1", step: 3, status: "active" }] }, { failTables: ["invoices", "prospects", "collabs"] });
     expect(await apresFacturePayee(db, "f1", "c1")).toBeNull();
-    expect(await apresCollabSignee(db, { id: "c1", brand: "Nutripure", creator: null })).toBeNull();
+    expect(await apresCollabSignee(db, "c1")).toBeNull();
     expect(await apresVersement(db, { createur: "X", lignes: [{ id: "f", collabId: "c1", paidOn: "2026-11-01", du: 10 }], dejaVerse: 0, montant: 10 })).toEqual([]);
   });
   it("versement : collab soldée à 10, collab désignée seulement si elle est à ce créateur", async () => {
@@ -189,6 +210,7 @@ describe("écritures des étapes automatiques", () => {
       collabs: [
         { id: "c1", brand: "Nutripure", creator: "LÉNA TEST", step: 9, status: "gagnee" },
         { id: "c2", brand: "Opéra Air", creator: "ANA TEST", step: 9, status: "active" },
+        { id: "c3", brand: "Seoni", creator: "LÉNA TEST", step: 4, status: "active" },
       ],
       collab_steps: [{ collab_id: "c1", step: 10 }],
     });
@@ -198,12 +220,33 @@ describe("écritures des étapes automatiques", () => {
     expect(await apresVersement(db, { createur: "Léna Test", lignes: [], dejaVerse: 0, montant: 100, collab: "c2" })).toEqual([]);
     expect(db.tables.collabs[1].step).toBe(9);
     expect((await apresVersement(db, { createur: "Ana Test", lignes: [], dejaVerse: 0, montant: 100, collab: "c2" })).length).toBe(1);
+    // Versement pour une collab encore à l'étape 4 : rien.
+    expect(await apresVersement(db, { createur: "Léna Test", lignes: [], dejaVerse: 0, montant: 100, collab: "c3" })).toEqual([]);
+    expect(db.tables.collabs[2].step).toBe(4);
+  });
+  it("facture d'acompte payée à l'étape 2 : rien", async () => {
+    const db = fakeDb({ invoices: [{ id: "f1", status: "payee", collab_id: "c1" }], collabs: [{ id: "c1", step: 2, status: "active" }] });
+    expect(await apresFacturePayee(db, "f1")).toBeNull();
+    expect(db.tables.collabs[0].step).toBe(2);
   });
   it("collab signée : le prospect passe « Signé » et garde le lien, une fois", async () => {
-    const db = fakeDb({ prospects: [{ id: "p1", brand: "Nutripure", stage: "Négociation", creator: null, collab_id: null }, { id: "p2", brand: "Nutripure", stage: "Perdue" }] });
-    expect(await apresCollabSignee(db, { id: "c1", brand: "nutripure", creator: "LÉNA TEST", cachet: "800 €" })).toEqual({ id: "p1", brand: "Nutripure" });
+    const db = fakeDb({
+      collabs: [
+        { id: "c1", brand: "nutripure", creator: "LÉNA TEST", cachet: "800 €", created_at: "2026-11-10T09:00:00Z" },
+        { id: "c2", brand: "Opéra Air", creator: "LÉNA TEST", cachet: "500 €", created_at: "2026-11-10T09:00:00Z" },
+      ],
+      prospects: [
+        { id: "p1", brand: "Nutripure", stage: "Négociation", creator: null, collab_id: null, created_at: "2026-11-01T09:00:00Z" },
+        { id: "p2", brand: "Nutripure", stage: "Perdue", created_at: "2026-11-01T09:00:00Z" },
+        { id: "p3", brand: "Opera Air", stage: "Négociation", creator: null, collab_id: null, created_at: "2026-11-15T09:00:00Z" },
+      ],
+    });
+    expect(await apresCollabSignee(db, "c1")).toEqual({ id: "p1", brand: "Nutripure" });
     expect(db.tables.prospects[0]).toMatchObject({ stage: "Signé", collab_id: "c1" });
     expect(db.tables.prospects[1].stage).toBe("Perdue");
-    expect(await apresCollabSignee(db, { id: "c1", brand: "Nutripure", creator: null })).toBeNull();
+    expect(await apresCollabSignee(db, "c1")).toBeNull();
+    // Prospect ouvert APRÈS la collab (renouvellement en discussion) : jamais signé.
+    expect(await apresCollabSignee(db, "c2")).toBeNull();
+    expect(db.tables.prospects[2].stage).toBe("Négociation");
   });
 });

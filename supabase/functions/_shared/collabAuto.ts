@@ -24,16 +24,27 @@ export const TOLERANCE_EUR = 0.5;
 /** Collabs qu'on ne fait jamais avancer toutes seules. */
 const FIGEES = new Set(["perdue", "archivee"]);
 
-export type CollabAuto = { id: string; brand: string | null; creator: string | null; step: number | null; status: string | null; cachet?: string | null };
+export type CollabAuto = { id: string; brand: string | null; creator: string | null; step: number | null; status: string | null; cachet?: string | null; created_at?: string | null };
+
+/**
+ * Étape où la collab doit déjà être pour avancer toute seule (relecture de Marc) : une facture
+ * payée ne vaut « Paiement marque reçu » qu'après la publication (étape 6 ; un acompte payé à
+ * l'étape 2 ne fait rien), et un versement ne vaut « Créateur payé » qu'une fois la marque
+ * payée (étape 9). En dessous : rien, le contrôle de données le signalera.
+ */
+export const PLANCHER: Record<number, number> = { [ETAPE_PAIEMENT_MARQUE]: 6, [ETAPE_CREATEUR_PAYE]: ETAPE_PAIEMENT_MARQUE };
 
 /**
  * Étape à écrire pour que la collab atteigne `cible`, sinon null : collab absente, perdue ou
- * archivée, ou déjà à cette étape ou plus loin (on ne recule jamais).
+ * archivée, pas encore à l'étape plancher (PLANCHER), ou déjà à cette étape ou plus loin (on
+ * ne recule jamais).
  */
 export function etapeAAtteindre(c: Pick<CollabAuto, "step" | "status"> | null | undefined, cible: number): number | null {
   if (!c || FIGEES.has(String(c.status ?? ""))) return null;
   if (!(cible >= 1 && cible <= 11)) return null;
-  return (Number(c.step) || 0) < cible ? cible : null;
+  const step = Number(c.step) || 0;
+  if (step < (PLANCHER[cible] ?? 0)) return null;
+  return step < cible ? cible : null;
 }
 
 // ── Facture payée → sa collab ───────────────────────────────────────────────
@@ -113,7 +124,7 @@ export function collabsSoldees(lignes: readonly LigneDue[], dejaVerse: number, m
 
 // ── Collab signée → prospect de la marque ───────────────────────────────────
 
-export type ProspectAuto = { id: string; brand: string | null; stage: string | null; creator?: string | null; collab_id?: string | null };
+export type ProspectAuto = { id: string; brand: string | null; stage: string | null; creator?: string | null; collab_id?: string | null; created_at?: string | null };
 
 /** Même marque, sans tenir compte de la casse, des accents, des espaces ni de la ponctuation
  *  (même règle que sameBrand de src/lib/brandRecord.ts). */
@@ -139,19 +150,35 @@ export function cachetGifting(cachet: unknown): boolean {
 }
 
 /**
- * Prospect à passer « Signé » pour cette collab : le prospect ouvert de la même marque, pas
- * relié à une autre collab, et pas proposé pour un autre créateur. Plusieurs : celui du même
- * créateur s'il est seul ; sinon null (doute). Collab de gifting : null.
+ * Passage en « gagnée » qui vaut signature : explicite, avant l'étape 11. Une collab gagnée à
+ * l'étape 11 (bilan, renouvellement) ne signe aucun prospect.
+ */
+export function gagneeHorsBilan(avant: unknown, apres: unknown, step: unknown): boolean {
+  return apres === "gagnee" && avant !== "gagnee" && (Number(step) || 0) < 11;
+}
+
+/**
+ * Prospect à passer « Signé » pour cette collab : le prospect ouvert de la même marque, créé
+ * AVANT la collab (sans date connue d'un côté : doute), pas relié à une autre collab, et dont
+ * le créateur est vide ou celui de la collab (jamais un prospect proposé pour un autre
+ * créateur). Plusieurs : celui du même créateur s'il est seul ; sinon null (doute). Collab de
+ * gifting : null.
  */
 export function prospectASigner(
   prospects: readonly ProspectAuto[],
-  collab: Pick<CollabAuto, "id" | "brand" | "creator" | "cachet">,
+  collab: Pick<CollabAuto, "id" | "brand" | "creator" | "cachet" | "created_at">,
 ): ProspectAuto | null {
   if (!String(collab.brand ?? "").trim() || cachetGifting(collab.cachet)) return null;
+  const cree = Date.parse(String(collab.created_at ?? ""));
+  if (!Number.isFinite(cree)) return null;
   const moi = foldName(collab.creator);
-  const autreCreateur = (p: ProspectAuto) => !!moi && !!foldName(p.creator) && foldName(p.creator) !== moi;
+  const bonCreateur = (p: ProspectAuto) => !foldName(p.creator) || foldName(p.creator) === moi;
+  const avant = (p: ProspectAuto) => {
+    const t = Date.parse(String(p.created_at ?? ""));
+    return Number.isFinite(t) && t <= cree;
+  };
   const candidats = prospects.filter((p) =>
-    memeMarque(p.brand, collab.brand) && prospectOuvert(p.stage) && (!p.collab_id || p.collab_id === collab.id) && !autreCreateur(p));
+    memeMarque(p.brand, collab.brand) && prospectOuvert(p.stage) && (!p.collab_id || p.collab_id === collab.id) && bonCreateur(p) && avant(p));
   if (candidats.length <= 1) return candidats[0] ?? null;
   const memeCreateur = moi ? candidats.filter((p) => foldName(p.creator) === moi) : [];
   return memeCreateur.length === 1 ? memeCreateur[0] : null;

@@ -10,7 +10,7 @@ import { collabLabel } from "./collabLinks";
 import { stepDef } from "./collabs";
 
 export {
-  ETAPE_CREATEUR_PAYE, ETAPE_PAIEMENT_MARQUE, TOLERANCE_EUR, cachetGifting, collabDeFacture, collabsSoldees, etapeAAtteindre,
+  ETAPE_CREATEUR_PAYE, ETAPE_PAIEMENT_MARQUE, PLANCHER, TOLERANCE_EUR, cachetGifting, gagneeHorsBilan, collabDeFacture, collabsSoldees, etapeAAtteindre,
   memeMarque, prospectASigner, prospectOuvert, type CollabAuto, type LigneDue, type ProspectAuto,
 } from "../../supabase/functions/_shared/collabAuto.ts";
 
