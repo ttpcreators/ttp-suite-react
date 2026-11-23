@@ -98,7 +98,7 @@ describe("bilan : chiffres envoyés par le créateur (collab_posts)", () => {
     ig: { posts: [{ id: "p1", url: "https://www.instagram.com/reel/ABC/", at: "2026-11-10T18:00:00Z", product: "REELS", likes: 100, comments: 5 }] },
   };
   const manual = (over: Partial<NonNullable<CollabForRecap["manual"]>[number]>) => ({
-    id: "m1", url: "https://instagram.com/reel/abc", platform: "instagram", created_at: "2026-11-10T19:00:00Z",
+    id: "m1", url: "https://instagram.com/reel/ABC?igsh=2", platform: "instagram", created_at: "2026-11-10T19:00:00Z",
     views: 20000, likes: 90, comments: 6, shares: 40, saves: 70, ...over,
   });
 

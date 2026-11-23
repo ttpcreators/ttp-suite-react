@@ -11,7 +11,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { notifyCreator } from "@/lib/push";
 import { openLater } from "@/lib/openLater";
 import { briefForCollab, conceptState, type BriefConcept } from "@/lib/briefConcept";
-import { loadBriefConcepts, validateConcept } from "@/lib/briefConceptDb";
+import { loadBriefConcepts, reachConceptStep, validateConcept } from "@/lib/briefConceptDb";
 import { hasStats, platformLabel, POST_METRICS, type CollabPost } from "@/lib/collabPosts";
 import { loadCollabPosts } from "@/lib/collabPostsDb";
 
@@ -23,10 +23,11 @@ import { loadCollabPosts } from "@/lib/collabPostsDb";
  * Avant le SQL 2026-11-23-espace-createur-collab.sql : rien ne s'affiche.
  */
 
-type Collab = { id: string; brand: string; creator: string | null; step: number };
+type Collab = { id: string; brand: string; creator: string | null };
 type BriefLite = { id: string; brand: string | null; creator: string | null; collab_id?: string | null; created_at?: string | null };
 
-export function CollabCreatorPanel({ collab, onConceptValidated }: { collab: Collab; onConceptValidated: () => void }) {
+/** `onStepReached` : la collab vient de passer à l'étape 3 en base (à refléter à l'écran). */
+export function CollabCreatorPanel({ collab, onStepReached }: { collab: Collab; onStepReached: (step: number) => void }) {
   const live = useLiveKey();
   const [concept, setConcept] = useState<BriefConcept | null | undefined>(undefined); // undefined = colonnes absentes
   const [posts, setPosts] = useState<CollabPost[] | null>(null); // null = table absente
@@ -66,8 +67,11 @@ export function CollabCreatorPanel({ collab, onConceptValidated }: { collab: Col
     if (!r) return toast("Erreur, réessaie");
     setConcept(r);
     if (collab.creator) notifyCreator("brief-update", collab.creator, `Concept validé · ${collab.brand}`, concept.id);
-    toast("Concept validé ✓");
-    if (collab.step < 3) onConceptValidated();
+    // Étape 3 posée en base sous condition (jamais de recul), puis reflétée à l'écran.
+    if (await reachConceptStep(collab.id)) {
+      onStepReached(3);
+      toast("Concept validé ✓ Étape 3 · Concept validé");
+    } else toast("Concept validé ✓");
   };
 
   const openCapture = (path: string) =>

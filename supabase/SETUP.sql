@@ -2866,14 +2866,16 @@ drop trigger if exists collab_posts_guard on public.collab_posts;
 create trigger collab_posts_guard before insert or update on public.collab_posts
   for each row execute function public.collab_posts_guard();
 
--- Lien → étape 6 ; stats → étape 7. Jamais de recul (le trigger collabs_log_step date l'étape).
+-- Lien → étape 6 ; stats → étape 7, seulement pour une collab déjà au tournage (étape 4)
+-- ou plus loin : en dessous, le post est enregistré mais l'étape ne bouge pas. Jamais de
+-- recul (le trigger collabs_log_step date l'étape). Miroir : postStepTarget (src/lib/collabPosts.ts).
 create or replace function public.collab_posts_advance() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_target integer := case when new.stats_at is not null then 7 else 6 end;
 begin
   update public.collabs set step = v_target
-   where id = new.collab_id and coalesce(step, 1) < v_target
+   where id = new.collab_id and coalesce(step, 1) >= 4 and coalesce(step, 1) < v_target
      and coalesce(status, 'active') not in ('perdue', 'archivee');
   return new;
 end $$;

@@ -38,3 +38,19 @@ export function proposeConcept(id: string, concept: string, link: string | null)
 export function validateConcept(id: string): Promise<BriefConcept | null> {
   return patchBrief(id, { concept_status: "valide", concept_validated_at: new Date().toISOString() });
 }
+
+/**
+ * Agence, après validation : la collab atteint l'étape 3 « Concept validé ». Mise à jour
+ * CONDITIONNELLE en base (étape encore sous 3, ni perdue ni archivée) : jamais de recul,
+ * même si l'écran a une étape périmée. true = la collab a avancé.
+ */
+export async function reachConceptStep(collabId: string): Promise<boolean> {
+  const { data, error } = await supabase
+    .from("collabs")
+    .update({ step: 3 })
+    .eq("id", collabId)
+    .lt("step", 3)
+    .not("status", "in", "(perdue,archivee)")
+    .select("id");
+  return !error && (data?.length ?? 0) > 0;
+}

@@ -74,16 +74,62 @@ export function postPlatform(url: string): PostPlatform {
   return "autre";
 }
 
-/** Clé de comparaison d'un lien (sans protocole, www, paramètres ni « / » final). */
+/**
+ * Clé de comparaison d'un lien de post, pour reconnaître le même post relevé par les
+ * synchros. Elle garde toujours l'identifiant du contenu (sensible à la casse) :
+ *   - YouTube : watch?v=ID, youtu.be/ID, /shorts/ID, /live/ID, /embed/ID → « youtube:ID » ;
+ *   - TikTok : /@compte/video/ID → « tiktok:ID » ; un lien court (vm.tiktok.com, /t/…) non
+ *     résolu garde une clé à part (jamais fusionné à tort, il compte comme un autre post) ;
+ *   - Instagram : /p/ID, /reel/ID, /reels/ID, /tv/ID → « instagram:ID » ;
+ *   - sinon : domaine (sans www) + chemin, sans « / » final ni paramètres.
+ * Lien illisible → "" (jamais rapproché).
+ */
 export function linkKey(url: string | null | undefined): string {
   const s = String(url ?? "").trim();
   if (!s) return "";
+  let u: URL;
   try {
-    const u = new URL(/^https?:\/\//i.test(s) ? s : `https://${s}`);
-    return `${u.hostname.toLowerCase().replace(/^www\./, "")}${u.pathname.replace(/\/+$/, "")}`.toLowerCase();
+    u = new URL(/^https?:\/\//i.test(s) ? s : `https://${s}`);
   } catch {
-    return s.toLowerCase();
+    return "";
   }
+  const host = u.hostname.toLowerCase().replace(/^(www|m)\./, "");
+  const parts = u.pathname.split("/").filter(Boolean);
+  if (host === "youtu.be") return parts[0] ? `youtube:${parts[0]}` : "";
+  if (host === "youtube.com" || host.endsWith(".youtube.com")) {
+    const v = u.searchParams.get("v");
+    if (u.pathname === "/watch" && v) return `youtube:${v}`;
+    if (["shorts", "live", "embed", "v"].includes(parts[0]) && parts[1]) return `youtube:${parts[1]}`;
+    return `${host}${u.pathname.replace(/\/+$/, "")}${u.search}`;
+  }
+  if (host === "tiktok.com" || host.endsWith(".tiktok.com")) {
+    const i = parts.indexOf("video");
+    if (i >= 0 && parts[i + 1]) return `tiktok:${parts[i + 1]}`;
+    if (host === "tiktok.com" && parts[0] === "t" && parts[1]) return `tiktok-court:${parts[1]}`;
+    if (host !== "tiktok.com" && parts[0]) return `tiktok-court:${host}/${parts[0]}`;
+  }
+  if (host === "instagram.com" || host === "instagr.am") {
+    const i = parts.findIndex((x) => ["p", "reel", "reels", "tv"].includes(x));
+    if (i >= 0 && parts[i + 1]) return `instagram:${parts[i + 1]}`;
+  }
+  return `${host}${u.pathname.replace(/\/+$/, "")}`;
+}
+
+/** Un lien de post doit venir d'Instagram, TikTok ou YouTube. */
+export function isSocialPostLink(url: string): boolean {
+  return postPlatform(url) !== "autre";
+}
+
+/**
+ * Étape que la collab atteint quand le créateur envoie son post (miroir du trigger SQL
+ * collab_posts_advance) : seulement si elle est déjà au tournage (étape 4) ou plus loin,
+ * jamais en arrière, rien sur une collab perdue ou archivée. null = l'étape ne bouge pas.
+ */
+export function postStepTarget(step: number | null | undefined, withStats: boolean, status?: string | null): number | null {
+  const cur = step ?? 1;
+  if (status === "perdue" || status === "archivee") return null;
+  const target = withStats ? 7 : 6;
+  return cur >= 4 && cur < target ? target : null;
 }
 
 /**

@@ -716,4 +716,6 @@ export const EN_CREATORSPACE: Record<string, string> = {
   "Saisir les stats": "Enter stats",
   "Lien d'un autre post": "Link to another post",
   "Lien de ton post": "Link to your post",
+  "Colle un lien Instagram, TikTok ou YouTube": "Paste an Instagram, TikTok or YouTube link",
+  "Pas encore lu": "Not read yet",
 };

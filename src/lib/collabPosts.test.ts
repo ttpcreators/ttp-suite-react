@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasStats, isDuplicatePost, linkKey, normalizeLink, parseMetric, postPlatform, postsTableMissing, statsDueDay } from "./collabPosts";
+import { hasStats, isDuplicatePost, isSocialPostLink, linkKey, normalizeLink, parseMetric, postPlatform, postStepTarget, postsTableMissing, statsDueDay } from "./collabPosts";
 
 describe("posts publiés déclarés par le créateur", () => {
   it("lit un lien collé, ajoute https et refuse le reste", () => {
@@ -18,8 +18,39 @@ describe("posts publiés déclarés par le créateur", () => {
     expect(postPlatform("https://example.com")).toBe("autre");
   });
 
-  it("compare deux liens sans www, paramètres ni / final", () => {
-    expect(linkKey("https://www.instagram.com/reel/ABC/?igsh=1")).toBe(linkKey("instagram.com/reel/abc"));
+  it("clé d'un post : garde l'id du contenu", () => {
+    expect(linkKey("https://www.instagram.com/reel/ABC/?igsh=1")).toBe(linkKey("instagram.com/p/ABC"));
+    expect(linkKey("https://www.instagram.com/reel/ABC/")).not.toBe(linkKey("https://www.instagram.com/reel/abc/"));
+    // YouTube : trois formes du même lien, une seule clé ; deux vidéos, deux clés.
+    const yt = linkKey("https://www.youtube.com/watch?v=Ab12Cd34Ef5&t=10s");
+    expect(yt).toBe("youtube:Ab12Cd34Ef5");
+    expect(linkKey("https://youtu.be/Ab12Cd34Ef5?si=x")).toBe(yt);
+    expect(linkKey("https://youtube.com/shorts/Ab12Cd34Ef5")).toBe(yt);
+    expect(linkKey("https://www.youtube.com/watch?v=Zz99Yy88Xx7")).not.toBe(yt);
+    expect(linkKey("https://m.youtube.com/watch?v=Zz99Yy88Xx7")).toBe("youtube:Zz99Yy88Xx7");
+    // TikTok : id de la vidéo ; un lien court non résolu reste à part.
+    expect(linkKey("https://www.tiktok.com/@test/video/7301?lang=fr")).toBe("tiktok:7301");
+    expect(linkKey("https://vm.tiktok.com/ZMabc/")).toBe("tiktok-court:vm.tiktok.com/ZMabc");
+    expect(linkKey("https://vm.tiktok.com/ZMabc/")).not.toBe(linkKey("https://vm.tiktok.com/ZMxyz/"));
+    expect(linkKey("https://vm.tiktok.com/ZMabc/")).not.toBe(linkKey("https://www.tiktok.com/@test/video/7301"));
+    expect(linkKey("")).toBe("");
+  });
+
+  it("n'accepte que des liens Instagram, TikTok ou YouTube", () => {
+    expect(isSocialPostLink("https://www.instagram.com/reel/x/")).toBe(true);
+    expect(isSocialPostLink("https://youtu.be/x")).toBe(true);
+    expect(isSocialPostLink("https://example.com/x")).toBe(false);
+  });
+
+  it("étape atteinte : seulement à partir du tournage, jamais en arrière", () => {
+    expect(postStepTarget(4, false)).toBe(6);
+    expect(postStepTarget(5, true)).toBe(7);
+    expect(postStepTarget(6, true)).toBe(7);
+    expect(postStepTarget(2, false)).toBeNull();
+    expect(postStepTarget(3, true)).toBeNull();
+    expect(postStepTarget(8, true)).toBeNull();
+    expect(postStepTarget(6, false)).toBeNull();
+    expect(postStepTarget(5, false, "perdue")).toBeNull();
   });
 
   it("lit les chiffres comme on les tape", () => {

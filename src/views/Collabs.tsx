@@ -1112,7 +1112,13 @@ export function Collabs() {
 
         <CollabTakeCard collab={{ id: row.id, brand: row.brand, creator: row.creator, cachet: row.cachet }} />
         {/* Côté créateur : brief lu, concept à valider (étape 3), posts et stats à 7 jours. */}
-        <CollabCreatorPanel collab={{ id: row.id, brand: row.brand, creator: row.creator, step: row.step }} onConceptValidated={() => void setStep(row, 3)} />
+        <CollabCreatorPanel
+          collab={{ id: row.id, brand: row.brand, creator: row.creator }}
+          onStepReached={(n) => {
+            setRows((rs) => (rs ?? []).map((r) => (r.id === row.id && r.step < n ? { ...r, step: n } : r)));
+            setSteps((m) => ({ ...m, [row.id]: [...(m[row.id] ?? []), { collab_id: row.id, step: n, reached_at: new Date().toISOString() }] }));
+          }}
+        />
 
         <CollabLinkedPanel
           collab={{ id: row.id, brand: row.brand, creator: row.creator, step: row.step, status: row.status, cachet: row.cachet }}

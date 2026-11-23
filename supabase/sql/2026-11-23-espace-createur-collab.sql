@@ -15,7 +15,8 @@
 --    de SES collabs, puis ses stats à 7 jours (vues, likes, commentaires, partages,
 --    enregistrements, capture facultative dans son dossier creator-uploads/<uid>/).
 --    Lien → la collab atteint l'étape 6 « Publication » ; stats → l'étape 7 « Stats à
---    7 jours » (jamais de recul, rien sur une collab perdue ou archivée). La page
+--    7 jours », si elle est déjà au tournage (étape 4) ou plus loin (jamais de recul,
+--    rien sur une collab perdue ou archivée). La page
 --    Debrief reprend ces chiffres dans le bilan.
 --    RLS : lecture et écriture = is_agency() or creator = my_creator() (aucune branche
 --    `creator is null`) ; la garde vérifie en plus que la collab est bien la sienne.
@@ -129,14 +130,16 @@ drop trigger if exists collab_posts_guard on public.collab_posts;
 create trigger collab_posts_guard before insert or update on public.collab_posts
   for each row execute function public.collab_posts_guard();
 
--- Lien → étape 6 ; stats → étape 7. Jamais de recul (le trigger collabs_log_step date l'étape).
+-- Lien → étape 6 ; stats → étape 7, seulement pour une collab déjà au tournage (étape 4)
+-- ou plus loin : en dessous, le post est enregistré mais l'étape ne bouge pas. Jamais de
+-- recul (le trigger collabs_log_step date l'étape). Miroir : postStepTarget (src/lib/collabPosts.ts).
 create or replace function public.collab_posts_advance() returns trigger
 language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   v_target integer := case when new.stats_at is not null then 7 else 6 end;
 begin
   update public.collabs set step = v_target
-   where id = new.collab_id and coalesce(step, 1) < v_target
+   where id = new.collab_id and coalesce(step, 1) >= 4 and coalesce(step, 1) < v_target
      and coalesce(status, 'active') not in ('perdue', 'archivee');
   return new;
 end $$;

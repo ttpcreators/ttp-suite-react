@@ -78,7 +78,7 @@ import { invoiceTone, netGains, netShare, partyBrand, payoutStatus, realGains, t
 import { OWED_LABEL, owedByCollab, type OwedInvoice } from "@/lib/creatorOwed";
 import { cleanConcept, CONCEPT_MAX, conceptState, type BriefConcept } from "@/lib/briefConcept";
 import { loadBriefConcepts, markBriefRead, proposeConcept } from "@/lib/briefConceptDb";
-import { hasStats, normalizeLink, parseMetric, platformLabel, POST_METRICS, statsDueDay, type CollabPost, type PostMetric } from "@/lib/collabPosts";
+import { hasStats, isSocialPostLink, normalizeLink, parseMetric, platformLabel, POST_METRICS, postStepTarget, statsDueDay, type CollabPost, type PostMetric } from "@/lib/collabPosts";
 import { addCollabPost, loadCollabPosts, saveCollabPostStats } from "@/lib/collabPostsDb";
 import { DEFAULT_COMMISSION, parseCommissionPct } from "@/lib/commission";
 import { daysBetween as daysBetweenIso, type AujDeadline } from "@/lib/aujourdhui";
@@ -1003,22 +1003,28 @@ export function CreatorSpace({
     if (!preview) notifyAgency("brief-maj", name, `Concept proposé · ${b.brand ?? ""}`, b.id);
     toast(t("Concept envoyé ✓ Ton agence le valide"));
   };
-  // Étape atteinte côté base (lien → 6, stats → 7) : reflétée tout de suite dans la mission.
-  const bumpCollab = (collabId: string, step: number) =>
-    setCollabs((list) => list.map((c) => (c.id === collabId && c.step < step ? { ...c, step } : c)));
+  // Étape atteinte côté base (lien → 6, stats → 7, à partir du tournage) : reflétée tout de suite.
+  const bumpCollab = (collabId: string, withStats: boolean) =>
+    setCollabs((list) =>
+      list.map((c) => {
+        const next = c.id === collabId ? postStepTarget(c.step, withStats, c.status) : null;
+        return next ? { ...c, step: next } : c;
+      }),
+    );
   const [postUrl, setPostUrl] = useState("");
   const [postBusy, setPostBusy] = useState(false);
   const sendPostLink = async (m: Mission) => {
     if (!m.collab) return;
     const url = normalizeLink(postUrl);
     if (!url) return toast(t("Lien illisible"));
+    if (!isSocialPostLink(url)) return toast(t("Colle un lien Instagram, TikTok ou YouTube"));
     setPostBusy(true);
     const r = await addCollabPost(m.collab.id, name, url);
     setPostBusy(false);
     if (!r.ok) return toast(r.reason === "duplicate" ? t("Ce lien est déjà envoyé") : t("Ça n'a pas marché. Réessaie dans un instant."));
     setPosts((list) => [...(list ?? []), r.post]);
     setPostUrl("");
-    bumpCollab(m.collab.id, 6);
+    bumpCollab(m.collab.id, false);
     if (!preview) notifyAgency("contenu", name, `Post publié · ${m.brand}`);
     toast(t("Lien envoyé ✓ Ton agence le voit"));
   };
@@ -1086,7 +1092,7 @@ export function CreatorSpace({
       if (!r.ok) return toast(t("Ça n'a pas marché. Réessaie dans un instant."));
       setPosts((list) => (list ?? []).map((x) => (x.id === p.id ? r.post : x)));
       setStatsFor(null);
-      bumpCollab(p.collab_id, 7);
+      bumpCollab(p.collab_id, true);
       if (!preview) notifyAgency("stats", name, `Stats à 7 jours · ${m.brand}`);
       toast(t("Stats envoyées ✓ Ton agence s'en sert pour le bilan"));
     } finally {
@@ -3624,6 +3630,9 @@ export function CreatorSpace({
                               <span className="flex items-center gap-1.5 text-[14px] font-medium text-foreground">
                                 <Check className="h-4 w-4 text-muted-foreground" /> {t("Lu le {date}", { date: fmtDay(c.read_at, locale) })}
                               </span>
+                            ) : preview ? (
+                              // Aperçu agence : jamais « J'ai lu » à la place du créateur.
+                              <span className="text-[14px] text-muted-foreground">{t("Pas encore lu")}</span>
                             ) : (
                               <button
                                 type="button"
@@ -3677,6 +3686,8 @@ export function CreatorSpace({
                                   </button>
                                 </div>
                               </div>
+                            ) : cs === "aucun" && preview ? (
+                              <span className="text-[14px] text-muted-foreground">{t("Aucun")}</span>
                             ) : cs === "aucun" ? (
                               <button
                                 type="button"
@@ -3693,7 +3704,7 @@ export function CreatorSpace({
                                     <ExternalLink className="h-4 w-4 shrink-0" /> <span className="truncate">{t("Ouvrir le lien")}</span>
                                   </a>
                                 )}
-                                {cs === "propose" && (
+                                {cs === "propose" && !preview && (
                                   <button
                                     type="button"
                                     onClick={() => openConcept(b)}
@@ -3847,7 +3858,7 @@ export function CreatorSpace({
                                   </button>
                                 </div>
                               </div>
-                            ) : (
+                            ) : preview ? null : (
                               <button
                                 type="button"
                                 onClick={() => openPostStats(p)}
@@ -3859,6 +3870,10 @@ export function CreatorSpace({
                           </div>
                         );
                       })}
+                      {preview ? (
+                        // Aperçu agence : lecture seule (le lien et les stats viennent du créateur).
+                        !mine.length && <p className="mt-3 text-[14px] text-muted-foreground">{t("Aucun")}</p>
+                      ) : (
                       <div className={cn("flex items-center gap-2", mine.length ? "mt-4 border-t border-border pt-4" : "mt-3")}>
                         <input
                           type="url"
@@ -3878,6 +3893,7 @@ export function CreatorSpace({
                           <Share2 className="h-4 w-4" /> {t("Envoyer")}
                         </button>
                       </div>
+                      )}
                     </div>
                   );
                 })()}
