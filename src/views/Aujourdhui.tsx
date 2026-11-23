@@ -59,6 +59,7 @@ import {
 } from "@/lib/aujourdhui";
 import { anticipationLine, buildAnticipation, collapseItems, contractTypeLabel, groupSteps, inDays } from "@/lib/anticipation";
 import { explainItem } from "@/lib/todayExplain";
+import { ControleSection } from "@/components/controle-section";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { IconTile } from "@/components/ui/icon-tile";
@@ -563,6 +564,9 @@ export function Aujourdhui() {
     [todos, events, briefs, money, invoices, contracts, collabs, stepsByCollab, statsCreators, snoozed, now],
   );
 
+  // « À corriger » ne répète pas une collab déjà dans « Collabs à faire avancer ».
+  const stuckCollabs = useMemo(() => new Set(ahead.flatMap((i) => (i.kind === "collab" && i.collab ? [i.collab.id] : []))), [ahead]);
+
   const filters = money ? TODAY_FILTERS : TODAY_FILTERS.filter((f) => f !== "argent");
   const [filter, setFilter] = useStickyState<TodayFilter>("aujourdhui:filtre", filters, "tout");
   const all = useMemo(() => [...items, ...ahead], [items, ahead]);
@@ -922,6 +926,9 @@ export function Aujourdhui() {
               </div>
             )}
           </div>
+
+          {/* Contrôle qualité des données (fondateurs) : src/components/controle-section.tsx. */}
+          {money && <ControleSection exclureCollabs={stuckCollabs} />}
 
           {/* Raccourcis clavier (ordinateur). Collés au bord bas de la zone qui défile : elle a une
               marge basse (md:pb-7) où la liste restait visible sous la barre ; -bottom-7 + pb-10 la couvrent. */}
