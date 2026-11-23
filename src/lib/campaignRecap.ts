@@ -7,13 +7,16 @@
 import { fmtDay } from "./dates";
 import { totalsOf, emptyStat, fmtCompact, fmtPct, reliableEr, GOOD_ER_REACH, GOOD_ER_FOLLOWERS, type EngPlatform, type PostStat } from "./engagement";
 import { parseAmountStrict } from "./money";
+import { hasStats, linkKey, platformLabel, type CollabPost } from "./collabPosts";
 
-type IgPost = { id: string; at?: string; type?: string; product?: string; likes?: number | null; comments?: number | null; reach?: number | null; saves?: number | null; shares?: number | null; views?: number | null };
-type TtPost = { id: string; at?: string; views?: number | null; likes?: number | null; comments?: number | null; shares?: number | null };
-type YtPost = { id: string; at?: string; short?: boolean; views?: number | null; likes?: number | null; comments?: number | null };
+type IgPost = { id: string; url?: string; at?: string; type?: string; product?: string; likes?: number | null; comments?: number | null; reach?: number | null; saves?: number | null; shares?: number | null; views?: number | null };
+type TtPost = { id: string; url?: string; at?: string; views?: number | null; likes?: number | null; comments?: number | null; shares?: number | null };
+type YtPost = { id: string; url?: string; at?: string; short?: boolean; views?: number | null; likes?: number | null; comments?: number | null };
 export type CollabForRecap = {
   id: string; brand: string; creator: string | null; deliverables: string | null; cachet: string | null; step: number; created_at: string;
   ig?: { posts?: IgPost[] } | null; tt?: { posts?: TtPost[] } | null; yt?: { posts?: YtPost[] } | null;
+  /** Posts et stats à 7 jours déclarés par le créateur (table collab_posts), facultatifs. */
+  manual?: Pick<CollabPost, "id" | "url" | "platform" | "created_at" | "views" | "likes" | "comments" | "shares" | "saves">[] | null;
 };
 export type StepRow = { collab_id: string; step: number; reached_at: string };
 
@@ -54,6 +57,32 @@ export function collabStats(c: CollabForRecap): { stats: PostStat[]; labels: Map
     const kind = p.short ? "Short" : "YouTube";
     stats.push({ ...emptyStat(id, kind), likes: n(p.likes), comments: n(p.comments), views: n(p.views) });
     labels.set(id, `${kind === "Short" ? "Short YouTube" : "Vidéo YouTube"} du ${day(p.at)}`);
+  }
+  // Chiffres envoyés par le créateur (espace créateur, table collab_posts). Post déjà relevé
+  // par les synchros (même lien) : on complète ses chiffres (le plus grand des deux), sans
+  // jamais le compter deux fois ; sinon il s'ajoute.
+  const byLink = new Map<string, PostStat>();
+  const auto = [
+    ...(c.ig?.posts ?? []).map((p) => ({ url: p.url, id: `ig-${p.id}` })),
+    ...(c.tt?.posts ?? []).map((p) => ({ url: p.url, id: `tt-${p.id}` })),
+    ...(c.yt?.posts ?? []).map((p) => ({ url: p.url, id: `yt-${p.id}` })),
+  ];
+  for (const a of auto) {
+    const s = stats.find((x) => x.id === a.id);
+    if (s && linkKey(a.url)) byLink.set(linkKey(a.url), s);
+  }
+  const METRICS = ["likes", "comments", "saves", "shares", "views"] as const;
+  for (const p of c.manual ?? []) {
+    if (!hasStats(p)) continue;
+    const same = byLink.get(linkKey(p.url));
+    if (same) {
+      for (const k of METRICS) same[k] = Math.max(same[k], n(p[k]));
+      continue;
+    }
+    const id = `m-${p.id}`;
+    const kind = platformLabel(p.platform);
+    stats.push({ ...emptyStat(id, kind), likes: n(p.likes), comments: n(p.comments), saves: n(p.saves), shares: n(p.shares), views: n(p.views) });
+    labels.set(id, `${kind === "Post" ? "Post" : `Post ${kind}`} du ${day(p.created_at)}`);
   }
   return { stats, labels };
 }

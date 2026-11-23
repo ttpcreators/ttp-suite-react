@@ -45,6 +45,7 @@ import { CreatorPickerField } from "@/components/ui/creator-picker";
 import { useBlockedCreators } from "@/lib/useExclusivites";
 import { CollabLinkedPanel, useCollabAutoTasks } from "@/components/collab-links";
 import { CollabExcluPanel } from "@/components/exclu-alert";
+import { CollabCreatorPanel } from "@/components/collab-creator";
 import { CachetField } from "@/components/cachet-field";
 import { CACHET_ILLISIBLE } from "../../supabase/functions/_shared/cachet.ts";
 import { createStepTask } from "@/lib/collabLinksDb";
@@ -1126,6 +1127,14 @@ export function Collabs() {
         </div>
 
         <CollabTakeCard collab={{ id: row.id, brand: row.brand, creator: row.creator, cachet: row.cachet }} />
+        {/* Côté créateur : brief lu, concept à valider (étape 3), posts et stats à 7 jours. */}
+        <CollabCreatorPanel
+          collab={{ id: row.id, brand: row.brand, creator: row.creator }}
+          onStepReached={(n) => {
+            setRows((rs) => (rs ?? []).map((r) => (r.id === row.id && r.step < n ? { ...r, step: n } : r)));
+            setSteps((m) => ({ ...m, [row.id]: [...(m[row.id] ?? []), { collab_id: row.id, step: n, reached_at: new Date().toISOString() }] }));
+          }}
+        />
 
         <CollabLinkedPanel
           collab={{ id: row.id, brand: row.brand, creator: row.creator, step: row.step, status: row.status, cachet: row.cachet }}

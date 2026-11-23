@@ -31,6 +31,7 @@ import { Tabs } from "@/components/ui/animated-tabs";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { useIntent } from "@/lib/openIntent";
 import { buildRecap, publicationDate, readyForRecap, type CollabForRecap, type StepRow } from "@/lib/campaignRecap";
+import { loadCollabPosts } from "@/lib/collabPostsDb";
 import { dbUpdate } from "@/lib/db";
 import { EMPTY, fmtDay, todayISO } from "@/lib/dates";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
@@ -440,7 +441,9 @@ export function Debrief() {
       followersBy.tiktok = row?.tt?.followers || 0;
       followersBy.youtube = row?.yt?.subscribers || 0;
     }
-    const r = buildRecap(c, c.pub, followersBy);
+    // Chiffres envoyés par le créateur depuis son espace (table collab_posts ; vide avant le SQL).
+    const manual = c.manual ?? (await loadCollabPosts({ collabId: c.id }).catch(() => null))?.posts ?? [];
+    const r = buildRecap({ ...c, manual }, c.pub, followersBy);
     setBrand(c.brand);
     setCreator(cr?.name ?? c.creator ?? "");
     setPeriod(r.period);
