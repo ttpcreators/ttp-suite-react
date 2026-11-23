@@ -53,7 +53,10 @@ const refuse = (refus: string): Verdict => ({ refus, kitJoint: false, note: "" }
 
 /** Le roster (petit) avec ce qu'il faut pour reconnaître un créateur et contrôler son kit. */
 async function roster(sb: SupabaseClient): Promise<FicheRoster[] | null> {
-  const { data, error } = await sb.from("creators").select("id, name, status, email, email_pro, handle, instagram, tiktok, youtube, mediakit, ig, tt, yt");
+  // « * » et non une liste de colonnes : une colonne absente en prod (youtube, 23 novembre 2026)
+  // faisait échouer la lecture, donc refuser TOUS les mails de prospection.
+  const { data, error } = await sb.from("creators").select("*");
+  if (error) console.error("kitGarde roster", error.message);
   return error ? null : ((data as FicheRoster[] | null) ?? []);
 }
 
@@ -63,7 +66,7 @@ export async function verifierKitsDuMail(sb: SupabaseClient, m: MailAVerifier, m
   const prospection = !m.reponse || m.pieces.length > 0 || slugsCites(texte).length > 0;
   if (!prospection) return PASSE;
   const fiches = await roster(sb);
-  if (!fiches) return refuse("Vérification du media kit impossible (lecture du roster) : rien n'est parti, réessaie dans un instant.");
+  if (!fiches) return refuse("Vérification du media kit impossible (lecture du roster) : rien n'est parti. Ne retire pas `createur` pour passer : signale le blocage à Marc en VIGILANCE.");
   let aliases: { creator?: string | null; alias?: string | null }[] = [];
   if (m.alias) {
     const { data } = await sb.from("creator_mail_settings").select("creator, alias");
