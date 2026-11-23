@@ -45,6 +45,7 @@ import { CreatorPickerField } from "@/components/ui/creator-picker";
 import { useBlockedCreators } from "@/lib/useExclusivites";
 import { CollabLinkedPanel, useCollabAutoTasks } from "@/components/collab-links";
 import { CollabExcluPanel } from "@/components/exclu-alert";
+import { CachetField } from "@/components/cachet-field";
 import { createStepTask } from "@/lib/collabLinksDb";
 import { autoTaskFor, cachetAmount, cachetCurrency } from "@/lib/collabLinks";
 import { dealKind } from "@/lib/dealKind";
@@ -725,7 +726,7 @@ export function Collabs() {
             <TextField label="Libellé de la collab" value={eTitle} onChange={setETitle} placeholder="ex Campagne été" />
             <TextField label="Contact marque" value={eContact} onChange={setEContact} />
             <TextField label="Livrables" value={eDeliverables} onChange={setEDeliverables} placeholder="ex 3 posts · 1 reel" />
-            <TextField label="Cachet" value={eCachet} onChange={setECachet} />
+            <CachetField value={eCachet} onChange={setECachet} />
             <TextField label="Site de la marque (pour son logo)" value={eSite} onChange={setESite} placeholder="ex. seoni.fr" />
             <AutoGrowTextField label="Note" value={eNote} onChange={setENote} placeholder="Contexte, angle, points d'attention…" mentions={creators} />
             <button
@@ -1277,7 +1278,7 @@ export function Collabs() {
         <TextField label="Libellé de la collab" value={title} onChange={setTitle} placeholder="ex Campagne été" />
         <TextField label="Contact marque" value={contact} onChange={setContact} />
         <TextField label="Livrables" value={deliverables} onChange={setDeliverables} placeholder="ex 3 posts · 1 reel" />
-        <TextField label="Cachet" value={cachet} onChange={setCachet} />
+        <CachetField value={cachet} onChange={setCachet} />
         <AutoGrowTextField label="Note" value={note} onChange={setNote} placeholder="Contexte, angle, points d'attention…" className="min-w-full" mentions={creators} />
       </InlineForm>
 

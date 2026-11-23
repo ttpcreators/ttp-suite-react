@@ -15,6 +15,7 @@ import { meetEventBody, meetLinkOf, parseMeetRequest } from "../_shared/meetEven
 import { doublonPlanning, type Candidat, type PlanEvent } from "../_shared/planningDoublon.ts";
 import { readAppState } from "../_shared/appState.ts";
 import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
+import { CONTACT_TAGS, normaliserTag } from "../_shared/contactTags.ts";
 import type { Ctx } from "./oauth.ts";
 import { boxAddress, boxesFor, createDraft, parseMailBox, deleteClaudeDraft, draftRefs, listClaudeDrafts, listSendAs, PARTOUT, attachmentFromThread, markThreadRead, readThread, resolveSender, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { findSendAs, type SendAs } from "../_shared/sendAs.ts";
@@ -354,6 +355,8 @@ const ficheCreateur: Tool = {
       `# ${titleCase(name)}`,
       `Niche : ${c.niche ?? "?"} · plateforme : ${c.platform || "?"} · abonnés tous réseaux : ${compact(au.total)}${perPlatformText(au) ? ` (${perPlatformText(au)})` : ""} · engagement : ${c.er ?? "?"} · statut : ${c.status ?? "?"}${c.ville ? ` · ${c.ville}` : ""}`,
       ...(/^https:\/\//.test(String(c.photo_url ?? "")) ? [`Photo : ${c.photo_url}`] : []),
+      // Exclusivité avec l'agence : la colonne creators.exclu fait foi, la copie du blob en repli.
+      ...((typeof c.exclu === "boolean" ? c.exclu : (st.creatorExclusive as Json | undefined)?.[name.trim().toLowerCase()] === true) ? ["Exclusif avec l'agence (fiche roster)"] : []),
       ...(aliasMail ? [`Alias mail : ${aliasMail} (pour écrire en son nom : envoyer_en_tant_que dans creer_brouillon_mail / envoyer_mail)`] : []),
       `Comptes : ${[c.handle && `@${String(c.handle).replace(/^@+/, "").trim()}`, c.instagram && `IG ${c.instagram}`, c.tiktok && `TikTok ${c.tiktok}`, c.youtube && `YouTube ${c.youtube}`, c.email_pro && `email pro ${c.email_pro}`].filter(Boolean).join(" · ") || "?"}`,
       ig && ig.followers != null
@@ -1757,7 +1760,7 @@ const ajouterContact: Tool = {
   write: true,
   inputSchema: {
     type: "object",
-    properties: { marque: { type: "string" }, personne: { type: "string" }, role: { type: "string" }, email: { type: "string" }, instagram: { type: "string" }, telephone: { type: "string" }, categorie: { type: "string" } },
+    properties: { marque: { type: "string" }, personne: { type: "string" }, role: { type: "string" }, email: { type: "string" }, instagram: { type: "string" }, telephone: { type: "string" }, categorie: { type: "string", description: `Une de : ${CONTACT_TAGS.join(", ")} (Marque par défaut ; une autre valeur est rapprochée, sinon Autre)` } },
     required: ["marque"],
     additionalProperties: false,
   },
@@ -1771,7 +1774,7 @@ const ajouterContact: Tool = {
       if (s) return ok(`Contact déjà présent : ${s.brand} [contact ${s.id}].`);
     }
     const { data, error } = await sb.from("contacts").insert({
-      brand: str(a.marque, 120), person: str(a.personne, 120) || null, role: str(a.role, 80) || null, email: email || null, instagram: ig || null, phone: str(a.telephone, 40) || null, tag: str(a.categorie, 60) || null, tone: "cyan",
+      brand: str(a.marque, 120), person: str(a.personne, 120) || null, role: str(a.role, 80) || null, email: email || null, instagram: ig || null, phone: str(a.telephone, 40) || null, tag: normaliserTag(str(a.categorie, 60), "Marque"), tone: "cyan",
     }).select("id").single<{ id: string }>();
     return error ? fail(`Contact non créé : ${error.message}`) : ok(`Contact ajouté : ${str(a.marque, 120)} [contact ${data.id}].`);
   },

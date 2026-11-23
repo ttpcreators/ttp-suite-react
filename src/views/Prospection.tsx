@@ -27,6 +27,7 @@ import { useStickyState } from "@/lib/useStickyState";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { BrandTile, DetailRows, MasterList } from "@/components/brand-tile";
 import { Picker } from "@/components/ui/form";
+import { CachetField } from "@/components/cachet-field";
 import { NewMailDialog } from "@/components/mail-tools";
 import { priceRange } from "@/lib/pricingForm";
 import { formatEuro } from "@/lib/money";
@@ -266,7 +267,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
     >
       <CreatorPickerField label="Créateur" value={cvCreator} onChange={setCvCreator} creators={creators} blocked={blockedCv} />
       <TextField label="Livrables" value={cvDeliv} onChange={setCvDeliv} placeholder="ex. 2 reels Instagram" />
-      <TextField label="Cachet" value={cvCachet} onChange={setCvCachet} placeholder="ex. 950 €" />
+      <CachetField value={cvCachet} onChange={setCvCachet} />
     </InlineForm>
   );
 

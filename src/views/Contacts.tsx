@@ -58,6 +58,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { BrandIgInline, BrandIgPanel } from "@/components/BrandInstagram";
 import type { IgBrand } from "@/lib/instagram";
 import { lireEmailCheck, lireSequence } from "../../supabase/functions/_shared/sequence.ts";
+import { CONTACT_TAGS, SYSTEM_TAGS, normaliserTag, tagHorsListe } from "../../supabase/functions/_shared/contactTags.ts";
 
 type Row = {
   id: string;
@@ -238,15 +239,9 @@ function GmailLogo({ className = "h-4 w-4" }: { className?: string }) {
   );
 }
 
-const TAG_OPTIONS = [
-  { value: "Marque", label: "Marque" },
-  { value: "Agence", label: "Agence" },
-  { value: "Agence RP", label: "Agence RP" },
-  { value: "Média", label: "Média" },
-  { value: "PME", label: "PME" },
-  { value: "Freelance", label: "Freelance" },
-  { value: "Autre", label: "Autre" },
-];
+// Liste FERMÉE (supabase/functions/_shared/contactTags.ts, partagée avec l'outil Claude) :
+// toute saisie est ramenée à l'une de ces valeurs ; « Perso » et « Lead site » sont posés par l'app.
+const TAG_OPTIONS = CONTACT_TAGS.map((t) => ({ value: t, label: t }));
 
 const ALL_TAGS = "__all__";
 const CREATOR_FILTER = "__creator__"; // filtre : contacts ajoutés par un créateur
@@ -422,6 +417,8 @@ export function Contacts() {
   const [lastName, setLastName] = useState("");
   const [role, setRole] = useState("");
   const [tag, setTag] = useState("Marque");
+  // Ancien tag libre du contact modifié (hors de la liste) : rappelé sous le formulaire.
+  const [tagOld, setTagOld] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [insta, setInsta] = useState("");
@@ -712,6 +709,7 @@ export function Contacts() {
     setLastName("");
     setRole("");
     setTag("Marque");
+    setTagOld("");
     setEmail("");
     setPhone("");
     setInsta("");
@@ -729,7 +727,9 @@ export function Contacts() {
     setFirstName(r.first_name ?? parts[0] ?? "");
     setLastName(r.last_name ?? parts.slice(1).join(" "));
     setRole(r.role ?? "");
-    setTag(r.tag || "Marque");
+    const rawTag = (r.tag ?? "").trim();
+    setTag(rawTag ? normaliserTag(rawTag) : "Marque");
+    setTagOld(tagHorsListe(rawTag) ? rawTag : "");
     setEmail(r.email ?? "");
     setPhone(r.phone ?? "");
     setInsta(r.instagram ?? "");
@@ -925,7 +925,7 @@ export function Contacts() {
       first_name: first || null,
       last_name: last || null,
       role: role.trim(),
-      tag,
+      tag: normaliserTag(tag, "Marque"),
       email: email.trim(),
       phone: phone.trim(),
       instagram: insta.trim() || null,
@@ -1003,9 +1003,7 @@ export function Contacts() {
         return;
       }
       let order = nextOrder(currentRows);
-      const validTags = new Set(TAG_OPTIONS.map((t) => t.value));
       const payload = fresh.map((c) => {
-        const rawTag = (c.tag ?? "").trim();
         const first = (c.first_name ?? "").trim();
         const last = (c.last_name ?? "").trim();
         const person = (c.person ?? "").trim() || [first, last].filter(Boolean).join(" ");
@@ -1017,7 +1015,7 @@ export function Contacts() {
           instagram: (c.instagram ?? "").trim() || null,
           city: (c.city ?? "").trim() || null,
           role: (c.role ?? "").trim(),
-          tag: validTags.has(rawTag) ? rawTag : rawTag || "Autre",
+          tag: normaliserTag(c.tag), // liste fermée : « presse » → Média, inconnu → Autre
           email: (c.email ?? "").trim(),
           phone: (c.phone ?? "").trim(),
           tone: "indigo",
@@ -1931,12 +1929,17 @@ export function Contacts() {
               label="Catégorie"
               value={tag}
               onChange={setTag}
-              options={TAG_OPTIONS}
+              options={(SYSTEM_TAGS as readonly string[]).includes(tag) ? [...TAG_OPTIONS, { value: tag, label: tag }] : TAG_OPTIONS}
             />
             <TextField label="Email" value={email} onChange={setEmail} type="email" />
             <TextField label="Téléphone" value={phone} onChange={setPhone} />
             <TextField label="Instagram" value={insta} onChange={(v) => setInsta(typeHandle(v))} placeholder="@lamarque" className="sm:min-w-[150px]" />
             <TextField label="Ville" value={city} onChange={setCity} placeholder="Paris" className="sm:min-w-[130px]" />
+            {tagOld && (
+              <span className="basis-full text-[11px] text-muted-foreground">
+                Ancienne catégorie « {tagOld} » : enregistrée en « {tag} ».
+              </span>
+            )}
           </InlineForm>
 
           {currentRows.length === 0 ? (
