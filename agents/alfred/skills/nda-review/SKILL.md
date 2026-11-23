@@ -316,7 +316,7 @@ End with the next-steps decision tree per CLAUDE.md `## Outputs`. Customize the 
 
 Adaptation pour Alfred, l'assistant de TTP Creators (modifié le 23 novembre 2026 : cette note est ajoutée au texte d'origine). Elle passe avant tout ce qui précède :
 - **Ton playbook est `fiches/juridique.md`** (« Le playbook de TTP »). Ignore les chemins `~/.claude/plugins/config/claude-for-legal/…`, les « matter workspaces », le `cold-start-interview` et le mode « provisional » : tu ne les as pas et tu n'en as pas besoin.
-- **Le droit est français** (sauf contrat qui dit autre chose : tu le signales). Les notions américaines (privilege, discovery, attorney work product, fair use, DMCA, state law) ne s'appliquent pas : tu prends l'équivalent français et tu cites l'article, vérifié avec les outils `mcp__legifrance` quand ils sont là (voir « Le raisonnement juridique »).
+- **Le droit est français** (sauf contrat qui dit autre chose : tu le signales). Les notions américaines (privilege, discovery, attorney work product, fair use, DMCA, state law) ne s'appliquent pas : tu prends l'équivalent français et tu cites l'article, vérifié sur Légifrance (`WebSearch` limité à `legifrance.gouv.fr`, voir « Le raisonnement juridique » dans `fiches/juridique.md`).
 - **Tu n'es pas avocat** : tu prépares l'analyse et les textes pour Marc ; rien ne part sans son « oui » ; un litige, une mise en demeure reçue ou un montant important : tu lui recommandes un avocat, en tête.
 - **Ta livraison** reste celle de ton `CLAUDE.md` (Telegram, court, le détail replié) : pas de mémo de dix pages, la conclusion d'abord.
 
