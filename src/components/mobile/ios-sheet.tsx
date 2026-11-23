@@ -1,7 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { motion, useDragControls, useReducedMotion } from "motion/react";
-import type { LucideIcon } from "@/components/icons";
+import { Check, type LucideIcon } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { useIsPhone } from "@/lib/iosUi";
 import { useT } from "@/lib/i18n";
@@ -79,7 +79,17 @@ export function IosSheet({ onClose, children, zIndex = 1000, label }: { onClose:
   );
 }
 
-export type IosAction = { key: string; label: string; icon?: LucideIcon; danger?: boolean; onClick: () => void };
+export type IosAction = {
+  key: string;
+  label: string;
+  icon?: LucideIcon;
+  danger?: boolean;
+  onClick: () => void;
+  /** Pastille de couleur avant le libellé (classe Tailwind, ex. menus de statut). */
+  dot?: string;
+  /** Choix actuel : coche après le libellé (menus de statut). */
+  selected?: boolean;
+};
 
 /** Feuille d'actions iOS : titre/message facultatifs, actions, puis « Annuler » à part. */
 export function IosActionSheet({ title, message, actions, onCancel, cancelLabel: cancelLabelProp }: {
@@ -117,7 +127,9 @@ export function IosActionSheet({ title, message, actions, onCancel, cancelLabel:
               )}
             >
               {a.icon && <a.icon className="h-[19px] w-[19px] shrink-0" strokeWidth={1.9} />}
-              <span className="truncate">{a.label}</span>
+              {a.dot && <span className={cn("size-2.5 shrink-0 rounded-full", a.dot)} aria-hidden />}
+              <span className={cn("truncate", a.selected && "font-semibold")}>{a.label}</span>
+              {a.selected && <Check className="h-[18px] w-[18px] shrink-0" strokeWidth={2.2} aria-label={t("Choix actuel")} />}
             </button>
           ))}
         </div>

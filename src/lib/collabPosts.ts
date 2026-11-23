@@ -152,6 +152,18 @@ export function parseMetric(raw: string | null | undefined): number | null {
   return Math.round(base * mult);
 }
 
+/**
+ * Chiffre ambigu : un nombre à virgule ou à point SANS K ni M (« 12,5 », « 3.2 »).
+ * Sur le pavé iPhone il n'y a pas de K/M : « 12,5 » voulait souvent dire 12,5 K vues,
+ * et serait enregistré 13. On refuse donc de l'envoyer tant que le créateur n'a pas
+ * précisé. Les séparateurs de milliers (« 12.500 », « 1,234,567 ») ne sont pas ambigus.
+ */
+export function metricAmbigu(raw: string | null | undefined): boolean {
+  const s = String(raw ?? "").trim().toLowerCase().replace(/[\s\u00a0\u202f]/g, "");
+  if (!/^\d+[.,]\d+$/.test(s)) return false;
+  return !/^\d{1,3}([.,]\d{3})+$/.test(s);
+}
+
 /** Le post a-t-il au moins un chiffre ? */
 export function hasStats(p: Pick<CollabPost, PostMetric>): boolean {
   return POST_METRICS.some(({ key }) => typeof p[key] === "number");

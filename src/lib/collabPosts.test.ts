@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { hasStats, isDuplicatePost, isSocialPostLink, linkKey, normalizeLink, parseMetric, postPlatform, postStepTarget, postsTableMissing, statsDueDay } from "./collabPosts";
+import { hasStats, isDuplicatePost, isSocialPostLink, linkKey, metricAmbigu, normalizeLink, parseMetric, postPlatform, postStepTarget, postsTableMissing, statsDueDay } from "./collabPosts";
 
 describe("posts publiés déclarés par le créateur", () => {
   it("lit un lien collé, ajoute https et refuse le reste", () => {
@@ -62,6 +62,26 @@ describe("posts publiés déclarés par le créateur", () => {
     expect(parseMetric("")).toBeNull();
     expect(parseMetric("-3")).toBeNaN();
     expect(parseMetric("beaucoup")).toBeNaN();
+  });
+
+  it("repère un chiffre à virgule sans K ni M (pavé iPhone sans K/M)", () => {
+    // Ambigus : « 12,5 » voulait sans doute dire 12,5 K.
+    expect(metricAmbigu("12,5")).toBe(true);
+    expect(metricAmbigu("3.2")).toBe(true);
+    expect(metricAmbigu(" 0,8 ")).toBe(true);
+    expect(metricAmbigu("1 234,5")).toBe(true);
+    expect(metricAmbigu("12.50")).toBe(true);
+    // Clairs : K/M précisé, entier, séparateur de milliers, vide ou illisible.
+    expect(metricAmbigu("12,5K")).toBe(false);
+    expect(metricAmbigu("12,5 k")).toBe(false);
+    expect(metricAmbigu("1.2M")).toBe(false);
+    expect(metricAmbigu("12500")).toBe(false);
+    expect(metricAmbigu("12 500")).toBe(false);
+    expect(metricAmbigu("12.500")).toBe(false);
+    expect(metricAmbigu("1,234,567")).toBe(false);
+    expect(metricAmbigu("")).toBe(false);
+    expect(metricAmbigu(null)).toBe(false);
+    expect(metricAmbigu("beaucoup")).toBe(false);
   });
 
   it("stats présentes, date des 7 jours, erreurs de la base", () => {

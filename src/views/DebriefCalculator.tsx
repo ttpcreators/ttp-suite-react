@@ -25,6 +25,7 @@ import {
   type EngTotals,
 } from "@/lib/engagement";
 import { FEATURES } from "@/lib/features";
+import { metricAmbigu } from "@/lib/collabPosts";
 
 export type Shot = { path: string; name: string };
 export type ErBasis = "reach" | "followers";
@@ -137,6 +138,10 @@ function NumField({
   placeholder?: string;
   wide?: boolean;
 }) {
+  // Clavier texte : le pavé décimal de l'iPhone n'a ni K ni M (« 120 K » impossible).
+  // « 12,5 » sans K/M est signalé : 12,5 vues, ou 12,5 K ?
+  const raw = value.trim();
+  const ambigu = metricAmbigu(raw);
   return (
     <label className={cn("flex min-w-0 flex-col gap-1", wide && "col-span-2")}>
       <span className="truncate text-[10px] font-medium text-muted-foreground">{label}</span>
@@ -144,9 +149,22 @@ function NumField({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
-        inputMode="decimal"
-        className="w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] tabular-nums outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15"
+        inputMode="text"
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        aria-invalid={ambigu || undefined}
+        className={cn(
+          "w-full rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] tabular-nums outline-none transition-shadow focus:border-primary focus:ring-2 focus:ring-primary/15",
+          ambigu && "border-danger focus:border-danger focus:ring-danger/15",
+        )}
       />
+      {ambigu && (
+        <span role="alert" className="text-[10.5px] leading-snug text-dangertext">
+          {raw} {label.toLowerCase()} ? Tape {raw}K si c'est des milliers
+        </span>
+      )}
     </label>
   );
 }
