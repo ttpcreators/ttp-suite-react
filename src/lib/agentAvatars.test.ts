@@ -3,10 +3,10 @@ import { AGENT_FIGURINES, assignFigurines } from "./agentAvatars";
 
 describe("figurines des agents", () => {
   it("donne une figurine différente à chaque agent, dans l'ordre", () => {
-    expect(assignFigurines([{ id: "megan" }, { id: "tm" }], {})).toEqual({ megan: "circuit", tm: "neon" });
+    expect(assignFigurines([{ id: "alfred" }, { id: "tm" }], {})).toEqual({ alfred: "circuit", tm: "neon" });
   });
   it("respecte un choix enregistré et ne le redonne pas à un autre", () => {
-    expect(assignFigurines([{ id: "megan" }, { id: "tm" }], { tm: "circuit" })).toEqual({ megan: "neon", tm: "circuit" });
+    expect(assignFigurines([{ id: "alfred" }, { id: "tm" }], { tm: "circuit" })).toEqual({ alfred: "neon", tm: "circuit" });
   });
   it("ignore un choix inconnu", () => {
     expect(assignFigurines([{ id: "a" }], { a: "dragon" })).toEqual({ a: "circuit" });

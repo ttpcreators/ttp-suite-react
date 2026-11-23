@@ -785,7 +785,7 @@ export function Aujourdhui() {
     listRef.current?.focus({ preventScroll: true });
   };
 
-  // En-tête : filtre, Megan, « + » (nouvelle tâche).
+  // En-tête : filtre, Alfred, « + » (nouvelle tâche).
   const navSlot = useNavActionSlot();
   const newTask = () => {
     requestIntent("todo:new");
@@ -806,8 +806,8 @@ export function Aujourdhui() {
             type="button"
             onClick={() => go("agent")}
             className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-field text-foreground transition-colors hover:bg-rowhover"
-            aria-label="Demander à Megan"
-            title="Demander à Megan"
+            aria-label="Demander à Alfred"
+            title="Demander à Alfred"
           >
             <TtpSpark className="h-4 w-4" />
           </button>

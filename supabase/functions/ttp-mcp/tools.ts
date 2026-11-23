@@ -229,7 +229,7 @@ const pointDuJour: Tool = {
     ];
     if (ctx.founder) {
       out.push(`\n## Factures en retard`, lines(late.map((f) => `- ${f.ref} · ${f.party} · ${money(f.amount)} · échéance ${dueText(f.date)}`), "Aucune."));
-      // Ce que les agents (Alfred, Megan…) ont fait : Marc et Gianni sur la même longueur d'onde.
+      // Ce que les agents (Alfred…) ont fait : Marc et Gianni sur la même longueur d'onde.
       const j = await agentJournalSince(sb, 1, null).catch(() => [] as JournalLine[]);
       out.push(`\n## Ce que les agents ont fait (24 h) · détail avec journal_agents`, lines(j.slice(0, 20).map((e) => `- ${e.quand} · ${e.agent} · ${e.action}${e.detail ? ` : ${e.detail.slice(0, 220)}` : ""}`), "Rien de noté."));
     }
@@ -773,7 +773,7 @@ const aValider: Tool = {
     ]);
     if (error) return fail(`Lecture de la file impossible : ${error.message}`);
     const agents = new Map(((ags as Json[] | null) ?? []).map((x) => [String(x.id), x]));
-    const nameOf = (r: Json) => String((r.agent_id ? agents.get(String(r.agent_id))?.nom : [...agents.values()].find((x) => x.slug === "megan")?.nom) ?? "Agent");
+    const nameOf = (r: Json) => String((r.agent_id ? agents.get(String(r.agent_id))?.nom : undefined) ?? "Agent");
     const want = str(a.agent, 60).toLowerCase();
     const rows = ((data as Json[] | null) ?? []).filter((r) => !want || nameOf(r).toLowerCase().includes(want));
     // Validé dans la page Agents (bouton « Valider ») : Marc a dit oui depuis l'app, l'agent l'envoie.
@@ -2065,7 +2065,7 @@ async function agentJournalSince(sb: SupabaseClient, jours: number, agentKey: st
   const { data } = await q;
   return ((data as Json[] | null) ?? []).map((r) => ({
     quand: new Date(String(r.cree_le)).toLocaleString("fr-FR", { timeZone: "Europe/Paris", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }),
-    agent: names.get(String(r.agent_id)) ?? (String(r.action).startsWith("marc_") ? "Marc" : "Megan"),
+    agent: names.get(String(r.agent_id)) ?? (String(r.action).startsWith("marc_") ? "Marc" : "Agent"),
     action: String(r.action ?? ""), detail: String(r.detail ?? ""),
   }));
 }
@@ -2098,7 +2098,7 @@ const noterJournal: Tool = {
 const journalAgents: Tool = {
   name: "journal_agents",
   title: "Journal des agents",
-  description: "Ce que les agents de TTP (Alfred, Megan…) ont fait, décidé ou signalé, avec le détail, le plus récent d'abord (section Agents → Journal). Pour savoir où en est un dossier traité par un agent, ou ce qu'Alfred a fait pour Marc.",
+  description: "Ce que les agents de TTP (Alfred…) ont fait, décidé ou signalé, avec le détail, le plus récent d'abord (section Agents → Journal). Pour savoir où en est un dossier traité par un agent, ou ce qu'Alfred a fait pour Marc.",
   founder: true,
   inputSchema: { type: "object", properties: { jours: { type: "number", description: "Nombre de jours (défaut 2, 30 au plus)" }, agent: { type: "string", description: "Un seul agent (facultatif)" } }, additionalProperties: false },
   run: async (sb, _c, a) => {

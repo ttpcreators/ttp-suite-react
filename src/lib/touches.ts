@@ -4,7 +4,7 @@
  * répondu le Z ». Stocké dans la colonne `contacts.touches` (jsonb, tableau),
  * même motif que todos.subtasks. `last_contacted` reste synchronisé à chaque
  * touche pour que tout l'existant (bento, filtres, alerte sur-contact, vue
- * agent de Megan) continue de fonctionner.
+ * agent d'Alfred) continue de fonctionner.
  */
 
 export type TouchCanal = "whatsapp" | "email" | "instagram" | "linkedin" | "tel" | "autre";
