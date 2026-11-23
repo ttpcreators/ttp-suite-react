@@ -1577,7 +1577,18 @@ const statsCollab: Tool = {
         const t = Object.entries(tot).filter(([k]) => k !== "ig_reels_avg_watch_time");
         if (posts.length > 1 && t.length) out.push(`Total : ${t.map(([k, v]) => `${METRIQUES[k]} ${v.toLocaleString("fr-FR")}`).join(" · ")}`);
       }
-      if (!c.ig && !c.tt) out.push("Aucune stat relevée pour l'instant (la synchro passe chaque jour à partir de l'étape 4 « Tournage »).");
+      // Posts et stats à 7 jours envoyés par le créateur depuis son espace (table collab_posts,
+      // sql/2026-11-23-espace-createur-collab.sql ; ignoré tant que la table n'existe pas).
+      const { data: manual } = await sb.from("collab_posts").select("url, platform, created_at, views, likes, comments, shares, saves").eq("collab_id", String(c.id)).order("created_at");
+      const mp = (manual as Json[] | null) ?? [];
+      if (mp.length) {
+        out.push(`## Envoyé par le créateur · ${mp.length} post(s)`);
+        for (const p of mp) {
+          const m = (["views", "likes", "comments", "shares", "saves"] as const).filter((k) => typeof p[k] === "number").map((k) => `${METRIQUES[k]} ${Number(p[k]).toLocaleString("fr-FR")}`);
+          out.push(`- ${p.created_at ? frDay(String(p.created_at).slice(0, 10)) : ""} · ${p.url}\n  ${m.join(" · ") || "stats à 7 jours pas encore envoyées"}`);
+        }
+      }
+      if (!c.ig && !c.tt && !mp.length) out.push("Aucune stat relevée pour l'instant (la synchro passe chaque jour à partir de l'étape 4 « Tournage »).");
     }
     return ok(out.join("\n"));
   },

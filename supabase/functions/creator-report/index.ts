@@ -7,6 +7,9 @@
 // Le blob agence est agence-only (RLS) : on n'en sort que les détails des
 // factures de CE créateur, SES versements et SES mesures d'engagement.
 //
+// Version 2 (2026-11-23) : factures avec leur date de paiement `paid_at` (« Ce qu'on te
+// doit », page Gains), écho `version: 2`. Contrat inchangé sinon.
+//
 // AUTH (config.toml -> verify_jwt = true) : JWT requis.
 //   créateur → toujours lui-même (le nom envoyé est ignoré) ;
 //   agence   → le créateur demandé dans { creator } ; l'argent (factures,
@@ -52,11 +55,16 @@ Deno.serve(async (req: Request) => {
   const money = prof.role === "creator" || prof.agency_role === "founder";
   const pat = exact(name);
 
+  // Date de paiement (`paid_at`, page Gains « Ce qu'on te doit ») : si la colonne manque,
+  // on relit sans elle (même réponse qu'avant).
+  const readInvoices = async () => {
+    const cols = "id,ref,party,amount,date,status,created_at,collab_id";
+    const r = await sb.from("invoices").select(`${cols},paid_at`).ilike("creator", pat);
+    return r.error ? await sb.from("invoices").select(cols).ilike("creator", pat) : r;
+  };
   const [cr, inv, col, gif] = await Promise.all([
     sb.from("creators").select("name,commission,ig,tt,yt").ilike("name", pat).limit(1).maybeSingle(),
-    money
-      ? sb.from("invoices").select("id,ref,party,amount,date,status,created_at,collab_id").ilike("creator", pat)
-      : Promise.resolve({ data: [], error: null }),
+    money ? readInvoices() : Promise.resolve({ data: [], error: null }),
     sb.from("collabs").select("id,brand,deliverables,cachet,step,status,created_at").ilike("creator", pat),
     sb.from("gifting").select("brand,product,value,received_on,created_at").ilike("creator", pat),
   ]);
@@ -103,6 +111,8 @@ Deno.serve(async (req: Request) => {
     return Object.fromEntries(keys.filter((k) => k in o).map((k) => [k, o[k]]));
   };
   return jsonRes({
+    // Écho de version : 2 = factures avec `paid_at` (2026-11-23). Absent avec l'ancienne.
+    version: 2,
     money,
     creator: {
       name: (c?.name as string) ?? name,

@@ -45,6 +45,7 @@ import { CreatorPickerField } from "@/components/ui/creator-picker";
 import { useBlockedCreators } from "@/lib/useExclusivites";
 import { CollabLinkedPanel, useCollabAutoTasks } from "@/components/collab-links";
 import { CollabExcluPanel } from "@/components/exclu-alert";
+import { CollabCreatorPanel } from "@/components/collab-creator";
 import { createStepTask } from "@/lib/collabLinksDb";
 import { autoTaskFor, cachetAmount, cachetCurrency } from "@/lib/collabLinks";
 import { dealKind } from "@/lib/dealKind";
@@ -1110,6 +1111,8 @@ export function Collabs() {
         </div>
 
         <CollabTakeCard collab={{ id: row.id, brand: row.brand, creator: row.creator, cachet: row.cachet }} />
+        {/* Côté créateur : brief lu, concept à valider (étape 3), posts et stats à 7 jours. */}
+        <CollabCreatorPanel collab={{ id: row.id, brand: row.brand, creator: row.creator, step: row.step }} onConceptValidated={() => void setStep(row, 3)} />
 
         <CollabLinkedPanel
           collab={{ id: row.id, brand: row.brand, creator: row.creator, step: row.step, status: row.status, cachet: row.cachet }}

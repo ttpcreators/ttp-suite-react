@@ -74,7 +74,12 @@ import { selectTodosFor } from "@/lib/todoCreatorsDb";
 import { agencyAwaits, progressColumnMissing } from "@/lib/todoProgress";
 import { CreatorTodos } from "@/components/CreatorTodos";
 import { invoiceHT } from "@/lib/invoice";
-import { invoiceTone, netGains, netShare, partyBrand, PAYOUT_LABEL, payoutStatus, realGains, type RealPayout, type ReportDetail, type ReportInvoice } from "@/lib/creatorGains";
+import { invoiceTone, netGains, netShare, partyBrand, payoutStatus, realGains, type RealPayout, type ReportDetail } from "@/lib/creatorGains";
+import { OWED_LABEL, owedByCollab, type OwedInvoice } from "@/lib/creatorOwed";
+import { cleanConcept, CONCEPT_MAX, conceptState, type BriefConcept } from "@/lib/briefConcept";
+import { loadBriefConcepts, markBriefRead, proposeConcept } from "@/lib/briefConceptDb";
+import { hasStats, normalizeLink, parseMetric, platformLabel, POST_METRICS, statsDueDay, type CollabPost, type PostMetric } from "@/lib/collabPosts";
+import { addCollabPost, loadCollabPosts, saveCollabPostStats } from "@/lib/collabPostsDb";
 import { DEFAULT_COMMISSION, parseCommissionPct } from "@/lib/commission";
 import { daysBetween as daysBetweenIso, type AujDeadline } from "@/lib/aujourdhui";
 import { birthdayEcheances, contractEcheances, excluEcheances } from "@/lib/planningEcheances";
@@ -716,7 +721,7 @@ export function CreatorSpace({
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   // Vrais versements et net exact : fonction serveur `creator-report` (filtrée sur la créatrice).
   // Absente ou en erreur : la page Gains garde l'estimation faite à partir des factures.
-  const [money, setMoney] = useState<{ invoices: ReportInvoice[]; details: Record<string, ReportDetail>; payouts: RealPayout[]; noPayout?: string[] } | null>(null);
+  const [money, setMoney] = useState<{ invoices: OwedInvoice[]; details: Record<string, ReportDetail>; payouts: RealPayout[]; noPayout?: string[] } | null>(null);
   const [contacts, setContacts] = useState<Contact[]>([]);
   // Collabs du créateur (lecture seule : RLS `collabs_scoped`, écriture réservée à l'agence).
   const [collabs, setCollabs] = useState<MissionCollab[]>([]);
@@ -855,7 +860,8 @@ export function CreatorSpace({
     supabase.functions
       .invoke("creator-report", { body: { creator: name } })
       .then(({ data, error }) => {
-        const d = data as { money?: boolean; invoices?: ReportInvoice[]; details?: Record<string, ReportDetail>; payouts?: RealPayout[]; noPayout?: string[] } | null;
+        // `paid_at` des factures : renvoyé depuis la version 2 (écho `version`), sinon l'échéance sert d'ordre.
+        const d = data as { money?: boolean; invoices?: OwedInvoice[]; details?: Record<string, ReportDetail>; payouts?: RealPayout[]; noPayout?: string[] } | null;
         if (!alive || error || !d?.money || !Array.isArray(d.invoices)) return;
         setMoney({ invoices: d.invoices, details: d.details ?? {}, payouts: Array.isArray(d.payouts) ? d.payouts : [], noPayout: Array.isArray(d.noPayout) ? d.noPayout : [] });
       })
@@ -941,6 +947,157 @@ export function CreatorSpace({
     pingAgency("idee", `Script · ${briefs.find((b) => b.id === id)?.brand ?? ""}`);
     toast(t("Script enregistré ✓ Ton agence le voit"));
   };
+
+  // ── Brief lu et concept (colonnes SQL 2026-11-23) : null = colonnes absentes, boutons cachés.
+  // ── Posts publiés et stats à 7 jours (table collab_posts, même SQL) : null = table absente.
+  const [concepts, setConcepts] = useState<Record<string, BriefConcept> | null>(null);
+  const [posts, setPosts] = useState<CollabPost[] | null>(null);
+  const extrasFor = useRef<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    // Aperçu agence : jamais les données du créateur affiché avant.
+    if (extrasFor.current !== name) {
+      setConcepts(null);
+      setPosts(null);
+      extrasFor.current = name;
+    }
+    void loadBriefConcepts({ creator: name }).then((r) => {
+      if (!alive || r.error) return; // erreur passagère : on garde l'affichage
+      setConcepts(r.missing ? null : Object.fromEntries(r.rows.map((c) => [c.id, c])));
+    });
+    void loadCollabPosts({ creator: name }).then((r) => {
+      if (!alive || r.error) return;
+      setPosts(r.missing ? null : r.posts);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [name, live]);
+  const putConcept = (c: BriefConcept) => setConcepts((m) => (m ? { ...m, [c.id]: c } : m));
+  const readBrief = async (b: Brief) => {
+    const r = await markBriefRead(b.id);
+    if (!r) return toast(t("Ça n'a pas marché. Réessaie dans un instant."));
+    putConcept(r);
+    if (!preview) notifyAgency("brief-maj", name, `Brief lu · ${b.brand ?? ""}`, b.id);
+    toast(t("C'est noté ✓ Ton agence le voit"));
+  };
+  const [conceptFor, setConceptFor] = useState<string | null>(null);
+  const [conceptText, setConceptText] = useState("");
+  const [conceptLink, setConceptLink] = useState("");
+  const openConcept = (b: Brief) => {
+    const c = concepts?.[b.id];
+    setConceptFor(b.id);
+    setConceptText(c?.concept ?? "");
+    setConceptLink(c?.concept_link ?? "");
+  };
+  const sendConcept = async (b: Brief) => {
+    const c = cleanConcept(conceptText, conceptLink);
+    if ("error" in c) {
+      toast(c.error === "vide" ? t("Écris ton concept") : c.error === "long" ? t("Concept trop long : {n} caractères au plus", { n: CONCEPT_MAX }) : t("Lien illisible"));
+      return;
+    }
+    const r = await proposeConcept(b.id, c.concept, c.link);
+    if (!r) return toast(t("Ça n'a pas marché. Réessaie dans un instant."));
+    putConcept(r);
+    setConceptFor(null);
+    if (!preview) notifyAgency("brief-maj", name, `Concept proposé · ${b.brand ?? ""}`, b.id);
+    toast(t("Concept envoyé ✓ Ton agence le valide"));
+  };
+  // Étape atteinte côté base (lien → 6, stats → 7) : reflétée tout de suite dans la mission.
+  const bumpCollab = (collabId: string, step: number) =>
+    setCollabs((list) => list.map((c) => (c.id === collabId && c.step < step ? { ...c, step } : c)));
+  const [postUrl, setPostUrl] = useState("");
+  const [postBusy, setPostBusy] = useState(false);
+  const sendPostLink = async (m: Mission) => {
+    if (!m.collab) return;
+    const url = normalizeLink(postUrl);
+    if (!url) return toast(t("Lien illisible"));
+    setPostBusy(true);
+    const r = await addCollabPost(m.collab.id, name, url);
+    setPostBusy(false);
+    if (!r.ok) return toast(r.reason === "duplicate" ? t("Ce lien est déjà envoyé") : t("Ça n'a pas marché. Réessaie dans un instant."));
+    setPosts((list) => [...(list ?? []), r.post]);
+    setPostUrl("");
+    bumpCollab(m.collab.id, 6);
+    if (!preview) notifyAgency("contenu", name, `Post publié · ${m.brand}`);
+    toast(t("Lien envoyé ✓ Ton agence le voit"));
+  };
+  const EMPTY_STATS: Record<PostMetric, string> = { views: "", likes: "", comments: "", shares: "", saves: "" };
+  const [statsFor, setStatsFor] = useState<string | null>(null);
+  const [statsForm, setStatsForm] = useState<Record<PostMetric, string>>(EMPTY_STATS);
+  const [statsCapture, setStatsCapture] = useState<File | null>(null);
+  const openPostStats = (p: CollabPost) => {
+    setStatsFor(p.id);
+    setStatsCapture(null);
+    setStatsForm(Object.fromEntries(POST_METRICS.map(({ key }) => [key, p[key] == null ? "" : String(p[key])])) as Record<PostMetric, string>);
+  };
+  /** Capture des stats : rangée dans SON dossier, comme « Envoyer mes stats ». */
+  const uploadCapture = async (file: File, brand: string): Promise<string | null> => {
+    if (file.size > 15 * 1024 * 1024) {
+      toast(t("Fichier trop lourd (max 15 Mo)"));
+      return null;
+    }
+    const { data: u } = await supabase.auth.getUser();
+    const uid = u?.user?.id;
+    if (!uid) {
+      toast(t("Session expirée. Reconnecte-toi."));
+      return null;
+    }
+    const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const path = `creator-uploads/${uid}/stats-${Date.now()}.${ext}`;
+    const up = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined, upsert: false });
+    if (up.error) {
+      toast(t("Envoi interrompu. Vérifie ta connexion et réessaie."));
+      return null;
+    }
+    const created = await dbInsert("documents", {
+      creator: name,
+      name: `Stats ${brand} · ${titleCase(name)} · ${fmtDay(new Date())}`,
+      type: "stats",
+      size: `${Math.max(1, Math.round(file.size / 1024))} Ko`,
+      path,
+      sort_order: 0,
+    });
+    if (!created) {
+      await supabase.storage.from("documents").remove([path]).catch(() => {});
+      toast(t("Envoi interrompu. Réessaie dans un instant."));
+      return null;
+    }
+    setDocs((prev) => [created as unknown as Doc, ...prev]);
+    return path;
+  };
+  const savePostStats = async (p: CollabPost, m: Mission) => {
+    const vals = {} as Record<PostMetric, number | null>;
+    for (const { key, label } of POST_METRICS) {
+      const v = parseMetric(statsForm[key]);
+      if (v !== null && Number.isNaN(v)) return toast(t("Chiffre illisible : {field}", { field: t(label) }));
+      vals[key] = v;
+    }
+    if (!hasStats(vals)) return toast(t("Indique au moins un chiffre"));
+    setPostBusy(true);
+    try {
+      let capture: string | undefined;
+      if (statsCapture) {
+        const path = await uploadCapture(statsCapture, m.brand);
+        if (!path) return;
+        capture = path;
+      }
+      const r = await saveCollabPostStats(p.id, vals, capture);
+      if (!r.ok) return toast(t("Ça n'a pas marché. Réessaie dans un instant."));
+      setPosts((list) => (list ?? []).map((x) => (x.id === p.id ? r.post : x)));
+      setStatsFor(null);
+      bumpCollab(p.collab_id, 7);
+      if (!preview) notifyAgency("stats", name, `Stats à 7 jours · ${m.brand}`);
+      toast(t("Stats envoyées ✓ Ton agence s'en sert pour le bilan"));
+    } finally {
+      setPostBusy(false);
+    }
+  };
+  useEffect(() => {
+    setConceptFor(null);
+    setStatsFor(null);
+    setPostUrl("");
+  }, [missionId]);
 
   // ── Gifting côté créateur : voir ses cadeaux, marquer publié, signaler un cadeau reçu.
   const setGiftStatus = async (id: string, status: string) => {
@@ -2027,6 +2184,11 @@ export function CreatorSpace({
   const rate = parseCommissionPct(creator?.commission) ?? DEFAULT_COMMISSION;
   const real = useMemo(() => (money ? realGains(money.invoices, money.details, money.payouts, rate, new Date(), new Set(money.noPayout ?? [])) : null), [money, rate]);
   const net = useMemo(() => real ?? netGains(invoices, rate), [real, invoices, rate]);
+  // « Ce qu'on te doit », collab par collab (src/lib/creatorOwed.ts), avec les vrais versements.
+  const owed = useMemo(
+    () => (money ? owedByCollab({ invoices: money.invoices, details: money.details, payouts: money.payouts, ratePct: rate, collabs, skip: new Set(money.noPayout ?? []) }) : null),
+    [money, rate, collabs],
+  );
   const themeCtx = useTheme();
   // Mode sombre automatique : une créatrice qui n'a rien choisi suit le réglage du téléphone.
   useEffect(() => {
@@ -3450,6 +3612,103 @@ export function CreatorSpace({
                       </div>
                     </dl>
 
+                    {/* « J'ai lu » puis le concept proposé (SQL 2026-11-23 ; caché avant) */}
+                    {concepts !== null && (() => {
+                      const c = concepts[b.id] ?? null;
+                      const cs = conceptState(c);
+                      return (
+                        <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4">
+                          <div className="flex items-center justify-between gap-3">
+                            <span className="text-[14px] text-muted-foreground">{t("Lecture")}</span>
+                            {c?.read_at ? (
+                              <span className="flex items-center gap-1.5 text-[14px] font-medium text-foreground">
+                                <Check className="h-4 w-4 text-muted-foreground" /> {t("Lu le {date}", { date: fmtDay(c.read_at, locale) })}
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => void readBrief(b)}
+                                className="flex h-9 items-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                              >
+                                <Eye className="h-4 w-4" /> {t("J'ai lu")}
+                              </button>
+                            )}
+                          </div>
+                          <div>
+                            <div className="mb-2 flex items-center justify-between gap-3">
+                              <span className="text-[12px] font-medium text-muted-foreground">{t("Mon concept")}</span>
+                              {cs !== "aucun" && conceptFor !== b.id && (
+                                <StatusPill tone={cs === "valide" ? "ok" : "wait"} size="xs">{cs === "valide" ? t("Validé") : t("En attente")}</StatusPill>
+                              )}
+                            </div>
+                            {conceptFor === b.id ? (
+                              <div className="flex flex-col gap-2">
+                                <textarea
+                                  value={conceptText}
+                                  onChange={(e) => setConceptText(e.target.value)}
+                                  rows={4}
+                                  maxLength={CONCEPT_MAX}
+                                  autoFocus
+                                  placeholder={t("Ton idée en quelques lignes")}
+                                  className="w-full resize-y rounded-[12px] border border-border bg-field px-3 py-2 text-[15px] leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                                />
+                                <input
+                                  type="url"
+                                  inputMode="url"
+                                  value={conceptLink}
+                                  onChange={(e) => setConceptLink(e.target.value)}
+                                  placeholder={t("Lien (facultatif)")}
+                                  className="h-10 w-full rounded-[12px] border border-border bg-field px-3 text-[15px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                                />
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => void sendConcept(b)}
+                                    className="flex h-10 items-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                                  >
+                                    <Check className="h-4 w-4" /> {t("Envoyer")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConceptFor(null)}
+                                    className="h-10 rounded-full px-4 text-[14px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                                  >
+                                    {t("Annuler")}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : cs === "aucun" ? (
+                              <button
+                                type="button"
+                                onClick={() => openConcept(b)}
+                                className="flex h-10 items-center gap-1.5 rounded-full border border-border px-4 text-[14px] font-semibold text-primary transition-colors hover:bg-rowhover"
+                              >
+                                <Sparkles className="h-4 w-4" /> {t("Proposer")}
+                              </button>
+                            ) : (
+                              <>
+                                <p className="whitespace-pre-wrap rounded-[12px] bg-field px-3 py-2.5 text-[14px] leading-relaxed text-foreground [overflow-wrap:anywhere]">{c?.concept}</p>
+                                {c?.concept_link && (
+                                  <a href={c.concept_link} target="_blank" rel="noreferrer" className="mt-2 flex w-fit max-w-full items-center gap-1.5 text-[14px] font-semibold text-primary hover:opacity-80">
+                                    <ExternalLink className="h-4 w-4 shrink-0" /> <span className="truncate">{t("Ouvrir le lien")}</span>
+                                  </a>
+                                )}
+                                {cs === "propose" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => openConcept(b)}
+                                    className="mt-3 flex h-10 items-center gap-1.5 rounded-full border border-border px-4 text-[14px] font-semibold text-primary transition-colors hover:bg-rowhover"
+                                  >
+                                    <Pencil className="h-4 w-4" /> {t("Modifier")}
+                                  </button>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+
                     {/* Script écrit par le créateur — visible et exportable par l'agence */}
                     <div className="mt-4 border-t border-border pt-4">
                       {briefScriptId === b.id ? (
@@ -3519,6 +3778,109 @@ export function CreatorSpace({
                     <Upload className="h-5 w-5" /> {t("Envoyer mon contenu")}
                   </button>
                 )}
+
+                {/* Ta publication : lien du post, puis stats à 7 jours (table collab_posts, SQL 2026-11-23 ; caché avant) */}
+                {posts !== null && m.collab && (() => {
+                  const collabId = m.collab.id;
+                  const mine = posts.filter((p) => p.collab_id === collabId);
+                  return (
+                    <div className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
+                      <div className="flex items-center gap-1.5">
+                        <h2 className="text-[18px] font-bold tracking-[-0.01em]">{t("Ta publication")}</h2>
+                        <HelpTip title={t("Ta publication")}>
+                          {t("Colle le lien de ton post dès qu'il est en ligne, puis tes chiffres 7 jours après. Ton agence s'en sert pour le bilan de la marque.")}
+                        </HelpTip>
+                      </div>
+                      {mine.map((p) => {
+                        const due = statsDueDay(p.created_at);
+                        const withStats = hasStats(p);
+                        const figures = POST_METRICS.filter(({ key }) => typeof p[key] === "number")
+                          .map(({ key, label }) => `${fmtCompact(p[key] as number)} ${t(label).toLowerCase()}`)
+                          .join(" · ");
+                        return (
+                          <div key={p.id} className="mt-3 border-t border-border pt-3">
+                            <div className="flex items-center gap-2.5">
+                              <PlatformIcon platform={p.platform ?? ""} className="h-4 w-4 shrink-0 text-muted-foreground" />
+                              <a href={p.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate text-[15px] font-semibold text-primary hover:opacity-80">
+                                {t(platformLabel(p.platform))}
+                              </a>
+                              <StatusPill tone={withStats ? "ok" : "wait"} size="xs">
+                                {withStats ? t("Stats envoyées") : due ? t("Stats le {date}", { date: fmtDay(due, locale) }) : t("Stats à envoyer")}
+                              </StatusPill>
+                            </div>
+                            {withStats && statsFor !== p.id && <div className="mt-1.5 text-[13px] text-muted-foreground">{figures}</div>}
+                            {statsFor === p.id ? (
+                              <div className="mt-3 flex flex-col gap-2">
+                                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                                  {POST_METRICS.map(({ key, label }) => (
+                                    <label key={key} className="flex flex-col gap-1">
+                                      <span className="text-[12px] font-medium text-muted-foreground">{t(label)}</span>
+                                      <input
+                                        inputMode="decimal"
+                                        value={statsForm[key]}
+                                        onChange={(e) => setStatsForm((f) => ({ ...f, [key]: e.target.value }))}
+                                        className="h-10 w-full rounded-[12px] border border-border bg-field px-3 text-[15px] tabular-nums outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                                      />
+                                    </label>
+                                  ))}
+                                </div>
+                                <label className="flex h-10 w-fit max-w-full cursor-pointer items-center gap-1.5 rounded-full border border-border px-4 text-[14px] font-semibold text-foreground transition-colors hover:bg-rowhover">
+                                  <ImageIcon className="h-4 w-4 shrink-0" />
+                                  <span className="truncate">{statsCapture ? statsCapture.name : t("Joindre une capture")}</span>
+                                  <input type="file" accept="image/*" className="hidden" onChange={(e) => setStatsCapture(e.target.files?.[0] ?? null)} />
+                                </label>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    type="button"
+                                    onClick={() => void savePostStats(p, m)}
+                                    disabled={postBusy}
+                                    className="flex h-10 items-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                                  >
+                                    <Check className="h-4 w-4" /> {postBusy ? t("Envoi…") : t("Enregistrer")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setStatsFor(null)}
+                                    className="h-10 rounded-full px-4 text-[14px] font-medium text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"
+                                  >
+                                    {t("Annuler")}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => openPostStats(p)}
+                                className="mt-2 flex h-9 items-center gap-1.5 rounded-full border border-border px-4 text-[14px] font-semibold text-primary transition-colors hover:bg-rowhover"
+                              >
+                                <BarChart3 className="h-4 w-4" /> {withStats ? t("Modifier") : t("Saisir les stats")}
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                      <div className={cn("flex items-center gap-2", mine.length ? "mt-4 border-t border-border pt-4" : "mt-3")}>
+                        <input
+                          type="url"
+                          inputMode="url"
+                          value={postUrl}
+                          onChange={(e) => setPostUrl(e.target.value)}
+                          onKeyDown={(e) => e.key === "Enter" && void sendPostLink(m)}
+                          placeholder={mine.length ? t("Lien d'un autre post") : t("Lien de ton post")}
+                          className="h-10 min-w-0 flex-1 rounded-[12px] border border-border bg-field px-3 text-[15px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/15"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void sendPostLink(m)}
+                          disabled={postBusy || !postUrl.trim()}
+                          className="flex h-10 shrink-0 items-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                        >
+                          <Share2 className="h-4 w-4" /> {t("Envoyer")}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {/* Contact de la marque (tes contacts) */}
                 {contact && (
@@ -4098,28 +4460,32 @@ export function CreatorSpace({
                 <span className={cn("text-[20px] font-bold tabular-nums", TONE_TEXT.ok)}>{formatEuro(net.paid)}</span>
               </div>
 
-              {/* Les versements, un par collab, avec un statut simple */}
+              {/* Ce qu'on te doit, collab par collab : la marque n'a pas payé, le versement arrive, ou versé (src/lib/creatorOwed.ts) */}
               <section>
-                <h2 className="mb-2 px-1 text-[20px] font-bold tracking-[-0.02em]">{t("Tes versements")}</h2>
+                <h2 className="mb-2 px-1 text-[20px] font-bold tracking-[-0.02em]">{owed ? t("Ce qu'on te doit") : t("Tes versements")}</h2>
                 <div className="overflow-hidden rounded-[20px] bg-surface shadow-sm">
-                  {real ? (
-                    real.lines.length === 0 ? (
+                  {owed ? (
+                    owed.length === 0 ? (
                       <div className="p-5 text-[15px] text-muted-foreground">{t("Rien pour l'instant. Tes versements arrivent ici.")}</div>
                     ) : (
-                      real.lines.map((l, i) => {
-                        const st = PAYOUT_LABEL[l.status];
-                        const title = l.status === "encours" ? t("Ton agence te vire bientôt") : l.status === "verse" ? l.label || t("Versement") : brandOnly(l.label);
-                        const when = l.date ? fmtDay(toISODate(l.date) || l.date, locale) : "";
+                      owed.map((l, i) => {
+                        const st = OWED_LABEL[l.status];
+                        const title = brandOnly(l.brand) || t("Versement");
+                        const when = l.date ? fmtDay(l.date, locale) : "";
+                        const text = l.status === "verse" ? (when ? t(st.text, { date: when }) : t("Versé")) : t(st.text);
                         return (
                           <div key={l.key} className={cn("flex min-h-[60px] items-center gap-3 px-4 py-2.5", i > 0 && "border-t border-border")}>
-                            <IconTile tone="info"><span className="text-[17px] font-bold">{l.status === "encours" ? "→" : brandInitial(title)}</span></IconTile>
+                            <IconTile tone="info"><span className="text-[17px] font-bold">{brandInitial(title)}</span></IconTile>
                             <div className="min-w-0 flex-1">
                               <div className="truncate text-[16px] font-semibold text-foreground">{title}</div>
-                              {when && <div className="text-[13px] text-muted-foreground">{when}</div>}
+                              <div className="text-[13px] text-muted-foreground">
+                                {text}
+                                {l.status === "marque" && when ? ` · ${t("échéance {date}", { date: when })}` : ""}
+                              </div>
                             </div>
                             <div className="flex shrink-0 flex-col items-end gap-1">
                               <span className="whitespace-nowrap text-[16px] font-bold tracking-tight tabular-nums">{formatEuro(l.amount)}</span>
-                              <StatusPill tone={st.tone} size="xs">{t(st.label)}</StatusPill>
+                              <StatusPill tone={st.tone} size="xs">{t(st.pill)}</StatusPill>
                             </div>
                           </div>
                         );

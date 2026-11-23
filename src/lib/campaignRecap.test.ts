@@ -91,3 +91,25 @@ describe("bilan automatique : taux d'engagement sur une base homogène (F1)", ()
     expect(buildRecap({ ...collab, cachet: "1,5k€" }, pub, {}).budget).toBe("1,5k€");
   });
 });
+
+describe("bilan : chiffres envoyés par le créateur (collab_posts)", () => {
+  const base: CollabForRecap = {
+    id: "c2", brand: "Alpha", creator: "test un", deliverables: null, cachet: null, step: 7, created_at: "2026-11-01T10:00:00Z",
+    ig: { posts: [{ id: "p1", url: "https://www.instagram.com/reel/ABC/", at: "2026-11-10T18:00:00Z", product: "REELS", likes: 100, comments: 5 }] },
+  };
+  const manual = (over: Partial<NonNullable<CollabForRecap["manual"]>[number]>) => ({
+    id: "m1", url: "https://instagram.com/reel/abc", platform: "instagram", created_at: "2026-11-10T19:00:00Z",
+    views: 20000, likes: 90, comments: 6, shares: 40, saves: 70, ...over,
+  });
+
+  it("complète le post déjà relevé sans le compter deux fois", () => {
+    const r = buildRecap({ ...base, manual: [manual({})] }, null, {});
+    expect(r.stats).toHaveLength(1);
+    expect(r.stats[0]).toMatchObject({ views: 20000, likes: 100, comments: 6, shares: 40, saves: 70 });
+  });
+
+  it("ajoute un post que les synchros n'ont pas vu, ignore un post sans chiffres", () => {
+    const r = buildRecap({ ...base, manual: [manual({ id: "m2", url: "https://www.tiktok.com/@x/video/1", platform: "tiktok" }), manual({ id: "m3", url: "https://example.com/p", views: null, likes: null, comments: null, shares: null, saves: null })] }, null, {});
+    expect(r.stats.map((s) => s.kind)).toEqual(["Reel", "TikTok"]);
+  });
+});
