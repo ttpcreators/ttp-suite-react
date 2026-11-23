@@ -46,6 +46,8 @@ import { useBlockedCreators } from "@/lib/useExclusivites";
 import { CollabLinkedPanel, useCollabAutoTasks } from "@/components/collab-links";
 import { CollabExcluPanel } from "@/components/exclu-alert";
 import { createStepTask } from "@/lib/collabLinksDb";
+import { autoCollabSignee } from "@/lib/collabAutoDb";
+import { gagneeHorsBilan } from "@/lib/collabAuto";
 import { autoTaskFor, cachetAmount, cachetCurrency } from "@/lib/collabLinks";
 import { dealKind } from "@/lib/dealKind";
 import { DealBadge } from "@/components/ui/deal-badge";
@@ -426,6 +428,8 @@ export function Collabs() {
     const st = await getAppState().catch(() => ({}) as AppState);
     void mergeAppStateKey("collabCashMode", { [(created as unknown as Row).id]: readSettings(st.comptaSettings).encaissement });
     toast("Collab créée ✓");
+    // Prospect ouvert de la marque : passe « Signé », relié à la collab (jamais bloquant).
+    void autoCollabSignee((created as unknown as Row).id).then((msgs) => msgs.forEach((m) => toast(m)));
     setFormOpen(false);
     resetForm();
   };
@@ -564,6 +568,10 @@ export function Collabs() {
     if (!(await dbUpdate("collabs", row.id, { status }))) {
       setRows((rs) => (rs ?? []).map((r) => (r.id === row.id ? { ...r, status: prev } : r)));
       toast("Erreur, réessaie");
+    } else if (gagneeHorsBilan(prev, status, row.step)) {
+      // Gagnée à la main avant le bilan : le prospect de la marque passe « Signé ». Pas après
+      // l'étape 11 (bilan, renouvellement) : ce n'est plus la signature.
+      void autoCollabSignee(row.id).then((msgs) => msgs.forEach((m) => toast(m)));
     }
   };
 
