@@ -1220,7 +1220,6 @@ export function Collabs() {
 
       {/* Synthèse (bento) */}
       {rows !== null && rows.length > 0 && (() => {
-        const byPhase = PHASES.map((p) => activeRows.filter((r) => phaseOf(r.step) === p.key).length);
         const staleCount = activeRows.filter((r) => staleDays(r) !== null).length;
         const won = (rows ?? []).filter((r) => r.status === "gagnee" || (r.status === "active" && isDone(r.step))).length;
         const prod = activeRows.filter((r) => phaseOf(r.step) === "production").length;
@@ -1228,7 +1227,7 @@ export function Collabs() {
           <StatsBento phoneStrip
             className="mb-5"
             primary={{ eyebrow: "Collabs en cours", value: String(activeRows.length), caption: `sur ${rows.length} collab${rows.length > 1 ? "s" : ""} au total.` }}
-            bars={{ label: "En production", value: String(prod), series: byPhase }}
+            bars={{ label: "En production", value: String(prod), caption: "Tournage, validation ou publication" }}
             small={{ value: String(staleCount), label: `Bloquées depuis ${STALE_DAYS} j ou +` }}
             accent={{ value: String(won), label: "Bouclées / gagnées", icon: TtpTrophy }}
           />

@@ -85,6 +85,25 @@ partnerships@ttpcreators.pro`;
   return { subject, body };
 }
 
+/**
+ * Rappel AVANT l'échéance (facture pas encore en retard), action discrète d'Aujourd'hui :
+ * ton doux, rien à voir avec une relance d'impayé. `dueLabel` : « 21 déc. ».
+ */
+export function rappelEcheanceEmail(inv: Pick<RelanceInvoice, "ref" | "party" | "amount" | "amountLabel">, dueLabel: string): { subject: string; body: string } {
+  const montant = inv.amountLabel || formatEuro(parseAmount(inv.amount));
+  const subject = `Facture ${inv.ref} · échéance le ${dueLabel}`;
+  const body = `Bonjour,
+
+Petit rappel : la facture ${inv.ref}${inv.party ? ` (${inv.party})` : ""} d'un montant de ${montant} arrive à échéance le ${dueLabel}.
+
+Si le règlement est déjà prévu, merci de ne pas tenir compte de ce message.
+
+Bien cordialement,
+TTP Creators
+partnerships@ttpcreators.pro`;
+  return { subject, body };
+}
+
 /** Lien mailto prêt à ouvrir (destinataire = email client saisi sur la facture, si connu). */
 export function relanceMailto(to: string, subject: string, body: string): string {
   return `mailto:${encodeURIComponent(to.trim())}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;

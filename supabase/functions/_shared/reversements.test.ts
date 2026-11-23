@@ -56,3 +56,61 @@ describe("amountOf : même lecture que l'app (audit 2026-11-22)", () => {
     expect(amountOf("")).toBe(0);
   });
 });
+
+describe("une seule règle pour la page Reversements et Alfred (24 nov. 2026)", () => {
+  // Noms et montants fictifs : une créatrice active, une ancienne sortie du roster.
+  const input = {
+    invoices: [
+      { id: "a1", amount: "1 000,00 €", status: "payee", creator: "ZOÉ TEST", party: "Marque A", paid_at: "2026-10-02" },
+      { id: "a2", amount: "1 000,00 €", status: "payee", creator: "Zoé Test", party: "Marque B", paid_at: "2026-11-02" },
+      { id: "b1", amount: "400", status: "payee", creator: "Ancienne Test", party: "Marque C", paid_at: "2026-09-10" },
+      { id: "b2", amount: "900", status: "attente", creator: "Ancienne Test" },
+    ],
+    details: {},
+    payouts: { "zoé test": [{ id: "p1", date: "2026-10-20", amount: 900 }] },
+    rosterRates: { "ZOÉ TEST": 20, "ANCIENNE TEST": 25 },
+    savedRates: {},
+    collabModes: {},
+    contractHistory: [],
+    activeNames: ["Zoé Test"],
+  };
+
+  it("l'argent dû à une ancienne créatrice reste compté", async () => {
+    const { reversementRows, reversementTotals } = await import("./reversements.ts");
+    const rows = reversementRows(input);
+    const ancienne = rows.find((r) => r.creator === "ANCIENNE TEST")!;
+    expect(ancienne).toMatchObject({ du: 300, reste: 300, horsRoster: true, rate: 25 });
+    expect(rows.find((r) => r.creator === "ZOÉ TEST")).toMatchObject({ du: 1600, reverse: 900, reste: 700, horsRoster: false });
+    expect(reversementTotals(rows)).toEqual({ reste: 1000, createurs: 2, horsRoster: 1, du: 1900, reverse: 900 });
+  });
+
+  it("sans activeNames, personne n'est marqué sorti, et le total ne change pas", async () => {
+    const { reversementRows, reversementTotals } = await import("./reversements.ts");
+    const rows = reversementRows({ ...input, activeNames: undefined });
+    expect(rows.every((r) => !r.horsRoster)).toBe(true);
+    expect(reversementTotals(rows).reste).toBe(1000);
+  });
+
+  it("détail des factures : les virements couvrent les plus anciennes d'abord", async () => {
+    const { reversementRows } = await import("./reversements.ts");
+    const zoe = reversementRows(input).find((r) => r.creator === "ZOÉ TEST")!;
+    expect(zoe.lines.map((l) => [l.id, l.state, l.covered])).toEqual([["a2", "partiel", 100], ["a1", "reverse", 800]]);
+    expect(zoe.lignes.map((l) => [l.id, l.party, l.du])).toEqual([["a2", "Marque B", 800], ["a1", "Marque A", 800]]);
+    expect(zoe).toMatchObject({ writeKey: "zoé test", keys: ["zoé test"], lastPayout: "2026-10-20" });
+  });
+
+  it("outil reversements filtré sur un créateur : l'en-tête garde le total de l'agence", async () => {
+    const { reversementRows, reversementsTexte } = await import("./reversements.ts");
+    const txt = reversementsTexte(reversementRows(input), { createur: "zoé", tous: true }, (d) => d);
+    expect(txt.split("\n")[0].replace(/[\u202f\u00a0]/g, " ")).toBe("# Reversements · reste à verser 1 000,00 € à 2 créateur(s), dont 1 sorti du roster (total de l'agence, comme la page Reversements)");
+    expect(txt.replace(/[\u202f\u00a0]/g, " ")).toContain("Zoé Test · reste 700,00 €");
+    expect(txt).not.toContain("Ancienne Test");
+    const tout = reversementsTexte(reversementRows(input), {}, (d) => d);
+    expect(tout).toContain("Ancienne Test (sorti du roster, l'argent reste dû) · reste 300,00 €");
+  });
+
+  it("noms encore au roster : statut autre que « inactif »", async () => {
+    const { activeRosterNames } = await import("./reversements.ts");
+    expect(activeRosterNames([{ name: "A", status: "actif" }, { name: "B", status: "Inactif" }, { name: "C", status: null }, { name: "", status: "actif" }])).toEqual(["A", "C"]);
+  });
+});

@@ -1,9 +1,10 @@
 // ============================================================================
-// _shared/reversements.ts : reversements créateurs et fins de contrat, côté serveur.
-// Copie fidèle des règles de l'app (src/lib/reversements.ts, src/lib/invoice.ts,
-// src/lib/compta.ts noPayoutIds / cashModeFor / mandatesFrom, src/lib/anticipation.ts
-// contractEnd) : le connecteur Claude doit donner les MÊMES chiffres que les pages
-// Reversements et Fins de contrat. Pur : testé par reversements.test.ts.
+// _shared/reversements.ts : reversements créateurs et fins de contrat.
+// Le calcul des reversements (reversementRows, reversementTotals, allocate) est la SEULE
+// version : la page Reversements l'importe (via src/lib/reversements.ts), comme le
+// connecteur Claude et le résumé du matin. Le reste est une copie fidèle des règles de
+// l'app (src/lib/invoice.ts, src/lib/compta.ts cashModeFor / mandatesFrom,
+// src/lib/anticipation.ts contractEnd). Pur : testé par reversements.test.ts.
 // ============================================================================
 
 export const COMMISSION_FLOOR_EUR = 100;
@@ -45,8 +46,8 @@ export function pctOf(s: unknown): number | null {
 }
 
 export type Detail = {
-  items?: { qty?: unknown; unit?: unknown }[];
-  franchise?: boolean;
+  items?: { qty?: unknown; unit?: unknown }[] | null;
+  franchise?: boolean | null;
   vatRate?: unknown;
   commissionRate?: unknown;
   onBehalf?: boolean | null;
@@ -99,71 +100,216 @@ export function cashModeFor(collabId: unknown, _creator: unknown, collabModes: R
   return set === "createur" ? "createur" : "agence";
 }
 
-export type RevInvoice = { id: string; amount: unknown; status: unknown; creator: unknown; collab_id?: unknown; party?: unknown; date?: unknown; paid_at?: unknown };
-export type Payout = { date?: string; amount?: unknown; note?: string };
-/** Part du créateur sur une facture payée (comme les lignes de la page Reversements). */
-export type RevLigne = { id: string; collabId: string | null; party: string; paidOn: string; du: number };
-export type RevRow = { creator: string; encaisse: number; ht: number; rate: number; commission: number; du: number; reverse: number; reste: number; lastPayout: string | null; lignes: RevLigne[] };
+// ── Reversements : LA règle, partagée par la page Reversements (src/lib/reversements.ts la
+// réexporte), le connecteur Claude (outil `reversements`, Alfred) et le résumé du matin.
+// Une seule fonction, pour que l'app et Alfred donnent toujours le même reste à verser.
+//   - dû = part créateur (HT moins commission, plus la TVA d'une facture au nom du créateur)
+//     des factures PAYÉES par la marque ;
+//   - versé = virements enregistrés (blob `creatorPayouts`) ;
+//   - reste = dû moins versé.
+// L'argent dû à un créateur est dû même s'il a quitté le roster : tout nom qui a une facture
+// payée ou un versement a sa ligne, fiche roster ou pas (règle de Marc, 24 nov. 2026).
+// Un créateur se reconnaît sans tenir compte des majuscules ni des espaces autour du nom.
 
-export function reversementRows(input: {
+export type RevInvoice = { id: string; amount: unknown; status: unknown; creator: unknown; collab_id?: unknown; party?: unknown; ref?: unknown; date?: unknown; paid_at?: unknown };
+export type Payout = { id?: string; date?: string; amount?: unknown; note?: string };
+/** Une facture payée dans le détail d'un créateur : sa part, et ce que les virements couvrent
+ *  (les plus anciennes factures d'abord). */
+export type RevLine = {
+  id: string; brand: string; ref: string; paidOn: string; collabId: string | null;
+  /** Part du créateur sur cette facture. */
+  du: number;
+  /** Déjà couvert par les virements. */
+  covered: number;
+  state: "reverse" | "partiel" | "a_reverser";
+};
+/** Part du créateur sur une facture payée (format attendu par _shared/collabAutoDb.ts). */
+export type RevLigne = { id: string; collabId: string | null; party: string; paidOn: string; du: number };
+export type RevRow<P extends Payout = Payout> = {
+  /** Nom affiché (celui de la fiche roster s'il existe). */
+  creator: string;
+  /** Sorti du roster (fiche inactive ou absente) : ancien créateur, à qui l'argent reste dû.
+   *  Toujours false si `activeNames` n'est pas fourni. */
+  horsRoster: boolean;
+  /** Clés du blob `creatorPayouts` qui désignent ce créateur (plusieurs graphies possibles). */
+  keys: string[];
+  /** Clé où ranger un nouveau versement (une clé existante de préférence). */
+  writeKey: string;
+  /** Payé par la marque, TTC. */
+  encaisse: number;
+  ht: number;
+  /** Taux effectif (commission / HT), sinon taux de la fiche. */
+  rate: number;
+  commission: number;
+  du: number;
+  reverse: number;
+  reste: number;
+  /** Versements, du plus récent au plus ancien. */
+  payouts: P[];
+  lastPayout: string | null;
+  /** Factures payées qui font ce montant, des plus récentes aux plus anciennes. */
+  lines: RevLine[];
+  lignes: RevLigne[];
+};
+
+export function reversementRows<P extends Payout = Payout>(input: {
   invoices: RevInvoice[];
   details: Record<string, Detail | undefined>;
-  payouts: Record<string, Payout[]>;
+  payouts: Record<string, P[]>;
+  /** Taux de la fiche roster, par nom (tout le roster, actifs ou non). */
   rosterRates: Record<string, number>;
+  /** Taux mémorisés à l'enregistrement d'une facture (blob `creatorCommission`), par nom. */
   savedRates: Record<string, number>;
-  collabModes: Record<string, string>;
-  contractHistory: unknown;
-}): RevRow[] {
+  /** Taux faute de fiche et de taux mémorisé (20 % par défaut). */
+  defaultRate?: number;
+  /** Blob `collabCashMode` : une collab en mode « createur » (la marque paie le créateur) n'a
+   *  rien à reverser, comme une facture de commission (page Compta). */
+  collabModes?: Record<string, string>;
+  contractHistory?: unknown;
+  /** Autres factures à écarter (ids). */
+  skip?: ReadonlySet<string>;
+  /** Créateurs actuellement au roster (fiche au statut autre que « inactif ») : sert seulement
+   *  à repérer les anciens créateurs, jamais à les écarter. */
+  activeNames?: string[];
+}): RevRow<P>[] {
   const roster = new Map<string, { name: string; rate: number }>();
-  for (const [name, rate] of Object.entries(input.rosterRates)) roster.set(key(name), { name, rate });
+  for (const [name, rate] of Object.entries(input.rosterRates ?? {})) roster.set(key(name), { name, rate });
   const saved = new Map<string, number>();
   for (const [name, rate] of Object.entries(input.savedRates ?? {})) if (Number.isFinite(Number(rate))) saved.set(key(name), Number(rate));
-  const rateOf = (k: string) => roster.get(k)?.rate ?? saved.get(k) ?? DEFAULT_COMMISSION;
+  const fallback = input.defaultRate ?? DEFAULT_COMMISSION;
+  const rateOf = (k: string) => roster.get(k)?.rate ?? saved.get(k) ?? fallback;
+  const modes = input.collabModes ?? {};
   const mandates = mandatesFrom(input.contractHistory);
+  const str = (v: unknown) => String(v ?? "").trim();
+  const active = input.activeNames ? new Set(input.activeNames.map(key)) : null;
 
-  type Acc = { name: string; encaisse: number; ht: number; commission: number; du: number; keys: string[]; lignes: RevLigne[] };
+  type Acc = { name: string; encaisse: number; ht: number; commission: number; du: number; keys: string[]; lines: Omit<RevLine, "covered" | "state">[] };
   const acc = new Map<string, Acc>();
   const bump = (raw: string): Acc => {
     const k = key(raw);
     let a = acc.get(k);
     if (!a) {
-      a = { name: roster.get(k)?.name ?? raw.trim(), encaisse: 0, ht: 0, commission: 0, du: 0, keys: [], lignes: [] };
+      a = { name: roster.get(k)?.name ?? raw.trim(), encaisse: 0, ht: 0, commission: 0, du: 0, keys: [], lines: [] };
       acc.set(k, a);
     }
     return a;
   };
   for (const iv of input.invoices) {
-    if (iv.status !== "payee" || !key(iv.creator)) continue;
+    if (iv.status !== "payee" || !key(iv.creator) || input.skip?.has(iv.id)) continue;
     const d = input.details[iv.id];
     // Marque qui paie le créateur, ou facture de commission : rien à reverser (page Compta).
-    if (d?.kind === "commission" || cashModeFor(iv.collab_id, iv.creator, input.collabModes, mandates) === "createur") continue;
+    if (d?.kind === "commission" || cashModeFor(iv.collab_id, iv.creator, modes, mandates) === "createur") continue;
     const a = bump(String(iv.creator));
     const t = invoiceTotals(amountOf(iv.amount), d, rateOf(key(iv.creator)));
     a.encaisse += t.ttc;
     a.ht += t.ht;
     a.commission += t.commission;
-    const part = t.reversal + (d?.onBehalf ? t.tva : 0);
-    a.du += part;
-    a.lignes.push({ id: iv.id, collabId: iv.collab_id ? String(iv.collab_id) : null, party: String(iv.party ?? "").trim(), paidOn: String(iv.paid_at ?? iv.date ?? "").slice(0, 10), du: cents(part) });
+    // Facture au nom du créateur (mandat) : la TVA facturée est la sienne, elle lui est reversée.
+    const share = t.reversal + (d?.onBehalf ? t.tva : 0);
+    a.du += share;
+    a.lines.push({
+      id: iv.id, brand: str(iv.party), ref: str(iv.ref),
+      paidOn: String(iv.paid_at ?? iv.date ?? "").slice(0, 10), collabId: iv.collab_id ? String(iv.collab_id) : null, du: cents(share),
+    });
   }
+  // Les créateurs qui ont déjà des versements apparaissent aussi (même sans facture payée).
   for (const [k, list] of Object.entries(input.payouts ?? {})) {
     if (!key(k) || !Array.isArray(list)) continue;
     bump(k).keys.push(k);
   }
-  const out: RevRow[] = [];
+
+  const out: RevRow<P>[] = [];
   for (const [k, a] of acc) {
-    const payouts = a.keys.flatMap((pk) => input.payouts[pk] ?? []);
+    const payouts = a.keys.flatMap((pk) => input.payouts[pk] ?? []).sort((x, y) => String(y?.date ?? "").localeCompare(String(x?.date ?? "")));
     const reverse = cents(payouts.reduce((s, p) => s + finite(p?.amount), 0));
     const ht = cents(a.ht);
     const commission = cents(a.commission);
     const du = cents(a.du);
-    const last = payouts.map((p) => String(p?.date ?? "")).filter(Boolean).sort().pop() ?? null;
-    out.push({ creator: a.name, encaisse: cents(a.encaisse), ht, rate: ht > 0 ? Math.round((commission / ht) * 100) : rateOf(k), commission, du, reverse, reste: cents(du - reverse), lastPayout: last, lignes: a.lignes });
+    const writeKey = a.keys.find((pk) => (input.payouts[pk] ?? []).length > 0) ?? a.keys[0] ?? a.name;
+    const lines = allocate(a.lines, reverse);
+    out.push({
+      creator: a.name,
+      horsRoster: active ? !active.has(k) : false,
+      keys: a.keys,
+      writeKey,
+      encaisse: cents(a.encaisse),
+      ht,
+      rate: ht > 0 ? Math.round((commission / ht) * 100) : rateOf(k),
+      commission,
+      du,
+      reverse,
+      reste: cents(du - reverse),
+      payouts,
+      lastPayout: payouts.map((p) => String(p?.date ?? "")).find(Boolean) ?? null,
+      lines,
+      lignes: lines.map((l) => ({ id: l.id, collabId: l.collabId, party: l.brand, paidOn: l.paidOn, du: l.du })),
+    });
   }
   return out.sort((x, y) => y.reste - x.reste);
 }
 
+/** Reste à verser (au-delà de l'écart d'arrondi toléré). */
 export const owesMoney = (r: Pick<RevRow, "reste">) => r.reste > PAYOUT_TOLERANCE_EUR;
+/** Versé plus que dû (facture supprimée ou repassée « en attente » après un virement). */
+export const overpaid = (r: Pick<RevRow, "reste">) => r.reste < -PAYOUT_TOLERANCE_EUR;
+
+/**
+ * Totaux affichés en tête de la page Reversements et de l'outil `reversements` : le reste
+ * compte TOUS les créateurs à qui on doit de l'argent, anciens compris.
+ */
+export function reversementTotals(rows: Pick<RevRow, "reste" | "du" | "reverse" | "horsRoster">[]) {
+  const owing = rows.filter(owesMoney);
+  return {
+    reste: cents(owing.reduce((s, r) => s + r.reste, 0)),
+    createurs: owing.length,
+    /** Dont créateurs sortis du roster. */
+    horsRoster: owing.filter((r) => r.horsRoster).length,
+    du: cents(rows.reduce((s, r) => s + r.du, 0)),
+    reverse: cents(rows.reduce((s, r) => s + r.reverse, 0)),
+  };
+}
+
+const eurTxt = (n: number) => `${n.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+const nomTxt = (s: string) => s.toLocaleLowerCase("fr-FR").replace(/(^|[^\p{L}])(\p{L})/gu, (_m, p: string, c: string) => p + c.toLocaleUpperCase("fr-FR"));
+
+/**
+ * Texte de l'outil `reversements` (Alfred). L'en-tête donne TOUJOURS le total de l'agence,
+ * même filtré sur un créateur : avant (nov. 2026), un filtre sur un créateur renvoyait « reste à
+ * verser … à 1 créateur », lu comme le total alors que la page comptait aussi une ancienne créatrice.
+ */
+export function reversementsTexte(rows: RevRow[], opts: { createur?: string; tous?: boolean }, day: (iso: string) => string): string {
+  const totals = reversementTotals(rows);
+  const anciens = totals.horsRoster ? `, dont ${totals.horsRoster} sorti${totals.horsRoster > 1 ? "s" : ""} du roster` : "";
+  const head = `# Reversements · reste à verser ${eurTxt(totals.reste)} à ${totals.createurs} créateur(s)${anciens} (total de l'agence, comme la page Reversements)`;
+  const who = key(opts.createur);
+  const filtered = who ? rows.filter((r) => key(r.creator).includes(who)) : rows;
+  const shown = opts.tous || who ? filtered : filtered.filter(owesMoney);
+  const ligne = (r: RevRow) =>
+    `- ${nomTxt(r.creator)}${r.horsRoster ? " (sorti du roster, l'argent reste dû)" : ""} · reste ${eurTxt(r.reste)} · dû ${eurTxt(r.du)} (factures payées ${eurTxt(r.encaisse)} TTC, commission ${r.rate} %) · versé ${eurTxt(r.reverse)}${r.lastPayout ? ` · dernier virement ${day(r.lastPayout)}` : ""}`;
+  const out = [head];
+  if (who) out.push(`\n## Filtre « ${String(opts.createur).trim()} »`);
+  out.push(...shown.map(ligne));
+  if (!shown.length) out.push(who ? "Aucun créateur ne correspond." : "Tout est à jour.");
+  return out.join("\n");
+}
+
+/** Noms des créateurs encore au roster (statut autre que « inactif »), pour `activeNames`. */
+export function activeRosterNames(creators: { name?: unknown; status?: unknown }[] | null | undefined): string[] {
+  return (creators ?? []).filter((c) => key(c?.status ?? "actif") !== "inactif" && key(c?.name)).map((c) => String(c.name));
+}
+
+/** Répartit le total versé sur les factures, les plus anciennes d'abord. */
+export function allocate(lines: Omit<RevLine, "covered" | "state">[], paid: number): RevLine[] {
+  let left = cents(paid);
+  const oldestFirst = [...lines].sort((x, y) => x.paidOn.localeCompare(y.paidOn) || x.id.localeCompare(y.id));
+  const out = oldestFirst.map((l): RevLine => {
+    const covered = cents(Math.max(0, Math.min(l.du, left)));
+    left = cents(left - covered);
+    const state = l.du - covered <= PAYOUT_TOLERANCE_EUR ? "reverse" : covered > 0 ? "partiel" : "a_reverser";
+    return { ...l, covered, state };
+  });
+  return out.reverse();
+}
 
 // ── Fins de contrat (page Échéances / Fins de contrat) ─────────────────────────
 export type Deadline = { id?: string; creator?: string; type?: string; start?: string; months?: number; note?: string };

@@ -6,11 +6,11 @@ import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, parseAm
 import { useCreators } from "@/lib/useCreators";
 import { commissionMap, DEFAULT_COMMISSION } from "@/lib/commission";
 import { cents } from "@/lib/invoice";
-import { mandatesFrom, noPayoutIds, type ComptaDetail } from "@/lib/compta";
+import type { ComptaDetail } from "@/lib/compta";
 import { collabIdMissing } from "@/lib/collabLinks";
 import { openCollab } from "@/lib/collabLinksDb";
 import { autoVersement } from "@/lib/collabAutoDb";
-import { owesMoney, overpaid, reversementRows, type Payout, type PayoutsMap, type RevInvoice, type RevRow } from "@/lib/reversements";
+import { activeRosterNames, owesMoney, overpaid, reversementRows, reversementTotals, type Payout, type PayoutsMap, type RevInvoice, type RevRow } from "@/lib/reversements";
 import { titleCase } from "@/lib/utils";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { useLiveKey } from "@/lib/useLive";
@@ -92,13 +92,15 @@ export function Reversements() {
       savedRates: commissions,
       defaultRate: DEFAULT_COMMISSION,
       // Marque qui paie le créateur, facture de commission : rien à reverser (page Compta).
-      skip: noPayoutIds(invoices, details, (app?.collabCashMode as Record<string, string>) ?? {}, mandatesFrom(app?.contractHistory)),
+      collabModes: (app?.collabCashMode as Record<string, string>) ?? {},
+      contractHistory: app?.contractHistory,
+      // Repère les anciens créateurs (sortis du roster) : leur argent reste dû et compté.
+      activeNames: activeRosterNames(creators),
     });
   }, [invoices, commissions, payoutsMap, creators, app]);
 
-  const totalReste = cents(rows.reduce((s, r) => s + (owesMoney(r) ? r.reste : 0), 0));
-  const totalDu = cents(rows.reduce((s, r) => s + r.du, 0));
-  const totalReverse = cents(rows.reduce((s, r) => s + r.reverse, 0));
+  // Mêmes totaux que l'outil `reversements` d'Alfred (_shared/reversements.ts).
+  const totals = reversementTotals(rows);
 
   // Relit FRAIS le blob et ne fusionne QUE les entrées modifiées (paiements = argent :
   // deux postes ne doivent jamais s'écraser). Renvoie le booléen d'écriture.
@@ -193,18 +195,22 @@ export function Reversements() {
   return (
     <div className="space-y-4">
       {rows.length > 0 && (() => {
-        const nbAPayer = rows.filter(owesMoney).length;
+        const nbAPayer = totals.createurs;
+        const top = rows.find(owesMoney);
         return (
           <StatsBento phoneStrip
             primary={{
               eyebrow: "Reste à reverser",
-              value: formatEuro(totalReste),
-              caption: `${nbAPayer} créateur${nbAPayer > 1 ? "s" : ""} à payer · ${formatEuro(totalDu)} dû au total.`,
+              value: formatEuro(totals.reste),
+              caption: `${nbAPayer} créateur${nbAPayer > 1 ? "s" : ""} à payer${totals.horsRoster ? `, dont ${totals.horsRoster} sorti${totals.horsRoster > 1 ? "s" : ""} du roster` : ""}.`,
             }}
-            // Valeur cohérente avec l'intitulé et les barres (reste dû) ; le déjà reversé a sa propre case.
-            bars={{ label: "Plus gros reste dû", value: formatEuro(Math.max(0, ...rows.map((r) => r.reste))), series: rows.map((r) => Math.max(0, r.reste)) }}
-            small={{ value: String(nbAPayer), label: "À payer" }}
-            accent={{ value: formatEuro(totalReverse), label: "Déjà reversé", icon: Wallet }}
+            bars={{
+              label: "Plus gros reste dû",
+              value: formatEuro(top ? top.reste : 0),
+              caption: top ? titleCase(top.creator) : "Personne",
+            }}
+            small={{ value: formatEuro(totals.du), label: "Dû au total", caption: "Part créateurs des factures payées" }}
+            accent={{ value: formatEuro(totals.reverse), label: "Déjà reversé", icon: Wallet }}
           />
         );
       })()}
@@ -226,7 +232,7 @@ export function Reversements() {
                   />
                   <div>
                     <div className="text-sm font-semibold text-foreground">{titleCase(r.creator)}</div>
-                    <div className="text-[11px] text-faint">Commission TTP {r.rate} %</div>
+                    <div className="text-[11px] text-faint">Commission TTP {r.rate} %{r.horsRoster ? " · sorti du roster" : ""}</div>
                   </div>
                 </div>
                 {owesMoney(r) ? (

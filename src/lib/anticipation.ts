@@ -291,7 +291,7 @@ export function buildAnticipation(input: AnticipationInput): TodayItem[] {
       meta: formatEuro(amount),
       metaSub: ahead === 0 ? "en retard demain" : inDays(ahead),
       tone: "info",
-      verb: "Préparer",
+      verb: "Ouvrir",
       minutes: MINUTES.echeance,
       invoice: iv,
       amount,

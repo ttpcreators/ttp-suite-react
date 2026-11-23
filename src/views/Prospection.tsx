@@ -430,8 +430,9 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
     return (
       <StatsBento phoneStrip
         className="mb-5"
-        primary={{ eyebrow: "Négociations en cours", value: String(c.open), caption: `sur ${rows.length} marque${rows.length > 1 ? "s" : ""} au total.` }}
-        bars={{ label: "En négociation", value: String(c.negotiating), series: STAGE_ORDER.map((st) => rows.filter((r) => r.stage === st).length) }}
+        primary={{ eyebrow: "Pistes ouvertes", value: String(c.open), caption: `Pas encore signées, sur ${rows.length} marque${rows.length > 1 ? "s" : ""} au total.` }}
+        // Sous-ensemble des pistes ouvertes : écrit « dont », avec les autres stades en légende.
+        bars={{ label: "Dont en négociation", value: String(c.negotiating), caption: `${c.spotted} repérée${c.spotted > 1 ? "s" : ""} · ${c.contacted} contactée${c.contacted > 1 ? "s" : ""}` }}
         small={{ value: String(c.signed), label: "Signées" }}
         accent={{ value: c.proposed ? formatEuro(c.proposed) : "—", label: "Valeur proposée", icon: Handshake }}
       />

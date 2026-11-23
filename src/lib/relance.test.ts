@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { daysSinceDue, isOverdueInvoice, overdueInvoices, parseDueDate, relanceEmail, relanceRefOf } from "./relance";
+import { daysSinceDue, isOverdueInvoice, overdueInvoices, parseDueDate, rappelEcheanceEmail, relanceEmail, relanceRefOf } from "./relance";
 
 describe("relances", () => {
   it("lit les échéances ISO et jj/mm/aaaa ; rien d'autre", () => {
@@ -75,5 +75,15 @@ describe("relanceRefOf", () => {
     expect(relanceRefOf("Relancer Fitaya J+1 pour la facture 2026-191")).toBe("2026-191");
     expect(relanceRefOf("Facture 2026-191 à envoyer")).toBeNull();
     expect(relanceRefOf("Relancer Nike")).toBeNull();
+  });
+});
+
+describe("rappel avant l'échéance (Aujourd'hui, action discrète)", () => {
+  it("ton doux, montant et date, jamais le mot relance", () => {
+    const { subject, body } = rappelEcheanceEmail({ ref: "2026-201", party: "Marque", amount: "400,00 €" }, "21 déc.");
+    expect(subject).toBe("Facture 2026-201 · échéance le 21 déc.");
+    expect(body).toContain("arrive à échéance le 21 déc.");
+    expect(body.toLowerCase()).not.toContain("relance");
+    expect(body).not.toContain("impayée");
   });
 });

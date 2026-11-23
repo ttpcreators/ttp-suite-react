@@ -11,6 +11,7 @@
 
 import { getServiceClient, corsHeaders, timingSafeEqualStr } from "../_shared/google.ts";
 import { readAppState } from "../_shared/appState.ts";
+import { reversementRows, reversementTotals, type Detail, type Payout } from "../_shared/reversements.ts";
 import { deepLinkUrl, loadAppBlob, makePayload, pushReady, sendTo, type Audience } from "../_shared/push.ts";
 import type { PushKind } from "../_shared/pushPayload.ts";
 
@@ -459,7 +460,7 @@ Deno.serve(async (req: Request) => {
   // 2) Blob agence __app_state__ : contrats à surveiller, commissions (override), reversements payés.
   let contractsSoon = 0;
   let commBlob: Record<string, number> = {};
-  let payoutsBlob: Record<string, { amount?: number }[]> = {};
+  let blob: Record<string, unknown> = {};
   try {
     // Ligne commune + ligne argent des fondateurs (commissions, versements).
     const obj = (await readAppState(sb)) as Record<string, unknown>;
@@ -469,7 +470,7 @@ Deno.serve(async (req: Request) => {
       if (end && daysUntil(end, today) <= 60) contractsSoon++;
     }
     if (obj?.creatorCommission && typeof obj.creatorCommission === "object") commBlob = obj.creatorCommission as Record<string, number>;
-    if (obj?.creatorPayouts && typeof obj.creatorPayouts === "object") payoutsBlob = obj.creatorPayouts as Record<string, { amount?: number }[]>;
+    blob = obj ?? {};
   } catch {
     /* blob illisible → valeurs par défaut */
   }
@@ -521,27 +522,26 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // 8) Reversements à faire : (encaissé − commission) − déjà reversé, par créateur.
-  const { data: invAll } = await sb.from("invoices").select("amount,status,creator,date");
-  const invRows = (invAll ?? []) as { amount: string | null; status: string | null; creator: string | null; date: string | null }[];
-  const encByCreator = new Map<string, number>();
-  for (const iv of invRows) {
-    if (iv.status !== "payee") continue;
-    const c = (iv.creator ?? "").trim();
-    if (!c) continue;
-    encByCreator.set(c, (encByCreator.get(c) ?? 0) + parseAmount(iv.amount));
+  // 8) Reversements à faire : même calcul que la page Reversements et Alfred
+  //    (_shared/reversements.ts), anciens créateurs compris.
+  const { data: invAll } = await sb.from("invoices").select("id,amount,status,creator,date,collab_id");
+  const invRows = (invAll ?? []) as { id: string; amount: string | null; status: string | null; creator: string | null; date: string | null; collab_id: string | null }[];
+  const rosterRate: Record<string, number> = {};
+  for (const c of creators) {
+    const v = parseCommissionPct(c.commission);
+    if (v != null) rosterRate[c.name] = v;
   }
-  const rosterRate: Record<string, number | null> = {};
-  for (const c of creators) rosterRate[c.name] = parseCommissionPct(c.commission);
-  let reverseCount = 0;
-  let reverseSum = 0;
-  for (const [c, enc] of encByCreator) {
-    const rate = rosterRate[c] != null ? (rosterRate[c] as number) : (typeof commBlob[c] === "number" ? commBlob[c] : 20);
-    const du = enc - Math.round((enc * rate) / 100);
-    const paid = (payoutsBlob[c] ?? []).reduce((a, p) => a + (Number(p?.amount) || 0), 0);
-    const reste = du - paid;
-    if (reste > 0) { reverseCount++; reverseSum += reste; }
-  }
+  const payoutTotals = reversementTotals(reversementRows({
+    invoices: invRows,
+    details: (blob.invoiceDetails ?? {}) as Record<string, Detail>,
+    payouts: (blob.creatorPayouts ?? {}) as Record<string, Payout[]>,
+    rosterRates: rosterRate,
+    savedRates: commBlob,
+    collabModes: (blob.collabCashMode ?? {}) as Record<string, string>,
+    contractHistory: blob.contractHistory,
+  }));
+  const reverseCount = payoutTotals.createurs;
+  const reverseSum = payoutTotals.reste;
 
   // 9) Récap mensuel — uniquement le 1er du mois : CA facturé/encaissé du mois précédent.
   let monthlyLine = "";
