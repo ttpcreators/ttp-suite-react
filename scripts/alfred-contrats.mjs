@@ -3,7 +3,7 @@
  * et ce qu'il importe) en un seul fichier JavaScript, sans dépendance, pour Alfred sur l'iMac
  * (qui ne reçoit que le dossier agents/alfred). À relancer après tout changement des contrats :
  *   npm run alfred:contrats
- * Le test agents/alfred/contrats.test.ts échoue si le fichier n'est plus à jour.
+ * Le test agents/alfred/tests/contrats.test.ts échoue si le fichier n'est plus à jour.
  */
 import { rolldown } from "rolldown";
 import { writeFileSync } from "node:fs";

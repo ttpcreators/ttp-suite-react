@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { boiteAutorisee, boiteDeLien, boiteDePortee, filtrerComptes, lireArgs, listeBoites, refusPortees } from "./spark.mjs";
+import { boiteAutorisee, boiteDeLien, boiteDePortee, filtrerComptes, lireArgs, listeBoites, refusPortees } from "../spark.mjs";
 
 const lien = (boite: string) =>
   `https://sparkmailapp.com/dpl/bl?token=${encodeURIComponent(Buffer.from(`A:${boite};ID:abc@mail.example.com;gID:123`).toString("base64"))}`;

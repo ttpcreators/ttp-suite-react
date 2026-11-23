@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { separerNotes } from "./texte.mjs";
+import { separerNotes } from "../texte.mjs";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { messagesFor } from "./telegram.mjs";
-import { problemeTexteDestinataire } from "../../supabase/functions/_shared/texteDestinataire.ts";
+import { messagesFor } from "../telegram.mjs";
+import { problemeTexteDestinataire } from "../../../supabase/functions/_shared/texteDestinataire.ts";
 
 const PROPRE = "Hello Léa !\n\nNova aimerait un Reel pour la rentrée, 600 € HT.\nNB : le tournage peut se faire chez toi.\nTu me dis ?";
 const SALE = "Voici le message pour Léa :\nHello [prénom] !\nNova aimerait un Reel.\nÀ VÉRIFIER : le prix exact\nNote pour Marc : elle a refusé l'UGC en octobre";
@@ -38,7 +38,7 @@ describe("Alfred : le texte à envoyer ne contient que le message", () => {
 describe("Alfred : le bouton « J'ai envoyé »", () => {
   it("suit chaque texte WhatsApp ou à copier, avec le nom de la personne", async () => {
     // @ts-expect-error : module JavaScript d'Alfred, sans types.
-    const { messageEnvoye } = await import("./telegram.mjs");
+    const { messageEnvoye } = await import("../telegram.mjs");
     const [wa] = messagesFor("02-whatsapp.txt", "Pour Léa sur WhatsApp · 33612345678\nHello Léa !");
     const envoye = wa.boutons.flat().find((b: { text: string }) => b.text === "J'ai envoyé");
     expect(envoye.callback_data).toBe("envoye:Léa");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { dossierAutorise, lireArgs, nbPages, nomDossier, urlPublique } from "./araignee.mjs";
+import { dossierAutorise, lireArgs, nbPages, nomDossier, urlPublique } from "../araignee.mjs";
 
 describe("Alfred : l'araignée, seulement sur des pages publiques", () => {
   it("accepte une page web publique", () => {

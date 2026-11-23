@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 // Les consignes d'Alfred : un tronc court (CLAUDE.md) et des fiches par sujet (fiches/), lues à la demande.
-const ici = new URL(".", import.meta.url).pathname.replace(/%20/g, " ");
+const ici = new URL("..", import.meta.url).pathname.replace(/%20/g, " ");
 const tronc = readFileSync(join(ici, "CLAUDE.md"), "utf8");
 const fiches = readdirSync(join(ici, "fiches")).filter((n) => n.endsWith(".md"));
 const textes = [tronc, ...fiches.map((n) => readFileSync(join(ici, "fiches", n), "utf8"))];
