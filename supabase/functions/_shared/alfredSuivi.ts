@@ -44,6 +44,21 @@ export function etatDroit(d: Pick<DroitUsage, "fin" | "clos">, today: string, pr
   return { etat: "en_cours", jours: n };
 }
 
+/**
+ * Droit de type publicité (ads Meta ou TikTok, whitelisting, Spark Ads…), texte libre :
+ * « publicite », « Publicité Meta », « organique + pub », « paid », « whitelisting ».
+ * « publication organique » ou « repost » n'en sont pas.
+ */
+export function estPublicite(type: string | null | undefined): boolean {
+  const t = String(type ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  return /\bpub(licit\w*|s)?\b|\bads?\b|\bpaid\b|whitelist|sponsoris|\bspark\b/.test(t);
+}
+
+/** Bibliothèque publicitaire Meta : les pubs actives en France pour cette marque (recherche par mot clé). */
+export function lienPubsMeta(marque: string): string {
+  return `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=FR&q=${encodeURIComponent(marque.trim())}&search_type=keyword_unordered&media_type=all`;
+}
+
 /** Lit la liste du blob sans planter sur une valeur bizarre. */
 export function lireDroits(v: unknown): DroitUsage[] {
   if (!Array.isArray(v)) return [];
@@ -61,7 +76,7 @@ export function droitsTexte(list: DroitUsage[], today: string, filtre = ""): str
   const libelle = (r: (typeof rows)[number]) =>
     r.etat === "expire" ? `EXPIRÉ depuis ${-(r.jours ?? 0)} j` : r.etat === "bientot" ? `finit dans ${r.jours} j` : r.etat === "clos" ? "clos" : r.etat === "sans_date" ? "sans date de fin" : `en cours (${r.jours} j)`;
   const line = (r: (typeof rows)[number]) =>
-    `- ${r.d.marque} × ${r.d.createur} · ${r.d.type || "droits"} · ${r.d.debut || "?"} → ${r.d.fin || "?"} · ${libelle(r)}${r.d.prix ? ` · ${r.d.prix}` : ""}${r.d.contenu ? ` · ${r.d.contenu}` : ""}${r.d.note ? ` · ${r.d.note}` : ""} · id ${r.d.id}`;
+    `- ${r.d.marque} × ${r.d.createur} · ${r.d.type || "droits"} · ${r.d.debut || "?"} → ${r.d.fin || "?"} · ${libelle(r)}${r.d.prix ? ` · ${r.d.prix}` : ""}${r.d.contenu ? ` · ${r.d.contenu}` : ""}${r.d.note ? ` · ${r.d.note}` : ""}${estPublicite(r.d.type) && r.d.marque.trim() ? ` · pubs Meta : ${lienPubsMeta(r.d.marque)}` : ""} · id ${r.d.id}`;
   const expire = rows.filter((r) => r.etat === "expire").length;
   const bientot = rows.filter((r) => r.etat === "bientot").length;
   return [

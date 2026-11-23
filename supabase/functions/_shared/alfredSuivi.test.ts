@@ -1,7 +1,28 @@
 import { describe, expect, it } from "vitest";
-import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCartonnent, type DroitUsage } from "./alfredSuivi.ts";
+import { droitsTexte, estPublicite, etatDroit, lienPubsMeta, lireDroits, noterPosts, postLigne, postsQuiCartonnent, type DroitUsage } from "./alfredSuivi.ts";
 
 const droit = (o: Partial<DroitUsage>): DroitUsage => ({ id: "d1", marque: "Marque A", createur: "Créateur Test", type: "publicite", debut: "2026-08-01", fin: "2026-11-01", ...o });
+
+describe("pubs Meta d'un droit publicité", () => {
+  it("construit le lien de la bibliothèque publicitaire Meta, nom de marque encodé", () => {
+    expect(lienPubsMeta("Marque Alpha")).toBe(
+      "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=FR&q=Marque%20Alpha&search_type=keyword_unordered&media_type=all",
+    );
+    expect(lienPubsMeta(" L'Atelier & Fils ")).toContain("&q=L'Atelier%20%26%20Fils&");
+    expect(lienPubsMeta("Crème Été")).toContain("&q=Cr%C3%A8me%20%C3%89t%C3%A9&");
+  });
+
+  it("reconnaît un droit de type publicité dans le texte libre", () => {
+    for (const t of ["publicite", "Publicité Meta", "organique + pub", "pubs TikTok", "Meta Ads", "paid", "whitelisting", "Spark Ads", "contenu sponsorisé"]) expect(estPublicite(t)).toBe(true);
+    for (const t of ["organique", "repost", "publication organique", "", null, undefined]) expect(estPublicite(t)).toBe(false);
+  });
+
+  it("ajoute le lien aux lignes publicité du registre seulement", () => {
+    const t = droitsTexte([droit({ id: "p" }), droit({ id: "o", marque: "Autre", type: "organique" })], "2026-11-09");
+    expect(t.split("\n").find((l) => l.includes("id p"))).toContain("pubs Meta : https://www.facebook.com/ads/library/?");
+    expect(t.split("\n").find((l) => l.includes("id o"))).not.toContain("facebook.com");
+  });
+});
 
 describe("droits d'utilisation", () => {
   it("dit si un droit est expiré, finit bientôt ou court encore", () => {

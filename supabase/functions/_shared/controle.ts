@@ -15,6 +15,7 @@
 // ============================================================================
 
 import { foldName } from "./exclusivites.ts";
+import { estPublicite, etatDroit, lienPubsMeta, lireDroits } from "./alfredSuivi.ts";
 
 export type Gravite = "haute" | "moyenne" | "basse";
 
@@ -30,7 +31,9 @@ export type RegleId =
   | "brief_casse"
   | "tache_cochee"
   | "fiche_incomplete"
-  | "etiquettes_contacts";
+  | "etiquettes_contacts"
+  | "droits_expirent"
+  | "droits_expires";
 
 /** Où ouvrir l'élément dans l'app : une page (`vue`), l'objet visé, un créateur, une recherche. */
 export type Lien = { vue: string; item?: string; createur?: string; recherche?: string };
@@ -53,6 +56,8 @@ export type Probleme = {
   /** Adresse complète du lien (pour Alfred et Telegram). */
   url: string;
   correction: Correction | null;
+  /** Lien vers un site extérieur, ouvert dans un nouvel onglet (les pubs Meta d'une marque). */
+  externe?: { texte: string; url: string };
   /** Demande une décision de Marc (Alfred dépose une proposition) ; sinon un clic suffit. */
   decision: boolean;
 };
@@ -120,6 +125,8 @@ export type ControleInput = {
   cashModes?: Record<string, string> | null;
   /** Blob `contractHistory` (contrats de représentation) ; null : pas lu, contrat non vérifié. */
   contractHistory: unknown | null;
+  /** Blob `usageRights` (droits d'utilisation vendus aux marques, outil noter_droits) ; null ou absent : pas lu. */
+  droits?: unknown | null;
 };
 
 // ── Réglages ─────────────────────────────────────────────────────────────────
@@ -127,6 +134,10 @@ export const APP_URL = "https://app.ttpcreators.pro";
 export const TITRE_MAX = 45;
 /** Collab publiée depuis plus de N jours sans facture. */
 export const JOURS_SANS_FACTURE = 14;
+/** Droits qui finissent dans N jours ou moins : proposer la prolongation avant la fin. */
+export const JOURS_AVANT_FIN_DROITS = 30;
+/** Droits expirés depuis moins de N jours : vérifier si la pub tourne encore (au delà, trop vieux). */
+export const JOURS_APRES_FIN_DROITS = 90;
 export const ETAPE_PUBLICATION = 6;
 export const ETAPE_STATS = 7;
 export const ETAPE_PAIEMENT = 9;
@@ -144,6 +155,8 @@ const ORDRE_GRAVITE: Record<Gravite, number> = { haute: 0, moyenne: 1, basse: 2 
 const ORDRE_REGLE: RegleId[] = [
   "brouillon_echu",
   "publiee_sans_facture",
+  "droits_expires",
+  "droits_expirent",
   "etape_reversement",
   "etape_paiement",
   "createur_hors_roster",
@@ -586,6 +599,47 @@ export function controler(input: ControleInput): Probleme[] {
     }
   }
 
+  // 11. Droits d'utilisation qui finissent bientôt, ou expirés depuis peu (une marque qui
+  // fait encore tourner la pub doit payer une prolongation). Les droits clos sont sautés.
+  if (input.droits != null) {
+    for (const d of lireDroits(input.droits)) {
+      const { etat, jours } = etatDroit(d, today, JOURS_AVANT_FIN_DROITS);
+      if (jours == null || (etat !== "bientot" && etat !== "expire") || jours <= -JOURS_APRES_FIN_DROITS) continue;
+      const marque = txt(d.marque);
+      const createur = titleCase(txt(d.createur)) || "créateur inconnu";
+      const fin = `${jourCourt(d.fin)}${d.fin.slice(0, 4) !== today.slice(0, 4) ? ` ${d.fin.slice(0, 4)}` : ""}`;
+      const quoi = [txt(d.type), txt(d.prix)].filter(Boolean).join(", ");
+      const pub = estPublicite(d.type) && !!marque;
+      const lien: Lien = txt(d.collab_id) ? { vue: "collabs", item: txt(d.collab_id) } : { vue: "collabs", recherche: marque || undefined };
+      const externe = pub ? { texte: "Voir les pubs Meta", url: lienPubsMeta(marque) } : undefined;
+      if (etat === "bientot") {
+        add({
+          id: `droits_expirent:${d.id}`,
+          regle: "droits_expirent",
+          gravite: "moyenne",
+          titre: `Droits à prolonger : ${marque} × ${createur}`,
+          detail: `Droits de ${createur} pour ${marque} expirent le ${fin} : proposer une prolongation.${quoi ? ` (${quoi})` : ""}`,
+          lien,
+          correction: null,
+          ...(externe ? { externe } : {}),
+          decision: true,
+        });
+      } else {
+        add({
+          id: `droits_expires:${d.id}`,
+          regle: "droits_expires",
+          gravite: "haute",
+          titre: `Droits expirés : ${marque} × ${createur}`,
+          detail: `Droits expirés le ${fin} : vérifier si la pub tourne encore. ${createur} pour ${marque}${quoi ? `, ${quoi}` : ""} ; si oui, facturer une prolongation, sinon clore la ligne (noter_droits, clos).`,
+          lien,
+          correction: null,
+          ...(externe ? { externe } : {}),
+          decision: true,
+        });
+      }
+    }
+  }
+
   return out.sort((a, b) => ORDRE_GRAVITE[a.gravite] - ORDRE_GRAVITE[b.gravite] || ORDRE_REGLE.indexOf(a.regle) - ORDRE_REGLE.indexOf(b.regle));
 }
 
@@ -604,5 +658,6 @@ export function sansIgnores(list: Probleme[], ignores: Ignores): Probleme[] {
 /** Une ligne de texte par problème (connecteur Claude, Alfred). */
 export function ligneProbleme(p: Probleme): string {
   const corr = p.correction ? ` · correction sûre : ${p.correction.texte} (bouton « Corriger » dans Aujourd'hui)` : "";
-  return `- [${p.gravite}] ${p.titre} · ${p.detail}${corr} · décision de Marc : ${p.decision ? "oui" : "non"} · ${p.url} [controle ${p.id}]`;
+  const ext = p.externe ? ` · ${p.externe.texte} : ${p.externe.url}` : "";
+  return `- [${p.gravite}] ${p.titre} · ${p.detail}${corr}${ext} · décision de Marc : ${p.decision ? "oui" : "non"} · ${p.url} [controle ${p.id}]`;
 }
