@@ -41,6 +41,43 @@ if [ -d "$SRC/skills" ]; then
   mkdir -p "$DEST/.claude/skills"
   for d in "$SRC"/skills/*(/N); do rsync -a --delete "$d/" "$DEST/.claude/skills/${d:t}/"; done
 fi
+# Légifrance et Judilibre (demande de Marc le 2026-11-23, voir legifrance/LISEZ-MOI.md) : branché
+# seulement si les clés PISTE sont dans config.env et qu'un Python 3.10+ existe. Un échec ne bloque
+# jamais l'installation (la mise à jour de 4 h passe par ici).
+legifrance=0
+mkdir -p "$DEST/legifrance"
+rsync -a --delete --exclude .venv "$SRC/legifrance/" "$DEST/legifrance/"
+chmod +x "$DEST/legifrance/lancer.sh"
+if grep -q '^PISTE_CLIENT_ID=.' "$DEST/config.env" 2>/dev/null && grep -q '^PISTE_CLIENT_SECRET=.' "$DEST/config.env" 2>/dev/null; then
+  py=""
+  for c in /opt/homebrew/bin/python3.13 /opt/homebrew/bin/python3.12 /opt/homebrew/bin/python3.11 /opt/homebrew/bin/python3 /usr/local/bin/python3 python3.13 python3.12 python3.11 python3.10 python3; do
+    p=$(command -v "$c" 2>/dev/null) || continue
+    if "$p" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then py=$p; break; fi
+  done
+  if [[ -z "$py" ]]; then
+    echo "Légifrance : il faut Python 3.10 ou plus (brew install python@3.12), pas branché." >&2
+  elif { [ -x "$DEST/legifrance/.venv/bin/python" ] || "$py" -m venv "$DEST/legifrance/.venv"; } \
+       && "$DEST/legifrance/.venv/bin/pip" install -q -r "$DEST/legifrance/requirements.txt"; then
+    legifrance=1
+  else
+    echo "Légifrance : installation des dépendances ratée, pas branché." >&2
+  fi
+fi
+export ALFRED_LEGIFRANCE=$legifrance ALFRED_DEST=$DEST
+/usr/bin/python3 - "$DEST/.mcp.json" <<'PY'
+import json, os, sys
+p = sys.argv[1]
+try:
+    d = json.load(open(p))
+except (OSError, ValueError):
+    d = {}
+s = d.setdefault("mcpServers", {})
+if os.environ.get("ALFRED_LEGIFRANCE") == "1":
+    s["legifrance"] = {"command": os.environ["ALFRED_DEST"] + "/legifrance/lancer.sh", "args": []}
+else:
+    s.pop("legifrance", None)
+json.dump(d, open(p, "w"), indent=2, ensure_ascii=False)
+PY
 # La salle de l'araignée (choix de Marc le 2026-11-16) : chaque passage d'Alfred y apparaît. Alfred ne
 # charge pas les réglages globaux du Mac (--setting-sources project,local) : le hook de l'araignée est
 # donc branché dans .claude/settings.json de son dossier. Il ne fait rien tant que l'araignée n'est pas
@@ -62,6 +99,11 @@ for ev, matcher in (("PostToolUse", "*"), ("UserPromptSubmit", None), ("Notifica
         if matcher:
             e["matcher"] = matcher
         lst.append(e)
+# Le serveur Légifrance du dossier (.mcp.json) est accepté sans question.
+servers = [x for x in d.get("enabledMcpjsonServers", []) if x != "legifrance"]
+if os.environ.get("ALFRED_LEGIFRANCE") == "1":
+    servers.append("legifrance")
+d["enabledMcpjsonServers"] = servers
 json.dump(d, open(p, "w"), indent=2, ensure_ascii=False)
 PY
 if ! grep -q '^ALFRED_BOT_TOKEN=' "$DEST/config.env" 2>/dev/null; then

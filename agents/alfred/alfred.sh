@@ -289,7 +289,9 @@ interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_factu
 # (trouvé le 2026-11-12). En plus, chaque commande Bash le ramène dans son dossier (plus bas).
 ici="/$PWD"
 allowed=("Read($ici/**)" "Edit($ici/etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)" "Bash(node telegram.mjs joindre:*)" "Bash(node telegram.mjs raccourcis)" "Bash(node telegram.mjs preparer:*)" "Bash(node telegram.mjs deposer:*)"
-  "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)" "Bash(node araignee.mjs:*)")
+  "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)" "Bash(node araignee.mjs:*)"
+  "mcp__legifrance")
+# mcp__legifrance : les codes, lois et décisions de justice, en lecture seule (fiches/juridique.md).
 denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash(spark:*)"
   "Edit($ici/etat/whatsapp-autorises.txt)" "Edit($ici/etat/whatsapp-a-envoyer/**)" "Edit($ici/etat/whatsapp-envoyes/**)")
 # Envoi WhatsApp (choix de Marc le 2026-11-15) : `whatsapp.mjs envoyer` ne fait partir que le texte
