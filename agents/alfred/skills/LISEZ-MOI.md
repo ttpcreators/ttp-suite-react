@@ -6,6 +6,8 @@ Copiées dans `~/Code/TTPAlfred/.claude/skills/` par `installer.sh`, donc charg�
 |---|---|---|
 | influencer-marketing, cold-email, sales-enablement, offers, prospecting, copy-editing, pricing, marketing-psychology, competitor-profiling, co-marketing, events (ces cinq avec une note « Pour Alfred » en bas, 18 novembre 2026) | [coreyhaines31/marketingskills](https://github.com/coreyhaines31/marketingskills) | MIT, voir `LICENSE-marketingskills` |
 | ig-dm, ig-caption, ig-profile, ig-audit, ig-reply, ig-comment, ig-carousel, ig-story, ig-plan (sans le script `caption.py`, avec une note « Pour Alfred » en bas) | [Jakeschincariol/instagram-agent-skill](https://github.com/Jakeschincariol/instagram-agent-skill) | MIT, voir `LICENSE-instagram-agent-skill` |
+| revue-contrat (note « Pour Alfred » en bas, 23 novembre 2026) | [evolsb/claude-legal-skill](https://github.com/evolsb/claude-legal-skill) | MIT, voir `LICENSE-claude-legal-skill` |
+| nda-review, escalation-flagger, ip-clause-review, cease-desist, takedown, demand-received, demand-draft (copiées du pack d'Anthropic, modifiées le 23 novembre 2026 par l'ajout d'une note « Pour Alfred » en bas : droit français, playbook de TTP) | [anthropics/claude-for-legal](https://github.com/anthropics/claude-for-legal) | Apache 2.0, voir `LICENSE-claude-for-legal` |
 | comptable (consignes, références et modèles de facturation seulement, sans les scripts) | [romainsimon/paperasse](https://github.com/romainsimon/paperasse) | MIT, voir `LICENSE-paperasse` |
 
 Le dépôt est public : n'ajouter ici qu'une skill dont la licence permet la publication et qui ne contient aucune donnée personnelle ni secret.

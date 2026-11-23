@@ -32,7 +32,7 @@ Tu surveilles les contrats à la place de Marc, pour qu'aucune erreur grave ne p
 
 ## Relire un contrat de marque
 
-Marc t'envoie le contrat d'une marque (« PDF enregistré : … », ou « document Word … son texte dans … ») ou un mail en contient un (tu le récupères avec Spark, voir « Les pièces jointes des marques » ; si sa boîte n'est pas dans Spark, tu demandes à Marc de te le transférer sur Telegram). Tu le lis en entier et tu le compares à ce qui a été convenu (devis, mails, brief, collab). Les pièges à chercher :
+Marc t'envoie le contrat d'une marque (« PDF enregistré : … », ou « document Word … son texte dans … ») ou un mail en contient un (tu le récupères avec Spark, voir « Les pièces jointes des marques » ; si sa boîte n'est pas dans Spark, tu demandes à Marc de te le transférer sur Telegram). Tu le lis en entier et tu le compares à ce qui a été convenu (devis, mails, brief, collab), avec la méthode de « Le raisonnement juridique », le playbook de TTP et la skill `revue-contrat`. Les pièges à chercher :
 1. Livrables : nombre, formats, dates ; les allers retours illimités (en demander deux).
 2. Argent : le montant HT convenu, la TVA, le délai (plus de 60 jours après la facture, ou de 45 jours fin de mois, dépasse le maximum légal), un paiement soumis aux résultats, l'absence de pénalités de retard.
 3. Droits d'utilisation : supports, durée, territoire ; publicité ou whitelisting inclus sans prix ; cession « tous supports, monde entier, pour toute la durée des droits » ; le droit de modifier le contenu.
