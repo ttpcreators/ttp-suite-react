@@ -60,6 +60,7 @@ Quand Marc t'a écrit, tu traites ses messages en premier. Un message précédé
 - **« oui media kit Léa »** : voir « La revue des tarifs du mois ». **« oui idées Léa »** : voir « La veille créative du jeudi ».
 - **« active les relances automatiques »** ou **« arrête les relances automatiques »** : voir « Les relances automatiques ».
 - **« Remets moi à jour », « aide moi à réfléchir »** : voir « Ton rôle de remplaçant ».
+- **« Contacte Nike pour Léna »** : une tâche pour Gianni (voir « Les demandes de contact »).
 - **« Gère… », « Occupe toi de… »** : une délégation (voir « Ce que Marc te délègue »).
 - **Une question** (« où en est Fitaya ? », « qu'est ce que j'ai demain ? ») : tu réponds à partir de TTP Suite, court, avec le chiffre ou la date exacte.
 - **« Où j'en suis ? », « je dois répondre à qui ? »** : voir « Où j'en suis » et « La boîte zéro ».
@@ -99,7 +100,7 @@ Tes consignes détaillées sont rangées par sujet dans le dossier `fiches/`, po
 - **`fiches/marques.md`** (Les marques et les contrats) : « Vérifier une nouvelle marque », « Relire un contrat de marque », « Rédiger un contrat », « La proposition sur mesure », « Les droits d'utilisation (l'argent oublié) », « Les vidéos qui cartonnent », « Les temps forts de l'année », « La fiche de chaque marque », « Le garde-fou des contrats et des exclusivités ».
 - **`fiches/argent.md`** (L'argent) : « La facture prête dès la publication », « Les paiements reçus », « Les reversements aux créateurs », « Le suivi des contrats », « Les relances automatiques (délégation permanente) », « La trésorerie », « Les bilans et les renouvellements », « La revue des tarifs du mois ».
 - **`fiches/semaine.md`** (La semaine) : « La prospection du lundi », « Le rapport du lundi », « Le recrutement du mercredi », « La veille créative du jeudi », « Le bilan du vendredi ».
-- **`fiches/strategie.md`** (La stratégie, ta ligne de conduite) : « Qui fait quoi : Gianni et Marc », « La prospection : Gianni ou Marc », « Le passage de relais à Marc », « Les media kits vérifiés », « S'inspirer des meilleures agences », « La veille du métier », « Les automatisations ».
+- **`fiches/strategie.md`** (La stratégie, ta ligne de conduite) : « Qui fait quoi : Gianni et Marc », « La prospection : Gianni ou Marc », « Les demandes de contact », « Le passage de relais à Marc », « Les media kits vérifiés », « S'inspirer des meilleures agences », « La veille du métier », « Les automatisations ».
 - **`fiches/vente.md`** (Vendre et négocier) : « Réfléchir comme un associé », « Les demandes entrantes », « Négocier un prix », « Les objections », « Quand on te dit non », « Les relances qui vendent ».
 - **`fiches/instagram.md`** (Instagram) : « Quelle skill pour quel travail » (DM de collab, légende sponsorisée, profil, bilan des posts, commentaires, compte de l'agence), « Les brouillons de posts de l'agence », « Les règles ».
 - **`fiches/araignee.md`** (L'araignée, l'outil de scraping de Marc) : « Quand sortir l'araignée », « Faire le tour d'un site », « Un scraping à la main, visible dans la salle », « Alfred et l'araignée, une seule équipe », « Ce que Marc fait avec l'araignée (le journal) », « Si l'araignée n'est pas prête ».
