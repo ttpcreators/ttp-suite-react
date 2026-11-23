@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronRight, Contact, FileText, Handshake, ListChecks, Receipt, Users, Wallet, type LucideIcon } from "@/components/icons";
+import { CalendarClock, ChevronRight, Contact, FileText, Handshake, ListChecks, Receipt, Users, Wallet, type LucideIcon } from "@/components/icons";
 import { IconTile } from "@/components/ui/icon-tile";
 import { toast } from "@/components/ui/toast";
 import { useAppState } from "@/lib/appState";
@@ -33,6 +33,8 @@ const ICON: Record<RegleId, LucideIcon> = {
   tache_cochee: ListChecks,
   fiche_incomplete: Users,
   etiquettes_contacts: Contact,
+  droits_expirent: CalendarClock,
+  droits_expires: CalendarClock,
 };
 
 const FOLD = ["ouvert", "ferme"] as const;
@@ -129,6 +131,11 @@ export function ControleSection({ exclureCollabs }: { exclureCollabs: ReadonlySe
                   <button type="button" onClick={() => void ignore(p)} disabled={busy === p.id} className="h-8 rounded-full px-2.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-field hover:text-foreground disabled:opacity-60">
                     Ignorer
                   </button>
+                  {p.externe && (
+                    <a href={p.externe.url} target="_blank" rel="noopener noreferrer" className="inline-flex h-8 items-center rounded-full px-2.5 text-[12.5px] font-medium text-muted-foreground transition-colors hover:bg-field hover:text-foreground">
+                      {p.externe.texte}
+                    </a>
+                  )}
                   <button type="button" onClick={() => openItem(p)} className="h-8 rounded-full bg-field px-3 text-[13px] font-semibold text-foreground transition-colors hover:bg-rowhover">
                     Ouvrir
                   </button>

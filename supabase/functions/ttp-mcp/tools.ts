@@ -567,7 +567,7 @@ const controleDonnees: Tool = {
   name: "controle_donnees",
   title: "Contrôle qualité des données",
   description:
-    "Les incohérences des données de TTP Suite, comme la section « À corriger » de la page Aujourd'hui : facture en brouillon échue, collab publiée depuis plus de 14 jours sans facture, facture payée ou créateur payé alors que la collab n'a pas suivi (et facture payée avant la publication, souvent un acompte), créateur absent du roster, prospect resté ouvert alors que la collab existe, cachet illisible, lien de brief cassé, tâche cochée pas « Fait », fiche créateur incomplète, étiquettes de contacts libres. Chaque ligne : gravité, titre, détail, correction sûre s'il y en a une, si elle demande une décision de Marc, lien et id [controle …]. Les problèmes masqués (« Ignorer ») sont retirés. Lecture seule. Les règles d'argent sont réservées aux fondateurs.",
+    "Les incohérences des données de TTP Suite, comme la section « À corriger » de la page Aujourd'hui : facture en brouillon échue, collab publiée depuis plus de 14 jours sans facture, facture payée ou créateur payé alors que la collab n'a pas suivi (et facture payée avant la publication, souvent un acompte), créateur absent du roster, prospect resté ouvert alors que la collab existe, cachet illisible, lien de brief cassé, tâche cochée pas « Fait », fiche créateur incomplète, étiquettes de contacts libres, droits d'utilisation qui expirent dans 30 jours (proposer une prolongation) ou expirés depuis moins de 90 jours (vérifier si la pub tourne encore). Chaque ligne : gravité, titre, détail, correction sûre s'il y en a une, lien « Voir les pubs Meta » pour un droit de type publicité, si elle demande une décision de Marc, lien et id [controle …]. Les problèmes masqués (« Ignorer ») sont retirés. Lecture seule. Les règles d'argent sont réservées aux fondateurs.",
   inputSchema: { type: "object", properties: { inclure_ignores: { type: "boolean", description: "true : aussi les problèmes masqués dans l'app" } }, additionalProperties: false },
   run: async (sb, ctx, a) => {
     const today = isoDay();
@@ -601,6 +601,7 @@ const controleDonnees: Tool = {
       payouts: ctx.founder && st ? ((st.creatorPayouts ?? {}) as Record<string, unknown>) : null,
       cashModes: st ? ((st.collabCashMode ?? {}) as Record<string, string>) : null,
       contractHistory: st ? (st.contractHistory ?? []) : null,
+      droits: st ? (st.usageRights ?? []) : null,
     } as unknown as ControleInput;
     const all = controler(input);
     const list = a.inclure_ignores === true ? all : sansIgnores(all, lireIgnores(st?.[IGNORES_KEY]));
@@ -2687,7 +2688,7 @@ const majChiffresMediakit: Tool = {
 const droitsUsage: Tool = {
   name: "droits_usage",
   title: "Droits d'utilisation",
-  description: "Registre des droits d'utilisation vendus aux marques (repost organique, publicité, whitelisting) : marque, créateur, contenu, dates, prix. Les droits EXPIRÉS remontent en tête (la marque qui continue d'utiliser le contenu doit payer une prolongation), puis ceux qui finissent dans 21 jours (proposer la prolongation avant la fin).",
+  description: "Registre des droits d'utilisation vendus aux marques (repost organique, publicité, whitelisting) : marque, créateur, contenu, dates, prix. Les droits EXPIRÉS remontent en tête (la marque qui continue d'utiliser le contenu doit payer une prolongation), puis ceux qui finissent dans 21 jours (proposer la prolongation avant la fin). Chaque droit de type publicité a son lien vers la bibliothèque publicitaire Meta de la marque (pubs actives en France).",
   inputSchema: { type: "object", properties: { filtre: { type: "string", description: "Marque ou créateur" } }, additionalProperties: false },
   run: async (sb, _c, a) => {
     const st = await appState(sb);

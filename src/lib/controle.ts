@@ -8,6 +8,8 @@ import type { Probleme } from "../../supabase/functions/_shared/controle.ts";
 
 export {
   IGNORES_KEY,
+  JOURS_APRES_FIN_DROITS,
+  JOURS_AVANT_FIN_DROITS,
   JOURS_SANS_FACTURE,
   TITRE_MAX,
   controler,

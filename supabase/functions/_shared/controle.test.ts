@@ -229,6 +229,54 @@ describe("étiquettes de contacts", () => {
   });
 });
 
+describe("droits d'utilisation qui expirent", () => {
+  // TODAY = 2026-11-23 : les dates sont calculées à partir de ce jour injecté, jamais de la vraie date.
+  const jour = (n: number) => new Date(Date.UTC(2026, 10, 23 + n)).toISOString().slice(0, 10);
+  const droit = (o: Record<string, unknown>) => ({ id: "d1", marque: "Marque Alpha", createur: "LEA TEST", type: "publicite", debut: "2026-06-01", fin: jour(10), ...o });
+  const avec = (...droits: Record<string, unknown>[]) => controler(base({ droits }));
+
+  it("finit dans 30 jours ou moins : proposer une prolongation", () => {
+    const [p] = avec(droit({ fin: jour(10) }));
+    expect(p).toMatchObject({ id: "droits_expirent:d1", regle: "droits_expirent", gravite: "moyenne", decision: true, correction: null });
+    expect(p.detail.startsWith("Droits de Lea Test pour Marque Alpha expirent le 3 déc. : proposer une prolongation.")).toBe(true);
+    expect(avec(droit({ fin: jour(0) }))[0]?.regle).toBe("droits_expirent");
+    expect(avec(droit({ fin: jour(30) }))[0]?.regle).toBe("droits_expirent");
+    expect(avec(droit({ fin: jour(31) }))).toEqual([]);
+  });
+
+  it("expirés depuis moins de 90 jours : vérifier si la pub tourne encore", () => {
+    const [p] = avec(droit({ fin: jour(-8) }));
+    expect(p).toMatchObject({ id: "droits_expires:d1", regle: "droits_expires", gravite: "haute", decision: true });
+    expect(p.detail.startsWith("Droits expirés le 15 nov. : vérifier si la pub tourne encore.")).toBe(true);
+    expect(avec(droit({ fin: jour(-89) }))[0]?.regle).toBe("droits_expires");
+    expect(avec(droit({ fin: jour(-90) }))).toEqual([]);
+    // Une autre année s'écrit en entier.
+    expect(controler(base({ aujourdhui: "2027-01-10", droits: [droit({ fin: "2026-12-20" })] }))[0].detail).toContain("le 20 déc. 2026");
+  });
+
+  it("saute les droits clos, sans date, et un blob absent ou bizarre", () => {
+    expect(avec(droit({ fin: jour(-5), clos: true }), droit({ id: "d2", fin: "" }), droit({ id: "d3", fin: "bientôt" }))).toEqual([]);
+    expect(controler(base({ droits: null }))).toEqual([]);
+    expect(controler(base({ droits: "x" }))).toEqual([]);
+    expect(controler(base({ droits: [{ id: 3 }, null] }))).toEqual([]);
+  });
+
+  it("lien vers la collab (sinon une recherche de la marque) et pubs Meta pour un droit publicité", () => {
+    const [p] = avec(droit({ collab_id: "c9" }));
+    expect(p.lien).toEqual({ vue: "collabs", item: "c9" });
+    expect(p.externe).toEqual({ texte: "Voir les pubs Meta", url: expect.stringContaining("&q=Marque%20Alpha&") });
+    expect(ligneProbleme(p)).toContain("Voir les pubs Meta : https://www.facebook.com/ads/library/");
+    const [q] = avec(droit({ type: "organique" }));
+    expect(q.lien).toEqual({ vue: "collabs", recherche: "Marque Alpha" });
+    expect(q.externe).toBeUndefined();
+    expect(ligneProbleme(q)).not.toContain("facebook.com");
+  });
+
+  it("les expirés passent avant ceux qui finissent bientôt", () => {
+    expect(avec(droit({ id: "a", fin: jour(5) }), droit({ id: "b", fin: jour(-5) })).map((p) => p.id)).toEqual(["droits_expires:b", "droits_expirent:a"]);
+  });
+});
+
 describe("forme des problèmes", () => {
   const out = controler(base({
     collabs: [collab({ brand: "Une marque au nom vraiment très très long", creator: "Prénom Composé Très Long", cachet: "à voir", brief_id: "zz" })],

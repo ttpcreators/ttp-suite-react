@@ -47,6 +47,7 @@ export async function chargerControle(founder: boolean, aujourdhui: string): Pro
     payouts: founder && st ? ((st.creatorPayouts as Record<string, unknown> | undefined) ?? {}) : null,
     cashModes: st ? ((st.collabCashMode as Record<string, string> | undefined) ?? {}) : null,
     contractHistory: st ? (st.contractHistory ?? []) : null,
+    droits: st ? (st.usageRights ?? []) : null,
   };
 }
 
