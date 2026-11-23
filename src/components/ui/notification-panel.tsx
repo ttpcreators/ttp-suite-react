@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Archive, Bell, Check, CheckCheck, Inbox, MoreHorizontal, Settings2, Trash2, type LucideIcon } from "@/components/icons";
 import { TONE_SOLID, type StatusTone } from "@/lib/statusTone";
 import { cn } from "@/lib/utils";
+import { notifsVisibles, type NotifTab } from "@/lib/notifTabs";
 
 /*
  * Panneau de notifications (d'après un composant fourni par Marc, adapté à l'app :
@@ -13,8 +14,8 @@ import { cn } from "@/lib/utils";
  * moment restent discrets. La pastille sur l'avatar dit de quel genre d'évènement il
  * s'agit, pour sauter d'un coup d'œil toute une famille de lignes.
  *
- *   • Les actions se règlent sur place : la ligne ne disparaît pas, elle garde une
- *     petite trace de ce qui a été fait.
+ *   • Une notification lue (ouverte, action faite, ou marquée lue) sort de la
+ *     liste : il ne reste que ce qui est nouveau.
  *   • Archiver est un déplacement, pas un effacement : la ligne part dans
  *     « Archivées » et le menu ⋯ peut la remettre. « Effacer » supprime pour de bon.
  */
@@ -298,9 +299,9 @@ function Row({
   );
 }
 
-type TabId = "all" | "unread" | "todo" | "archived";
+// Une notification lue ne s'affiche plus (lib/notifTabs) : pas d'onglet « Tout ».
+type TabId = NotifTab;
 const TABS: { id: TabId; label: string }[] = [
-  { id: "all", label: "Tout" },
   { id: "unread", label: "Non lues" },
   { id: "todo", label: "À traiter" },
   { id: "archived", label: "Archivées" },
@@ -320,27 +321,15 @@ export function NotificationPanel({
   className,
 }: NotificationPanelProps) {
   const reduced = useReducedMotion();
-  const [tab, setTab] = React.useState<TabId>("all");
+  const [tab, setTab] = React.useState<TabId>("unread");
   const [resolved, setResolved] = React.useState<Record<string, string>>({});
 
-  const shown = React.useMemo(() => {
-    switch (tab) {
-      case "unread":
-        return items.filter((n) => !n.archived && n.unread);
-      case "todo":
-        return items.filter((n) => !n.archived && n.actionable);
-      case "archived":
-        return items.filter((n) => n.archived);
-      default:
-        return items.filter((n) => !n.archived);
-    }
-  }, [items, tab]);
+  const shown = React.useMemo(() => notifsVisibles(items, tab), [items, tab]);
 
-  const unread = items.filter((n) => n.unread && !n.archived).length;
+  const unread = notifsVisibles(items, "unread").length;
   const counts: Record<TabId, number> = {
-    all: 0,
     unread,
-    todo: items.filter((n) => n.actionable && !n.archived).length,
+    todo: notifsVisibles(items, "todo").length,
     archived: 0,
   };
 
