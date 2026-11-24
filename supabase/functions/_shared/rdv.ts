@@ -134,3 +134,11 @@ export function quandFr(jour: string, heure: string): string {
   const d = new Date(jour + "T12:00:00Z").toLocaleDateString("fr-FR", { timeZone: "UTC", weekday: "long", day: "numeric", month: "long" });
   return `${d} à ${heure.replace(":", " h ")}`.replace(" h 00", " h");
 }
+
+/**
+ * Message Telegram envoyé à Marc quand une visio est réservée : le jour, l'heure et la durée.
+ * Aucun texte du visiteur (nom, marque, besoin), comme pour le push : la page est publique.
+ */
+export function texteTelegramRdv(jour: string, heure: string, duree: number): string {
+  return `Visio réservée : ${quandFr(jour, heure)} (${duree} min). La fiche du contact est dans la to-do de l'app.`;
+}

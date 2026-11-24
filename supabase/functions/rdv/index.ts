@@ -6,7 +6,8 @@
 // POST { jour, heure, nom, email, marque, message?, site? (piège à robots) } →
 //        rendez-vous Google Agenda avec lien Meet et invitation Google au contact,
 //        contact noté au carnet (séquence arrêtée : il a répondu), tâche « Visio : marque »
-//        avec la fiche pour Marc, push générique à l'agence.
+//        avec la fiche pour Marc, push générique à l'agence, message Telegram à Marc
+//        (secrets ALFRED_BOT_TOKEN et TELEGRAM_CHAT_ID, comme agent-watchdog ; sans eux, rien).
 // AUTH : verify_jwt = false (page publique). Garde-fous : CORS app seulement, piège à
 // robots, créneau revérifié au moment de réserver, 10 réservations par heure au plus,
 // aucun texte du visiteur dans la notification. Règles : _shared/rdv.ts.
@@ -18,7 +19,7 @@ import { meetEventBody, meetLinkOf } from "../_shared/meetEvent.ts";
 import { makePayload, pushReady, sendTo } from "../_shared/push.ts";
 import { arreter, lireSequence } from "../_shared/sequence.ts";
 import { LEAD_TAG } from "../_shared/siteLead.ts";
-import { RDV_KEY, RDV_ORIGINS, creneauOk, creneauxLibres, lireRdv, lireReservation, quandFr, type Occupe, type RdvConfig } from "../_shared/rdv.ts";
+import { RDV_KEY, RDV_ORIGINS, creneauOk, creneauxLibres, lireRdv, lireReservation, quandFr, texteTelegramRdv, type Occupe, type RdvConfig } from "../_shared/rdv.ts";
 
 type Sb = ReturnType<typeof getServiceClient>;
 
@@ -141,6 +142,17 @@ Deno.serve(async (req: Request) => {
 
   if (pushReady()) {
     await sendTo(sb, { agency: true }, makePayload({ kind: "team", title: "Visio réservée", body: "Un contact a réservé une visio. Détail dans la to-do et le planning.", url: "/?open=view&view=todo", tag: "ttp-rdv" })).catch(() => {});
+  }
+  // Telegram de Marc : le push n'arrive que sur un téléphone abonné, ce message arrive toujours.
+  const bot = Deno.env.get("ALFRED_BOT_TOKEN") ?? "";
+  const chat = Deno.env.get("TELEGRAM_CHAT_ID") ?? "";
+  if (bot && chat) {
+    await fetch(`https://api.telegram.org/bot${bot}/sendMessage`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ chat_id: chat, text: texteTelegramRdv(r.jour, r.heure, c.duree) }),
+      signal: AbortSignal.timeout(4000),
+    }).catch(() => null);
   }
   try {
     triggerSync("webhook");
