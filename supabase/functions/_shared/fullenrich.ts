@@ -16,10 +16,11 @@ const f = (value: string, exact = false) => ({ value, exact_match: exact, exclud
 export const DEFAULT_TITLES = ["influence", "partnership", "partenariat", "marketing", "communication", "brand manager", "relations presse", "social media"];
 
 /** Corps de la recherche de personnes chez une marque (site ou nom). */
-export function searchBody(o2: { company: string; titles?: string[]; country?: string; limit?: number; offset?: number }): J {
+export function searchBody(o2: { company: string; titles?: string[]; country?: string; limit?: number; offset?: number; allTitles?: boolean }): J {
   const c = o2.company.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/.*$/, "");
   const isDomain = /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(c);
-  const titles = (o2.titles?.length ? o2.titles : DEFAULT_TITLES).map((t) => t.trim()).filter(Boolean).slice(0, 12);
+  // allTitles : aucun filtre de poste (petite marque où personne n'a un titre marketing).
+  const titles = o2.allTitles ? [] : (o2.titles?.length ? o2.titles : DEFAULT_TITLES).map((t) => t.trim()).filter(Boolean).slice(0, 12);
   return {
     limit: Math.max(1, Math.min(25, o2.limit ?? 10)),
     offset: Math.max(0, o2.offset ?? 0),
@@ -56,6 +57,54 @@ export function enrichContact(i: { first?: string; last?: string; company?: stri
   const first = s(i.first), last = s(i.last), domain = s(i.domain), company = s(i.company);
   if (!first || !last || (!domain && !company)) return null;
   return { first_name: first, last_name: last, ...(domain ? { domain } : { company_name: company }), enrich_fields: fields };
+}
+
+// ── Tri des personnes pour la prospection (outil trouver_emails_marque du connecteur) ──
+
+const sansAccent = (v: string) => v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+const POIDS: [number, RegExp][] = [
+  [5, /influen|creator|createur|talent manager|\bkol\b|ambassad/],
+  [4, /partenariat|partnership|collab|sponsor/],
+  [3, /relations? presse|relations? publiques|public relations|\brp\b|\bpr\b|communication|social media|reseaux sociaux|community|brand|marque|content|contenu/],
+  [2, /marketing|growth|acquisition|e-?commerce|digital|\bcmo\b/],
+  [1, /\bceo\b|founder|fondat|\bdg\b|directeur general|directrice generale|gerant|president|owner/],
+];
+
+/** Recrutement et ressources humaines : « talent acquisition » ou « marque employeur » ne sont pas la cible. */
+const HORS_CIBLE = /recrut|recruit|talent acquisition|ressources humaines|human resources|\brh\b|\bhr\b|employeur|employer|\bstagiaire\b|\bintern\b/;
+
+/** Intérêt d'un poste pour une agence d'influence : 5 = influence, 1 = dirigeant, 0 = hors cible. */
+export function poidsPoste(title: string): number {
+  const t = sansAccent(title);
+  if (HORS_CIBLE.test(t)) return 0;
+  for (const [poids, re] of POIDS) if (re.test(t)) return poids;
+  return 0;
+}
+
+/**
+ * Personnes à contacter d'abord : les postes les plus proches de l'influence en tête, sans
+ * doublon (même LinkedIn ou même nom). `cibles` = celles dont le poste est dans la cible.
+ */
+export function classerPersonnes(people: readonly Person[]): { toutes: Person[]; cibles: Person[] } {
+  const vus = new Set<string>();
+  const uniques = people.filter((p) => {
+    const cle = sansAccent(p.linkedin.replace(/[/?#]+$/, "") || p.name);
+    if (!cle || vus.has(cle)) return false;
+    vus.add(cle);
+    return true;
+  });
+  const toutes = uniques.map((p, i) => ({ p, i, w: poidsPoste(p.title) })).sort((x, y) => y.w - x.w || x.i - y.i);
+  return { toutes: toutes.map((x) => x.p), cibles: toutes.filter((x) => x.w > 0).map((x) => x.p) };
+}
+
+/** Une personne sur une ligne : nom, poste, lieu, LinkedIn. */
+export function lignePersonneFE(p: Person): string {
+  return `- ${[p.name, p.title, p.location, p.linkedin].map((x) => x.replace(/\s+/g, " ").trim()).filter(Boolean).join(" · ")}`;
+}
+
+/** Crédits d'une recherche : le chiffre de FullEnrich, sinon 0,25 par personne trouvée. */
+export function coutRecherche(n: number, credits: number): number {
+  return credits > 0 ? credits : Math.round(n * 25) / 100;
 }
 
 export type Found = { email: string; emailStatus: string; phone: string };
