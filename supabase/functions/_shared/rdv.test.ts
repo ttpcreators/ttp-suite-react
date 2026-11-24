@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RDV_DEFAUT, creneauOk, creneauxLibres, instantParis, lireRdv, lireReservation, paris, mailRdv, quandFr, texteTelegramRdv } from "./rdv.ts";
+import { RDV_DEFAUT, creneauOk, creneauxLibres, instantParis, lireRdv, lireReservation, paris, mailRdv, occupeDepuisEvenements, quandFr, texteTelegramRdv } from "./rdv.ts";
 
 const cfg = { ...RDV_DEFAUT, actif: true }; // mardi 14 h-18 h, jeudi 9 h-12 h 30, 30 min, 20 h de délai
 // Dimanche 22 novembre 2026, 16 h à Paris (15 h UTC).
@@ -55,6 +55,25 @@ describe("lireRdv et lireReservation", () => {
   it("quandFr", () => {
     expect(quandFr("2026-11-24", "14:30")).toBe("mardi 24 novembre à 14 h 30");
     expect(quandFr("2026-11-24", "14:00")).toBe("mardi 24 novembre à 14 h");
+  });
+  it("occupeDepuisEvenements : ce qui occupe l'agenda, comme freeBusy", () => {
+    const h = (iso: string) => Date.parse(iso);
+    expect(occupeDepuisEvenements([
+      { start: { dateTime: "2026-11-24T14:00:00+01:00" }, end: { dateTime: "2026-11-24T15:00:00+01:00" } },
+      { status: "cancelled", start: { dateTime: "2026-11-24T16:00:00+01:00" }, end: { dateTime: "2026-11-24T17:00:00+01:00" } },
+      { transparency: "transparent", start: { dateTime: "2026-11-24T16:00:00+01:00" }, end: { dateTime: "2026-11-24T17:00:00+01:00" } },
+      { eventType: "workingLocation", start: { date: "2026-11-24" }, end: { date: "2026-11-25" } },
+      { attendees: [{ self: true, responseStatus: "declined" }], start: { dateTime: "2026-11-24T18:00:00+01:00" }, end: { dateTime: "2026-11-24T19:00:00+01:00" } },
+      { attendees: [{ self: true, responseStatus: "accepted" }, { responseStatus: "declined" }], start: { dateTime: "2026-11-24T20:00:00+01:00" }, end: { dateTime: "2026-11-24T20:30:00+01:00" } },
+      { start: { date: "2026-11-26" }, end: { date: "2026-11-27" } },
+      { start: { dateTime: "pas une date" }, end: { dateTime: "2026-11-24T15:00:00+01:00" } },
+      { start: { dateTime: "2026-11-24T15:00:00+01:00" }, end: { dateTime: "2026-11-24T15:00:00+01:00" } },
+    ])).toEqual([
+      { debut: h("2026-11-24T13:00:00Z"), fin: h("2026-11-24T14:00:00Z") },
+      { debut: h("2026-11-24T19:00:00Z"), fin: h("2026-11-24T19:30:00Z") },
+      { debut: h("2026-11-25T23:00:00Z"), fin: h("2026-11-26T23:00:00Z") },
+    ]);
+    expect(occupeDepuisEvenements(null)).toEqual([]);
   });
   it("mailRdv : qui, quand, le lien, et le texte du visiteur échappé", () => {
     const m = mailRdv({ nom: "Julie Martin", email: "julie@nova.fr", marque: "Nova", message: "Campagne janvier\n<script>x</script>", jour: "2026-11-24", heure: "14:30", duree: 30, meet: "https://meet.google.com/abc-defg-hij" });
