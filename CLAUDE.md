@@ -60,9 +60,14 @@ compile pas ou d'une tâche à moitié faite.
 - **Production = branche `main`.** `.github/workflows/deploy.yml` : `npm ci && npm run build`,
   puis `upload-pages-artifact` et `deploy-pages`. Domaine `app.ttpcreators.pro`
   (`public/CNAME`).
-- **Edge Functions** : **PAS déployées par la CI.** Déploiement MANUEL par Marc :
-  `supabase functions deploy <noms> --project-ref zizvggziggswhrbuyhuo`
-  (`ttp-mcp` : ajouter `--no-verify-jwt`).
+- **Edge Functions** : **jamais déployées par une fusion.** Deux façons, toujours depuis
+  `main` à jour :
+  - à la main, par Marc : `supabase functions deploy <noms> --project-ref zizvggziggswhrbuyhuo`
+    (`ttp-mcp` : ajouter `--no-verify-jwt`) ;
+  - à la demande, par GitHub : « Déploiement des fonctions »
+    (`.github/workflows/deploy-fonctions.yml`), lancé exprès en nommant les fonctions (onglet
+    Actions › Run workflow). Il lit `verify_jwt` dans `supabase/config.toml` et a besoin du
+    secret GitHub `SUPABASE_ACCESS_TOKEN`.
 - **SQL** : lancé à la main par Marc dans le SQL Editor de Supabase.
 - Vérifier une mise en ligne : `https://app.ttpcreators.pro/version.json` affiche les 12
   premiers caractères du commit déployé.
@@ -304,7 +309,7 @@ Depuis le 24 novembre 2026, Marc et Gianni (son associé) développent l'app tou
 - **Session Claude en ligne de Gianni** (décisions de Gianni du 24 novembre 2026, à la suite de l'audit du même jour) :
   - elle ne peut pas lancer `npm run build` (les paquets npm ne se téléchargent pas dans cette session) : pour ses PR, le contrôle « Vérification des PR » fait foi, et elle fusionne elle-même dès qu'il est vert ;
   - elle applique le SQL elle-même, par le connecteur Supabase de Gianni, après le « oui » de Gianni pour ce SQL précis. Le fichier daté est quand même déposé dans `supabase/sql/` et le tableau d'état mis à jour (⏳ puis ✅), comme pour tout SQL ;
-  - le déploiement des Edge Functions ne change pas (voir Déploiement), sauf accord de Marc et Gianni pour un déploiement précis ;
+  - elle déploie les Edge Functions elle-même par « Déploiement des fonctions » (voir Déploiement), après le « oui » de Gianni pour ce déploiement précis (décision de Gianni du 24 novembre 2026 au soir). Avant de lancer, elle vérifie que la fonction en ligne n'a pas été déployée depuis une branche pas encore fusionnée (date du dernier déploiement, PR ouvertes qui touchent la fonction) : dans le doute, elle s'arrête et le dit. Après, elle met le tableau d'état à jour ;
   - la liste des modifications en cours est dans l'audit du 24 novembre 2026 (points M1 à M30), cité dans les PR.
 
 ## Pièges connus

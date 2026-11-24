@@ -144,7 +144,8 @@ Exemple court à copier : `supabase/functions/team-notify/index.ts`.
    l'ancienne version déployée : l'app est en ligne avant la fonction. Modèle :
    [`mails-contrat-v2.md`](mails-contrat-v2.md) (la fonction renvoie un écho que l'app teste).
 6. **Le tableau d'état** : ligne `⏳ À faire` dans `supabase/sql/README.md` avec la commande.
-7. **Donner la commande à Marc** (l'assistant ne déploie jamais) :
+7. **Donner la commande à Marc**, ou lancer « Déploiement des fonctions » dans l'onglet Actions
+   de GitHub (voir `CLAUDE.md`, Déploiement). Une fusion ne déploie jamais une fonction :
    ```bash
    supabase functions deploy <nom> --project-ref zizvggziggswhrbuyhuo
    ```
