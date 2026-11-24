@@ -7,7 +7,9 @@
 //   lire_profil_instagram / lire_profils_instagram : profils lus par Business Discovery,
 //      agence détectée, Base créateurs mise à jour (_shared/profilInstagramDb.ts) ;
 //   scanner_base_createurs : relit la Base par lots (jamais lus, ou lus il y a plus de 30 j) ;
-//   trouver_emails_marque / trouver_email_personne : e-mails pro (Hunter, FullEnrich).
+//   trouver_emails_marque : les bonnes personnes chez une marque (FullEnrich, recherche de
+//      personnes ; Hunter seulement si FullEnrich n'est pas configuré) ;
+//   trouver_email_personne : l'e-mail pro d'une personne (FullEnrich, puis Hunter en secours).
 // Rien n'est écrit dans les contacts : l'outil propose, puis Claude appelle ajouter_contact.
 // ============================================================================
 
@@ -17,8 +19,8 @@ import { lireProfils, scannerBase, RELIRE_APRES_JOURS, type Lecture } from "../_
 import { MAX_LOT, compteDe, preparerComptes, raisonEchec, texteProfil } from "../_shared/profilInstagram.ts";
 import { tidySecret } from "../_shared/instagram.ts";
 import { CLE_MANQUANTE, HUNTER_API, cibles, domaineDe, erreurHunter, limiteDeLOffre, lignePersonne, lireEmailTrouve, lireRecherche, lireVerification, paramsRecherche, statutEmail, type PersonneHunter } from "../_shared/hunter.ts";
-import { enrichContact } from "../_shared/fullenrich.ts";
-import { FULLENRICH_KEY, enrichir, result as resultatFullEnrich, type EnrichResult } from "../_shared/fullenrichApi.ts";
+import { classerPersonnes, coutRecherche, enrichContact, lignePersonneFE, parsePeople, searchBody } from "../_shared/fullenrich.ts";
+import { FULLENRICH_KEY, enrichir, fe, result as resultatFullEnrich, why, type EnrichResult } from "../_shared/fullenrichApi.ts";
 
 type Json = Record<string, unknown>;
 const ok = (text: string) => ({ text });
@@ -173,23 +175,78 @@ async function hunter(path: string, key: string): Promise<{ status: number; body
   }
 }
 
+const RAISON_FE: Record<string, string> = {
+  reseau: "FullEnrich ne répond pas, réessayer dans une minute",
+  cle_invalide: "clé FullEnrich refusée (secret FULLENRICH_API_KEY à vérifier)",
+  credits_insuffisants: "crédits FullEnrich épuisés pour ce mois",
+  limite: "trop de demandes à FullEnrich d'un coup, réessayer dans une minute",
+};
+const raisonFE = (code: string) => RAISON_FE[code] ?? `FullEnrich a répondu une erreur (${code})`;
+
+/** Les bonnes personnes chez une marque, par la recherche de personnes FullEnrich. */
+async function marqueParFullEnrich(a: Record<string, unknown>) {
+  const domaine = domaineDe(str(a.domaine, 200)) || domaineDe(str(a.marque, 200));
+  const marque = str(a.marque, 120);
+  if (!domaine && !marque) return fail("Donne le domaine du site de la marque (ex. marque.fr) ou son nom.");
+  const company = domaine || marque;
+  const max = int(a.max, 5, 1, 10);
+  const titles = str(a.postes, 400).split(/[,;\n]/).map((x) => x.trim()).filter(Boolean).slice(0, 12);
+  const country = str(a.pays, 60) || undefined;
+  const chercher = (allTitles: boolean, limit: number) => fe("/people/search", { method: "POST", body: JSON.stringify(searchBody({ company, titles, country, limit, allTitles })) });
+
+  const r = await chercher(a.tous_les_postes === true, max);
+  if (r.status !== 200) return fail(`Rien n'a été cherché : ${raisonFE(why(r.status, r.body))}.`);
+  let res = parsePeople(r.body);
+  let cout = coutRecherche(res.people.length, res.credits);
+  let elargi = false;
+  // Personne avec un poste marketing ou influence : on regarde tous les postes, 5 personnes au plus.
+  if (!res.people.length && a.tous_les_postes !== true) {
+    const r2 = await chercher(true, Math.min(max, 5));
+    if (r2.status === 200) {
+      res = parsePeople(r2.body);
+      cout += coutRecherche(res.people.length, res.credits);
+      elargi = true;
+    }
+  }
+  const { toutes, cibles: dansLaCible } = classerPersonnes(res.people);
+  const solde = await fe("/account/credits");
+  const restants = solde.status === 200 && Number.isFinite(Number(solde.body.balance)) ? Number(solde.body.balance) : null;
+  const nom = toutes.find((p) => p.company)?.company || marque || domaine;
+  return ok([
+    `# Personnes à contacter · ${nom}${domaine ? ` (${domaine})` : ""}`,
+    !domaine ? `Recherche par le nom « ${marque} », sans le site : vérifier que les personnes travaillent bien pour cette marque.` : "",
+    toutes.length
+      ? `${fr(toutes.length)} personne(s)${res.total > toutes.length ? ` sur ${fr(res.total)} connue(s) de FullEnrich` : ""}${country ? `, ${country}` : ""}${elargi ? ", recherche élargie à tous les postes" : ""}. ${fr(dansLaCible.length)} avec un poste dans la cible, les plus utiles en premier.`
+      : `FullEnrich ne connaît personne chez ${nom}${country ? ` (${country})` : ""}${elargi ? ", même sans filtre de poste" : ""}. Essayer avec le domaine exact du site, sans le pays, ou garder l'adresse générale de la marque.`,
+    ...toutes.map(lignePersonneFE),
+    toutes.length ? "Pour l'e-mail d'une personne : trouver_email_personne (prenom, nom, domaine, ou son lien LinkedIn) : 1 crédit seulement si l'e-mail est trouvé." : "",
+    `Coût de cette recherche : ${fr(cout)} crédit(s) FullEnrich.${restants === null ? "" : ` Crédits restants : ${fr(restants)}.`}`,
+    restants !== null && restants < 25 ? "⚠ Presque plus de crédits FullEnrich ce mois-ci : garder les adresses générales des marques pour la suite." : "",
+    "Rien n'a été enregistré. Pour garder une personne : ajouter_contact (marque, personne, role, email).",
+  ].filter(Boolean).join("\n"));
+}
+
 const trouverEmailsMarque: AdminTool = {
   name: "trouver_emails_marque",
-  title: "Trouver les e-mails pro d'une marque",
+  title: "Trouver les personnes à contacter chez une marque",
   description:
-    "Trouve chez une marque les personnes marketing, influence, relations presse (RP) ou partenariats, avec leur poste, leur e-mail pro et son statut de vérification, et leur LinkedIn (API Hunter, domain-search). Donner le domaine du site (ex. marque.fr) de préférence ; avec seulement le nom de la marque, Hunter cherche le domaine (à confirmer). verifier = true vérifie en plus les 5 premières adresses non vérifiées (1 vérification Hunter chacune). N'écrit RIEN : pour garder une personne, appeler ajouter_contact.",
+    "Trouve chez une marque les personnes à contacter (influence, partenariats, relations presse, social media, marketing), classées de la plus utile à la moins utile, avec leur poste, leur ville et leur LinkedIn. Passe par FullEnrich (abonnement de l'agence) : 0,25 crédit par personne trouvée, donc 5 personnes par défaut. Donner le domaine du site (ex. marque.fr) de préférence, sinon le nom de la marque. La recherche ne donne PAS l'e-mail : pour la ou les personnes retenues, appeler ensuite trouver_email_personne (1 crédit seulement si l'e-mail est trouvé). Le solde de crédits est affiché à la fin : à surveiller, l'abonnement en donne 500 par mois. N'écrit RIEN : pour garder une personne, appeler ajouter_contact.",
   inputSchema: {
     type: "object",
     properties: {
       domaine: { type: "string", description: "Domaine ou site de la marque (ex. marque.fr)" },
       marque: { type: "string", description: "Nom de la marque, si le domaine est inconnu" },
-      max: { type: "integer", minimum: 1, maximum: 50, description: "Personnes demandées à Hunter (défaut 10 ; l'offre gratuite en donne 10 au plus)" },
-      tous_les_postes: { type: "boolean", description: "Montrer aussi les autres postes (pas seulement marketing, influence, RP, partenariats)" },
-      verifier: { type: "boolean", description: "Vérifier les adresses non vérifiées (5 au plus)" },
+      max: { type: "integer", minimum: 1, maximum: 50, description: "Personnes demandées (défaut 5, 10 au plus avec FullEnrich : chaque personne trouvée coûte 0,25 crédit)" },
+      postes: { type: "string", description: "Postes cherchés, séparés par des virgules (défaut : influence, partenariat, marketing, communication, relations presse, social media, brand manager)" },
+      pays: { type: "string", description: "Ne garder que les personnes dans ce pays (ex. France). Vide : tous les pays" },
+      tous_les_postes: { type: "boolean", description: "Chercher sans filtre de poste (petite marque où personne n'a un titre marketing)" },
+      verifier: { type: "boolean", description: "Hunter seulement : vérifier les adresses non vérifiées (5 au plus)" },
     },
     additionalProperties: false,
   },
   run: async (_sb, _c, a) => {
+    // FullEnrich d'abord (abonnement de l'agence, décision du 24/11/2026 : pas de Hunter).
+    if (FULLENRICH_KEY) return await marqueParFullEnrich(a);
     const key = hunterKey();
     if (!key) return fail(CLE_MANQUANTE);
     const domaine = domaineDe(str(a.domaine, 200)) || domaineDe(str(a.marque, 200));
