@@ -55,3 +55,29 @@ export function alfredHorsLigne(now: Date, vuLe: string | null, alerteLe: string
   const dejaDit = !!alerteLe && Date.parse(alerteLe) > Date.parse(vuLe);
   return { alerte: minutes >= 15 && h >= 7 && h < 23 && !dejaDit, minutes };
 }
+
+/**
+ * Où ranger une photo qu'Alfred téléverse sur l'app (demande de Marc, 24 novembre 2026) :
+ *   « createur:<id> »          → la photo de profil du créateur (creators.photo_url) ;
+ *   « mediakit:<id>:<cle> »    → une photo de son media kit (mediakit.photos[cle] : hero, contact,
+ *                                ou la capture d'une plateforme : instagram, tiktok…) ;
+ *   vide                        → seulement l'adresse de la photo, sans rien changer dans l'app.
+ * null : cible illisible (refusée).
+ */
+export type CiblePhoto = { kind: "aucune" } | { kind: "createur"; id: string } | { kind: "mediakit"; id: string; cle: string };
+export function cibleDePhoto(cible: unknown): CiblePhoto | null {
+  const c = String(cible ?? "").trim().toLowerCase();
+  if (!c) return { kind: "aucune" };
+  const uuid = "([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})";
+  let m = c.match(new RegExp(`^createur:${uuid}$`));
+  if (m) return { kind: "createur", id: m[1] };
+  m = c.match(new RegExp(`^mediakit:${uuid}:([a-z0-9_-]{1,30})$`));
+  if (m) return { kind: "mediakit", id: m[1], cle: m[2] };
+  return null;
+}
+
+/** Une photo seulement (jpg, png, webp, heic), 10 Mo au plus. */
+export function typePhoto(nom: string): string | null {
+  const ext = String(nom).toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] ?? "";
+  return ({ jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", heic: "image/heic" } as Record<string, string>)[ext] ?? null;
+}

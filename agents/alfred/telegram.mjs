@@ -813,6 +813,46 @@ export function trouverLien(text) {
   return null;
 }
 
+/**
+ * Lien d'une vidéo publiée sur un réseau (Instagram, TikTok, YouTube, X, Facebook, Vimeo) : seulement
+ * quand Alfred le télécharge lui même pour donner son avis (node telegram.mjs telecharger), jamais
+ * pour un lien que Marc colle sans rien demander (demande de Marc, 24 novembre 2026).
+ */
+export function lienReseau(text) {
+  for (const raw of String(text ?? "").match(/https?:\/\/[^\s<>"'»)]+/gi) ?? []) {
+    const url = raw.replace(/[.,;:!?]+$/, "");
+    let h = "";
+    try {
+      h = new URL(url).hostname.toLowerCase();
+    } catch {
+      continue;
+    }
+    if (/(^|\.)(instagram\.com|tiktok\.com|youtube\.com|youtu\.be|x\.com|twitter\.com|facebook\.com|fb\.watch|vimeo\.com)$/.test(h)) return { kind: "reseau", url };
+  }
+  return null;
+}
+
+/** Une vidéo d'un réseau téléchargée avec yt-dlp (installé sur le Mac), puis découpée comme une preview. */
+async function telechargerReseau(lien, dir, model) {
+  const ytdlp = ["/opt/homebrew/bin/yt-dlp", "/usr/local/bin/yt-dlp", join(homedir(), ".local/bin/yt-dlp")].find((c) => existsSync(c));
+  if (!ytdlp) return "yt-dlp n'est pas installé sur l'iMac : dis à Marc de lancer « brew install yt-dlp » dans le Terminal de l'iMac, ou de t'envoyer la vidéo sur Telegram.";
+  mkdirSync(dir, { recursive: true });
+  try {
+    await promisify(execFile)(ytdlp, ["--no-playlist", "--max-filesize", "300M", "-f", "mp4/bv*[height<=1080]+ba/b", "--merge-output-format", "mp4", "-o", join(dir, "video.%(ext)s"), lien.url], { timeout: 300_000, maxBuffer: 10 * 1024 * 1024 });
+  } catch (e) {
+    return `vidéo impossible à récupérer (compte privé, connexion demandée ou lien mort) : ${String(e.message).split("\n").filter(Boolean).pop()?.slice(0, 200)}. Demande à Marc de t'envoyer la vidéo sur Telegram.`;
+  }
+  const v = plusGrosseVideo(dir);
+  return v ? await decouperVideo(v, dir, model) : "aucune vidéo trouvée derrière ce lien.";
+}
+
+/** Nom d'une pièce jointe de mail copiée sur l'iMac : « 20261124-153000-Brief Nova.pdf ». */
+export function nomPieceMail(nom, quand = new Date()) {
+  const id = quand.toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-");
+  const propre = String(nom ?? "").replace(/[\/\\:*?"<>|\u0000-\u001f]/g, "_").replace(/^\.+/, "").trim().slice(0, 120) || "piece";
+  return `${id}-${propre}`;
+}
+
 /** Lien Google Drive ou Dropbox → lien de téléchargement direct (sans appel réseau). */
 export function lienSimple(kind, url) {
   if (kind === "drive") {
@@ -1258,15 +1298,17 @@ function lireSujets(here) {
 const PONT = "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/alfred-pont";
 
 /** Appelle alfred-pont avec le secret de config.env (ALFRED_PONT_SECRET). null sans secret ou en cas d'échec. */
-async function pont(env, body) {
+async function pont(env, body, { attente = 20_000, erreurs = false } = {}) {
   // Le secret du pont, ou l'empreinte du jeton du bot (déjà dans config.env) : rien à poser à la main.
   const secret = env.ALFRED_PONT_SECRET || (env.ALFRED_BOT_TOKEN ? `tg:${createHash("sha256").update(env.ALFRED_BOT_TOKEN).digest("hex")}` : "");
-  if (!secret) return null;
+  if (!secret) return erreurs ? { error: "pas de secret du pont dans config.env" } : null;
   try {
-    const r = await fetch(PONT, { method: "POST", headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(20_000) });
-    return r.ok ? await r.json() : null;
-  } catch {
-    return null;
+    const r = await fetch(PONT, { method: "POST", headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(attente) });
+    if (r.ok) return await r.json();
+    // erreurs : la raison du refus revient (pièce introuvable, photo trop lourde…), jamais un silence.
+    return erreurs ? { error: (await r.json().catch(() => null))?.error || `refusé (${r.status})` } : null;
+  } catch (e) {
+    return erreurs ? { error: `pont injoignable (${e.message})` } : null;
   }
 }
 
@@ -1452,6 +1494,47 @@ async function main() {
     const r = await pont(env, { action: "deposer", nom: nomAffiche(src.split(sep).pop()), contenu: readFileSync(src).toString("base64") });
     if (!r?.path) return console.log(`Dépôt refusé${r?.error ? ` (${r.error})` : ""} : PDF, image, Word, Excel, PowerPoint ou CSV.`);
     console.log(`Déposé : ${r.nom}. Pour le joindre : creer_brouillon_mail avec pieces_jointes [{ "document": "${r.path}" }]`);
+    return;
+  }
+
+  // Une pièce jointe d'un mail des boîtes reliées à l'app (partnerships, talent, boîte d'un créateur),
+  // copiée dans etat/pieces pour qu'Alfred la lise quand Marc le demande (24 novembre 2026) :
+  //   node telegram.mjs piece-mail <boîte> <id du fil> "<nom du fichier, comme lire_mail l'écrit>"
+  if (mode === "piece-mail") {
+    const [boite, fil, ...reste] = process.argv.slice(3);
+    const nom = reste.join(" ").trim();
+    if (!boite || !fil || !nom) return console.log('Usage : node telegram.mjs piece-mail <boîte> <id du fil> "<nom du fichier>" (boîte, fil et noms des pièces : rechercher_mails puis lire_mail).');
+    const r = await pont(env, { action: "piece_mail", boite, fil, nom }, { attente: 90_000, erreurs: true });
+    if (!r?.contenu) return console.log(`Pièce jointe pas récupérée : ${r?.error ?? "réponse vide"}. Vérifie le nom exact avec lire_mail ; sinon, dis à Marc de te la transférer sur Telegram.`);
+    const dir = join(here, "etat", "pieces");
+    mkdirSync(dir, { recursive: true });
+    const dest = join(dir, nomPieceMail(r.nom));
+    writeFileSync(dest, Buffer.from(r.contenu, "base64"));
+    const rel = dest.replace(join(here, ""), "");
+    const quoi = /^video\//.test(r.type) || VIDEO_EXT.test(r.nom)
+      ? `C'est une vidéo : node telegram.mjs preparer "${rel}" te donne ses images et sa transcription.`
+      : /pdf|image\//.test(r.type) ? "Lis la avec Read (un PDF de plus de 10 pages : par tranches de 20 avec pages)." : "Lis la avec Read ; un document Word ou Excel illisible : demande le PDF.";
+    console.log(`Pièce jointe prête : ${rel} (${Math.ceil(statSync(dest).size / 1024)} Ko). ${quoi}`);
+    return;
+  }
+
+  // Une photo téléversée sur l'app, seulement quand Marc le demande (24 novembre 2026) :
+  //   node telegram.mjs photo <etat/…> [createur:<id> | mediakit:<id>:<cle>]
+  //   node telegram.mjs photo --remettre "<ancienne adresse ou vide>" <cible>   (bouton Annuler)
+  if (mode === "photo") {
+    if (arg === "--remettre") {
+      const [ancienne, cible] = process.argv.slice(4);
+      const r = await pont(env, { action: "photo", cible, remettre: ancienne || null }, { erreurs: true });
+      return console.log(r?.ok ? `Remis comme avant${r.createur ? ` pour ${r.createur}` : ""}.` : `Pas remis : ${r?.error}.`);
+    }
+    const src = resolve(here, String(arg ?? ""));
+    if (!src.startsWith(join(here, "etat") + sep) || !existsSync(src)) return console.log("Donne une photo de etat/ (etat/previews/… pour une photo que Marc t'a envoyée, etat/pieces/… pour une pièce jointe).");
+    if (statSync(src).size > 10 * 1024 * 1024) return console.log("Photo de plus de 10 Mo : demande à Marc une version plus légère.");
+    const cible = process.argv[4] ?? "";
+    const r = await pont(env, { action: "photo", nom: src.split(sep).pop(), contenu: readFileSync(src).toString("base64"), cible }, { attente: 60_000, erreurs: true });
+    if (!r?.url) return console.log(`Photo pas téléversée : ${r?.error ?? "réponse vide"}.`);
+    const ou = cible.startsWith("createur:") ? `photo de profil de ${r.createur}` : cible.startsWith("mediakit:") ? `media kit de ${r.createur} (${cible.split(":")[2]})` : "stockage de l'app (rien d'autre n'a changé)";
+    console.log(`Photo en ligne : ${r.url}\nRangée : ${ou}.${cible ? `\nPour Annuler : node telegram.mjs photo --remettre "${r.avant ?? ""}" ${cible}` : ""}`);
     return;
   }
 
@@ -1646,10 +1729,12 @@ async function main() {
 
   if (mode === "telecharger") {
     const lien = trouverLien(arg ?? "");
-    if (!lien) return console.log("Lien non reconnu : WeTransfer, SwissTransfer, Google Drive, Dropbox ou lien direct vers une vidéo.");
+    const reseau = lien ? null : lienReseau(arg ?? "");
+    if (!lien && !reseau) return console.log("Lien non reconnu : WeTransfer, SwissTransfer, Google Drive, Dropbox, Instagram, TikTok, YouTube, X, Facebook, Vimeo ou lien direct vers une vidéo.");
     const id = new Date().toISOString().slice(0, 19).replace(/[-:]/g, "").replace("T", "-");
     const model = env.WHISPER_MODEL || join(homedir(), ".cache/whisper-cpp/ggml-large-v3-turbo-q5_0.bin");
-    console.log((await telechargerVideo(lien, join(here, "etat", "previews", `${id}-mail`), model)).replace(join(here, ""), ""));
+    const dir = join(here, "etat", "previews", `${id}-${reseau ? "reseau" : "mail"}`);
+    console.log((reseau ? await telechargerReseau(reseau, dir, model) : await telechargerVideo(lien, dir, model)).replace(join(here, ""), ""));
     return;
   }
 

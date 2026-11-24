@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { prendreLaPlace, ecrireSkill, ligneEvenement, messageDemande, reponseDepuis, origineTransfert, texteDuMail, ajouterCommandes, carteDepuis, cleSujet, commandeFixe, doitSonner, enHtml, extraireSujet, graphiqueHtml, ligneRemise, messageMail, aEnvoyerWhatsApp, boutonsLiens, chunks, clavier, commandesDepuis, COMMANDES_DE_BASE, menuDepuis, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "../telegram.mjs";
+import { lienReseau, nomPieceMail, prendreLaPlace, ecrireSkill, ligneEvenement, messageDemande, reponseDepuis, origineTransfert, texteDuMail, ajouterCommandes, carteDepuis, cleSujet, commandeFixe, doitSonner, enHtml, extraireSujet, graphiqueHtml, ligneRemise, messageMail, aEnvoyerWhatsApp, boutonsLiens, chunks, clavier, commandesDepuis, COMMANDES_DE_BASE, menuDepuis, clavierConfirmation, etapeToucher, dossierEnvoi, dueReminders, extraireLiens, fichierRecuIds, fichiersPrets, escapeCode, escapeMd, frameTimes, lienSimple, marcMessages, mediaOf, messagesFor, nomAffiche, nomContrat, contratDepuisJson, nomPieceJointe, pdfArgs, refusPiece, trouverLien } from "../telegram.mjs";
 
 describe("Alfred : messages Telegram", () => {
   it("échappe le MarkdownV2 hors et dans un bloc de code", () => {
@@ -485,3 +485,19 @@ describe("raccourcis des créateurs", () => {
   });
 });
 
+describe("pièces des mails et vidéos des réseaux (24 novembre 2026)", () => {
+  it("reconnaît une vidéo d'un réseau, pas un autre lien", () => {
+    expect(lienReseau("ton avis ? https://www.instagram.com/reel/C9abc/?igsh=x.")).toEqual({ kind: "reseau", url: "https://www.instagram.com/reel/C9abc/?igsh=x" });
+    expect(lienReseau("https://vm.tiktok.com/ZM123/")?.kind).toBe("reseau");
+    expect(lienReseau("https://youtu.be/abc")?.kind).toBe("reseau");
+    expect(lienReseau("https://ttpcreators.pro/kit")).toBeNull();
+    expect(lienReseau("https://instagram.com.evil.io/reel/x")).toBeNull();
+  });
+
+  it("nomme une pièce jointe copiée sans chemin ni caractère piégé", () => {
+    const quand = new Date("2026-11-24T15:30:00Z");
+    expect(nomPieceMail("Brief Nova.pdf", quand)).toBe("20261124-153000-Brief Nova.pdf");
+    expect(nomPieceMail("../../config.env", quand)).toBe("20261124-153000-_.._config.env");
+    expect(nomPieceMail("", quand)).toBe("20261124-153000-piece");
+  });
+});

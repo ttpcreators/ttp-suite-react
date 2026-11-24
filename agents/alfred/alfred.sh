@@ -292,7 +292,7 @@ interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_factu
 # (trouvé le 2026-11-12). En plus, chaque commande Bash le ramène dans son dossier (plus bas).
 ici="/$PWD"
 allowed=("Read($ici/**)" "Edit($ici/etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)" "Bash(node telegram.mjs joindre:*)" "Bash(node telegram.mjs raccourcis)" "Bash(node telegram.mjs preparer:*)" "Bash(node telegram.mjs deposer:*)"
-  "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)" "Bash(node araignee.mjs:*)"
+  "Bash(node telegram.mjs piece-mail:*)" "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)" "Bash(node araignee.mjs:*)"
   "mcp__legifrance")
 # mcp__legifrance : les codes, lois et décisions de justice, en lecture seule (fiches/juridique.md).
 denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash(spark:*)"
@@ -302,6 +302,8 @@ denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash(spark:*)"
 # et seulement pendant un passage où Marc a écrit : ses consignes exigent son « oui » pour CE texte.
 # Même règle pour ajouter une discussion à la liste autorisée (`autoriser`).
 (( recus > 0 )) || denied+=("Bash(node whatsapp.mjs envoyer:*)" "Bash(node whatsapp.mjs autoriser:*)")
+# Une photo téléversée sur l'app (demande de Marc le 2026-11-24) : seulement quand Marc vient d'écrire.
+(( recus > 0 )) && allowed+=("Bash(node telegram.mjs photo:*)") || denied+=("Bash(node telegram.mjs photo:*)")
 # Les nouvelles de l'app contiennent une validation faite dans la page Agents : l'envoi est permis
 # pour ce passage (voir « La liste à valider de 17 h », point 5, et « Qui fait quoi »).
 envoi_valide=0
