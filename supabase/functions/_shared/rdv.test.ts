@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RDV_DEFAUT, creneauOk, creneauxLibres, instantParis, lireRdv, lireReservation, paris, quandFr } from "./rdv.ts";
+import { RDV_DEFAUT, creneauOk, creneauxLibres, instantParis, lireRdv, lireReservation, paris, quandFr, texteTelegramRdv } from "./rdv.ts";
 
 const cfg = { ...RDV_DEFAUT, actif: true }; // mardi 14 h-18 h, jeudi 9 h-12 h 30, 30 min, 20 h de délai
 // Dimanche 22 novembre 2026, 16 h à Paris (15 h UTC).
@@ -55,5 +55,8 @@ describe("lireRdv et lireReservation", () => {
   it("quandFr", () => {
     expect(quandFr("2026-11-24", "14:30")).toBe("mardi 24 novembre à 14 h 30");
     expect(quandFr("2026-11-24", "14:00")).toBe("mardi 24 novembre à 14 h");
+  });
+  it("texteTelegramRdv : le créneau, sans texte du visiteur", () => {
+    expect(texteTelegramRdv("2026-11-24", "14:30", 30)).toBe("Visio réservée : mardi 24 novembre à 14 h 30 (30 min). La fiche du contact est dans la to-do de l'app.");
   });
 });
