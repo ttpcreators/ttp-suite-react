@@ -30,6 +30,7 @@ import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "
 import { discover, engagementRate, igUser, metaReady, ownAccount, postsPerWeek, quotaPct, saveUsage, type IgProfile } from "../_shared/instagram.ts";
 import { brandAccountOk, handleCandidates, isCommonWord, isPlainWord, proseWords } from "../_shared/mentions.ts";
 import { agencyHint, emailsIn, isPaid } from "../_shared/signals.ts";
+import { MAX_OCTETS, adressesDans, genreEmail } from "../_shared/siteMarque.ts";
 import { brandSummary, postEr, postKind, type CollabPost } from "../_shared/creatorCollabs.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -45,6 +46,7 @@ const POOL_PER_SCAN = 40; // créatrices du Scouting lues par passage (les plus 
 const BRANDS_PER_SCAN = 80; // comptes cités vérifiés par passage (les plus probables d'abord)
 const QUOTA_MAX = 80; // au-delà, pause : on ne risque pas le blocage par Meta (le cron des 2 h envoie 60)
 const DISCOVER_PER_SCAN = 40; // créatrices hors agence lues par passage (découvertes)
+const VERIFY_PER_RUN = 150; // marques en attente vérifiées par passage, dans la limite de MAX_LUS
 const age = (iso: string | null | undefined) => (iso ? Date.now() - Date.parse(iso) : Infinity);
 
 
@@ -85,43 +87,51 @@ function safeHost(h: string): boolean {
   if (/^\d+\.\d+\.\d+\.\d+$/.test(host) || host.includes(":") || host.startsWith("[")) return false;
   return host.includes(".");
 }
-/** Texte de la page du lien en bio (6 s max, 2 Mo max, 3 redirections). */
-async function siteText(raw: string): Promise<string> {
+/**
+ * La page du lien en bio (6 s max, 1,5 Mo max, 3 redirections) : ses adresses e-mail, les plus
+ * « pro » d'abord, et le début de son texte (pour l'indice d'agence). Les adresses sont lues
+ * autour de chaque « @ » (adressesDans) et les balises ne sont retirées que du début : nettoyer
+ * 2 Mo de page par motifs à chaque profil coûtait l'essentiel du temps de calcul du radar.
+ */
+async function sitePage(raw: string): Promise<{ emails: string[]; debut: string } | null> {
   let u: URL;
   try {
     u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
   } catch {
-    return "";
+    return null;
   }
   for (let hop = 0; hop < 4; hop++) {
-    if (!/^https?:$/.test(u.protocol) || !safeHost(u.hostname)) return "";
+    if (!/^https?:$/.test(u.protocol) || !safeHost(u.hostname)) return null;
     let r: Response;
     try {
       r = await fetch(u, { redirect: "manual", signal: AbortSignal.timeout(6000), headers: { "User-Agent": "Mozilla/5.0 (compatible; TTPCreators/1.0)", Accept: "text/html" } });
     } catch {
-      return "";
+      return null;
     }
     if (r.status >= 300 && r.status < 400) {
       const loc = r.headers.get("location");
       await r.body?.cancel();
-      if (!loc) return "";
+      if (!loc) return null;
       try {
         u = new URL(loc, u);
       } catch {
-        return "";
+        return null;
       }
       continue;
     }
     const type = r.headers.get("content-type") ?? "";
     if (!r.ok || !type.includes("text/html") || Number(r.headers.get("content-length") ?? 0) > 2_000_000) {
       await r.body?.cancel();
-      return "";
+      return null;
     }
-    const html = new TextDecoder().decode((await r.arrayBuffer()).slice(0, 2_000_000));
-    const mailtos = [...html.matchAll(/mailto:([^"'?>\s]+)/gi)].map((m) => decodeURIComponent(m[1]));
-    return `${mailtos.join(" ")} ${html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#160;/g, " ")}`;
+    const html = new TextDecoder().decode((await r.arrayBuffer()).slice(0, MAX_OCTETS));
+    const pro = /(collab|contact|booking|partenariat|business|hello|pr)/;
+    // Sans les adresses de robots, techniques ou d'exemple (noreply@, test@test.com).
+    const emails = adressesDans(html).filter((e) => genreEmail(e) !== null).sort((a, b) => Number(pro.test(b)) - Number(pro.test(a)));
+    const debut = html.slice(0, 80_000).replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#160;/g, " ");
+    return { emails, debut };
   }
-  return "";
+  return null;
 }
 
 /** Chiffres utiles d'un profil (gardés dans ig_profiles.data), + email et indice d'agence. */
@@ -132,14 +142,14 @@ async function toData(p: IgProfile): Promise<Json> {
   let emailFrom = email ? "bio" : "";
   let agency = agencyHint(`${p.name} ${p.bio}`, email);
   if (p.website && (!email || !agency)) {
-    const text = await siteText(p.website);
-    if (text) {
-      const siteEmail = emailsIn(text)[0] ?? "";
+    const page = await sitePage(p.website);
+    if (page) {
+      const siteEmail = page.emails[0] ?? "";
       if (!email && siteEmail) {
         email = siteEmail;
         emailFrom = "lien";
       }
-      agency = agency ?? agencyHint(text.slice(0, 20000), siteEmail);
+      agency = agency ?? agencyHint(page.debut.slice(0, 20000), siteEmail);
     }
   }
   // Marques citées dans ses posts : « payé » (#ad, code promo…) = elle a déjà fait des partenariats.
@@ -167,9 +177,14 @@ async function toData(p: IgProfile): Promise<Json> {
   };
 }
 
-type Ctx = { sb: SupabaseClient; stop: string; t0: number; cache: Map<string, ProfileRow>; quotaMax: number };
+type Ctx = { sb: SupabaseClient; stop: string; t0: number; cache: Map<string, ProfileRow>; quotaMax: number; lus: number };
+// Profils demandés à Meta par passage. Au-delà, la fonction dépassait son temps de calcul
+// (« CPU Time exceeded », réponse 546, quatre nuits de suite le 24/11/2026) : la nuit, le quota
+// est libre et le radar lisait sans s'arrêter. La suite attend le passage suivant (toutes les 2 h).
+const MAX_LUS = 120;
 function inBudget(ctx: Ctx): boolean {
   if (!ctx.stop && (quotaPct() ?? 0) >= ctx.quotaMax) ctx.stop = "quota_proche";
+  if (!ctx.stop && ctx.lus >= MAX_LUS) ctx.stop = "passage_plein";
   return !ctx.stop && Date.now() - ctx.t0 < 110_000;
 }
 
@@ -181,6 +196,7 @@ async function profile(ctx: Ctx, user: string, mediaLimit: number, force = false
   const current = !!known && (!!known.why || known.data?.v === DATA_V);
   if (!force && known && current && age(known.at) < freshDays * DAY) return { row: known };
   if (ctx.stop) return { row: known ?? { username: u, data: null, why: ctx.stop, scanned_at: null, at: new Date().toISOString() } };
+  ctx.lus++;
   const r = await discover(u, mediaLimit);
   const now = new Date().toISOString();
   if (!r.ok) {
@@ -384,14 +400,27 @@ async function verifyBrand(ctx: Ctx, b: string) {
  * cités d'abord), sans relire les créatrices. S'arrête à QUOTA_MAX % du quota Meta.
  */
 async function verify(ctx: Ctx) {
-  const { data } = await ctx.sb.from("ig_radar").select("brand, posts").eq("status", "nouveau").limit(5000);
-  const rows = (data as { brand: string; posts: unknown[] }[] | null) ?? [];
-  await loadCache(ctx, rows.map((r) => r.brand));
-  const todo = rows
-    .filter((r) => { const k = ctx.cache.get(r.brand); return !k || (!k.why && k.data?.v !== DATA_V); })
-    .sort((a, b) => (b.posts?.length ?? 0) - (a.posts?.length ?? 0))
-    .slice(0, 150)
-    .map((r) => r.brand);
+  // Les plus citées d'abord, sans charger leurs posts (39 000 lignes en attente, 36 Mo) : on
+  // demande à la base les marques qui ont au moins 10 posts, puis 5, 3, 2, puis les autres
+  // (« posts->9 » existe = au moins 10 posts), 1 000 noms par palier, les plus récentes d'abord.
+  const todo: string[] = [];
+  const vues = new Set<string>();
+  for (const rang of [9, 4, 2, 1, 0]) {
+    // Deux pages par palier : quand les premières marques sont déjà vérifiées, on regarde plus loin.
+    for (let page = 0; page < 2 && todo.length < VERIFY_PER_RUN; page++) {
+      const { data } = await ctx.sb.from("ig_radar").select("brand").eq("status", "nouveau").not(`posts->${rang}`, "is", null)
+        .order("last_seen", { ascending: false }).order("brand").range(page * 1000, page * 1000 + 999);
+      const lignes = (data as { brand: string }[] | null) ?? [];
+      const noms = lignes.map((r) => r.brand).filter((b) => !vues.has(b));
+      for (const b of noms) vues.add(b);
+      await loadCache(ctx, noms);
+      for (const b of noms) {
+        const k = ctx.cache.get(b);
+        if ((!k || (!k.why && k.data?.v !== DATA_V)) && todo.length < VERIFY_PER_RUN) todo.push(b);
+      }
+      if (lignes.length < 1000) break;
+    }
+  }
   let verified = 0;
   await each(ctx, todo, async (b) => {
     await verifyBrand(ctx, b);
@@ -667,7 +696,7 @@ Deno.serve(async (req: Request) => {
   // Seuil de pause : 80 % à la main ; le passage automatique toutes les 2 h envoie 60 pour
   // laisser de la marge aux recherches de l'agence pendant la journée.
   const quotaMax = Math.min(85, Math.max(30, Number(body.quota) || QUOTA_MAX));
-  const ctx: Ctx = { sb, stop: "", t0: Date.now(), cache: new Map(), quotaMax };
+  const ctx: Ctx = { sb, stop: "", t0: Date.now(), cache: new Map(), quotaMax, lus: 0 };
   // Table absente (SQL pas encore lancé) : on le dit clairement.
   const probe = await sb.from("ig_profiles").select("username").limit(1);
   if (probe.error) return res({ error: "migration_manquante" });

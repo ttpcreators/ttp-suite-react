@@ -94,6 +94,7 @@ const IG_WHY: Record<string, string> = {
   hashtag_invalide: "hashtag non valide",
   hashtag_introuvable: "hashtag inconnu d'Instagram",
   quota_proche: "pause pour ne pas dépasser le quota Meta, la suite au prochain passage",
+  passage_plein: "pause : assez de profils lus d'un coup, la suite au prochain passage",
   page_introuvable: "le robot Meta ne voit pas la Page Facebook liée au compte Instagram de TTP",
   meta_validation: "Meta demande de valider l'app (accès avancé) pour cette fonction",
   migration_manquante: "la base n'est pas encore à jour (SQL à lancer)",
