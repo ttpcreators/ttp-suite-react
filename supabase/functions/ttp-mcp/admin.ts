@@ -30,7 +30,8 @@ import { LIEN_TTL_MS, PROJECT_URL, creatorBoxReady, listCreatorBoxes, normEmail 
 import { genNonce, signState } from "../_shared/state.ts";
 import type { Ctx } from "./oauth.ts";
 import { PROSPECTION_TOOLS, adressesDe, adressesInvalides, suiviApresEnvoi } from "./prospection.ts";
-import { verifierBrouillon, verifierKitsDuMail } from "./kitGarde.ts";
+import { verifierKitsDuMail } from "./kitGarde.ts";
+import { bloquant, journaliserEnvoi, verifierAvantEnvoi } from "./envois.ts";
 
 type Json = Record<string, unknown>;
 type Args = Record<string, unknown>;
@@ -553,6 +554,8 @@ const envoyerMail: AdminTool = {
     // Domaine du destinataire vérifié (MX) : une adresse impossible ne part pas, la fiche est marquée.
     const invalide = await adressesInvalides(sb, to);
     if (invalide) return fail(invalide);
+    const npc = await bloquant(sb, [...to, ...cc], !!str(a.fil));
+    if (npc) return fail(`Rien n'est parti : ${npc}.`);
     // Media kit faux : un mail de prospection ne part pas (kitGarde.ts).
     const kit = await verifierKitsDuMail(sb, { createur: str(a.createur, 80), alias, a: to, copies: [...cc, ...bcc], objet: str(a.objet, 300), texte: text, reponse: !!str(a.fil), pieces: [] });
     if (kit.refus) return fail(kit.refus.replace("Rien n'est préparé ni envoyé", "Rien n'est envoyé"));
@@ -570,6 +573,7 @@ const envoyerMail: AdminTool = {
         }
       }
       const r = await sendMail(sb, box, { to, cc, bcc, subject: str(a.objet, 300), html: mailHtml(text, sig), threadId: str(a.fil, 64) || undefined, from });
+      await journaliserEnvoi(sb, { box: String(box), to: to.join(", "), subject: r.subject, threadId: r.threadId, source: "claude" });
       const suivi = await suiviApresEnvoi(sb, to, { demarrer: a.demarrer_sequence === true, createur: str(a.createur, 80) || undefined }).catch(() => "");
       return ok(`✓ Mail envoyé ${from ? `de ${from.email}${from.name ? ` (${from.name})` : ""} via ${box}` : `depuis ${box.includes("@") ? box : `${box}@`}`} à ${to.join(", ")}${cc.length ? ` (cc ${cc.join(", ")})` : ""} · objet « ${r.subject} ».` + suivi + kit.note);
     } catch (e) {
@@ -611,7 +615,8 @@ const envoyerBrouillon: AdminTool = {
     const alias = str(a.envoyer_en_tant_que, 200);
     try {
       if (alias) await resolveSender(sb, box, alias);
-      const r = await sendDraft(sb, box, id, alias || undefined, verifierBrouillon(sb, str(a.createur, 80) || undefined));
+      const r = await sendDraft(sb, box, id, alias || undefined, verifierAvantEnvoi(sb, str(a.createur, 80) || undefined));
+      await journaliserEnvoi(sb, { box: String(box), to: r.to, subject: r.subject, threadId: r.threadId, source: "claude" });
       const suivi = await suiviApresEnvoi(sb, adressesDe(r.to), { demarrer: a.demarrer_sequence === true, createur: str(a.createur, 80) || undefined }).catch(() => "");
       return ok(`✓ Brouillon envoyé de ${r.from || `${box}@`} à ${r.to} · objet « ${r.subject} ».${suivi}`);
     } catch (e) {
@@ -667,8 +672,9 @@ const envoyerBrouillonsValides: AdminTool = {
     let partis = 0;
     for (const id of ids) {
       try {
-        const r = await sendDraft(sb, box, id, alias || undefined, verifierBrouillon(sb));
+        const r = await sendDraft(sb, box, id, alias || undefined, verifierAvantEnvoi(sb));
         partis++;
+        await journaliserEnvoi(sb, { box: String(box), to: r.to, subject: r.subject, threadId: r.threadId, source: "claude" });
         const suivi = await suiviApresEnvoi(sb, adressesDe(r.to), { demarrer: a.demarrer_sequence === true }).catch(() => "");
         lignes.push(`✓ ${id} → ${r.to} · « ${r.subject} »${suivi.replace(/^\nSuivi : /, " · ")}`);
       } catch (e) {
