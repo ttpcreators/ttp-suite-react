@@ -26,6 +26,9 @@
 // (réglage notifPrefs.dmReceivedPush, activé par défaut), une par conversation, un
 // résumé au-delà de 3. Les messages envoyés depuis l'app (ig-send, id « sent:… ») sont
 // remplacés par leur version Meta dès qu'elle est lue.
+// { action: "backfill", pages?, recommencer? } : une tranche de l'import de TOUT
+// l'historique (pages de 25 conversations, curseur gardé dans ig_sync_state.inbox_historique),
+// voir _shared/igHistoriqueDb.ts ; aussi lancé par l'outil Claude importer_historique_instagram.
 // AUTH : verify_jwt = false (config.toml) ; Bearer CRON_SECRET (cron) OU JWT agence.
 // ============================================================================
 
@@ -36,6 +39,7 @@ import { extFor, mediaFromMessage, metaFileUrl, type DmMedia } from "../_shared/
 import { emailsIn } from "../_shared/signals.ts";
 import { loadNotifPrefs, pushReady, sendTo } from "../_shared/push.ts";
 import { deepLinkUrl, makePayload, type PushPayload } from "../_shared/pushPayload.ts";
+import { trancheHistorique } from "../_shared/igHistoriqueDb.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 /** Lit TOUTES les lignes par pages de 1 000 (au-delà, Supabase coupe sans prévenir). */
@@ -121,11 +125,16 @@ Deno.serve(async (req: Request) => {
   const probe = await sb.from("ig_threads").select("id").limit(1);
   if (probe.error) return res({ error: "migration_manquante" });
   if (!metaReady()) return res({ error: "meta_non_configure" });
-  let body: { users?: unknown; chain?: unknown } = {};
+  let body: { users?: unknown; chain?: unknown; action?: unknown; pages?: unknown; recommencer?: unknown } = {};
   try {
     body = (await req.json()) ?? {};
   } catch {
     body = {};
+  }
+  // Import de tout l'historique, par tranches reprenables (_shared/igHistoriqueDb.ts).
+  if (body.action === "backfill") {
+    const r = await trancheHistorique(sb, { pages: Number(body.pages) || undefined, recommencer: body.recommencer === true });
+    return res({ ok: r.ok, why: r.why ?? null, etat: r.etat, tranche: r.tranche, texte: r.texte, quota: r.quota });
   }
   const targets = Array.isArray(body.users) ? [...new Set(body.users.map(String).filter((x) => /^\d{5,25}$/.test(x)))].slice(0, 10) : [];
   const stateKey = targets.length ? "inbox_direct" : "inbox";

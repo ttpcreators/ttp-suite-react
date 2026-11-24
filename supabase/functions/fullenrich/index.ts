@@ -11,50 +11,12 @@
 //   { action: "result", id }                      → même réponse qu'« enrich »
 // Coûts : 0,25 crédit par personne trouvée ; email pro 1 crédit et téléphone 10 crédits,
 // seulement s'ils sont trouvés. L'enrichissement est relu ici jusqu'à 25 s ; au-delà,
-// l'app redemande avec « result ».
+// l'app redemande avec « result ». Appels réseau partagés : _shared/fullenrichApi.ts.
 // ============================================================================
 
 import { corsHeaders, getServiceClient } from "../_shared/google.ts";
-import { bestContact, enrichContact, parsePeople, searchBody } from "../_shared/fullenrich.ts";
-
-const API = "https://app.fullenrich.com/api/v2";
-const KEY = (Deno.env.get("FULLENRICH_API_KEY") ?? "").trim();
-
-async function fe(path: string, init: RequestInit = {}): Promise<{ status: number; body: Record<string, unknown> }> {
-  try {
-    const r = await fetch(`${API}${path}`, {
-      ...init,
-      headers: { Authorization: `Bearer ${KEY}`, "Content-Type": "application/json", ...(init.headers ?? {}) },
-      signal: AbortSignal.timeout(25_000),
-    });
-    return { status: r.status, body: (await r.json().catch(() => ({}))) as Record<string, unknown> };
-  } catch {
-    return { status: 0, body: {} };
-  }
-}
-
-/** Erreur FullEnrich → raison lisible pour l'app. */
-function why(status: number, body: Record<string, unknown>): string {
-  if (status === 0) return "reseau";
-  if (status === 401) return "cle_invalide";
-  if (status === 402 || /credit/i.test(JSON.stringify(body))) return "credits_insuffisants";
-  if (status === 429) return "limite";
-  return `fullenrich_${status}`;
-}
-
-async function result(id: string, waitMs: number) {
-  const until = Date.now() + waitMs;
-  for (;;) {
-    const r = await fe(`/contact/enrich/bulk/${encodeURIComponent(id)}`);
-    const st = String(r.body.status ?? "");
-    if (r.status === 200 && st === "FINISHED") return { ok: true, ...bestContact(r.body), credits: Number((r.body.cost as { credits?: number } | undefined)?.credits) || 0 };
-    if (r.status === 200 && ["CANCELED", "CREDITS_INSUFFICIENT", "UNKNOWN"].includes(st)) return { error: st === "CREDITS_INSUFFICIENT" ? "credits_insuffisants" : "echec" };
-    // En cours (200 IN_PROGRESS, ou 400 error.enrichment.in_progress) : on attend encore un peu.
-    if (r.status !== 200 && !/in_progress/i.test(JSON.stringify(r.body))) return { error: why(r.status, r.body) };
-    if (Date.now() > until) return { ok: true, pending: id };
-    await new Promise((res) => setTimeout(res, 3000));
-  }
-}
+import { enrichContact, parsePeople, searchBody } from "../_shared/fullenrich.ts";
+import { FULLENRICH_KEY as KEY, enrichir, fe, result, why } from "../_shared/fullenrichApi.ts";
 
 Deno.serve(async (req: Request) => {
   const cors = corsHeaders(req.headers.get("Origin"));
@@ -100,10 +62,7 @@ Deno.serve(async (req: Request) => {
       linkedin: String(b.linkedin ?? ""), phone: b.phone === true,
     });
     if (!contact) return json({ error: "infos_manquantes" }, 400);
-    const r = await fe("/contact/enrich/bulk", { method: "POST", body: JSON.stringify({ name: "TTP Suite", data: [contact] }) });
-    const id = String(r.body.enrichment_id ?? "");
-    if (r.status !== 200 || !id) return json({ error: why(r.status, r.body) });
-    return json(await result(id, 20_000));
+    return json(await enrichir(contact, 20_000));
   }
 
   if (action === "result") {

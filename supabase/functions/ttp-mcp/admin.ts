@@ -47,7 +47,9 @@ const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0
 const obj = (v: unknown): Json | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Json) : null);
 const json = (v: unknown) => JSON.stringify(v, null, 1);
 const TABLE_ENUM = Object.keys(TABLES);
-const ORDER: Record<string, string | null> = { collab_steps: "reached_at", creator_roadmap: "updated_at", creator_mail_settings: "updated_at", agency_mediakit: "updated_at" };
+// Tri des lignes lues : created_at, sauf les tables qui n'ont pas cette colonne
+// (ig_threads : « column ig_threads.created_at does not exist », corrigé le 2026-11-24).
+const ORDER: Record<string, string | null> = { collab_steps: "reached_at", creator_roadmap: "updated_at", creator_mail_settings: "updated_at", agency_mediakit: "updated_at", ig_threads: "updated_at" };
 const like = (s: string) => `%${s.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
 const keyOf = (table: string) => TABLES[table]?.key ?? "id";
 const todayIso = () => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());

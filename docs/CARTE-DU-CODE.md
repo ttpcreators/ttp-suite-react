@@ -277,7 +277,7 @@ fonction avec `Authorization: Bearer <CRON_SECRET>`.
 | `daily-digest` | Résumés push (matin, semaine, après-midi, rappel des stats) et notifications d'activité | pg_cron, `push.ts`, `diagnostics.ts` | non | CRON_SECRET ou JWT | `0 6,7 * * *`, `0 6,7 * * 1`, `0 12,13 * * *`, `0 7,8 * * *` |
 | `report-error` | Journal des crashs + push agence (anti-spam) | `errorReport.ts` | non | aucun (crash possible hors connexion) | |
 | `dispos-du-mois` | Liste « Dispos de <mois> » pour les agences (Base créateurs › Listes, lien public), logique `_shared/disposDuMois.ts` et `disposDuMoisDb.ts` | pg_cron | non | CRON_SECRET | `45 6 1 * *` |
-| `ttp-mcp` | Connecteur Claude : serveur MCP (`index.ts`), OAuth (`oauth.ts`), outils (`tools.ts`), Gmail (`gmail.ts`) | Claude, `connecteur/`, `Parametres.tsx` | non | jetons propres hachés, rôle agence, outils fondateurs filtrés | |
+| `ttp-mcp` | Connecteur Claude : serveur MCP (`index.ts`), OAuth (`oauth.ts`), outils (`tools.ts`, accès fondateurs `admin.ts`, prospection autonome `autonomie.ts`), Gmail (`gmail.ts`) | Claude, `connecteur/`, `Parametres.tsx` | non | jetons propres hachés, rôle agence, outils fondateurs filtrés | |
 
 Les crons doublés (`6,7`, `12,13`, `7,8`) servent à tomber à la bonne heure de Paris été comme
 hiver : la fonction ne garde que le bon passage. Hors fonction : `ttp-app-state-backup`
@@ -311,6 +311,11 @@ hiver : la fonction ne garde que le bon passage. Hors fonction : `ttp-app-state-
 | `autoStats.ts` | Stats du mois relevées toutes seules | `ig-sync`, `tt-sync` |
 | `inbox.ts` | Touches de prospection tirées des DM | `ig-inbox` |
 | `meetEvent.ts` | Rendez-vous Meet (logique pure, testée) | `meet-invite` |
+| `igHistorique.ts`, `igHistoriqueDb.ts` | Import de tout l'historique des DM Instagram, par tranches reprenables (curseur Meta dans `ig_sync_state.inbox_historique`, pause à 80 % du quota, conversations de plus de 3 ans laissées de côté) | `ig-inbox` (`action: "backfill"`), `ttp-mcp` (`importer_historique_instagram`) |
+| `agenceDetection.ts` | Un créateur est-il en agence : « oui », « non » ou « a_verifier » + nom (agences connues, email ou @ d'agence, « représentée par ») | `profilInstagram.ts` |
+| `profilInstagram.ts`, `profilInstagramDb.ts` | Profil lu par Business Discovery (email de la bio, engagement, dernier post, agence) et mise à jour de la Base créateurs (`ig_profiles`) ; scan par lots | `ttp-mcp` (`lire_profil_instagram`, `lire_profils_instagram`, `scanner_base_createurs`) |
+| `hunter.ts` | Hunter : e-mails pro d'une marque (domain-search, email-finder, vérification), postes marketing, influence, RP, partenariats | `ttp-mcp` (`trouver_emails_marque`, `trouver_email_personne`) |
+| `fullenrich.ts`, `fullenrichApi.ts` | FullEnrich : règles pures, puis appels réseau partagés | `fullenrich`, `ttp-mcp` (`trouver_email_personne`) |
 | `mediakitControle.ts` | Chiffres d'un media kit comparés aux chiffres réels (relevés automatiques, mesures du calculateur) : « ok », « à corriger » (abonnés à plus de 25 %, engagement ou vues à plus de 50 %), « à vérifier » (pas de chiffre réel de moins de 62 jours) ; reconnaissance du créateur proposé dans un mail (logique pure, testée) | app (`kit-check.tsx` sur la page Media kit et la fiche roster, `mediakitControleDb.ts` pour « Mettre à jour »), `ttp-mcp` (`kitGarde.ts` : refus des mails de prospection avec un kit faux, section « Media kit » de `fiche_createur`) |
 
 ## 7. Base de données (`supabase/`)
