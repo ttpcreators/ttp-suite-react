@@ -626,6 +626,10 @@ export function Todo() {
       ...creatorsPatch(f.creators, await todosHaveCreators()),
       priority: f.priority,
       source: "agency" as Source,
+      // Tâche écrite à la main pour un créateur : elle est pour lui, donc visible dans son
+      // espace (la case « Côté créateur » de la fiche la rend interne). Les tâches d'Alfred
+      // et les rappels automatiques des collabs, eux, restent internes.
+      ...(f.creators.length ? { visible_createur: true } : {}),
       done: false,
       sort_order: nextOrder(rows ?? []),
     };
@@ -639,9 +643,9 @@ export function Todo() {
     setRows((prev) => [createdRow, ...(prev ?? [])]);
     // Le commentaire ne bloque jamais la réinitialisation du formulaire (saveNote ne lève pas).
     if (f.note.trim() && !(await saveNote(createdRow.id, f.note))) toast("Avancement non enregistré, réessaie");
-    // Pas de push : une tâche de l'agence est interne tant qu'elle n'est pas cochée
-    // « Visible par le créateur » (fiche de la tâche) ; le push part à ce moment-là.
-    toast("Tâche ajoutée ✓");
+    // Push à chaque créateur concerné (s'il a activé les notifs sur son téléphone).
+    for (const name of shownTo(createdRow)) notifyCreator("task", name, f.text.trim());
+    toast(f.creators.length ? `Tâche ajoutée ✓ · visible par ${creatorsLabel(f.creators)}` : "Tâche ajoutée ✓");
     return createdRow;
   };
 
