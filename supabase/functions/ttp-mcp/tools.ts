@@ -2932,9 +2932,17 @@ const baseCreateurs: Tool = {
     additionalProperties: false,
   },
   run: async (sb, _c, a) => {
+    // Avec un seuil d'abonnés et sans liste, on ne lit que cette tranche : relire les 15 000
+    // profils à chaque appel coûtait trop de calcul (le 24/11, six appels en même temps ont
+    // fait tomber le connecteur : « CPU Time exceeded »). Tri par nom : sans tri, la lecture
+    // par pages peut sauter ou doubler des lignes.
+    const borne = { min: !str(a.liste, 120) && typeof a.abonnes_min === "number" && Number.isFinite(a.abonnes_min) ? a.abonnes_min : null, max: !str(a.liste, 120) && typeof a.abonnes_max === "number" && Number.isFinite(a.abonnes_max) ? a.abonnes_max : null };
     const rows: BaseRow[] = [];
-    for (let from = 0; from < 20000; from += 1000) {
-      const { data, error } = await sb.from("ig_profiles").select("username, data, at").range(from, from + 999);
+    for (let from = 0; from < 30000; from += 1000) {
+      let q = sb.from("ig_profiles").select("username, data, at");
+      if (borne.min !== null) q = q.gte("data->followers", borne.min);
+      if (borne.max !== null) q = q.lt("data->followers", borne.max);
+      const { data, error } = await q.order("username").range(from, from + 999);
       if (error) return fail(`Base illisible : ${error.message}`);
       rows.push(...((data ?? []) as BaseRow[]));
       if (!data || data.length < 1000) break;
@@ -2978,7 +2986,7 @@ const baseCreateurs: Tool = {
     const lim = int(a.limite, 20, 1, 50);
     const total = base.filter((c) => !c.excluded).length;
     return ok([
-      `# Base créateurs · ${found.length} trouvé(s) sur ${total}${found.length > lim ? ` · les ${lim} premiers` : ""}`,
+      `# Base créateurs · ${found.length} trouvé(s) sur ${total}${borne.min !== null || borne.max !== null ? " dans cette tranche d'abonnés" : ""}${found.length > lim ? ` · les ${lim} premiers` : ""}`,
       ...found.slice(0, lim).map((c) => ligneBase(c, now)),
       found.length ? "Chiffres Instagram au dernier passage de l'app. Niche « devinée » = tirée de la bio. Pour en faire une liste pour une marque : page Base créateurs (cases à cocher)." : "Personne ne correspond. Élargis un filtre (ville, taille, engagement).",
       m.error ? "(Le SQL de la Base créateurs n'est pas encore lancé : niches et villes sont toutes devinées.)" : "",
