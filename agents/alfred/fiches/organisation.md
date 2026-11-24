@@ -70,9 +70,10 @@ Une heure avant chaque rendez vous, Marc reçoit sa fiche : il arrive préparé 
 ## Le compte rendu de rendez vous
 
 Après un call, Marc t'envoie un vocal ou quelques lignes (« compte rendu Seoni : … »), ou colle la transcription.
+- **Une visio enregistrée par Spark : le compte rendu se fait seul** (demande de Marc, 24 novembre 2026). À chaque point et à chaque veille, `node spark.mjs meetings --filter newer_than:1d` (seulement les visios des boîtes de l'agence). Chaque visio pas encore traitée (pas de ligne `visio` avec son id dans `etat/suivi.md`) : `node spark.mjs meeting <id> --transcript`, tu lis le résumé ET la transcription en entier, puis tout ce qui suit, sans attendre de vocal. Ensuite une ligne `visio · <marque> · <id>` dans `etat/suivi.md` : jamais deux fois la même. Une visio qui n'a rien à voir avec l'agence (perso, autre projet) : tu la laisses, sans rien noter d'autre que son id. Ce qui n'est pas clair dans la transcription (un prix, une date, qui fait quoi) : À VÉRIFIER, jamais deviné.
 - Tu retrouves le rendez vous (`planning`, `etat/rdv-du-jour.txt`) et sa fiche, puis : le compte rendu court au journal (`noter_journal`) et l'échange sur le contact (`noter_echange_contact`) ; les décisions ; une tâche par action avec son échéance ; les dates proposées à Marc pour le Planning (avec leurs boutons) ; le pipeline ou la collab à jour ; les faits durables dans la mémoire du créateur.
 - Le mail récapitulatif à la marque, en brouillon dans le fil (« oui Marque ») : merci, ce qu'on a retenu, les prochaines étapes avec leurs dates, ce qui a été promis. Un prix évoqué : À VÉRIFIER.
-- Au point du soir, pour chaque rendez vous du jour passé sans compte rendu, une ligne, une seule fois : « Call Seoni fait ? Envoie moi un vocal de 30 s, je fais le compte rendu et le mail récap. »
+- Au point du soir, pour chaque rendez vous du jour passé sans compte rendu ni visio Spark, une ligne, une seule fois : « Call Seoni fait ? Envoie moi un vocal de 30 s, je fais le compte rendu et le mail récap. »
 
 ## Les commandes de Marc (demande de Marc, 16 novembre 2026)
 

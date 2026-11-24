@@ -10,7 +10,7 @@
 #                         l'heure ; du lundi au vendredi à 9 h et 17 h, fait le POINT (mails
 #                         des marques, DM, devis, relances, créateurs, argent à aller chercher).
 #                         Le lundi à 11 h : la prospection de la semaine ; le 1er
-#                         du mois à 14 h : la revue des tarifs ; le mercredi à 11 h : le
+#                         du mois à 14 h : la revue des tarifs ; le mardi à 11 h : la veille des pubs ; le mercredi à 11 h : le
 #                         recrutement ; le jeudi à 11 h : la veille créative. Tous les jours à 6 h : la VIGIE des réseaux ; le mardi et le
 #                         vendredi à 16 h : le POINT CONTENU des créateurs. Du lundi au vendredi à 11 h, 13 h et 15 h : la VEILLE (les
 #                         mails arrivés depuis, modèle rapide, silencieuse sauf pour l'important).
@@ -137,7 +137,7 @@ aujourdhui=$(date +%Y-%m-%d)
 
 # Mode vacances : etat/vacances.txt commence par « AAAA-MM-JJ », le dernier jour d'absence de
 # Marc (écrit par Alfred quand Marc dit « je pars jusqu'au … »). Pendant l'absence : le point du
-# matin seulement (l'urgent), pas de point du soir, de prospection, de revue, de recrutement ni de veille créative.
+# matin seulement (l'urgent), pas de point du soir, de prospection, de revue, de recrutement ni de veille (pubs, créative).
 # Le premier point après : le résumé du retour, puis le fichier est vidé.
 vacances=""
 retour=0
@@ -182,6 +182,10 @@ elif [[ "$1" == "--prospection" ]] || (( auto && ! ${#vacances} && jour == 1 && 
 # Le 1er du mois à 14 h (demande de Marc, 16 novembre 2026) : la revue des tarifs et des media kits.
 elif [[ "$1" == "--tarifs" ]] || (( auto && ! ${#vacances} && quantieme == 1 && heure == 14 )); then
   mode="la revue des tarifs du mois"
+# Le mardi à 11 h (demande de Marc, 24 novembre 2026) : la veille des pubs (bibliothèque publicitaire
+# de Meta : les marques qui paient déjà des créateurs proches des nôtres, confiées à Gianni).
+elif [[ "$1" == "--pubs" ]] || (( auto && ! ${#vacances} && jour == 2 && heure == 11 )); then
+  mode="la veille des pubs de la semaine"
 # Le mercredi à 11 h : le recrutement de la semaine (scouting).
 elif [[ "$1" == "--recrutement" ]] || (( auto && ! ${#vacances} && jour == 3 && heure == 11 )); then
   mode="le recrutement de la semaine"

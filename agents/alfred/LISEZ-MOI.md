@@ -10,7 +10,9 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Va à l'essentiel | Messages à Marc très courts (une ligne par point, 6 lignes pour une réponse, 12 pour un point), le détail sur demande ; les textes à copier et documents restent complets |
 | Comprend les vocaux de Marc | Transcrits sur le Mac (whisper.cpp et ffmpeg, gratuit, sans internet), puis traités comme un message écrit |
 | Le point à 9 h et 17 h en semaine | Mails des marques et DM, devis, factures en retard, créateurs, argent à aller chercher |
-| Bilans et renouvellements | 7 jours après une publication : stats relevées par l'app, bilan pour la marque et mail « on refait ça ? » avec une offre plus grosse |
+| Bilans et renouvellements | 7 jours après une publication : stats relevées par l'app, rapport de fin de collab en PDF aux couleurs de l'agence (chiffres, post par post, captures, ce qui a marché, la suite ; fichier `.rapport.json` fabriqué avec le moteur des bilans de l'app) et mail « on refait ça ? » avec une offre plus grosse |
+| Veille des pubs | Mardi 11 h : la bibliothèque publicitaire de Meta (avec l'araignée), les marques qui paient déjà des créateurs proches des nôtres ; prospect, tâche pour Gianni et premier mail prêt |
+| Visios sans vocal | Les visios enregistrées par Spark (boîtes de l'agence seulement) : compte rendu, tâches, dates et mail récap faits tout seuls à la veille ou au point suivant |
 | Prospection du lundi | Lundi 11 h : deux ou trois marques par créateur actif (radar à marques de l'app, agences concurrentes, bilans, pipeline, web), avec Megan, premier mail prêt ; « oui tout » pour tout envoyer |
 | Tarifs du mois | Premier lundi du mois, 14 h : qui mérite une hausse, quels précédents sont trop bas |
 | Facture prête | Collab publiée sans facture : facture préparée et montrée, créée dans Facturation sur « oui facture Marque » |
