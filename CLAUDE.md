@@ -291,6 +291,17 @@ Tous les PDF de l'app partagent UNE identité, celle des media kits du site (dir
 - Pull requests et tickets : modèles dans `.github/` (checklist build, SQL et fonctions à
   appliquer, tableau d'état, captures).
 
+## Travailler à deux : Marc et Gianni
+
+Depuis le 24 novembre 2026, Marc et Gianni (son associé) développent l'app tous les deux, chacun avec son propre compte GitHub et ses propres sessions Claude. Les règles :
+
+- **`main` est protégée** : on ne pousse jamais dessus directement. Tout passe par une PR, et le contrôle « Vérification des PR » (`.github/workflows/verif-pr.yml` : lint, tests, types, build) doit être vert avant la fusion. Pas de force-push, pas de suppression de `main`. Chacun peut fusionner ses propres PR, sans relecture obligatoire.
+- **Une branche par modification**, au nom parlant. Les copies de travail locales vont dans `~/Code/TTP Suite/_ateliers/<nom>`, et on les efface après la fusion.
+- **Avant de commencer** : `git fetch` et partir de `origin/main` à jour. Regarder les PR ouvertes (`gh pr list`) pour ne pas toucher aux mêmes fichiers que l'autre. Si c'est le cas, on se prévient.
+- **SQL et déploiements Supabase** (`supabase functions deploy …`) : un seul des deux à la fois. Chaque SQL est daté dans `supabase/sql/` et noté dans `supabase/sql/README.md` (⏳ puis ✅), pour que l'autre sache ce qui est en prod.
+- **Les accès** : chacun pousse avec son compte. Le compte `ttpcreators` (propriétaire du dépôt) n'est jamais partagé, et les clés restent dans les secrets Supabase.
+- **En cas de doute** sur le contexte (ce qui est en ligne, ce qui reste à faire) : `supabase/sql/README.md` d'abord, puis les PR fusionnées récentes (`gh pr list --state merged`), et le journal des agents dans l'app.
+
 ## Pièges connus
 
 - **Colonne ou table pas encore créée en prod** : l'app est en ligne avant le SQL.
