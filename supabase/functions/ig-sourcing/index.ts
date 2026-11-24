@@ -46,6 +46,7 @@ const POOL_PER_SCAN = 40; // créatrices du Scouting lues par passage (les plus 
 const BRANDS_PER_SCAN = 80; // comptes cités vérifiés par passage (les plus probables d'abord)
 const QUOTA_MAX = 80; // au-delà, pause : on ne risque pas le blocage par Meta (le cron des 2 h envoie 60)
 const DISCOVER_PER_SCAN = 40; // créatrices hors agence lues par passage (découvertes)
+const DM_PER_SCAN = 30; // comptes des DM Instagram jamais lus, pris en tête de ces 40
 const VERIFY_PER_RUN = 150; // marques en attente vérifiées par passage, dans la limite de MAX_LUS
 const age = (iso: string | null | undefined) => (iso ? Date.now() - Date.parse(iso) : Infinity);
 
@@ -554,6 +555,27 @@ async function rivals(ctx: Ctx, handle?: string) {
 }
 
 // ── Radar : marques citées par les créatrices ────────────────────────────────
+/**
+ * Comptes des DM Instagram sans réponse (notre message en dernier) qui n'ont encore aucune
+ * ligne dans ig_profiles, les conversations les plus récentes d'abord. Une lecture ratée de la
+ * base rend une liste vide : on ne relit jamais des profils déjà connus par erreur.
+ */
+async function comptesDmJamaisLus(ctx: Ctx, ours: Set<string>, max: number): Promise<string[]> {
+  const { data, error } = await ctx.sb.from("ig_threads").select("username").eq("last_from_me", true).not("username", "is", null)
+    .order("updated_at", { ascending: false }).limit(1000);
+  if (error) return [];
+  const comptes = [...new Set(((data as { username: string | null }[] | null) ?? []).map((r) => igUser(r.username).toLowerCase()).filter(Boolean))].filter((u) => !ours.has(u));
+  const out: string[] = [];
+  for (let i = 0; i < comptes.length && out.length < max; i += 200) {
+    const lot = comptes.slice(i, i + 200);
+    const connus = await ctx.sb.from("ig_profiles").select("username").in("username", lot);
+    if (connus.error) return out;
+    const deja = new Set(((connus.data as { username: string }[] | null) ?? []).map((k) => k.username));
+    for (const u of lot) if (!deja.has(u) && out.length < max) out.push(u);
+  }
+  return out;
+}
+
 async function scan(ctx: Ctx) {
   const [cr, pool] = await Promise.all([
     ctx.sb.from("creators").select("name, handle, platform, instagram, status"),
@@ -579,11 +601,15 @@ async function scan(ctx: Ctx) {
   const { data: disc } = await ctx.sb.from("ig_profiles").select("username, data, why, scanned_at, at")
     .or("data->>pending.eq.true,data->>isBrand.eq.false").is("why", null)
     .order("scanned_at", { ascending: true, nullsFirst: true }).limit(300);
+  // En tête : les comptes à qui l'agence a écrit en DM sans réponse et dont le profil n'a
+  // jamais été lu (audit du 24/11, point M5). Une fois lus, on sait si c'est une marque, son
+  // site et son e-mail, et l'outil dm_sans_reponse peut les proposer.
+  const dmTodo = await comptesDmJamaisLus(ctx, ours, DM_PER_SCAN);
   const discovered = ((disc as ProfileRow[] | null) ?? [])
     .filter((r) => !ours.has(r.username) && (r.data?.pending || Number(r.data?.followers ?? 0) >= 3000))
-    .slice(0, DISCOVER_PER_SCAN);
+    .slice(0, Math.max(0, DISCOVER_PER_SCAN - dmTodo.length));
   for (const r of discovered) if (!ctx.cache.has(r.username)) ctx.cache.set(r.username, r);
-  const discoveredSet = new Set(discovered.map((r) => r.username));
+  const discoveredSet = new Set([...dmTodo, ...discovered.map((r) => r.username)]);
   let discoveredRead = 0;
 
   const found = new Map<string, RadarPost[]>();
@@ -663,7 +689,7 @@ async function scan(ctx: Ctx) {
   await each(ctx, todo, (b) => verifyBrand(ctx, b));
   // Puis les marques en attente des passages précédents, avec le quota qui reste.
   const backlog = inBudget(ctx) ? await verify(ctx) : null;
-  return { creators: scanned.length, discovered: discoveredRead, brands: brands.length, profiles: todo.length + (backlog?.verified ?? 0), rivals: rivalsRead, diag, stopped: ctx.stop || undefined };
+  return { creators: scanned.length, discovered: discoveredRead, dm: dmTodo.length, brands: brands.length, profiles: todo.length + (backlog?.verified ?? 0), rivals: rivalsRead, diag, stopped: ctx.stop || undefined };
 }
 
 async function caller(req: Request, sb: SupabaseClient): Promise<"cron" | "agency" | null> {
