@@ -9,7 +9,8 @@
 // contrôlé ici par nos propres jetons (hachés, 1 h, révocables).
 // ============================================================================
 
-import { getServiceClient } from "../_shared/google.ts";
+import { checkCronSecret, getServiceClient } from "../_shared/google.ts";
+import { traiterFile } from "./envois.ts";
 import { approve, asMetadata, authenticate, check, FN_URL, register, resourceMetadata, revoke, token } from "./oauth.ts";
 import { callTool, toolList } from "./tools.ts";
 
@@ -45,13 +46,25 @@ const INSTRUCTIONS =
   "Les messages WhatsApp, Instagram ou LinkedIn préparés vont dans la file « À valider » (proposer_action). " +
   "Pour préparer la réponse à un fil depuis la page Mails de l'app : lire_mail, puis preparer_reponse_mail (la réponse apparaît dans l'app, jamais envoyée). " +
   "Pour résumer un brief au créateur : lire_brief, puis resumer_brief (4 listes courtes, rien d'inventé). " +
-  "Prospection : dm_sans_reponse pour les comptes Instagram à reprendre par e-mail ; lire_profil_instagram ou lire_profils_instagram (100 @ max) pour les chiffres, l'e-mail et l'agence d'un créateur ; pour l'adresse d'une marque, lire_site_marque d'abord (gratuit), puis trouver_emails_marque et trouver_email_personne seulement pour les marques prioritaires (crédits FullEnrich, 500 par mois) ; rien n'est enregistré : ajouter_contact ou ajouter_contacts ensuite, après accord.";
+  "Prospection : dm_sans_reponse pour les comptes Instagram à reprendre par e-mail ; lire_profil_instagram ou lire_profils_instagram (100 @ max) pour les chiffres, l'e-mail et l'agence d'un créateur ; pour l'adresse d'une marque, lire_site_marque d'abord (gratuit), puis trouver_emails_marque et trouver_email_personne seulement pour les marques prioritaires (crédits FullEnrich, 500 par mois) ; rien n'est enregistré : ajouter_contact ou ajouter_contacts ensuite, après accord. " +
+  "Envoi des mails de prospection : après le « oui » de l'utilisateur pour une liste précise de brouillons, programmer_envoi (envoi étalé aux heures de bureau, plafonné, revérifié juste avant), jamais envoyer_brouillons_valides pour un lot de prospection ; file_envoi pour suivre, annuler_envoi pour retirer. Un refus, une demande d'arrêt ou un rebond : ne_plus_contacter (après accord).";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   const url = new URL(req.url);
   const path = url.pathname.replace(/^.*?\/ttp-mcp/, "").replace(/\/+$/, "") || "/";
   const sb = getServiceClient();
+
+  // ── File d'envoi des mails (pg_cron, chaque minute, CRON_SECRET) : envois.ts ──
+  if (path === "/file-envoi") {
+    if (req.method !== "POST" || !checkCronSecret(req)) return json({ error: "unauthorized" }, 401);
+    try {
+      return json(await traiterFile(sb));
+    } catch (e) {
+      console.error("file-envoi", e);
+      return json({ ok: false, raison: String((e as Error).message ?? e).slice(0, 200) }, 500);
+    }
+  }
 
   // ── Découverte (OAuth) ──
   if (req.method === "GET" && path.startsWith("/.well-known/oauth-protected-resource")) return json(resourceMetadata());

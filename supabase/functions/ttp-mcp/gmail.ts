@@ -371,6 +371,18 @@ export async function draftRefs(sb: SupabaseClient, box: MailBox, draftId: strin
   return { messageId: String(d.message?.id ?? ""), rfcId: header(d.message?.payload?.headers, "message-id"), threadId: String(d.message?.threadId ?? "") };
 }
 
+/** En-têtes d'un brouillon (file d'envoi : vérifier avant de programmer, sans rien envoyer). */
+export async function lireEntetesBrouillon(sb: SupabaseClient, box: MailBox, draftId: string): Promise<{ to: string; cc: string; bcc: string; subject: string; claude: boolean; reponse: boolean }> {
+  const token = await tokenFor(sb, box, "read");
+  const q = ["To", "Cc", "Bcc", "Subject", "X-TTP-Source", "In-Reply-To"].map((h) => `metadataHeaders=${h}`).join("&");
+  const d = (await gjson(token, `${GMAIL}/drafts/${encodeURIComponent(draftId)}?format=metadata&${q}`)) as DraftRes;
+  const h = d.message?.payload?.headers;
+  return {
+    to: header(h, "to"), cc: header(h, "cc"), bcc: header(h, "bcc"), subject: header(h, "subject"),
+    claude: header(h, "x-ttp-source").toLowerCase() === "claude", reponse: !!header(h, "in-reply-to"),
+  };
+}
+
 export type ClaudeDraft = { box: MailBox; id: string; to: string; subject: string; threadId: string; ts: number; answered: boolean; messageId: string; rfcId: string };
 
 /**

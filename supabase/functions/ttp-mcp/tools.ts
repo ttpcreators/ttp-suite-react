@@ -23,6 +23,7 @@ import { boxAddress, boxesFor, createDraft, parseMailBox, deleteClaudeDraft, dra
 import { findSendAs, type SendAs } from "../_shared/sendAs.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
 import { AUTONOMIE_TOOLS } from "./autonomie.ts";
+import { ENVOI_TOOLS, bloquant } from "./envois.ts";
 import { adressesDe, adressesInvalides } from "./prospection.ts";
 import { addressList, mailHtml, sparkLink } from "../_shared/mcpAdmin.ts";
 import { guessEventKind } from "../_shared/eventKind.ts";
@@ -1757,6 +1758,10 @@ const brouillonMail: Tool = {
     const cci = addressList(str(a.cci, 500));
     if (!cci) return fail("Adresse en copie cachée (cci) invalide.");
     const fil = str(a.fil, 40);
+    // Liste « ne plus contacter » (refus, demande d'arrêt, rebond) : pas de nouveau mail. Une
+    // réponse dans un fil existant reste possible.
+    const npc = await bloquant(sb, adressesDe(to), !!fil);
+    if (npc) return fail(`Brouillon non créé : ${npc}. Si c'est une erreur : ne_plus_contacter (action retirer).`);
     // Seulement le message : une note pour Marc ou un « [prénom] » partirait chez le destinataire.
     const probleme = problemeTexteDestinataire(str(a.message, 20000));
     if (probleme) return fail(probleme);
@@ -3142,6 +3147,7 @@ export const TOOLS: Tool[] = [
   droitsUsage, noterDroits, postsCreateur, preparerContrat,
   ...ADMIN_TOOLS,
   ...AUTONOMIE_TOOLS,
+  ...ENVOI_TOOLS,
 ];
 
 /** Liste MCP (les outils fondateurs n'apparaissent pas pour un membre). */
