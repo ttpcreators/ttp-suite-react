@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { boiteAutorisee, boiteDeLien, boiteDePortee, filtrerComptes, lireArgs, listeBoites, refusPortees } from "../spark.mjs";
+import { boiteAutorisee, boiteDeLien, boiteDePortee, filtrerComptes, filtrerReunions, lireArgs, listeBoites, refusPortees } from "../spark.mjs";
 
 const lien = (boite: string) =>
   `https://sparkmailapp.com/dpl/bl?token=${encodeURIComponent(Buffer.from(`A:${boite};ID:abc@mail.example.com;gID:123`).toString("base64"))}`;
@@ -68,5 +68,22 @@ describe("Alfred : Spark limité aux boîtes de TTP Creators", () => {
     const r = filtrerComptes(donnees, liste);
     expect(r.accounts.map((a: { email: string }) => a.email)).toEqual(["partnerships@ttpcreators.pro", "contact.lea@example.com"]);
     expect(r.accounts[1].shared_inboxes).toEqual([{ email: "talent@ttpcreators.pro" }]);
+  });
+});
+
+describe("les visios transcrites par Spark (24 novembre 2026)", () => {
+  const lien = (boite: string) => `https://sparkmailapp.com/dpl/bl?token=${Buffer.from(`A:${boite};ID:123`).toString("base64")}`;
+  const liste = listeBoites("");
+  it("garde seulement les visios des boîtes de l'agence", () => {
+    const r = filtrerReunions({ meetings: [{ id: "1", link: lien("partnerships@ttpcreators.pro") }, { id: "2", link: lien("perso@gmail.com") }, { id: "3" }] }, liste);
+    expect(r.meetings.map((m: { id: string }) => m.id)).toEqual(["1"]);
+    expect(r.ecartees).toContain("2 visio");
+  });
+  it("accepte une liste nue et le champ account", () => {
+    expect(filtrerReunions([{ id: "4", account: "Talent@ttpcreators.pro" }], liste).meetings).toHaveLength(1);
+  });
+  it("refuse les options inconnues de meetings et meeting", () => {
+    expect(() => lireArgs("meetings", ["--delete"])).toThrow();
+    expect(lireArgs("meeting", ["42", "--transcript"]).opts["--transcript"]).toBe(true);
   });
 });

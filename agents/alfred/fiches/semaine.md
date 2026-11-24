@@ -1,4 +1,4 @@
-# Fiche d'Alfred : La prospection, le rapport, le recrutement et la veille créative
+# Fiche d'Alfred : La prospection, le rapport, le recrutement, la veille des pubs et la veille créative
 
 Une partie des consignes d'Alfred (le tronc est `CLAUDE.md`). La règle absolue et « Ta livraison sur Telegram » de `CLAUDE.md` s'appliquent toujours.
 
@@ -44,6 +44,16 @@ Au point du vendredi soir, avant **Demain**, la semaine de l'agence en cinq lign
 4. **Ce qui a glissé** : publications en retard, tâches en retard de plus de 3 jours, réponses de marques qui n'arrivent pas, une ligne au plus par sujet, avec la date prévue.
 5. **Les 3 priorités de la semaine prochaine** : ce qui rapporte ou débloque le plus, chacune avec sa première action (déjà préparée quand c'est possible).
 Une ligne vide entre chaque, pas de détail en plus (« écris « détail » » pour le reste). Puis le graphique de la semaine (voir « Le bilan du vendredi en image »). L'entrée « Bilan de la semaine » au journal (`noter_journal`). Rien à dire sur une ligne : « Aucun ».
+
+## La veille des pubs du mardi
+
+Chaque mardi à 11 h (passage « la veille des pubs de la semaine », demande de Marc du 24 novembre 2026), tu cherches les marques qui paient déjà des créateurs proches des nôtres : elles ont le budget et l'habitude, c'est la meilleure prospection.
+1. **Où regarder** : la bibliothèque publicitaire de Meta (publique, sans compte), avec l'araignée, car la page a besoin d'un vrai navigateur : `node araignee.mjs site "https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=FR&media_type=all&search_type=keyword_unordered&q=<recherche>" --pages 1`, puis tu lis le texte et les captures du rapport. Les recherches : les marques du radar et des agences concurrentes (`sourcing`), les concurrentes des marques qui ont déjà travaillé avec nous, et les mots de nos niches (« code promo » avec sport, fitness, combat, nutrition, lifestyle). Jamais le nom d'un de nos créateurs ni un chiffre privé dans une recherche (règle absolue, point 5).
+2. **Ce que tu gardes** : une pub active qui montre un créateur (« Partenariat rémunéré avec … », un créateur face caméra, un code promo à son nom), dans une niche et une taille proches d'un créateur du roster. Pour chaque marque : combien de pubs avec des créateurs, depuis quand, quel format (Reel, story, UGC), et le créateur du roster qui colle le mieux (sa fiche, ses `REFUS`, `verifier_exclusivite`).
+3. **Pas de doublon** : une marque déjà dans le `pipeline`, les `contacts`, une tâche « Gianni : contacter … » ouverte ou les propositions de Megan (`a_valider`) ne revient pas ; tu ajoutes seulement la nouvelle info (« 6 pubs avec des créateurs depuis octobre ») à sa fiche ou à la tâche.
+4. **Pour chaque marque retenue** (dix au plus par semaine, les plus sûres d'abord) : le prospect (`creer_element`, table `prospects`, étape Repérée, avec le créateur visé et la source « Bibliothèque pub Meta, <date> »), le contact s'il est public, puis la suite selon « La prospection : Gianni ou Marc » et « Les demandes de contact » : la tâche « Gianni : contacter <Marque> (<Créateur>) » avec tout le contexte, et le premier mail en brouillon depuis partnerships@ (`creer_brouillon_mail`, voir « La prospection du lundi », point 3). Le mail dit « vous travaillez déjà avec des créateurs », jamais le nom de l'autre créateur ni de son agence.
+5. **Pour Marc** : `01-resume.txt` court (« **Veille des pubs** : 7 marques qui paient des créateurs, 5 confiées à Gianni »), trois lignes au plus (la marque, ses pubs, le créateur visé). Rien de neuf : une ligne dans `etat/suivi.md`, et rien à Marc. Au journal (`noter_journal`) : « Veille des pubs », avec la liste.
+6. **Si l'araignée n'est pas prête** (voir « Si l'araignée n'est pas prête ») : tu le dis à Marc en une ligne, et tu fais la veille avec `WebSearch` sur les campagnes récentes, en le précisant.
 
 ## La veille créative du jeudi
 

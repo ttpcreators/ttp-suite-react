@@ -15,6 +15,9 @@
 //   node spark.mjs emails <boîte>[:Dossier] [--filter …] [--json] …
 //   node spark.mjs thread <id ou lien Spark> [--json] [--download-attachments] [--include-quoted]
 //   node spark.mjs attachment <id> [--json]       copie le fichier dans etat/pieces/ et donne ce chemin
+//   node spark.mjs meetings [--filter …]          les visios transcrites par Spark, seulement celles des
+//                                                 boîtes de TTP Creators (JSON)
+//   node spark.mjs meeting <id> [--transcript] [--notes]   le résumé (et la transcription) d'une visio
 //   node spark.mjs draft --account <boîte> [--reply-all <id> | --reply-to <id> | --forward <id> | --edit <id>]
 //                        [--to …] [--cc …] [--bcc …] [--subject …] [--body …] [--attach <fichier d'etat/>]
 //                        [--attach-id <id>] [--no-signature] [--json]
@@ -70,6 +73,8 @@ const VALEURS = {
   emails: ["--filter", "--page", "--page-size", "--limit", "--order"],
   thread: [],
   attachment: [],
+  meetings: ["--filter", "--page", "--page-size", "--limit"],
+  meeting: [],
   draft: ["--to", "--cc", "--bcc", "--subject", "--body", "--account", "--edit", "--reply-to", "--reply-all", "--forward", "--attach", "--attach-id"],
 };
 const DRAPEAUX = {
@@ -77,6 +82,8 @@ const DRAPEAUX = {
   emails: ["--json", "--new-senders"],
   thread: ["--json", "--download-attachments", "--include-quoted"],
   attachment: ["--json"],
+  meetings: ["--json"],
+  meeting: ["--json", "--transcript", "--notes"],
   draft: ["--json", "--no-signature"],
 };
 
@@ -129,6 +136,20 @@ export function filtrerComptes(donnees, liste) {
     ...(Array.isArray(a.shared_inboxes) ? { shared_inboxes: a.shared_inboxes.filter(garder) } : {}),
   }));
   return { accounts };
+}
+
+/**
+ * Garde seulement les visios d'une boîte de TTP Creators dans la réponse de `spark meetings --json`
+ * (demande de Marc, 24 novembre 2026) : la boîte se lit dans le lien Spark de chaque visio (ou son
+ * champ account) ; une visio dont la boîte est illisible est écartée, par prudence.
+ */
+export function filtrerReunions(donnees, liste) {
+  const cle = Array.isArray(donnees) ? null : ["meetings", "items", "results", "data"].find((k) => Array.isArray(donnees?.[k]));
+  const items = Array.isArray(donnees) ? donnees : cle ? donnees[cle] : [];
+  const boite = (m) => boiteDeLien(m?.link ?? m?.deep_link ?? m?.url) ?? (String(m?.account ?? m?.account_email ?? "").toLowerCase() || null);
+  const gardes = items.filter((m) => { const b = boite(m); return !!b && boiteAutorisee(b, liste); });
+  const ecartees = items.length - gardes.length;
+  return { meetings: gardes, ...(ecartees ? { ecartees: `${ecartees} visio(s) hors des boîtes de TTP Creators, non montrées` } : {}) };
 }
 
 // ── Appels à Spark ──────────────────────────────────────────────────────────
@@ -220,6 +241,20 @@ async function main() {
     copyFileSync(info.path, chemin);
     const sortie = { ...info, path: chemin, account: boite };
     console.log(opts["--json"] ? JSON.stringify(sortie, null, 2) : Object.entries(sortie).map(([k, v]) => `${k}: ${v}`).join("\n"));
+    return;
+  }
+
+  if (cmd === "meetings") {
+    if (libres.length) throw new Error(`argument refusé : ${libres[0]}`);
+    const args2 = args.filter((a) => a !== "--json");
+    console.log(JSON.stringify(filtrerReunions(await spark(["meetings", "--json", ...args2], { json: true }), liste), null, 2));
+    return;
+  }
+
+  if (cmd === "meeting") {
+    if (libres.length !== 1) throw new Error("Usage : node spark.mjs meeting <id ou lien Spark> [--transcript] [--notes]");
+    await verifierMail(libres[0], liste);
+    process.stdout.write(await spark(["meeting", ...args]));
     return;
   }
 

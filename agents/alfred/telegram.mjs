@@ -1018,6 +1018,41 @@ export async function contratDepuisJson(chemin, name) {
   }
 }
 
+/** « 02-rapport-Nova-Lea.rapport.json » → « 02-rapport-Nova-Lea.html ». */
+export function nomRapport(nom) {
+  return String(nom).replace(/\.rapport\.json$/i, ".html");
+}
+
+/**
+ * Rapport de fin de collab (demande de Marc, 24 novembre 2026) : les données d'Alfred dans un
+ * fichier .rapport.json → le document du moteur de l'app (contrats.mjs, identité des PDF de l'app),
+ * à côté, prêt à partir en PDF. S'il ne peut pas être fabriqué : un message qui dit pourquoi.
+ */
+export async function rapportDepuisJson(chemin, name) {
+  try {
+    const { renderRapportCollab } = await import("./contrats.mjs");
+    const d = JSON.parse(readFileSync(chemin, "utf8"));
+    // Une capture de l'iMac (« etat/araignee/…/page.png », « etat/previews/… ») : seulement dans etat/.
+    const etat = resolve(dirname(chemin), "..", "..", "etat") + sep;
+    const ici = resolve(dirname(chemin), "..", "..");
+    if (Array.isArray(d?.captures))
+      d.captures = d.captures.map((c) => {
+        const u = String(c?.url ?? "");
+        if (/^https:\/\//.test(u)) return c;
+        const f = resolve(ici, u);
+        return f.startsWith(etat) && existsSync(f) ? { ...c, url: pathToFileURL(f).href } : null;
+      }).filter(Boolean);
+    const r = renderRapportCollab(d);
+    if (r.erreur) throw new Error(r.erreur);
+    const html = join(dirname(chemin), nomRapport(name));
+    writeFileSync(html, r.html);
+    return [{ file: html, name: nomRapport(name), temporaire: html }];
+  } catch (e) {
+    const texte = `Je n'ai pas pu fabriquer le rapport (${nomAffiche(name)}) : ${e.message}`;
+    return [{ text: escapeHtml(texte), html: true, plain: texte }];
+  }
+}
+
 const PIECE_MAX = 50 * 1024 * 1024; // limite d'envoi des bots Telegram
 // Ce qu'une marque envoie : script, brief, contrat, présentation, tableau, image, vidéo, archive.
 // Pas de .txt ni de .html : dans etat/envoi, ils deviendraient un message ou seraient convertis.
@@ -1115,7 +1150,8 @@ async function envoyerFichiers({ token, chatId, here, dir, names, fil, supprimer
       if (supprimer) rmSync(chemin, { force: true });
       continue;
     }
-    // Un .txt = un message ; un .contrat.json = un contrat fabriqué par le moteur de l'app ;
+    // Un .txt = un message ; un .contrat.json (contrat) ou un .rapport.json (rapport de fin de collab) :
+    // un document fabriqué par le moteur de l'app ;
     // tout autre fichier (document .html, PDF) part en pièce jointe.
     // Pont WhatsApp installé (ALFRED_WA_ENVOI=1 dans config.env) : le texte est gardé tel que Marc
     // le voit, et son bouton « Envoyer » le fait partir après confirmation (whatsapp.mjs envoyer).
@@ -1133,7 +1169,9 @@ async function envoyerFichiers({ token, chatId, here, dir, names, fil, supprimer
       ? messagesFor(name, brut, { waEnvoi })
       : name.endsWith(".contrat.json")
         ? await contratDepuisJson(chemin, name)
-        : [{ file: chemin, name }];
+        : name.endsWith(".rapport.json")
+          ? await rapportDepuisJson(chemin, name)
+          : [{ file: chemin, name }];
     for (const m of messages) {
       if (m.file) {
         // Un document HTML part en PDF quand Chrome est là (plus simple à ouvrir et à transférer).

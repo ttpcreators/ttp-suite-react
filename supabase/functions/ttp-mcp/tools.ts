@@ -1689,7 +1689,7 @@ const statsCollab: Tool = {
           const m = Object.entries(p).filter(([k, v]) => typeof v === "number" && METRIQUES[k]);
           for (const [k, v] of m) tot[k] = (tot[k] ?? 0) + (v as number);
           const date = p.at ? frDay(String(p.at).slice(0, 10)) : "";
-          out.push(`- ${date}${p.type ? ` · ${String(p.type).toLowerCase()}` : ""}${p.url ? ` · ${p.url}` : ""}\n  ${m.map(([k, v]) => `${METRIQUES[k]} ${Number(v).toLocaleString("fr-FR")}`).join(" · ") || "pas de chiffres"}${p.caption ? `\n  « ${String(p.caption).slice(0, 160)} »` : ""}`);
+          out.push(`- ${date}${p.type ? ` · ${String(p.type).toLowerCase()}` : ""}${p.url ? ` · ${p.url}` : ""}\n  ${m.map(([k, v]) => `${METRIQUES[k]} ${Number(v).toLocaleString("fr-FR")}`).join(" · ") || "pas de chiffres"}${p.caption ? `\n  « ${String(p.caption).slice(0, 160)} »` : ""}${typeof p.cover === "string" && p.cover.startsWith("https://") ? `\n  vignette : ${p.cover}` : ""}`);
         }
         const t = Object.entries(tot).filter(([k]) => k !== "ig_reels_avg_watch_time");
         if (posts.length > 1 && t.length) out.push(`Total : ${t.map(([k, v]) => `${METRIQUES[k]} ${v.toLocaleString("fr-FR")}`).join(" · ")}`);

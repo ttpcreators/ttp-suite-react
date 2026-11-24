@@ -1,5 +1,5 @@
-// FICHIER GÉNÉRÉ par `npm run alfred:contrats` depuis src/lib/contractRender.ts : ne pas le modifier à la main.
-// Le moteur des contrats de l'app TTP Suite, pour qu'Alfred envoie exactement le contrat que l'app ferait.
+// FICHIER GÉNÉRÉ par `npm run alfred:contrats` depuis src/lib/alfredDocs.ts : ne pas le modifier à la main.
+// Les moteurs de documents de l'app TTP Suite (contrats, rapport de fin de collab), pour qu'Alfred envoie exactement ce que l'app ferait.
 // supabase/functions/_shared/contractDraft.ts
 const DRAFT_OPTS = {
 	nature: [
@@ -372,6 +372,24 @@ function pdfFileTitle(...parts) {
 function docHead(title, extraCss = "") {
 	return `<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc$2(title)}</title><style>${fontFaces()}${BASE_CSS}${extraCss}</style></head>`;
 }
+/** En-tête commun. `right` = lignes de droite, DÉJÀ échappées (type de document, référence, date…). */
+function docMast(right, tagline = "Talent management · Lyon et Genève", name = "TTP Creators") {
+	const [first, ...rest] = name.trim().split(/\s+/);
+	const tail = rest.join(" ");
+	const wm = esc$2(first) + (tail ? ` <i>${esc$2(tail === tail.toUpperCase() ? tail.charAt(0) + tail.slice(1).toLowerCase() : tail)}</i>` : "");
+	return `<header class="mast"><span class="id">${ttpLogoImg(30)}<span><span class="wm">${wm}</span><span class="tl" style="display:block">${esc$2(tagline)}</span></span></span><span class="r">${right.filter(Boolean).join("<br>")}</span></header>`;
+}
+/** Pied commun. */
+function docFoot(left = "TTP Creators · Trust The Process", right = "partnerships@ttpcreators.pro") {
+	return `<footer class="foot"><span>${esc$2(left)}</span><span>${esc$2(right)}</span></footer>`;
+}
+/**
+* Titre en deux temps : `main` droit, `tail` en italique bordeaux.
+* Les deux sont échappés ici.
+*/
+function docTitle(main, tail) {
+	return esc$2(main) + (tail ? ` <i>${esc$2(tail)}</i>` : "");
+}
 /**
 * CONTRATS (Marque × Créateur, UGC, représentation) : mise en page de vrai document
 * juridique, plus sobre que les autres documents (demande de Marc, 2026-10-07 : « mal
@@ -430,6 +448,33 @@ function contractHead(name, tagline, right) {
 /** Titre de contrat centré, avec une ligne de précisions en dessous. */
 function contractTitle(title, sub) {
 	return `<div class="ct-title"><h1>${esc$2(title)}</h1>${sub ? `<p>${esc$2(sub)}</p>` : ""}</div>`;
+}
+/** Enveloppe complète d'un document simple (brief, bilan). `title` = nom de fichier proposé. */
+function pdfShell(o) {
+	return docHead(o.title) + `<body><div class="wrap">` + (o.lang === "en" ? docMast([o.ref ? `<b>Ref. ${esc$2(o.ref)}</b>` : "", esc$2(docToday("en-GB"))], "Talent management · Lyon and Geneva") : docMast([o.ref ? `<b>Réf. ${esc$2(o.ref)}</b>` : "", esc$2(docToday())])) + `<p class="kicker">${esc$2(o.eyebrow)}</p><h1>${o.heading}</h1>` + (o.sub ? `<p class="sub">${esc$2(o.sub)}</p>` : "") + o.body + docFoot() + `</div></body></html>`;
+}
+/** Titre « Marque × Créateur » : la partie créateur en italique bordeaux. */
+function pdfHeading(left, right) {
+	return docTitle(left, right ? `× ${right}` : void 0);
+}
+/** Informations en lignes à pointillés (les valeurs vides sont ignorées). */
+function pdfMeta(rows) {
+	const keep = rows.filter(([, v]) => v && String(v).trim() && String(v).trim() !== "—");
+	if (!keep.length) return "";
+	return `<dl class="meta">` + keep.map(([l, v]) => `<div class="row"><dt>${esc$2(l)}</dt><span class="lead"></span><dd>${esc$2(v)}</dd></div>`).join("") + `</dl>`;
+}
+function pdfSection(label, inner) {
+	return `<section class="sec"><h2>${esc$2(label)}</h2>${inner}</section>`;
+}
+function pdfKpis(items) {
+	const keep = items.filter((k) => k.v && k.v.trim() && k.v.trim() !== "—");
+	if (!keep.length) return "";
+	return `<div class="kpis">${keep.map((k) => `<div class="kpi"><span class="n">${esc$2(k.v)}</span><span class="c">${esc$2(k.l)}</span></div>`).join("")}</div>`;
+}
+function pdfTicks(items) {
+	const keep = items.filter(Boolean);
+	if (!keep.length) return "";
+	return `<ul class="ticks">${keep.map((h) => `<li>${esc$2(h)}</li>`).join("")}</ul>`;
 }
 /** <img> de la signature pour le cadre de l'agence ("" si aucune ou désactivée). */
 function sigImgHtml() {
@@ -2041,4 +2086,71 @@ function renderContract(a) {
 		titre: `${doc.title} · ${d.brand} × ${d.ctName}`
 	};
 }
-export { renderContract };
+// src/lib/rapportCollab.ts
+/**
+* Rapport de fin de collab pour la marque (demande de Marc, 24 novembre 2026) : Alfred écrit les
+* données dans un fichier `.rapport.json`, ce module en fait le document, avec l'identité commune
+* des PDF de l'app (`pdfDoc.ts` : celle des bilans et des media kits). Rien d'inventé : un chiffre
+* absent n'apparaît pas, une rubrique vide disparaît.
+*
+* Embarqué dans `agents/alfred/contrats.mjs` (npm run alfred:contrats) pour qu'Alfred fabrique sur
+* l'iMac exactement le document que l'app ferait.
+*/
+const nb = (v) => typeof v === "number" && Number.isFinite(v) ? Math.round(v).toLocaleString("fr-FR").replace(/ /g, " ") : "";
+const httpsOk = (u) => typeof u === "string" && /^https:\/\/[^\s"'<>]+$/.test(u);
+/** Une image : en ligne (https), ou un fichier de l'iMac déjà vérifié par telegram.mjs (file://). */
+const imageOk = (u) => httpsOk(u) || typeof u === "string" && /^file:\/\/\/[^"'<>]+\.(jpe?g|png|webp)$/i.test(u);
+const liste = (v) => Array.isArray(v) ? v.map((x) => String(x ?? "").trim()).filter(Boolean) : [];
+const COLONNES = [
+	["vues", "Vues"],
+	["couverture", "Couverture"],
+	["likes", "Likes"],
+	["commentaires", "Commentaires"],
+	["partages", "Partages"],
+	["enregistrements", "Enreg."]
+];
+/** Le tableau post par post : seulement les colonnes qui ont au moins un chiffre. */
+function tableauPosts(posts) {
+	const cols = COLONNES.filter(([k]) => posts.some((p) => nb(p[k])));
+	const st = "border-bottom:.5pt solid var(--soft);padding:1.8mm 1.5mm;";
+	return `<table style="width:100%;border-collapse:collapse;font-size:8.8pt">${`<tr><th style="${st}text-align:left;font-weight:500;color:var(--grey)">Publication</th>${cols.map(([, l]) => `<th style="${st}text-align:right;font-weight:500;color:var(--grey)">${esc$2(l)}</th>`).join("")}</tr>`}${posts.map((p) => {
+		const titre = [
+			p.reseau,
+			p.format,
+			p.date
+		].map((x) => String(x ?? "").trim()).filter(Boolean).join(" · ") || "Publication";
+		const cellule = httpsOk(p.lien) ? `<a href="${esc$2(p.lien)}" style="color:var(--ink)">${esc$2(titre)}</a>` : esc$2(titre);
+		return `<tr><td style="${st}">${cellule}</td>${cols.map(([k]) => `<td style="${st}text-align:right;font-variant-numeric:tabular-nums">${esc$2(nb(p[k]) || "")}</td>`).join("")}</tr>`;
+	}).join("")}</table>`;
+}
+/** Les contenus : trois images au plus (cadres de même hauteur que les captures des bilans ; la légende sert de texte alternatif). */
+function captures(items) {
+	return `<div class="shots">` + items.map((c) => `<figure><img src="${esc$2(c.url)}" alt="${esc$2(c.legende ?? "")}"></figure>`).join("") + `</div>`;
+}
+/** Données d'Alfred → HTML du rapport, ou la raison du refus. */
+function renderRapportCollab(input) {
+	const d = input && typeof input === "object" ? input : {};
+	const marque = String(d.marque ?? "").trim();
+	const createur = String(d.createur ?? "").trim();
+	if (!marque || !createur) return { erreur: "il manque la marque ou le créateur" };
+	const chiffres = (Array.isArray(d.chiffres) ? d.chiffres : []).map((c) => ({
+		v: String(c?.valeur ?? "").trim(),
+		l: String(c?.libelle ?? "").trim()
+	})).filter((c) => c.v && c.l).slice(0, 4);
+	const posts = (Array.isArray(d.posts) ? d.posts : []).filter((p) => p && typeof p === "object").slice(0, 12);
+	const caps = (Array.isArray(d.captures) ? d.captures : []).filter((c) => imageOk(c?.url)).slice(0, 3);
+	if (!chiffres.length && !posts.length) return { erreur: "aucun chiffre : le rapport attend les stats de la collab (stats_collab)" };
+	const titre = pdfFileTitle("Rapport", `${marque} x ${createur}`);
+	const body = pdfMeta([["Créateur", createur], ["Livrables", String(d.livrables ?? "").trim()]]) + (chiffres.length ? pdfSection("Les chiffres clés", pdfKpis(chiffres)) : "") + (posts.length ? pdfSection("Post par post", tableauPosts(posts)) : "") + (caps.length ? pdfSection("Les contenus", captures(caps)) : "") + (liste(d.points_forts).length ? pdfSection("Ce qui a marché", pdfTicks(liste(d.points_forts))) : "") + (liste(d.enseignements).length ? pdfSection("Ce que nous en retenons", pdfTicks(liste(d.enseignements))) : "") + (String(d.suite ?? "").trim() ? pdfSection("Pour la suite", `<p class="lede">${esc$2(String(d.suite).trim())}</p>`) : "");
+	return {
+		html: pdfShell({
+			title: titre,
+			eyebrow: "Rapport de collaboration",
+			heading: pdfHeading(marque, createur),
+			sub: String(d.periode ?? "").trim() || void 0,
+			body
+		}),
+		titre
+	};
+}
+export { renderContract, renderRapportCollab };
