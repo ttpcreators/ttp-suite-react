@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alfredHorsLigne, commandesGagnantes, reglagesPropres, REGLAGES_DE_BASE } from "./alfredPont.ts";
+import { alfredHorsLigne, cibleDePhoto, commandesGagnantes, reglagesPropres, REGLAGES_DE_BASE, typePhoto } from "./alfredPont.ts";
 
 describe("pont Alfred ↔ app", () => {
   it("complète et borne les réglages", () => {
@@ -24,5 +24,22 @@ describe("pont Alfred ↔ app", () => {
     expect(alfredHorsLigne(midi, "2026-11-18T10:30:00Z", "2026-11-18T10:50:00Z").alerte).toBe(false);
     expect(alfredHorsLigne(new Date("2026-11-18T02:00:00Z"), "2026-11-18T01:00:00Z", null).alerte).toBe(false);
     expect(alfredHorsLigne(midi, null, null).alerte).toBe(false);
+  });
+
+  it("lit la cible d'une photo téléversée par Alfred", () => {
+    const id = "0a1b2c3d-1111-2222-3333-444455556666";
+    expect(cibleDePhoto("")).toEqual({ kind: "aucune" });
+    expect(cibleDePhoto(`createur:${id}`)).toEqual({ kind: "createur", id });
+    expect(cibleDePhoto(`mediakit:${id}:hero`)).toEqual({ kind: "mediakit", id, cle: "hero" });
+    expect(cibleDePhoto(`MEDIAKIT:${id.toUpperCase()}:Instagram`)).toEqual({ kind: "mediakit", id, cle: "instagram" });
+    expect(cibleDePhoto("createur:lena")).toBeNull();
+    expect(cibleDePhoto(`mediakit:${id}:../x`)).toBeNull();
+    expect(cibleDePhoto(`invoices:${id}`)).toBeNull();
+  });
+
+  it("n'accepte que des photos", () => {
+    expect(typePhoto("Léna.JPG")).toBe("image/jpeg");
+    expect(typePhoto("a.heic")).toBe("image/heic");
+    expect(typePhoto("contrat.pdf")).toBeNull();
   });
 });

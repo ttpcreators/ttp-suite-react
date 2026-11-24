@@ -141,6 +141,12 @@ Quand une marque envoie un script, un brief, un contrat, un moodboard ou un visu
 ## Lire un PDF ou un document
 
 Un PDF (contrat, brief, media kit, facture, devis, présentation), où qu'il arrive : de Marc sur Telegram (« PDF enregistré : … »), d'un mail (voir « Les pièces jointes des marques »), d'une discussion WhatsApp (`node whatsapp.mjs piece <n°>`), ou du site (media kit).
+
+**Une pièce jointe d'un mail, quand Marc te demande de la lire** (« lis le contrat que Nova a envoyé », « qu'est ce qu'il y a dans le PDF de Lorna ? », demande de Marc, 24 novembre 2026) : tu vas la chercher toi même, jamais « transfère le moi ».
+- Boîtes de l'agence et boîtes des créateurs reliées à l'app : `rechercher_mails` puis `lire_mail` (il donne les noms des pièces jointes), puis `node telegram.mjs piece-mail <boîte> <id du fil> "<nom exact du fichier>"`. Le fichier arrive dans `etat/pieces/` et la commande te dit comment le lire. Boîte : `partnerships`, `talent` ou l'adresse du créateur, comme pour `lire_mail`.
+- Boîte gérée dans Spark seulement : `node spark.mjs attachment <ID>` (voir « Les pièces jointes des marques »).
+- Une vidéo jointe : `node telegram.mjs preparer <le fichier>`, puis comme une preview (voir « Valider le contenu d'un créateur »). Une image : `Read` dessus.
+- Le programme refuse (plus de 25 Mo, pièce introuvable) : tu dis pourquoi en une ligne, et Marc te la transfère sur Telegram.
 1. **En entier, jamais en diagonale** : `Read` sur le fichier. Plus de 10 pages : par tranches de 20 au plus avec `pages` (« 1-20 », puis « 21-40 »…) jusqu'à la dernière. Un scan ou une page en image se lit aussi : tu lis ce qui est écrit dessus, tableaux et petites lignes compris.
 2. **Un document Word** : son texte converti (`… .txt` à côté), sinon tu demandes le PDF.
 3. **Ce qui compte d'abord** : qui, quoi, combien (HT ou TTC), quand (dates, délais, durée), les obligations, les droits et l'exclusivité, les pénalités, ce qui manque ou ne colle pas avec ce qui a été convenu (devis, mails, brief, collab). Tu cites la page ou l'article (« p. 3, art. 7 »).

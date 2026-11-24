@@ -15,13 +15,21 @@
 //   { action: "deposer", nom, contenu }   → un fichier de l'iMac (PDF d'un contrat, pièce reçue sur
 //       Telegram) rangé dans le stockage « documents » sous alfred/, pour le joindre à un mail
 //       (creer_brouillon_mail, pieces_jointes : { document }) ; 10 Mo au plus
+//   { action: "piece_mail", boite, fil, nom } → une pièce jointe d'un mail des boîtes reliées à l'app
+//       (partnerships, talent, boîte d'un créateur) : { nom, type, contenu } en base64, 25 Mo au plus,
+//       pour qu'Alfred la lise sur l'iMac (PDF, vidéo, image) quand Marc le lui demande
+//   { action: "photo", nom, contenu, cible? } → une photo téléversée sur l'app (bucket public avatars),
+//       rangée selon la cible (cibleDePhoto) : photo de profil d'un créateur ou photo de son media kit ;
+//       renvoie { url, avant } (avant : l'ancienne adresse, pour le bouton Annuler) ; 10 Mo au plus ;
+//       avec remettre (au lieu de contenu) : l'ancienne adresse remise, rien de téléversé
 // AUTH : verify_jwt = false (config.toml) + secret ALFRED_PONT_SECRET (aussi dans config.env de l'iMac),
 // ou, sans ce secret, « tg:<empreinte SHA-256 du jeton du bot d'Alfred> » : l'iMac a déjà ce jeton
 // (ALFRED_BOT_TOKEN), le même est posé côté Supabase ; le jeton lui-même ne circule jamais.
 // ============================================================================
 
 import { getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
-import { commandesGagnantes, reglagesPropres } from "../_shared/alfredPont.ts";
+import { cibleDePhoto, commandesGagnantes, reglagesPropres, typePhoto } from "../_shared/alfredPont.ts";
+import { attachmentFromThread } from "../ttp-mcp/gmail.ts";
 import { nomPropre, tailleBase64, typeAccepte, typeDuNom } from "../_shared/piecesJointes.ts";
 
 const SECRET = Deno.env.get("ALFRED_PONT_SECRET") ?? "";
@@ -75,6 +83,69 @@ Deno.serve(async (req: Request) => {
     const path = `alfred/${maintenant.slice(0, 10)}/${crypto.randomUUID().slice(0, 8)}-${nom.replace(/[^A-Za-z0-9._ -]/g, "_")}`;
     const { error } = await getServiceClient().storage.from("documents").upload(path, octets, { contentType: type, upsert: false });
     return error ? json({ error: error.message }, 500) : json({ ok: true, path, nom });
+  }
+
+  // Une pièce jointe d'un mail, lue sur l'iMac (demande de Marc, 24 novembre 2026).
+  if (body.action === "piece_mail") {
+    const boite = String(body.boite ?? "").trim().toLowerCase();
+    const fil = String(body.fil ?? "").trim();
+    const nom = String(body.nom ?? "").trim().slice(0, 200);
+    if (!boite || !/^[A-Za-z0-9_-]{6,64}$/.test(fil) || !nom) return json({ error: "boite, fil et nom attendus" }, 400);
+    try {
+      const p = await attachmentFromThread(getServiceClient(), boite, fil, nom);
+      if (tailleBase64(p.base64) > 25 * 1024 * 1024) return json({ error: `${p.nom} dépasse 25 Mo` }, 400);
+      return json({ ok: true, nom: p.nom, type: p.type, contenu: p.base64 });
+    } catch (e) {
+      return json({ error: String((e as Error)?.message ?? e).slice(0, 300) }, 400);
+    }
+  }
+
+  // Une photo téléversée sur l'app, sur demande de Marc (demande du 24 novembre 2026).
+  if (body.action === "photo") {
+    const nom = nomPropre(String(body.nom ?? ""));
+    const type = typePhoto(nom);
+    const contenu = String(body.contenu ?? "");
+    const cible = cibleDePhoto(body.cible);
+    // « remettre » (bouton Annuler) : l'ancienne adresse remise telle quelle, sans téléverser.
+    const remettre = "remettre" in body;
+    if (!cible) return json({ error: "cible illisible : createur:<id> ou mediakit:<id>:<cle>" }, 400);
+    if (remettre && cible.kind === "aucune") return json({ error: "remettre demande une cible" }, 400);
+    if (!remettre && !type) return json({ error: "une photo seulement (jpg, png, webp, heic)" }, 400);
+    if (!remettre && (!contenu || tailleBase64(contenu) > 10 * 1024 * 1024)) return json({ error: "photo vide ou de plus de 10 Mo" }, 400);
+    const sb = getServiceClient();
+    let createur: Record<string, any> | null = null;
+    if (cible.kind !== "aucune") {
+      const { data } = await sb.from("creators").select("id, name, photo_url, mediakit").eq("id", cible.id).maybeSingle();
+      if (!data) return json({ error: "créateur introuvable" }, 404);
+      createur = data as Record<string, any>;
+    }
+    let url: string | null;
+    if (remettre) {
+      url = body.remettre == null || body.remettre === "" ? null : String(body.remettre);
+      if (url && !/^https:\/\/[a-z0-9]+\.supabase\.co\/storage\/v1\/object\/public\/avatars\//.test(url)) return json({ error: "adresse à remettre refusée" }, 400);
+    } else {
+      const octets = Uint8Array.from(atob(contenu), (c) => c.charCodeAt(0));
+      const dossier = cible.kind === "aucune" ? `alfred/${maintenant.slice(0, 10)}` : `${cible.kind === "mediakit" ? "mediakit/" : ""}${cible.id}`;
+      const path = `${dossier}/${Date.now()}-${crypto.randomUUID().slice(0, 6)}-${nom.replace(/[^A-Za-z0-9._-]/g, "_")}`;
+      const { error } = await sb.storage.from("avatars").upload(path, octets, { contentType: type!, upsert: false, cacheControl: "3600" });
+      if (error) return json({ error: error.message }, 500);
+      url = sb.storage.from("avatars").getPublicUrl(path).data.publicUrl;
+    }
+    let avant: string | null = null;
+    if (cible.kind === "createur") {
+      avant = createur!.photo_url ?? null;
+      const { error: e } = await sb.from("creators").update({ photo_url: url }).eq("id", cible.id);
+      if (e) return json({ error: e.message }, 500);
+    } else if (cible.kind === "mediakit") {
+      const mk = createur!.mediakit && typeof createur!.mediakit === "object" && !Array.isArray(createur!.mediakit) ? createur!.mediakit : {};
+      const photos = mk.photos && typeof mk.photos === "object" ? mk.photos : {};
+      avant = photos[cible.cle] ?? null;
+      const nouvelles = { ...photos, [cible.cle]: url };
+      if (url === null) delete nouvelles[cible.cle];
+      const { error: e } = await sb.from("creators").update({ mediakit: { ...mk, photos: nouvelles } }).eq("id", cible.id);
+      if (e) return json({ error: e.message }, 500);
+    }
+    return json({ ok: true, url, avant, createur: createur?.name ?? null });
   }
 
   if (body.action !== "pouls") return json({ error: "action" }, 400);
