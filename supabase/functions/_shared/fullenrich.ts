@@ -71,7 +71,7 @@ const POIDS: [number, RegExp][] = [
 ];
 
 /** Recrutement et ressources humaines : « talent acquisition » ou « marque employeur » ne sont pas la cible. */
-const HORS_CIBLE = /recrut|recruit|talent acquisition|ressources humaines|human resources|\brh\b|\bhr\b|employeur|employer|\bstagiaire\b|\bintern\b/;
+const HORS_CIBLE = /recrut|recruit|talent acquisition|ressources humaines|human resources|\brh\b|\bhr\b|employeur|employer|\bstagiair|\bintern\b|internship|trainee|alternan|apprenti/;
 
 /** Intérêt d'un poste pour une agence d'influence : 5 = influence, 1 = dirigeant, 0 = hors cible. */
 export function poidsPoste(title: string): number {

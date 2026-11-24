@@ -11,6 +11,8 @@
 //      personnes ; Hunter seulement si FullEnrich n'est pas configuré) ;
 //   trouver_email_personne : l'e-mail pro d'une personne (FullEnrich, puis Hunter en secours).
 //   lire_site_marque : l'adresse de contact écrite sur le site d'une marque (gratuit).
+//   dm_sans_reponse : les conversations Instagram où notre dernier message est resté sans
+//      réponse, avec ce qu'on sait déjà pour reprendre le contact par e-mail.
 // Rien n'est écrit dans les contacts : l'outil propose, puis Claude appelle ajouter_contact.
 // ============================================================================
 
@@ -23,6 +25,7 @@ import { CLE_MANQUANTE, HUNTER_API, cibles, domaineDe, erreurHunter, limiteDeLOf
 import { classerPersonnes, coutRecherche, enrichContact, lignePersonneFE, parsePeople, searchBody } from "../_shared/fullenrich.ts";
 import { FULLENRICH_KEY, enrichir, fe, result as resultatFullEnrich, why, type EnrichResult } from "../_shared/fullenrichApi.ts";
 import { MAX_OCTETS, adresseSite, domaineDuSite, emailsDuSite, ligneEmailSite, pagesALire, reseauxDuSite } from "../_shared/siteMarque.ts";
+import { cleCompte, decompte, ligneSansReponse, sansReponse, type FilDm, type ProfilDm, type TypeDemande } from "../_shared/dmSansReponse.ts";
 
 type Json = Record<string, unknown>;
 const ok = (text: string) => ({ text });
@@ -482,4 +485,79 @@ const lireSiteMarque: AdminTool = {
   },
 };
 
-export const AUTONOMIE_TOOLS: AdminTool[] = [importerHistorique, lireProfil, lireProfilsLot, scannerBaseTool, trouverEmailsMarque, trouverEmailPersonne, lireSiteMarque];
+// ── 5. DM restés sans réponse ───────────────────────────────────────────────
+type Lecture1000 = PromiseLike<{ data: unknown; error: unknown }>;
+
+/** Lit une table par pages de 1 000 lignes (l'API n'en rend pas plus par appel). null si une lecture échoue. */
+async function toutLire<T>(lire: (de: number, a: number) => Lecture1000, maxPages = 10): Promise<T[] | null> {
+  const out: T[] = [];
+  for (let p = 0; p < maxPages; p++) {
+    const { data, error } = await lire(p * 1000, p * 1000 + 999);
+    if (error) return null;
+    const rows = (data as T[] | null) ?? [];
+    out.push(...rows);
+    if (rows.length < 1000) break;
+  }
+  return out;
+}
+
+const TYPES_DM: TypeDemande[] = ["marques", "createurs", "inconnus", "tous"];
+
+const dmSansReponse: AdminTool = {
+  name: "dm_sans_reponse",
+  title: "DM Instagram restés sans réponse",
+  description:
+    "Liste les conversations Instagram de @ttpcreators où le dernier message est le nôtre et où rien n'est revenu depuis au moins `jours` jours : les comptes à reprendre par e-mail. Pour chacun : marque ou créateur (si le profil a déjà été lu), abonnés, date de notre dernier message, e-mail donné en DM, e-mail et site du profil, agence. Les comptes déjà au carnet de contacts et les créateurs déjà en agence sont laissés de côté par défaut. Les plus gros comptes d'abord. Lecture seule. Ensuite : lire_profils_instagram pour les profils jamais lus, lire_site_marque pour l'adresse d'une marque, puis ajouter_contacts.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      type: { type: "string", enum: TYPES_DM, description: "marques, createurs, inconnus (profil jamais lu) ou tous (défaut)" },
+      jours: { type: "integer", minimum: 0, maximum: 3650, description: "Jours écoulés au moins depuis notre dernier message (défaut 7)" },
+      abonnes_min: { type: "integer", minimum: 0, description: "Abonnés au moins (ex. 100000 pour les créateurs visés)" },
+      avec_carnet: { type: "boolean", description: "Montrer aussi les comptes déjà au carnet de contacts" },
+      avec_agence: { type: "boolean", description: "Montrer aussi les créateurs déjà en agence" },
+      limite: { type: "integer", minimum: 1, maximum: 100, description: "Comptes montrés (défaut 30)" },
+      a_partir_de: { type: "integer", minimum: 0, description: "Passer les N premiers comptes (pour voir la suite)" },
+    },
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const type = (TYPES_DM as string[]).includes(str(a.type, 20)) ? (str(a.type, 20) as TypeDemande) : "tous";
+    const limite = int(a.limite, 30, 1, 100);
+    const passer = int(a.a_partir_de, 0, 0, 100_000);
+    const fils = await toutLire<FilDm & { hidden?: boolean | null }>((de, fin) =>
+      sb.from("ig_threads").select("id, username, name, followers, updated_at, emails, contact_id, hidden").eq("last_from_me", true).order("updated_at", { ascending: true }).order("id").range(de, fin));
+    if (!fils) return fail("Les conversations Instagram n'ont pas pu être lues. Réessayer.");
+    const visibles = fils.filter((f) => f.hidden !== true);
+    const comptes = [...new Set(visibles.map((f) => cleCompte(f.username)).filter(Boolean))];
+    const profils: ProfilDm[] = [];
+    const paquets: string[][] = [];
+    for (let i = 0; i < comptes.length; i += 150) paquets.push(comptes.slice(i, i + 150));
+    for (let i = 0; i < paquets.length; i += 5) {
+      const lus = await Promise.all(paquets.slice(i, i + 5).map((noms) =>
+        sb.from("ig_profiles").select("username, agence, agence_nom, isBrand:data->isBrand, website:data->>website, email:data->>email, followers:data->followers, agency:data->>agency").in("username", noms)));
+      for (const r of lus) {
+        if (r.error) return fail("Les profils déjà lus n'ont pas pu être relus. Réessayer.");
+        profils.push(...((r.data as ProfilDm[] | null) ?? []));
+      }
+    }
+    const carnet = await toutLire<{ instagram: string | null }>((de, fin) => sb.from("contacts").select("instagram").not("instagram", "is", null).order("id").range(de, fin), 30);
+    if (!carnet) return fail("Le carnet de contacts n'a pas pu être relu. Réessayer.");
+    const duCarnet = new Set(carnet.map((c) => cleCompte(c.instagram)).filter(Boolean));
+    const toutes = sansReponse(visibles, profils, duCarnet, {
+      now: new Date(), joursMin: int(a.jours, 7, 0, 3650), type, abonnesMin: int(a.abonnes_min, 0, 0, 1_000_000_000), sansContact: a.avec_carnet !== true, sansAgence: a.avec_agence !== true,
+    });
+    const page = toutes.slice(passer, passer + limite);
+    const jamaisLus = page.filter((l) => l.genre === "inconnu").map((l) => l.compte);
+    return ok([
+      `# DM sans réponse · ${fr(toutes.length)} compte(s) : ${decompte(toutes)}`,
+      toutes.length ? `Comptes ${fr(passer + 1)} à ${fr(passer + page.length)}, les plus gros d'abord :` : "Aucun compte ne correspond.",
+      ...page.map(ligneSansReponse),
+      toutes.length > passer + page.length ? `Suite : a_partir_de = ${passer + page.length}.` : "",
+      jamaisLus.length ? `Profils jamais lus dans cette page (${jamaisLus.length}) : ${jamaisLus.join(", ")}. Appeler lire_profils_instagram avec ces comptes pour savoir si ce sont des marques, leur site et leur e-mail.` : "",
+      "Rien n'a été modifié.",
+    ].filter(Boolean).join("\n"));
+  },
+};
+
+export const AUTONOMIE_TOOLS: AdminTool[] = [importerHistorique, lireProfil, lireProfilsLot, scannerBaseTool, trouverEmailsMarque, trouverEmailPersonne, lireSiteMarque, dmSansReponse];

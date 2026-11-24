@@ -175,12 +175,18 @@ export type EmailSite = { email: string; genre: "partenariats" | "general" | "no
 /** Genre d'une adresse d'après ce qui est écrit avant le @ ; null si elle est inutile. */
 export function genreEmail(email: string): EmailSite["genre"] | null {
   const local = email.split("@")[0] ?? "";
-  if (INUTILE.test(local) || TECHNIQUE.test(email.split("@")[1] ?? "") || /^[0-9a-f]{16,}$/.test(local)) return null;
+  const domaine = email.split("@")[1] ?? "";
+  if (INUTILE.test(local) || TECHNIQUE.test(domaine) || /^[0-9a-f]{16,}$/.test(local)) return null;
+  // Adresses d'exemple laissées dans le code d'un site (« test@test.com », « nom@exemple.fr »).
+  if (FACTICE_LOCAL.test(local) || FACTICE_DOMAINE.test(domaine)) return null;
   if (PARTENARIAT.test(local)) return "partenariats";
   if (CLIENT.test(local)) return "service client";
   if (GENERAL.test(local)) return "general";
   return "nominative";
 }
+
+const FACTICE_LOCAL = /^(test|tests|exemple|example|email|e-mail|mail|name|nom|prenom|firstname|lastname|user|username|you|your|votre|john\.?doe|jane\.?doe|xxx+)$/;
+const FACTICE_DOMAINE = /^(test|tests|example|exemple|domain|domaine|yourdomain|votredomaine|monsite|mysite|site|company|societe|email|xxx+)\.[a-z]{2,}$/;
 
 const ORDRE: Record<EmailSite["genre"], number> = { partenariats: 0, general: 1, nominative: 2, "service client": 3 };
 
