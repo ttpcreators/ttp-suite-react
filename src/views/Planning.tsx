@@ -12,6 +12,7 @@ import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { toISODate, todayISO } from "@/lib/dates";
 import { notifyCreator } from "@/lib/push";
+import { evenementInterne } from "@/lib/todoVisibility";
 import { FolderTabs, type FolderTabItem } from "@/components/ui/folder-tabs";
 import { useVisitedTabs } from "@/lib/useVisitedTabs";
 import { useNavSub, useSetNavSub } from "@/lib/navSub";
@@ -281,8 +282,9 @@ function Agenda({ onOpenPost }: { onOpenPost: (id: string) => void }) {
     }
     if (e.collabId) void linkNewToCollab("events", String((created as { id: string }).id), e.collabId);
     setRows((prev) => [{ ...e, collabId: undefined, date: dateVal, id: String((created as { id: string }).id) }, ...(prev ?? [])]);
-    // Push à chaque créateur concerné (who peut être une liste "Nom A, Nom B").
-    (e.who ?? "").split(",").map((c) => c.trim()).filter(Boolean).forEach((c) => notifyCreator("event", c, e.title));
+    // Push à chaque créateur concerné (who peut être une liste "Nom A, Nom B"), sauf pour un
+    // rendez-vous interne (« Tâche : … ») qu'il ne voit pas.
+    if (!evenementInterne(e)) (e.who ?? "").split(",").map((c) => c.trim()).filter(Boolean).forEach((c) => notifyCreator("event", c, e.title));
     toast("Événement ajouté ✓");
     return true;
   };

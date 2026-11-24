@@ -13,6 +13,7 @@ import { useSearch } from "@/lib/search";
 import { useCreators } from "@/lib/useCreators";
 import { commissionMap } from "@/lib/commission";
 import { notifyCreator } from "@/lib/push";
+import { visiblePourCreateur } from "@/lib/todoVisibility";
 import { useNavActionSlot } from "@/lib/navAction";
 import { requestIntent } from "@/lib/openIntent";
 import { openCommandPalette } from "@/lib/commandPalette";
@@ -717,8 +718,9 @@ export function Aujourdhui() {
       toast("Statut non enregistré, réessaie");
       return;
     }
-    // Comme la page To-do : le créateur est prévenu quand SA demande est faite.
-    if (t.creator) notifyCreator("task-done", t.creator, `✅ Ta demande est faite : « ${t.text} »`);
+    // Comme la page To-do : le créateur est prévenu quand SA demande est faite (jamais pour
+    // une tâche interne de l'agence, qu'il ne voit pas).
+    if (t.creator && visiblePourCreateur(t as { source?: string | null; visible_createur?: boolean | null })) notifyCreator("task-done", t.creator, `✅ Ta demande est faite : « ${t.text} »`);
     setTodos((prev) => (prev ?? []).map((x) => (x.id === t.id ? { ...x, ...saved } : x)));
     toast("Tâche terminée ✓");
   };
