@@ -442,7 +442,7 @@ const lireSiteMarque: AdminTool = {
   name: "lire_site_marque",
   title: "Lire le site d'une marque",
   description:
-    "Lit le site public d'une marque (page d'accueil, page contact, mentions légales, page presse : 4 pages au plus) et en sort les adresses e-mail écrites dessus, les plus utiles d'abord (partenariats et presse, adresse générale, adresse d'une personne, service client), plus le compte Instagram et la page LinkedIn liés depuis le site. GRATUIT : aucun crédit FullEnrich. À faire en premier pour chaque marque ; trouver_emails_marque (payant en crédits) seulement pour les marques prioritaires ou quand le site ne donne rien. Les réseaux sociaux ne sont pas lus. N'écrit RIEN : pour garder une adresse, appeler ajouter_contact.",
+    "Lit le site public d'une marque (page d'accueil, puis contact, presse, mentions légales : 6 pages au plus) et en sort les adresses e-mail écrites dessus, les plus utiles d'abord (partenariats et presse, adresse générale, adresse d'une personne, service client), plus le compte Instagram et la page LinkedIn liés depuis le site. GRATUIT : aucun crédit FullEnrich. À faire en premier pour chaque marque ; trouver_emails_marque (payant en crédits) seulement pour les marques prioritaires ou quand le site ne donne rien. Les réseaux sociaux ne sont pas lus. N'écrit RIEN : pour garder une adresse, appeler ajouter_contact.",
   inputSchema: {
     type: "object",
     properties: {

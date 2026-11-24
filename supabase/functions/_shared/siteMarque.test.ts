@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { adresseSite, adressesDans, domaineDuSite, emailsDuSite, genreEmail, ligneEmailSite, pagesALire, reseauxDuSite, texteLisible } from "./siteMarque.ts";
+import { adresseCloudflare, adresseSite, adressesDans, domaineDuSite, emailsDuSite, genreEmail, ligneEmailSite, pagesALire, reseauxDuSite, texteLisible } from "./siteMarque.ts";
 
 describe("lire le site d'une marque", () => {
   it("n'accepte que des sites publics", () => {
@@ -14,19 +14,40 @@ describe("lire le site d'une marque", () => {
     expect(domaineDuSite("https://www.nova.fr")).toBe("nova.fr");
   });
 
-  it("choisit les pages contact, mentions légales, presse du même site", () => {
+  it("choisit les pages du même site, les plus utiles d'abord", () => {
     const html = `
       <a href="/collections/robes">Robes</a>
+      <a href="/pages/cgv">Conditions générales</a>
+      <a href="/pages/qui"> Mentions légales </a>
       <a class="x" href="/pages/contact">Nous écrire</a>
       <a href="https://www.nova.fr/pages/contact/">Contact</a>
       <a href="https://autre-site.fr/contact">Contact du partenaire</a>
       <a href="mailto:hello@nova.fr">Écrire</a>
       <a href="/pages/presse"><span>Presse</span></a>
-      <a href="/pages/qui"> Mentions légales </a>
+      <a href="/pages/histoire">À propos</a>
       <a href="/pages/partenariats">Devenir partenaire</a>`;
-    expect(pagesALire("nova.fr", html)).toEqual(["https://nova.fr/pages/contact", "https://nova.fr/pages/presse", "https://nova.fr/pages/qui"]);
+    expect(pagesALire("nova.fr", html)).toEqual([
+      "https://nova.fr/pages/contact", "https://nova.fr/pages/presse", "https://nova.fr/pages/partenariats", "https://nova.fr/pages/qui", "https://nova.fr/contact",
+    ]);
     expect(pagesALire("https://www.nova.fr", "<p>rien</p>")).toEqual(["https://www.nova.fr/contact", "https://www.nova.fr/pages/contact", "https://www.nova.fr/mentions-legales"]);
     expect(pagesALire("localhost", html)).toEqual([]);
+  });
+
+  it("boutique Shopify : les pages de la société passent juste après le contact", () => {
+    const html = `<link href="https://cdn.shopify.com/s/x.css"><a href="/pages/faq">Contact</a><a href="/policies/terms-of-service">Terms</a>`;
+    expect(pagesALire("komono.com", html)).toEqual([
+      "https://komono.com/pages/faq", "https://komono.com/policies/contact-information", "https://komono.com/policies/legal-notice", "https://komono.com/contact", "https://komono.com/pages/contact",
+    ]);
+  });
+
+  it("décode une adresse masquée par Cloudflare", () => {
+    const masquer = (email: string, cle = 0x5a) => cle.toString(16).padStart(2, "0") + [...email].map((c) => (c.charCodeAt(0) ^ cle).toString(16).padStart(2, "0")).join("");
+    const hex = masquer("info@nova.fr");
+    expect(adresseCloudflare(hex)).toBe("info@nova.fr");
+    expect(adresseCloudflare("zz")).toBe("");
+    expect(adresseCloudflare("")).toBe("");
+    expect(texteLisible(`<a href="/cdn-cgi/l/email-protection#${hex}">[email&#160;protected]</a>`)).toContain(" info@nova.fr ");
+    expect(texteLisible(`<span class="__cf_email__" data-cfemail="${masquer("presse@nova.fr", 0x1f)}">x</span>`)).toContain(" presse@nova.fr ");
   });
 
   it("rend lisibles les adresses cachées simplement", () => {
@@ -52,6 +73,7 @@ describe("lire le site d'une marque", () => {
     expect(genreEmail("pr@nova.fr")).toBe("partenariats");
     expect(genreEmail("contact@nova.fr")).toBe("general");
     expect(genreEmail("hello@nova.fr")).toBe("general");
+    expect(genreEmail("sales@nova.fr")).toBe("general");
     expect(genreEmail("julie.martin@nova.fr")).toBe("nominative");
     expect(genreEmail("sav@nova.fr")).toBe("service client");
     expect(genreEmail("service-client@nova.fr")).toBe("service client");
