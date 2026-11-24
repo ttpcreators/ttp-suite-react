@@ -77,7 +77,7 @@ describe("lire le site d'une marque", () => {
     expect(genreEmail("julie.martin@nova.fr")).toBe("nominative");
     expect(genreEmail("sav@nova.fr")).toBe("service client");
     expect(genreEmail("service-client@nova.fr")).toBe("service client");
-    for (const inutile of ["noreply@nova.fr", "no-reply@nova.fr", "dpo@nova.fr", "rgpd@nova.fr", "recrutement@nova.fr", "jobs@nova.fr", "abuse@nova.fr", "3f2a9c1b7d4e5f60a1b2@nova.fr", "x@o123.ingest.sentry.io"]) {
+    for (const inutile of ["noreply@nova.fr", "no-reply@nova.fr", "dpo@nova.fr", "rgpd@nova.fr", "recrutement@nova.fr", "jobs@nova.fr", "abuse@nova.fr", "3f2a9c1b7d4e5f60a1b2@nova.fr", "x@o123.ingest.sentry.io", "test@test.com", "nom@exemple.fr", "john.doe@nova.fr", "julie@yourdomain.com"]) {
       expect(genreEmail(inutile)).toBeNull();
     }
   });

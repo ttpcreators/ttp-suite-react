@@ -28,6 +28,9 @@ describe("FullEnrich", () => {
     expect(poidsPoste("Talent Acquisition Manager")).toBe(0);
     expect(poidsPoste("Responsable marque employeur")).toBe(0);
     expect(poidsPoste("Talent Manager")).toBe(5);
+    expect(poidsPoste("Stagiair digitale marketing")).toBe(0);
+    expect(poidsPoste("Alternante communication")).toBe(0);
+    expect(poidsPoste("International Marketing Manager")).toBe(2);
     expect(poidsPoste("VP Marketing")).toBe(2);
   });
   it("classe les personnes : influence d'abord, sans doublon", () => {
