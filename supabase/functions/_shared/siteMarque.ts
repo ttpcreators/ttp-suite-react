@@ -7,16 +7,16 @@
 // marque sinon. Cette adresse est presque toujours écrite sur le site : page d'accueil,
 // page contact, mentions légales. La lire ne coûte aucun crédit.
 // Garde-fous : seuls des sites publics sont lus (pas d'adresse IP, pas de nom interne, pas
-// de port), 4 pages au plus sur le même site, et les grands réseaux ne sont jamais lus.
+// de port), 6 pages au plus sur le même site, et les grands réseaux ne sont jamais lus.
 // Règles PURES, testées par siteMarque.test.ts. La lecture réseau est dans autonomie.ts.
 // ============================================================================
 
 import { FREE_MAIL } from "./signals.ts";
 
 /** Pages lues par site, page d'accueil comprise. */
-export const MAX_PAGES = 4;
-/** Taille lue par page (octets). */
-export const MAX_OCTETS = 400_000;
+export const MAX_PAGES = 6;
+/** Taille lue par page (octets). Assez pour atteindre le pied de page d'une boutique, où sont les adresses. */
+export const MAX_OCTETS = 1_500_000;
 
 const INTERNES = /\.(local|localhost|internal|intranet|lan|home|corp|test|example|invalid|onion)$/;
 /** Réseaux et plateformes : l'adresse de la marque n'y est pas, et ils refusent la lecture. */
@@ -49,43 +49,56 @@ export function domaineDuSite(site: string): string {
   }
 }
 
-const INTERET = /contact|nous-?contacter|contactez|mentions-?legales|legal|imprint|impressum|a-?propos|about|qui-?sommes|presse|press|partenariat|partnership|collab|influence|ambassad/;
+/** Ce qu'un lien promet, du plus utile au moins utile ; -1 = sans intérêt. */
+const RANGS: RegExp[] = [
+  /contact|nous-?contacter|contactez/,
+  /presse|press|partenariat|partnership|collab|influence|ambassad/,
+  /mentions-?legales|legal|imprint|impressum/,
+  /a-?propos|about|qui-?sommes/,
+  /\bcgv\b|conditions|terms|\bfaq\b/,
+];
+function rangDuLien(texte: string): number {
+  return RANGS.findIndex((re) => re.test(texte));
+}
+/** Adresses habituelles quand la page d'accueil ne donne pas assez de liens. */
 const PAR_DEFAUT = ["/contact", "/pages/contact", "/mentions-legales"];
+/** Boutiques Shopify : ces deux pages portent presque toujours l'adresse de la société. */
+const SHOPIFY = ["/policies/contact-information", "/policies/legal-notice"];
 
 /**
  * Les pages à lire après la page d'accueil : les liens du même site qui parlent de contact,
- * de mentions légales, de presse ou de partenariats, sinon les adresses habituelles.
+ * de presse ou de partenariats, de mentions légales, puis d'à-propos et de conditions (les
+ * plus utiles d'abord), complétés par les adresses habituelles.
  */
 export function pagesALire(site: string, html: string): string[] {
   const base = adresseSite(site);
   if (!base) return [];
   const hote = domaineDuSite(base);
+  const page = String(html ?? "");
   const vues = new Set<string>();
-  const out: string[] = [];
-  const garder = (u: URL) => {
+  const trouves: { url: string; rang: number; ordre: number }[] = [];
+  const garder = (u: URL, rang: number) => {
     if (domaineDuSite(u.origin) !== hote || u.port || !/^https?:$/.test(u.protocol)) return;
     const cle = u.pathname.replace(/\/+$/, "").toLowerCase();
     if (!cle || vues.has(cle) || /\.(pdf|jpe?g|png|webp|svg|zip|mp4)$/.test(cle)) return;
     vues.add(cle);
-    out.push(`https://${u.hostname}${u.pathname}`);
+    trouves.push({ url: `https://${u.hostname}${u.pathname}`, rang, ordre: trouves.length });
   };
-  for (const m of String(html ?? "").matchAll(/<a\b[^>]*?href\s*=\s*["']([^"'#]+)["'][^>]*>([\s\S]{0,120}?)<\/a>/gi)) {
+  for (const m of page.matchAll(/<a\b[^>]*?href\s*=\s*["']([^"'#]+)["'][^>]*>([\s\S]{0,120}?)<\/a>/gi)) {
+    if (trouves.length >= 40) break;
     const href = m[1].trim();
     if (/^(mailto|tel|javascript|data):/i.test(href)) continue;
-    const texte = m[2].replace(/<[^>]+>/g, " ");
-    if (!INTERET.test(sansAccent(`${href} ${texte}`))) continue;
+    const rang = rangDuLien(sansAccent(`${href} ${m[2].replace(/<[^>]+>/g, " ")}`));
+    if (rang < 0) continue;
     try {
-      garder(new URL(href, `${base}/`));
+      garder(new URL(href, `${base}/`), rang);
     } catch {
       /* lien illisible : on passe */
     }
-    if (out.length >= MAX_PAGES - 1) return out;
   }
-  for (const p of PAR_DEFAUT) {
-    if (out.length >= MAX_PAGES - 1) break;
-    garder(new URL(p, `${base}/`));
-  }
-  return out.slice(0, MAX_PAGES - 1);
+  if (/cdn\.shopify\.com|\/cdn\/shop\//.test(page)) for (const p of SHOPIFY) garder(new URL(p, `${base}/`), 0.5);
+  for (const p of PAR_DEFAUT) garder(new URL(p, `${base}/`), 2.5);
+  return trouves.sort((a, b) => a.rang - b.rang || a.ordre - b.ordre).slice(0, MAX_PAGES - 1).map((x) => x.url);
 }
 
 function sansAccent(v: string): string {
@@ -97,6 +110,8 @@ export function texteLisible(html: string): string {
   let t = String(html ?? "");
   t = t.replace(/&#(\d{2,4});/g, (_m, n) => String.fromCharCode(Number(n))).replace(/&#x([0-9a-f]{2,4});/gi, (_m, n) => String.fromCharCode(parseInt(n, 16)));
   t = t.replace(/&commat;/gi, "@").replace(/&period;/gi, ".").replace(/&amp;/gi, "&").replace(/&nbsp;/gi, " ");
+  // Adresses masquées par Cloudflare : « data-cfemail="…" » ou « /cdn-cgi/l/email-protection#… ».
+  t = t.replace(/(?:data-cfemail=["']|email-protection#)([0-9a-f]{6,400})/gi, (_m, hex) => ` ${adresseCloudflare(hex)} `);
   t = t.replace(/mailto:([^"'?\s>]{1,200})/gi, (_m, a) => {
     try {
       return ` ${decodeURIComponent(a)} `;
@@ -108,6 +123,16 @@ export function texteLisible(html: string): string {
   // pour que la lecture reste rapide même sur une page pleine d'espaces).
   t = t.replace(/[[(] {0,2}(?:at|arobase) {0,2}[\])]/gi, "\u0001").replace(/[[(] {0,2}(?:dot|point) {0,2}[\])]/gi, "\u0002");
   return t.replace(/ {0,3}\u0001 {0,3}/g, "@").replace(/ {0,3}\u0002 {0,3}/g, ".");
+}
+
+/** Décode une adresse masquée par Cloudflare : le premier octet est la clé des suivants. */
+export function adresseCloudflare(hex: string): string {
+  const h = String(hex ?? "");
+  if (!/^([0-9a-f]{2}){3,200}$/i.test(h)) return "";
+  const cle = parseInt(h.slice(0, 2), 16);
+  let out = "";
+  for (let i = 2; i < h.length; i += 2) out += String.fromCharCode(parseInt(h.slice(i, i + 2), 16) ^ cle);
+  return /^[\x21-\x7e]+$/.test(out) ? out : "";
 }
 
 const AVANT = /[a-z0-9._%+-]/i;
@@ -142,7 +167,7 @@ export function adressesDans(texte: string): string[] {
 const INUTILE = /^(no-?reply|ne-?pas-?repondre|donotreply|mailer-daemon|postmaster|abuse|webmaster|hostmaster|dpo|rgpd|gdpr|privacy|legal|juridique|security|jobs?|recrutement|careers?|rh|hr|compta|comptabilite|facturation|billing|invoice)\b/;
 const TECHNIQUE = /(sentry|wixpress|shopify|squarespace|wordpress|cloudflare|googleapis|gstatic|schema|w3|jquery|example|exemple|domain|domaine|email|votre|your)\./;
 const PARTENARIAT = /(influen|partner|partenariat|collab|ambassad|presse|press|\bpr\b|\brp\b|marketing|communication|comm?s?\b|social|brand|media)/;
-const GENERAL = /^(contact|hello|bonjour|info|infos|hi|hey|salut|team|equipe|coucou|welcome)\b/;
+const GENERAL = /^(contact|hello|bonjour|info|infos|hi|hey|salut|team|equipe|coucou|welcome|sales|commercial|b2b|pro|wholesale)\b/;
 const CLIENT = /(sav|support|service-?client|client|customer|commande|order|retour|return|livraison|shipping|help|aide)/;
 
 export type EmailSite = { email: string; genre: "partenariats" | "general" | "nominative" | "service client"; duSite: boolean; page: string };
