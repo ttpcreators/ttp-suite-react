@@ -1,0 +1,108 @@
+name: Déploiement des fonctions
+
+# Déploie une ou plusieurs Edge Functions Supabase, à la demande, depuis `main`.
+#
+# Rien ne part tout seul : une fusion dans `main` ne déploie aucune fonction. On lance ce
+# déploiement exprès, en nommant les fonctions :
+#   - à la main : onglet Actions › « Déploiement des fonctions » › Run workflow ;
+#   - ou par l'API (session Claude en ligne de Gianni, après son « oui » pour ce
+#     déploiement précis, voir CLAUDE.md, « Travailler à deux »).
+#
+# Le code déployé est toujours celui de `main`, donc celui qui a passé la « Vérification
+# des PR ». Un seul déploiement à la fois (les demandes suivantes attendent leur tour).
+#
+# Secret requis : SUPABASE_ACCESS_TOKEN (jeton personnel Supabase), posé dans
+# Settings › Secrets and variables › Actions. Jamais dans un fichier ni dans une discussion.
+on:
+  workflow_dispatch:
+    inputs:
+      fonctions:
+        description: "Fonctions à déployer, séparées par des espaces (ex. ttp-mcp rdv)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploiement-fonctions
+  cancel-in-progress: false
+
+jobs:
+  deployer:
+    name: déployer
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROJECT_REF: zizvggziggswhrbuyhuo
+      # Le texte saisi passe par une variable, jamais recopié dans une commande.
+      FONCTIONS: ${{ inputs.fonctions }}
+    steps:
+      - name: Partir de main seulement
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Le déploiement part seulement de main (reçu : $GITHUB_REF)."
+          exit 1
+
+      - uses: actions/checkout@v7
+
+      - name: Vérifier la demande
+        env:
+          JETON_PRESENT: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          if [ "$JETON_PRESENT" != "true" ]; then
+            echo "::error::Le secret SUPABASE_ACCESS_TOKEN n'existe pas encore (Settings › Secrets and variables › Actions)."
+            exit 1
+          fi
+          read -r -a NOMS <<< "$FONCTIONS"
+          if [ "${#NOMS[@]}" -eq 0 ]; then
+            echo "::error::Aucune fonction demandée."
+            exit 1
+          fi
+          if [ "${#NOMS[@]}" -gt 12 ]; then
+            echo "::error::12 fonctions au plus par déploiement (reçu : ${#NOMS[@]})."
+            exit 1
+          fi
+          for n in "${NOMS[@]}"; do
+            if ! [[ "$n" =~ ^[a-z0-9][a-z0-9-]{0,60}$ ]]; then
+              echo "::error::Nom de fonction refusé : $n"
+              exit 1
+            fi
+            if [ ! -f "supabase/functions/$n/index.ts" ]; then
+              echo "::error::Fonction inconnue dans main : $n"
+              exit 1
+            fi
+          done
+          echo "Demande valide : ${NOMS[*]}"
+
+      - name: Déployer
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          read -r -a NOMS <<< "$FONCTIONS"
+          {
+            echo "## Fonctions déployées"
+            echo ""
+            echo "Version de main : \`${GITHUB_SHA:0:12}\`, lancé par ${GITHUB_ACTOR}."
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+          for n in "${NOMS[@]}"; do
+            ARGS=(functions deploy "$n" --project-ref "$PROJECT_REF")
+            # verify_jwt = false dans supabase/config.toml : on le redit au déploiement
+            # (cron, webhook, retour OAuth, ttp-mcp : sinon 401 avant le code).
+            if awk -v bloc="[functions.$n]" '
+              $0 == bloc { dedans = 1; next }
+              /^\[/ { dedans = 0 }
+              dedans && /^verify_jwt[[:space:]]*=[[:space:]]*false/ { trouve = 1 }
+              END { exit !trouve }
+            ' supabase/config.toml; then
+              ARGS+=(--no-verify-jwt)
+            fi
+            echo "::group::$n"
+            echo "supabase ${ARGS[*]}"
+            npx --yes supabase@2 "${ARGS[@]}"
+            echo "::endgroup::"
+            echo "- \`$n\`" >> "$GITHUB_STEP_SUMMARY"
+          done
