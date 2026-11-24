@@ -17,7 +17,7 @@ import { meetEventBody, meetLinkOf, parseMeetRequest } from "../_shared/meetEven
 import { doublonPlanning, type Candidat, type PlanEvent } from "../_shared/planningDoublon.ts";
 import { readAppState } from "../_shared/appState.ts";
 import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
-import { CONTACT_TAGS, normaliserTag } from "../_shared/contactTags.ts";
+import { CONTACT_TAGS } from "../_shared/contactTags.ts";
 import type { Ctx } from "./oauth.ts";
 import { boxAddress, boxesFor, createDraft, parseMailBox, deleteClaudeDraft, draftRefs, listClaudeDrafts, listSendAs, PARTOUT, attachmentFromThread, markThreadRead, readThread, resolveSender, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { findSendAs, type SendAs } from "../_shared/sendAs.ts";
@@ -35,6 +35,7 @@ import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCart
 import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
 import { ciblesEchange, requeteEchange, texteEchanges } from "../_shared/dejaEchange.ts";
 import { colonneErreurAbsente, ligneJournal, sansErreur } from "../_shared/mcpJournal.ts";
+import { MAX_LOT_CONTACTS, alerteMemeMarque, chercherDoublon, citerContact, lireContact, trierContacts, type ContactExistant } from "../_shared/contactAjout.ts";
 import { cleDuCreateur, dateVersement, versementEnDouble } from "../_shared/versement.ts";
 import { apresVersement } from "../_shared/collabAutoDb.ts";
 import { ligneAvance } from "../_shared/collabAuto.ts";
@@ -1878,30 +1879,95 @@ function base64DesOctets(o: Uint8Array): string {
   return btoa(bin);
 }
 
+/** Champs d'une fiche contact, communs à ajouter_contact et ajouter_contacts. */
+const CHAMPS_CONTACT = {
+  marque: { type: "string" },
+  personne: { type: "string", description: "Nom complet de la personne (ou prenom + nom)" },
+  prenom: { type: "string" },
+  nom: { type: "string" },
+  role: { type: "string", description: "Son poste" },
+  email: { type: "string" },
+  instagram: { type: "string", description: "@ ou lien du compte Instagram de la marque" },
+  linkedin: { type: "string", description: "Lien du profil LinkedIn de la personne" },
+  telephone: { type: "string" },
+  ville: { type: "string" },
+  categorie: { type: "string", description: `Une de : ${CONTACT_TAGS.join(", ")} (Marque par défaut ; une autre valeur est rapprochée, sinon Autre)` },
+} as const;
+
+/** Tout le carnet, pour chercher les doublons (par pages : l'API en rend 1 000 au plus par appel). */
+async function carnetPourDoublons(sb: SupabaseClient): Promise<ContactExistant[] | null> {
+  const out: ContactExistant[] = [];
+  for (let page = 0; page < 30; page++) {
+    const { data, error } = await sb.from("contacts").select("id, brand, person, email, instagram, linkedin").order("id").range(page * 1000, page * 1000 + 999);
+    if (error) return null;
+    const rows = (data as ContactExistant[] | null) ?? [];
+    out.push(...rows);
+    if (rows.length < 1000) return out;
+  }
+  return null;
+}
+
 const ajouterContact: Tool = {
   name: "ajouter_contact",
   title: "Ajouter un contact marque",
-  description: "Ajoute une marque au carnet de contacts (ne crée pas de doublon : un contact existant avec le même email ou le même @ est renvoyé).",
+  description: "Ajoute une personne ou une marque au carnet de contacts, avec son poste, son e-mail, son LinkedIn, sa ville. Ne crée pas de doublon : une fiche avec le même e-mail, le même LinkedIn ou le même @ est renvoyée. Si la marque a déjà d'autres fiches (même nom ou même domaine d'adresse), la fiche est ajoutée et l'outil les cite : écrire à une seule personne de la marque à la fois. Une adresse e-mail illisible est refusée. Pour plusieurs fiches d'un coup : ajouter_contacts.",
   write: true,
   inputSchema: {
     type: "object",
-    properties: { marque: { type: "string" }, personne: { type: "string" }, role: { type: "string" }, email: { type: "string" }, instagram: { type: "string" }, telephone: { type: "string" }, categorie: { type: "string", description: `Une de : ${CONTACT_TAGS.join(", ")} (Marque par défaut ; une autre valeur est rapprochée, sinon Autre)` } },
+    properties: CHAMPS_CONTACT,
     required: ["marque"],
     additionalProperties: false,
   },
   run: async (sb, _c, a) => {
-    const email = str(a.email, 200).toLowerCase();
-    const ig = str(a.instagram, 80) ? `@${str(a.instagram, 80).replace(/^@/, "")}` : "";
-    if (email || ig) {
-      const conds = [email && `email.ilike.${JSON.stringify(email)}`, ig && `instagram.ilike.${JSON.stringify(ig)}`].filter(Boolean).join(",");
-      const { data: same } = await sb.from("contacts").select("id, brand").or(conds).limit(1);
-      const s = (same as Json[] | null)?.[0];
-      if (s) return ok(`Contact déjà présent : ${s.brand} [contact ${s.id}].`);
+    const lu = lireContact(a);
+    if ("erreur" in lu) return fail(`Contact non créé : ${lu.erreur}.`);
+    const carnet = await carnetPourDoublons(sb);
+    if (!carnet) return fail("Contact non créé : le carnet n'a pas pu être relu pour chercher les doublons. Réessayer.");
+    const d = chercherDoublon(lu.c, carnet);
+    if (d.identique) return ok(`Contact déjà présent : ${d.identique.brand ?? lu.c.brand} [contact ${d.identique.id}].`);
+    const { data, error } = await sb.from("contacts").insert(lu.c).select("id").single<{ id: string }>();
+    if (error) return fail(`Contact non créé : ${error.message}`);
+    return ok([`Contact ajouté : ${lu.c.brand} [contact ${data.id}].`, ...lu.remarques.map((r) => `Remarque : ${r}.`), alerteMemeMarque(d.memeMarque)].filter(Boolean).join("\n"));
+  },
+};
+
+const ajouterContacts: Tool = {
+  name: "ajouter_contacts",
+  title: "Ajouter plusieurs contacts",
+  description: `Ajoute un lot de fiches au carnet de contacts en une fois (${MAX_LOT_CONTACTS} au plus), avec les mêmes règles qu'ajouter_contact : pas de doublon (même e-mail, même LinkedIn ou même @, dans le carnet comme dans le lot), adresse illisible refusée, et les marques qui ont déjà d'autres fiches sont signalées. Montrer le lot à l'utilisateur avant d'appeler. Le résultat dit, fiche par fiche, ce qui a été ajouté, ce qui existait déjà et ce qui a été refusé.`,
+  write: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      contacts: { type: "array", minItems: 1, maxItems: MAX_LOT_CONTACTS, items: { type: "object", properties: CHAMPS_CONTACT, required: ["marque"], additionalProperties: false } },
+    },
+    required: ["contacts"],
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const bruts = Array.isArray(a.contacts) ? a.contacts : [];
+    if (!bruts.length) return fail("Aucune fiche dans le lot.");
+    if (bruts.length > MAX_LOT_CONTACTS) return fail(`${MAX_LOT_CONTACTS} fiches au plus par lot (reçu : ${bruts.length}). Rien n'a été ajouté.`);
+    const carnet = await carnetPourDoublons(sb);
+    if (!carnet) return fail("Rien n'a été ajouté : le carnet n'a pas pu être relu pour chercher les doublons. Réessayer.");
+    const tri = trierContacts(bruts, carnet);
+    let crees: { id: string }[] = [];
+    if (tri.aCreer.length) {
+      // Un seul envoi : tout le lot est créé, ou rien.
+      const { data, error } = await sb.from("contacts").insert(tri.aCreer.map((x) => x.c)).select("id");
+      if (error) return fail(`Rien n'a été ajouté : ${error.message}`);
+      crees = (data as { id: string }[] | null) ?? [];
     }
-    const { data, error } = await sb.from("contacts").insert({
-      brand: str(a.marque, 120), person: str(a.personne, 120) || null, role: str(a.role, 80) || null, email: email || null, instagram: ig || null, phone: str(a.telephone, 40) || null, tag: normaliserTag(str(a.categorie, 60), "Marque"), tone: "cyan",
-    }).select("id").single<{ id: string }>();
-    return error ? fail(`Contact non créé : ${error.message}`) : ok(`Contact ajouté : ${str(a.marque, 120)} [contact ${data.id}].`);
+    return ok([
+      `# Lot de contacts : ${tri.aCreer.length} ajoutée(s), ${tri.dejaLa.length} déjà au carnet, ${tri.refuses.length} refusée(s)`,
+      ...tri.aCreer.flatMap((x, i) => [
+        `- Ajouté : ${x.c.brand}${x.c.person ? ` · ${x.c.person}` : ""}${x.c.email ? ` · ${x.c.email}` : ""}${crees[i]?.id ? ` [contact ${crees[i].id}]` : ""}`,
+        ...x.remarques.map((r) => `  Remarque : ${r}.`),
+        ...(x.memeMarque.length ? [`  ${alerteMemeMarque(x.memeMarque)}`] : []),
+      ]),
+      ...tri.dejaLa.map((x) => `- Déjà au carnet : ${x.marque} → ${citerContact(x.existant)}`),
+      ...tri.refuses.map((x) => `- Refusée : ${x.marque} (${x.raison})`),
+    ].join("\n"));
   },
 };
 
@@ -3061,7 +3127,7 @@ const lireContrat: Tool = {
 
 export const TOOLS: Tool[] = [
   pointDuJour, controleDonnees, strategie, tableauLundiTool, devisRelancer, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
-  creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, noterEchange, ajouterScouting, statutScouting, avancerCollab,
+  creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, ajouterContacts, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief, lireContrat,
   compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, baseCreateurs, disposDuMoisTool, notifications,
