@@ -10,6 +10,7 @@
 //   trouver_emails_marque : les bonnes personnes chez une marque (FullEnrich, recherche de
 //      personnes ; Hunter seulement si FullEnrich n'est pas configuré) ;
 //   trouver_email_personne : l'e-mail pro d'une personne (FullEnrich, puis Hunter en secours).
+//   lire_site_marque : l'adresse de contact écrite sur le site d'une marque (gratuit).
 // Rien n'est écrit dans les contacts : l'outil propose, puis Claude appelle ajouter_contact.
 // ============================================================================
 
@@ -21,6 +22,7 @@ import { tidySecret } from "../_shared/instagram.ts";
 import { CLE_MANQUANTE, HUNTER_API, cibles, domaineDe, erreurHunter, limiteDeLOffre, lignePersonne, lireEmailTrouve, lireRecherche, lireVerification, paramsRecherche, statutEmail, type PersonneHunter } from "../_shared/hunter.ts";
 import { classerPersonnes, coutRecherche, enrichContact, lignePersonneFE, parsePeople, searchBody } from "../_shared/fullenrich.ts";
 import { FULLENRICH_KEY, enrichir, fe, result as resultatFullEnrich, why, type EnrichResult } from "../_shared/fullenrichApi.ts";
+import { MAX_OCTETS, adresseSite, domaineDuSite, emailsDuSite, ligneEmailSite, pagesALire, reseauxDuSite } from "../_shared/siteMarque.ts";
 
 type Json = Record<string, unknown>;
 const ok = (text: string) => ({ text });
@@ -371,4 +373,113 @@ const trouverEmailPersonne: AdminTool = {
   },
 };
 
-export const AUTONOMIE_TOOLS: AdminTool[] = [importerHistorique, lireProfil, lireProfilsLot, scannerBaseTool, trouverEmailsMarque, trouverEmailPersonne];
+// ── 4. Site d'une marque ────────────────────────────────────────────────────
+type PageLue = { url: string; html: string };
+
+/** Le début d'une réponse, borné à MAX_OCTETS : une page énorme ne remplit pas la mémoire. */
+async function debutDuTexte(res: Response): Promise<string> {
+  const reader = res.body?.getReader();
+  if (!reader) return "";
+  const tout = new Uint8Array(MAX_OCTETS);
+  let pris = 0;
+  while (pris < MAX_OCTETS) {
+    const { done, value } = await reader.read();
+    if (done || !value) break;
+    const part = value.subarray(0, Math.min(value.length, MAX_OCTETS - pris));
+    tout.set(part, pris);
+    pris += part.length;
+  }
+  await reader.cancel().catch(() => {});
+  return new TextDecoder("utf-8", { fatal: false }).decode(tout.subarray(0, pris));
+}
+
+/**
+ * Lit une page publique. Les redirections sont suivies à la main (3 au plus), et chaque étape
+ * repasse par adresseSite : jamais d'adresse IP, de nom interne ni de port.
+ */
+async function lirePageSite(url: string): Promise<PageLue | { erreur: string }> {
+  let courant = url;
+  for (let saut = 0; saut < 4; saut++) {
+    let res: Response;
+    try {
+      res = await fetch(courant, {
+        redirect: "manual",
+        headers: { "User-Agent": "TTPSuite/1.0 (+https://ttpcreators.pro)", Accept: "text/html,application/xhtml+xml" },
+        signal: AbortSignal.timeout(8000),
+      });
+    } catch {
+      return { erreur: "pas de réponse" };
+    }
+    if (res.status >= 300 && res.status < 400) {
+      const vers = res.headers.get("location") ?? "";
+      await res.body?.cancel().catch(() => {});
+      let suite: URL;
+      try {
+        suite = new URL(vers, courant);
+      } catch {
+        return { erreur: "redirection illisible" };
+      }
+      const origine = adresseSite(suite.origin);
+      if (!origine) return { erreur: "redirection vers une adresse refusée" };
+      courant = `${origine}${suite.pathname}${suite.search}`;
+      continue;
+    }
+    if (!res.ok) {
+      await res.body?.cancel().catch(() => {});
+      return { erreur: `réponse ${res.status}` };
+    }
+    const type = res.headers.get("content-type") ?? "";
+    if (type && !/text\/html|application\/xhtml|text\/plain/i.test(type)) {
+      await res.body?.cancel().catch(() => {});
+      return { erreur: "ce n'est pas une page web" };
+    }
+    return { url: courant, html: await debutDuTexte(res) };
+  }
+  return { erreur: "trop de redirections" };
+}
+
+const lireSiteMarque: AdminTool = {
+  name: "lire_site_marque",
+  title: "Lire le site d'une marque",
+  description:
+    "Lit le site public d'une marque (page d'accueil, page contact, mentions légales, page presse : 4 pages au plus) et en sort les adresses e-mail écrites dessus, les plus utiles d'abord (partenariats et presse, adresse générale, adresse d'une personne, service client), plus le compte Instagram et la page LinkedIn liés depuis le site. GRATUIT : aucun crédit FullEnrich. À faire en premier pour chaque marque ; trouver_emails_marque (payant en crédits) seulement pour les marques prioritaires ou quand le site ne donne rien. Les réseaux sociaux ne sont pas lus. N'écrit RIEN : pour garder une adresse, appeler ajouter_contact.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      site: { type: "string", description: "Site de la marque (ex. marque.fr ou https://www.marque.fr)" },
+    },
+    required: ["site"],
+    additionalProperties: false,
+  },
+  run: async (_sb, _c, a) => {
+    const site = adresseSite(str(a.site, 300));
+    if (!site) return fail("Donne le site public de la marque (ex. marque.fr). Les réseaux sociaux, les adresses internes et les adresses IP ne sont pas lus.");
+    let accueil = await lirePageSite(`${site}/`);
+    const premiereErreur = "erreur" in accueil ? accueil.erreur : "";
+    // « marque.fr » qui ne répond pas : beaucoup de sites ne répondent qu'avec « www. ».
+    if ("erreur" in accueil && !/^https:\/\/www\./.test(site)) {
+      const avecWww = adresseSite(`www.${domaineDuSite(site)}`);
+      if (avecWww) accueil = await lirePageSite(`${avecWww}/`);
+    }
+    if ("erreur" in accueil) return fail(`Le site ${domaineDuSite(site)} n'a pas pu être lu (${premiereErreur || accueil.erreur}). Vérifier l'adresse du site.`);
+    // Le site a pu renvoyer vers une autre adresse (www., autre domaine) : c'est elle qui compte.
+    const base = adresseSite(new URL(accueil.url).origin) || site;
+    const autres = await Promise.all(pagesALire(base, accueil.html).map((u) => lirePageSite(u)));
+    const pages: PageLue[] = [accueil, ...autres.filter((p): p is PageLue => !("erreur" in p))];
+    const emails = emailsDuSite(pages, base);
+    const reseaux = reseauxDuSite(pages);
+    return ok([
+      `# Site de ${domaineDuSite(base)} · ${pages.length} page(s) lue(s)`,
+      emails.length
+        ? `${fr(emails.length)} adresse(s) écrite(s) sur le site, les plus utiles d'abord :`
+        : "Aucune adresse e-mail écrite sur les pages lues : la marque passe sans doute par un formulaire. Essayer trouver_emails_marque (crédits FullEnrich) si la marque est prioritaire, ou le DM Instagram.",
+      ...emails.map(ligneEmailSite),
+      emails.some((e) => e.genre === "nominative") ? "Une adresse d'une personne est une donnée personnelle : lui écrire seulement pour son activité professionnelle." : "",
+      reseaux.instagram ? `Instagram lié depuis le site : ${reseaux.instagram}` : "",
+      reseaux.linkedin ? `LinkedIn lié depuis le site : ${reseaux.linkedin}` : "",
+      "Aucun crédit dépensé. Rien n'a été enregistré : pour garder une adresse, ajouter_contact (marque, email, instagram).",
+    ].filter(Boolean).join("\n"));
+  },
+};
+
+export const AUTONOMIE_TOOLS: AdminTool[] = [importerHistorique, lireProfil, lireProfilsLot, scannerBaseTool, trouverEmailsMarque, trouverEmailPersonne, lireSiteMarque];
