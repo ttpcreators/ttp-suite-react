@@ -21,7 +21,7 @@ import { meetEventBody, meetLinkOf } from "../_shared/meetEvent.ts";
 import { makePayload, pushReady, sendTo } from "../_shared/push.ts";
 import { arreter, lireSequence } from "../_shared/sequence.ts";
 import { LEAD_TAG } from "../_shared/siteLead.ts";
-import { RDV_KEY, RDV_ORIGINS, creneauOk, creneauxLibres, lireRdv, lireReservation, mailRdv, quandFr, texteTelegramRdv, type Occupe, type RdvConfig } from "../_shared/rdv.ts";
+import { RDV_KEY, RDV_ORIGINS, creneauOk, creneauxLibres, lireRdv, lireReservation, mailRdv, occupeDepuisEvenements, quandFr, texteTelegramRdv, type EvenementAgenda, type Occupe, type RdvConfig } from "../_shared/rdv.ts";
 
 type Sb = ReturnType<typeof getServiceClient>;
 
@@ -54,19 +54,29 @@ async function mailAgence(sb: Sb, m: { subject: string; html: string }): Promise
 }
 
 async function occupe(sb: Sb, c: RdvConfig, now: Date): Promise<Occupe[]> {
-  const res = await gcalFetch(sb, "/freeBusy", {
-    method: "POST",
-    body: JSON.stringify({
+  // La liste des évènements, pas freeBusy : la connexion Google de l'app a le droit
+  // `calendar.events`, que freeBusy refuse (403 : la page n'affichait aucun créneau).
+  // Les règles de freeBusy sont refaites dans occupeDepuisEvenements.
+  const items: EvenementAgenda[] = [];
+  let page = "";
+  for (let i = 0; i < 6; i++) {
+    const q = new URLSearchParams({
       timeMin: now.toISOString(),
       timeMax: new Date(now.getTime() + (c.horizonJours + 1) * 86_400_000).toISOString(),
-      timeZone: APP_TIMEZONE,
-      items: [{ id: CALENDAR_ID }],
-    }),
-  }, { maxRetries: 2 });
-  if (!res.ok) throw new Error(`freebusy_${res.status}`);
-  const j = await res.json() as { calendars?: Record<string, { busy?: { start: string; end: string }[] }> };
-  const busy = Object.values(j.calendars ?? {}).flatMap((x) => x.busy ?? []);
-  return busy.map((b) => ({ debut: Date.parse(b.start), fin: Date.parse(b.end) })).filter((o) => Number.isFinite(o.debut) && Number.isFinite(o.fin));
+      singleEvents: "true",
+      maxResults: "250",
+      fields: "nextPageToken,items(status,transparency,eventType,start,end,attendees(self,responseStatus))",
+    });
+    if (page) q.set("pageToken", page);
+    const res = await gcalFetch(sb, `/calendars/${encodeURIComponent(CALENDAR_ID)}/events?${q.toString()}`, {}, { maxRetries: 2 });
+    if (!res.ok) throw new Error(`agenda_${res.status}`);
+    const j = await res.json() as { items?: EvenementAgenda[]; nextPageToken?: string };
+    items.push(...(j.items ?? []));
+    page = j.nextPageToken ?? "";
+    if (!page) return occupeDepuisEvenements(items);
+  }
+  // Agenda lu en partie seulement : mieux vaut ne rien proposer qu'un créneau déjà pris.
+  throw new Error("agenda_trop_long");
 }
 
 Deno.serve(async (req: Request) => {

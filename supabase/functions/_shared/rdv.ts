@@ -4,7 +4,7 @@
 // Organisation Gianni / Marc (20/11/2026) : dès qu'un contact montre un vrai intérêt, il
 // reçoit un lien pour réserver une visio dans l'agenda de Marc, sur ses 2 demi-journées
 // fixes par semaine. Réglages : Paramètres › Résumés et rappels › Rendez-vous (clé du blob
-// `rdvMarc`). Les créneaux libres tiennent compte de Google Agenda (freeBusy).
+// `rdvMarc`). Les créneaux libres tiennent compte de Google Agenda (liste des évènements).
 // Règles PURES (heure de Paris), testées par rdv.test.ts.
 // ============================================================================
 
@@ -81,6 +81,34 @@ function addDays(jour: string, n: number): string {
 }
 
 export type Occupe = { debut: number; fin: number };
+
+/** Un évènement de Google Agenda, réduit à ce qui dit s'il occupe l'agenda. */
+export type EvenementAgenda = {
+  status?: string;
+  transparency?: string;
+  eventType?: string;
+  start?: { date?: string; dateTime?: string };
+  end?: { date?: string; dateTime?: string };
+  attendees?: { self?: boolean; responseStatus?: string }[];
+};
+
+/**
+ * Les moments occupés d'après la liste des évènements de l'agenda (events.list), avec les
+ * règles de freeBusy : annulé, marqué « disponible », refusé par Marc ou simple lieu de
+ * travail = libre. Une journée entière compte de minuit à minuit, heure de Paris.
+ */
+export function occupeDepuisEvenements(items: readonly EvenementAgenda[] | null | undefined): Occupe[] {
+  const out: Occupe[] = [];
+  const instant = (x?: { date?: string; dateTime?: string }) =>
+    x?.dateTime ? Date.parse(x.dateTime) : x?.date && /^\d{4}-\d{2}-\d{2}$/.test(x.date) ? instantParis(x.date, "00:00") : NaN;
+  for (const e of items ?? []) {
+    if (!e || e.status === "cancelled" || e.transparency === "transparent" || e.eventType === "workingLocation") continue;
+    if ((e.attendees ?? []).some((p) => p?.self && p.responseStatus === "declined")) continue;
+    const debut = instant(e.start), fin = instant(e.end);
+    if (Number.isFinite(debut) && Number.isFinite(fin) && fin > debut) out.push({ debut, fin });
+  }
+  return out;
+}
 export type Creneau = { jour: string; heure: string; debut: number };
 
 /** Créneaux libres de `now + délai` à l'horizon, dans les plages, hors rendez-vous déjà pris. */
