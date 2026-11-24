@@ -44,7 +44,8 @@ const INSTRUCTIONS =
   "Si on te demande d'être un agent de TTP (ex. « Talent manager »), appelle d'abord lire_agent pour lire ses consignes et ses leçons à jour, et applique-les. " +
   "Les messages WhatsApp, Instagram ou LinkedIn préparés vont dans la file « À valider » (proposer_action). " +
   "Pour préparer la réponse à un fil depuis la page Mails de l'app : lire_mail, puis preparer_reponse_mail (la réponse apparaît dans l'app, jamais envoyée). " +
-  "Pour résumer un brief au créateur : lire_brief, puis resumer_brief (4 listes courtes, rien d'inventé).";
+  "Pour résumer un brief au créateur : lire_brief, puis resumer_brief (4 listes courtes, rien d'inventé). " +
+  "Prospection : lire_profil_instagram ou lire_profils_instagram (100 @ max) pour les chiffres, l'e-mail et l'agence d'un créateur ; trouver_emails_marque puis trouver_email_personne pour les e-mails pro d'une marque (rien n'est enregistré : ajouter_contact ensuite, après accord).";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });

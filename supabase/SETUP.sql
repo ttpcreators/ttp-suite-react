@@ -395,6 +395,12 @@ create table if not exists public.ig_radar (
   first_seen timestamptz default now(),
   last_seen  timestamptz default now()
 );
+-- Agence détectée et date de lecture par les outils Claude (sql/2026-11-24-base-createurs-profils).
+alter table public.ig_profiles add column if not exists agence text
+  check (agence is null or agence in ('oui', 'non', 'a_verifier'));
+alter table public.ig_profiles add column if not exists agence_nom text;
+alter table public.ig_profiles add column if not exists profil_lu_at timestamptz;
+create index if not exists ig_profiles_profil_lu_idx on public.ig_profiles (profil_lu_at asc nulls first);
 alter table public.ig_profiles enable row level security;
 alter table public.ig_radar    enable row level security;
 revoke all on public.ig_profiles from anon;
@@ -586,6 +592,8 @@ create table if not exists public.ig_threads (
   hidden       boolean not null default false,
   synced_at    timestamptz not null default now()
 );
+-- Date du premier message (import de l'historique, sql/2026-11-24-dm-historique).
+alter table public.ig_threads add column if not exists first_at timestamptz;
 create index if not exists ig_threads_updated_idx  on public.ig_threads (updated_at desc);
 create index if not exists ig_threads_username_idx on public.ig_threads (username);
 create table if not exists public.ig_messages (

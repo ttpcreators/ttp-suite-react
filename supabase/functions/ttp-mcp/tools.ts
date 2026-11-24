@@ -6,6 +6,8 @@
 // échange noté, scouting, étape de collab, résumé de brief, dispos du mois. Claude demande l'accord avant chaque action.
 // Accès complet des fondateurs (admin.ts) : lire / créer / modifier / supprimer (Corbeille) partout,
 // réglages, factures, envoi de mails et de DM Instagram.
+// Prospection autonome (autonomie.ts) : historique des DM, profils Instagram et agence,
+// scan de la Base créateurs, e-mails pro des marques (Hunter, FullEnrich).
 // Jamais exposés : coffre des mots de passe, IBAN, jetons de connexion.
 // ============================================================================
 
@@ -20,6 +22,7 @@ import type { Ctx } from "./oauth.ts";
 import { boxAddress, boxesFor, createDraft, parseMailBox, deleteClaudeDraft, draftRefs, listClaudeDrafts, listSendAs, PARTOUT, attachmentFromThread, markThreadRead, readThread, resolveSender, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
 import { findSendAs, type SendAs } from "../_shared/sendAs.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
+import { AUTONOMIE_TOOLS } from "./autonomie.ts";
 import { adressesDe, adressesInvalides } from "./prospection.ts";
 import { addressList, mailHtml, sparkLink } from "../_shared/mcpAdmin.ts";
 import { guessEventKind } from "../_shared/eventKind.ts";
@@ -3063,6 +3066,7 @@ export const TOOLS: Tool[] = [
   compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, baseCreateurs, disposDuMoisTool, notifications,
   droitsUsage, noterDroits, postsCreateur, preparerContrat,
   ...ADMIN_TOOLS,
+  ...AUTONOMIE_TOOLS,
 ];
 
 /** Liste MCP (les outils fondateurs n'apparaissent pas pour un membre). */
