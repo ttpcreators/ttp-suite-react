@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RDV_DEFAUT, creneauOk, creneauxLibres, instantParis, lireRdv, lireReservation, paris, quandFr, texteTelegramRdv } from "./rdv.ts";
+import { RDV_DEFAUT, creneauOk, creneauxLibres, instantParis, lireRdv, lireReservation, paris, mailRdv, quandFr, texteTelegramRdv } from "./rdv.ts";
 
 const cfg = { ...RDV_DEFAUT, actif: true }; // mardi 14 h-18 h, jeudi 9 h-12 h 30, 30 min, 20 h de délai
 // Dimanche 22 novembre 2026, 16 h à Paris (15 h UTC).
@@ -55,6 +55,22 @@ describe("lireRdv et lireReservation", () => {
   it("quandFr", () => {
     expect(quandFr("2026-11-24", "14:30")).toBe("mardi 24 novembre à 14 h 30");
     expect(quandFr("2026-11-24", "14:00")).toBe("mardi 24 novembre à 14 h");
+  });
+  it("mailRdv : qui, quand, le lien, et le texte du visiteur échappé", () => {
+    const m = mailRdv({ nom: "Julie Martin", email: "julie@nova.fr", marque: "Nova", message: "Campagne janvier\n<script>x</script>", jour: "2026-11-24", heure: "14:30", duree: 30, meet: "https://meet.google.com/abc-defg-hij" });
+    expect(m.subject).toBe("Visio réservée : Nova, mardi 24 novembre à 14 h 30");
+    expect(m.html).toContain("<b>Visio réservée : mardi 24 novembre à 14 h 30 (30 min)</b>");
+    expect(m.html).toContain("Julie Martin, Nova<br>julie@nova.fr");
+    expect(m.html).toContain('<a href="https://meet.google.com/abc-defg-hij">');
+    expect(m.html).toContain("Campagne janvier<br>&#60;script&#62;x&#60;/script&#62;");
+    expect(m.html).not.toContain("<script>");
+  });
+  it("mailRdv : objet sur une ligne, sans lien ni message si absents", () => {
+    const m = mailRdv({ nom: "Zoé", email: "zoe@exemple.fr", marque: "Maison\r\nBcc: x@y.fr", jour: "2026-11-24", heure: "14:00", duree: 45 });
+    expect(m.subject).toBe("Visio réservée : Maison Bcc: x@y.fr, mardi 24 novembre à 14 h");
+    expect(m.subject).not.toMatch(/[\r\n]/);
+    expect(m.html).not.toContain("Lien Meet");
+    expect(m.html).not.toContain("Son message");
   });
   it("texteTelegramRdv : le créneau, sans texte du visiteur", () => {
     expect(texteTelegramRdv("2026-11-24", "14:30", 30)).toBe("Visio réservée : mardi 24 novembre à 14 h 30 (30 min). La fiche du contact est dans la to-do de l'app.");

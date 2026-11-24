@@ -142,3 +142,23 @@ export function quandFr(jour: string, heure: string): string {
 export function texteTelegramRdv(jour: string, heure: string, duree: number): string {
   return `Visio réservée : ${quandFr(jour, heure)} (${duree} min). La fiche du contact est dans la to-do de l'app.`;
 }
+
+const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+const uneLigne = (s: string) => s.replace(/[\r\n]+/g, " ").trim();
+
+/**
+ * Mail envoyé à la boîte de l'agence quand une visio est réservée : qui, quand, le lien Meet
+ * et le message du contact. Tout ce que le visiteur a écrit est échappé, l'objet tient sur
+ * une ligne.
+ */
+export function mailRdv(o: { nom: string; email: string; marque: string; message?: string; jour: string; heure: string; duree: number; meet?: string }): { subject: string; html: string } {
+  const quand = quandFr(o.jour, o.heure);
+  const html = [
+    `<p><b>Visio réservée : ${esc(quand)} (${o.duree} min)</b></p>`,
+    `<p>${esc(uneLigne(o.nom))}, ${esc(uneLigne(o.marque))}<br>${esc(uneLigne(o.email))}</p>`,
+    o.meet ? `<p>Lien Meet : <a href="${esc(o.meet)}">${esc(o.meet)}</a></p>` : "",
+    o.message ? `<p>Son message (écrit par le contact) :<br>${esc(o.message).replace(/\r?\n/g, "<br>")}</p>` : "",
+    `<p style="color:#777;font-size:12px">Envoyé par la page de rendez-vous de TTP Suite. La fiche complète est dans la to-do de l'app, le rendez-vous est dans Google Agenda.</p>`,
+  ].filter(Boolean).join("");
+  return { subject: `Visio réservée : ${uneLigne(o.marque).slice(0, 60)}, ${quand}`, html };
+}
