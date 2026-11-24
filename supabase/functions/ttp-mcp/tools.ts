@@ -34,6 +34,7 @@ import { audienceOf, compact, perPlatformText, type EngEntry } from "../_shared/
 import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCartonnent, type DroitUsage, type PostCourt } from "../_shared/alfredSuivi.ts";
 import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
 import { ciblesEchange, requeteEchange, texteEchanges } from "../_shared/dejaEchange.ts";
+import { colonneErreurAbsente, ligneJournal, sansErreur } from "../_shared/mcpJournal.ts";
 import { cleDuCreateur, dateVersement, versementEnDouble } from "../_shared/versement.ts";
 import { apresVersement } from "../_shared/collabAutoDb.ts";
 import { ligneAvance } from "../_shared/collabAuto.ts";
@@ -3090,8 +3091,15 @@ export async function callTool(sb: SupabaseClient, ctx: Ctx, name: string, args:
   } catch (e) {
     res = fail(`Erreur : ${(e as Error).message}`);
   }
-  // Journal : qui, quoi, quand (Paramètres → Assistants IA).
-  const summary = JSON.stringify(args ?? {}).slice(0, 300);
-  await sb.from("mcp_log").insert({ user_id: ctx.userId, grant_id: ctx.grantId, tool: name, summary, ok: !res.isError }).then(() => {}, () => {});
+  // Journal : qui, quoi, quand (Paramètres → Assistants IA), et la raison d'un appel raté
+  // (colonne `error`, SQL 2026-11-24-mcp-log-erreur). Le journal ne bloque jamais l'outil.
+  try {
+    const ligne = ligneJournal({ userId: ctx.userId, grantId: ctx.grantId, tool: name, args, res });
+    const { error } = await sb.from("mcp_log").insert(ligne);
+    // Avant le SQL : la colonne n'existe pas, on écrit la ligne comme avant.
+    if (error && ligne.error && colonneErreurAbsente(error)) await sb.from("mcp_log").insert(sansErreur(ligne));
+  } catch {
+    // rien : un journal en panne ne fait pas échouer l'appel
+  }
   return res;
 }
