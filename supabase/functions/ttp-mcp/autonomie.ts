@@ -222,7 +222,7 @@ async function marqueParFullEnrich(a: Record<string, unknown>) {
     toutes.length ? "Pour l'e-mail d'une personne : trouver_email_personne (prenom, nom, domaine, ou son lien LinkedIn) : 1 crédit seulement si l'e-mail est trouvé." : "",
     `Coût de cette recherche : ${fr(cout)} crédit(s) FullEnrich.${restants === null ? "" : ` Crédits restants : ${fr(restants)}.`}`,
     restants !== null && restants < 25 ? "⚠ Presque plus de crédits FullEnrich ce mois-ci : garder les adresses générales des marques pour la suite." : "",
-    "Rien n'a été enregistré. Pour garder une personne : ajouter_contact (marque, personne, role, email).",
+    "Rien n'a été enregistré. Pour garder une personne : ajouter_contact (marque, personne, role, email, linkedin, ville).",
   ].filter(Boolean).join("\n"));
 }
 
@@ -291,7 +291,7 @@ const trouverEmailsMarque: AdminTool = {
       !list.length ? (autres > 0 ? `Aucun poste marketing, influence, RP ou partenariats parmi les ${autres} trouvée(s) : tous_les_postes = true pour les voir.` : "Hunter ne connaît personne à ce domaine. Essayer trouver_email_personne avec un nom trouvé sur LinkedIn.") : "",
       res.motif ? `Format habituel des adresses : ${res.motif}@${res.domaine}.` : "",
       ...verifs.map((v) => `⚠ Vérification arrêtée : ${v}`),
-      "Rien n'a été enregistré. Pour garder une personne : ajouter_contact (marque, personne, role, email).",
+      "Rien n'a été enregistré. Pour garder une personne : ajouter_contact (marque, personne, role, email, linkedin, ville).",
     ].filter(Boolean).join("\n"));
   },
 };
