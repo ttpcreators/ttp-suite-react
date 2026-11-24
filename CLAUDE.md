@@ -301,6 +301,11 @@ Depuis le 24 novembre 2026, Marc et Gianni (son associé) développent l'app tou
 - **SQL et déploiements Supabase** (`supabase functions deploy …`) : un seul des deux à la fois. Chaque SQL est daté dans `supabase/sql/` et noté dans `supabase/sql/README.md` (⏳ puis ✅), pour que l'autre sache ce qui est en prod.
 - **Les accès** : chacun pousse avec son compte. Le compte `ttpcreators` (propriétaire du dépôt) n'est jamais partagé, et les clés restent dans les secrets Supabase.
 - **En cas de doute** sur le contexte (ce qui est en ligne, ce qui reste à faire) : `supabase/sql/README.md` d'abord, puis les PR fusionnées récentes (`gh pr list --state merged`), et le journal des agents dans l'app.
+- **Session Claude en ligne de Gianni** (décisions de Gianni du 24 novembre 2026, à la suite de l'audit du même jour) :
+  - elle ne peut pas lancer `npm run build` (les paquets npm ne se téléchargent pas dans cette session) : pour ses PR, le contrôle « Vérification des PR » fait foi, et elle fusionne elle-même dès qu'il est vert ;
+  - elle applique le SQL elle-même, par le connecteur Supabase de Gianni, après le « oui » de Gianni pour ce SQL précis. Le fichier daté est quand même déposé dans `supabase/sql/` et le tableau d'état mis à jour (⏳ puis ✅), comme pour tout SQL ;
+  - le déploiement des Edge Functions ne change pas (voir Déploiement), sauf accord de Marc et Gianni pour un déploiement précis ;
+  - la liste des modifications en cours est dans l'audit du 24 novembre 2026 (points M1 à M30), cité dans les PR.
 
 ## Pièges connus
 
