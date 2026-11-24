@@ -14,6 +14,7 @@ import {
 } from "@/lib/mailDrafts";
 import { supabase } from "@/lib/supabase";
 import { markActivity } from "@/lib/mailReadSync";
+import { adjustUnread, applyOverride, pruneOverrides, revertAdj, settleAdjs, trashConfirmText, unreadDelta, type Override, type UnreadAdj } from "@/lib/mailOptimistic";
 import { allAddresses } from "@/lib/mailAddresses";
 import { cn, titleCase } from "@/lib/utils";
 import { getCache, setCache } from "@/lib/viewCache";
@@ -116,15 +117,11 @@ type Target = { threadId: string; box: MailBox; subject: string };
 /** Fil à ouvrir (depuis la liste, l'historique d'un contact ou les raccourcis). */
 type OpenRef = { threadId: string; subject: string; box: MailBox; contact?: string; name?: string };
 type OpenThread = { contact: string; name: string; subject: string; threadId: string; box: MailBox };
-/** Changement affiché avant la confirmation du serveur (retiré s'il n'est pas confirmé). */
-type Override = {
-  unread?: boolean; hidden?: "archive" | "trash"; at: number; done?: number;
-  /** Réponse envoyée depuis l'app : le fil s'affiche « Répondu » tout de suite, avant que Gmail l'ait indexée. */
-  reply?: { ts: number; snippet: string };
-};
+/** Changement en cours (lu, non lu, archivé, supprimé) : de quoi le confirmer ou revenir en arrière. */
+type Change = { key: string; at: number; adjId: string; adj: UnreadAdj | null };
 type SearchState = { q: string; folder: Folder; threads: InboxThread[]; busy: boolean; err: string | null; off: boolean };
 type UndoState =
-  | { kind: "trash" | "archive"; t: Target; row: InboxThread | null; folder: Folder; done: Promise<boolean>; at: number }
+  | { kind: "trash" | "archive"; t: Target; row: InboxThread | null; folder: Folder; done: Promise<boolean>; at: number; change: Change }
   /** « Pas à traiter » : l'expéditeur retenu, oublié par « Annuler ». */
   | { kind: "ignore"; email: string; at: number };
 
@@ -151,8 +148,8 @@ let peekSig = ""; // derniers historyId vus (coup d'œil)
 // Lu / non lu, archivé, corbeille pas encore confirmés par une liste FRAÎCHE du serveur :
 // gardés quand on quitte la page (sinon la liste en cache remontrait l'ancien état).
 const pendingOv = new Map<string, Override>();
-/** Délai après lequel une liste du serveur fait foi, même si elle contredit l'app (nouveau message…). */
-const OV_TRUST_MS = 90_000;
+// Écarts au compte des non lus du serveur (clics pas encore vus par le coup d'œil), gardés de même.
+const pendingAdj = new Map<string, UnreadAdj>();
 
 /** Date façon Gmail : « 14:32 » aujourd'hui, sinon la date commune (« 3 oct. », « 3 oct. 2025 »). */
 function fmtDate(d: string): string {
@@ -207,9 +204,11 @@ const trashErrorText = (code?: string, b?: MailBox) =>
     ? b === "talent"
       ? "Suppression depuis talent@ pas encore autorisée (admin.google.com, droit gmail.modify)."
       : "Reconnecte Google (Planning → Google Agenda) pour autoriser la suppression."
-    : code === "introuvable" ? "Mail introuvable (déjà supprimé ?)"
-    : code === "limite_gmail" ? "Gmail limite les demandes, réessaie dans une minute."
-    : "Suppression impossible, réessaie";
+    : code === "introuvable" ? "Mail introuvable dans Gmail (déjà supprimé ?)"
+    : code === "limite_gmail" ? "Gmail limite les demandes : mail non supprimé, réessaie dans une minute."
+    : code === "google_non_connecte" ? "Google n'est plus connecté à l'app : mail non supprimé."
+    : code === "reseau" ? "Pas de réponse du serveur : mail non supprimé, réessaie."
+    : "Gmail a refusé la suppression : le mail est revenu dans la liste, réessaie.";
 
 /**
  * Appel d'une fonction Gmail, avec délai max. supabase-js met le corps JSON des
@@ -354,7 +353,7 @@ const SHORTCUTS: [string, string][] = [
   ["f", "Transférer"],
   ["c", "Copier le fil pour Claude"],
   ["e", "Archiver"],
-  ["#", "Corbeille"],
+  ["# / Suppr", "Supprimer (avec confirmation)"],
   ["⇧ U", "Marquer non lu"],
   ["/", "Rechercher"],
   ["c", "Nouveau mail"],
@@ -485,7 +484,7 @@ function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhot
   const swipe: SwipeAction[] = [
     ...(onNotTodo ? [{ key: "nottodo", label: "Pas à traiter", icon: CircleSlash, tone: "gray" as const, onClick: onNotTodo }] : []),
     ...(folder === "inbox" ? [{ key: "archive", label: "Archiver", icon: Archive, tone: "blue" as const, onClick: onArchive }] : []),
-    { key: "trash", label: "Corbeille", icon: Trash2, tone: "red", onClick: onTrash },
+    { key: "trash", label: "Supprimer", icon: Trash2, tone: "red", onClick: onTrash },
   ];
   return (
     <li className={mailCardCls(on, cursor)} data-key={keyOf(t)}>
@@ -546,7 +545,7 @@ function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhot
       <div className="pointer-events-none absolute right-3 top-2.5 z-[2] hidden items-center gap-0.5 rounded-lg bg-surface p-0.5 opacity-0 shadow-sm ring-1 ring-border transition-opacity lg:flex lg:group-focus-within:pointer-events-auto lg:group-focus-within:opacity-100 lg:group-hover:pointer-events-auto lg:group-hover:opacity-100">
         {onNotTodo && <RowAction icon={CircleSlash} label="Pas à traiter" onClick={onNotTodo} />}
         {folder === "inbox" && !t.archived && <RowAction icon={Archive} label="Archiver" shortcut="e" onClick={onArchive} />}
-        <RowAction icon={Trash2} label="Corbeille" shortcut="#" onClick={onTrash} danger />
+        <RowAction icon={Trash2} label="Supprimer" shortcut="#" onClick={onTrash} danger />
         <RowAction icon={t.unread ? MailOpen : Mail} label={t.unread ? "Marquer comme lu" : "Marquer non lu"} shortcut={t.unread ? undefined : "⇧U"} onClick={onToggleRead} />
       </div>
     </li>
@@ -844,6 +843,14 @@ export function Mails() {
       const o = m.get(key);
       return o && o.at === at ? new Map(m).set(key, { ...o, done: Date.now() }) : m;
     });
+  // Écarts au compte des non lus du serveur (même vie que les changements ci-dessus).
+  const [unreadAdjs, setUnreadAdjs] = useState<Map<string, UnreadAdj>>(() => new Map(pendingAdj));
+  useEffect(() => {
+    pendingAdj.clear();
+    for (const [k, a] of unreadAdjs) pendingAdj.set(k, a);
+  }, [unreadAdjs]);
+  // « Non lus » plus anciens que les fils chargés (demandés quand le filtre s'ouvre), bruts.
+  const [unreadExtra, setUnreadExtra] = useState<InboxThread[]>([]);
 
   const refreshList = useCallback(async (f: Folder) => {
     const id = ++listReq.current[f];
@@ -865,22 +872,7 @@ export function Mails() {
     // partie avant le clic revient avec l'ancien état : « lu » repassait en « non lu »).
     // Au-delà de 90 s, la liste du serveur fait foi (ex. nouveau message dans le fil).
     const freshRows = new Map((res.threads ?? []).map((t) => [keyOf(t), t]));
-    setOverrides((m) => {
-      let n: Map<string, Override> | null = null;
-      for (const [k, o] of m) {
-        if (!o.done || started < o.done + 3_000) continue;
-        const row = freshRows.get(k);
-        if (!row && f !== "inbox") continue; // fil d'un autre dossier : jugé par sa propre liste
-        const agrees = o.reply
-          ? !row || row.ts > o.reply.ts || (row.direction === "out" && row.ts >= o.reply.ts - 120_000)
-          : o.hidden ? !row || (f === "inbox" && o.hidden === "archive" && row.archived === true) : !row || row.unread === o.unread;
-        if (agrees || started > o.done + OV_TRUST_MS) {
-          n ??= new Map(m);
-          n.delete(k);
-        }
-      }
-      return n ?? m;
-    });
+    setOverrides((m) => pruneOverrides(m, freshRows, f, started));
   }, []);
   // Ouverture et changement de dossier : liste en cache tout de suite, actualisée en fond.
   useEffect(() => {
@@ -896,20 +888,9 @@ export function Mails() {
       sent: p.sent && { ...p.sent, threads: map(p.sent.threads) },
     }));
     setSearch((s) => s && { ...s, threads: map(s.threads) });
+    setUnreadExtra((l) => map(l));
   };
-  const applyOv = useCallback(
-    (t: InboxThread): InboxThread | null => {
-      const o = overrides.get(keyOf(t));
-      if (!o) return t;
-      if (o.hidden) return null;
-      let r = o.unread !== undefined && o.unread !== t.unread ? { ...t, unread: o.unread } : t;
-      // Notre réponse est plus récente que ce que la liste connaît : elle devient le dernier message.
-      // Un message reçu APRÈS notre réponse (t.ts plus récent) reprend la main.
-      if (o.reply && t.ts <= o.reply.ts) r = { ...r, direction: "out", snippet: o.reply.snippet, ts: o.reply.ts, unread: false, count: t.direction === "out" && t.ts >= o.reply.ts - 5_000 ? t.count : t.count + 1 };
-      return r;
-    },
-    [overrides],
-  );
+  const applyOv = useCallback((t: InboxThread): InboxThread | null => applyOverride(t, overrides.get(keyOf(t))), [overrides]);
   const effList = (l: InboxThread[] | undefined) => (l ?? []).map(applyOv).filter((x): x is InboxThread => !!x);
 
   // Non lus par boîte (pastilles) : le compte du serveur (coup d'œil, même calcul que
@@ -924,10 +905,12 @@ export function Mails() {
       c.all++;
       c[t.box]++;
     }
-    const p = Math.max(c.partnerships, serverUnread.partnerships ?? 0);
-    const tl = Math.max(c.talent, serverUnread.talent ?? 0);
+    // Compte du serveur corrigé des clics qu'il n'a pas encore vus : le chiffre bouge tout de suite.
+    const srv = adjustUnread(serverUnread, unreadAdjs.values());
+    const p = Math.max(c.partnerships, srv.partnerships ?? 0);
+    const tl = Math.max(c.talent, srv.talent ?? 0);
     return { all: p + tl, partnerships: p, talent: tl };
-  }, [inboxEff, serverUnread]);
+  }, [inboxEff, serverUnread, unreadAdjs]);
   const unreadShown = unreadBy[box];
   // Non lus par créateur (dossiers de couleur), d'après la boîte de réception chargée.
   const creatorUnread = useMemo(() => {
@@ -1190,28 +1173,72 @@ export function Mails() {
     }
     return res.error ?? "erreur";
   };
-  const allKnown = () => [...(lists.inbox?.threads ?? []), ...(lists.sent?.threads ?? []), ...(search?.threads ?? [])];
+  const allKnown = () => [...(lists.inbox?.threads ?? []), ...(lists.sent?.threads ?? []), ...(search?.threads ?? []), ...unreadExtra];
   const findRow = (key: string) => {
     const row = allKnown().find((t) => keyOf(t) === key);
     return row ? applyOv(row) : null;
   };
+  /** Le fil tel qu'affiché dans la boîte de réception (seule boîte comptée par les non lus du serveur). */
+  const inboxRow = (key: string) => {
+    const row = [...(lists.inbox?.threads ?? []), ...unreadExtra].find((t) => keyOf(t) === key);
+    return row ? applyOv(row) : null;
+  };
+  // Un changement s'affiche tout de suite (liste, gras, point, compteurs), puis Gmail le
+  // confirme (`settle`) ou le refuse (`rollback` : l'ancien état revient).
+  const begin = (t: Target, next: { unread?: boolean; hidden?: "archive" | "trash" }): Change => {
+    const key = keyOf(t);
+    const at = Date.now();
+    const delta = unreadDelta(inboxRow(key), next);
+    const adj: UnreadAdj | null = delta ? { box: t.box, delta } : null;
+    const adjId = `${key}@${at}`;
+    putOv(key, { ...next, at });
+    if (adj) setUnreadAdjs((m) => new Map(m).set(adjId, adj));
+    return { key, at, adjId, adj };
+  };
+  const settle = (c: Change) => {
+    doneOv(c.key, c.at);
+    const adj = c.adj;
+    if (adj) setUnreadAdjs((m) => (m.has(c.adjId) ? new Map(m).set(c.adjId, { ...adj, done: Date.now() }) : m));
+  };
+  const rollback = (c: Change) => {
+    dropOv(c.key, c.at);
+    if (c.adj) setUnreadAdjs((m) => {
+      if (!m.has(c.adjId)) return m;
+      const n = new Map(m);
+      n.delete(c.adjId);
+      return n;
+    });
+  };
   const markRead = (t: Target) => {
     const key = keyOf(t);
-    if (!findRow(key)?.unread || Date.now() - actionsOldAt < OLD_RETRY_MS) return;
-    const at = Date.now();
-    putOv(key, { unread: false, at });
+    if (Date.now() - actionsOldAt < OLD_RETRY_MS) return;
+    const row = findRow(key);
+    if (row && !row.unread) return;
+    if (!row) {
+      // Fil pas (encore) dans la liste (notification, historique d'un contact) : lu dans Gmail, sans message.
+      void callAction(t, "read").then((r) => {
+        if (r !== "ok") return;
+        invalidateMailUnread();
+        void markActivity([t.threadId], true);
+      });
+      return;
+    }
+    const c = begin(t, { unread: false });
     void callAction(t, "read").then((r) => {
-      if (r !== "ok") return dropOv(key, at); // ancienne version ou erreur : reste non lu, sans message
+      if (r !== "ok") {
+        rollback(c); // reste non lu
+        if (r !== "old") toast(`Pas marqué lu dans Gmail. ${actionErrText(r)}`);
+        return;
+      }
       patchThreads((x) => (keyOf(x) === key ? { ...x, unread: false } : x));
-      doneOv(key, at);
+      settle(c);
       invalidateMailUnread();
       void markActivity([t.threadId], true); // la cloche le voit lu tout de suite
     });
   };
   const setRead = async (t: Target, unread: boolean) => {
     const key = keyOf(t);
-    const at = Date.now();
-    putOv(key, { unread, at });
+    const c = begin(t, { unread });
     const cur = threadRef.current;
     if (unread && cur && keyOf(cur) === key) closeThread(); // comme Gmail : retour à la liste
     const r = await callAction(t, unread ? "unread" : "read");
@@ -1219,10 +1246,10 @@ export function Mails() {
       patchThreads((x) => (keyOf(x) === key ? { ...x, unread } : x));
       invalidateMailUnread();
       void markActivity([t.threadId], !unread);
-      return doneOv(key, at);
+      return settle(c);
     }
-    dropOv(key, at);
-    toast(r === "old" ? OLD_SERVER_TEXT : actionErrText(r));
+    rollback(c);
+    toast(r === "old" ? OLD_SERVER_TEXT : `${unread ? "Pas remis non lu" : "Pas marqué lu"} dans Gmail. ${actionErrText(r)}`);
   };
 
   const openThread = (m: OpenRef) => {
@@ -1272,7 +1299,7 @@ export function Mails() {
   );
   // Non lus plus anciens que les fils chargés : demandés au serveur quand le filtre s'ouvre, pour
   // que « Non lus » montre le même chiffre que la boîte (audit du 2 nov., n° 56).
-  const [unreadExtra, setUnreadExtra] = useState<InboxThread[]>([]);
+  const extraEff = useMemo(() => effList(unreadExtra), [unreadExtra, applyOv]); // eslint-disable-line react-hooks/exhaustive-deps
   const boxThreads = useMemo(() => {
     if (!(unreadOnly && folder === "inbox")) {
       if (todoOnly && folder === "inbox") return boxAll.filter((t) => needsReply(t, ignored) || keyOf(t) === openKey);
@@ -1280,9 +1307,9 @@ export function Mails() {
     }
     const here = boxAll.filter((t) => t.unread || unreadOnly.has(keyOf(t)));
     const seen = new Set(here.map(keyOf));
-    const more = unreadExtra.filter((t) => !seen.has(keyOf(t)) && (box === "all" || t.box === box) && (!creatorKey || rowCreators(t).includes(creatorKey)));
+    const more = extraEff.filter((t) => !seen.has(keyOf(t)) && (box === "all" || t.box === box) && (!creatorKey || rowCreators(t).includes(creatorKey)));
     return [...here, ...more];
-  }, [boxAll, unreadOnly, todoOnly, openKey, folder, unreadExtra, box, creatorKey, rowCreators, ignored]);
+  }, [boxAll, unreadOnly, todoOnly, openKey, folder, extraEff, box, creatorKey, rowCreators, ignored]);
   const todoCount = useMemo(() => boxAll.filter((t) => needsReply(t, ignored)).length, [boxAll, ignored]);
   const unreadLoaded = useMemo(() => boxAll.filter((t) => t.unread).length, [boxAll]);
   // Même chiffre que la pastille de la boîte (compte du serveur), sauf filtre par créateur.
@@ -1293,7 +1320,8 @@ export function Mails() {
     setUnreadOnly(new Set(boxAll.filter((t) => t.unread).map(keyOf)));
     if (unreadHere > unreadLoaded) {
       void invokeJson<ListRes>("gmail-history", { inbox: true, box: "all", folder: "inbox", q: "is:unread" }).then((res) => {
-        if (res.ok) setUnreadExtra(effList(res.threads ?? []).filter((t) => t.unread));
+        // Bruts : l'état affiché (lu, supprimé…) leur est appliqué à chaque rendu.
+        if (res.ok) setUnreadExtra((res.threads ?? []).filter((t) => t.unread));
       });
     }
   };
@@ -1371,46 +1399,53 @@ export function Mails() {
   const archive = (t: Target) => {
     haptic("retrait");
     const key = keyOf(t);
-    const at = Date.now();
     const row = allKnown().find((x) => keyOf(x) === key) ?? null;
     leave(t);
-    putOv(key, { hidden: "archive", at });
+    const c = begin(t, { hidden: "archive" });
+    const at = c.at;
     const done = callAction(t, "archive").then((r) => {
       if (r === "ok") {
         removeRows(key);
         threadCache.delete(key);
-        doneOv(key, at);
+        settle(c);
         return true;
       }
-      dropOv(key, at);
+      rollback(c);
       setUndo((u) => (u?.at === at ? null : u));
-      toast(r === "old" ? `Archiver : ${OLD_SERVER_TEXT.charAt(0).toLowerCase()}${OLD_SERVER_TEXT.slice(1)}` : actionErrText(r));
+      toast(r === "old" ? `Archiver : ${OLD_SERVER_TEXT.charAt(0).toLowerCase()}${OLD_SERVER_TEXT.slice(1)}` : `Pas archivé : le mail est revenu dans la liste. ${actionErrText(r)}`);
       return false;
     });
-    setUndo({ kind: "archive", t, row, folder, done, at });
+    setUndo({ kind: "archive", t, row, folder, done, at, change: c });
   };
+  // Supprimer = corbeille Gmail, TOUJOURS après la fenêtre de confirmation (boutons, glissé,
+  // menu ⋯ et raccourci # / Suppr passent tous par `askTrash`).
+  const [trashAsk, setTrashAsk] = useState<Target | null>(null);
+  const trashAskRef = useRef<Target | null>(null);
+  trashAskRef.current = trashAsk;
+  const askTrash = (t: Target) => setTrashAsk(t);
   const trash = (t: Target) => {
     haptic("retrait");
     const key = keyOf(t);
-    const at = Date.now();
     const row = allKnown().find((x) => keyOf(x) === key) ?? null;
     leave(t);
-    putOv(key, { hidden: "trash", at });
-    // Corbeille Gmail (récupérable 30 jours), jamais de suppression définitive.
+    const c = begin(t, { hidden: "trash" });
+    const at = c.at;
+    // Corbeille Gmail de la boîte du fil (récupérable 30 jours), jamais de suppression définitive.
     const done = invokeJson<{ ok?: boolean; error?: string }>("gmail-trash", { threadId: t.threadId, box: t.box }).then((res) => {
       if (res.ok) {
         removeRows(key);
         threadCache.delete(key);
         setHistory((l) => l?.filter((x) => x.threadId !== t.threadId) ?? l);
-        doneOv(key, at);
+        settle(c);
         return true;
       }
-      dropOv(key, at);
+      // Refus de Gmail : le mail revient dans la liste, avec la raison.
+      rollback(c);
       setUndo((u) => (u?.at === at ? null : u));
       toast(trashErrorText(res.error, t.box));
       return false;
     });
-    setUndo({ kind: "trash", t, row, folder, done, at });
+    setUndo({ kind: "trash", t, row, folder, done, at, change: c });
   };
   /** « Pas à traiter » : l'expéditeur sort de « À traiter » (ses mails restent dans la boîte). */
   const notTodo = (t: InboxThread) => {
@@ -1440,8 +1475,9 @@ export function Mails() {
       err = r === "old" ? undefined : r;
     }
     if (!ok) return toast(u.kind === "trash" ? trashErrorText(err, u.t.box) : actionErrText(err));
-    // Le fil revient tout de suite dans la liste d'où il venait.
+    // Le fil revient tout de suite dans la liste d'où il venait (et dans le compte des non lus).
     const key = keyOf(u.t);
+    setUnreadAdjs((m) => revertAdj(m, u.change.adjId, `${u.change.adjId}:annule`, u.change.adj, Date.now()));
     setOverrides((m) => {
       if (!m.has(key)) return m;
       const n = new Map(m);
@@ -1509,6 +1545,7 @@ export function Mails() {
       lastCheck = Date.now();
       // Ancienne version (coup d'œil inconnu) : liste complète toutes les 2 min.
       if (peekOff) return fullIfStale(110_000);
+      const peekStarted = Date.now();
       const res = await invokeJson<PeekRes>("gmail-history", { peek: true, box: "all" });
       if (!alive) return;
       if (!res.ok || !res.boxes) {
@@ -1519,6 +1556,8 @@ export function Mails() {
         return; // coupure réseau : on réessaiera au prochain tour
       }
       setServerUnread(Object.fromEntries(Object.entries(res.boxes).map(([b, v]) => [b, Number(v?.unread) || 0])));
+      // Les clics confirmés avant ce coup d'œil y sont déjà comptés : leurs écarts disparaissent.
+      setUnreadAdjs((m) => settleAdjs(m, peekStarted));
       const sig = Object.entries(res.boxes).map(([b, v]) => `${b}:${v?.historyId ?? ""}`).sort().join("|");
       if (peekSig && sig !== peekSig) {
         void refreshList(folderRef.current);
@@ -1927,6 +1966,16 @@ export function Mails() {
   const keyHandler = useRef<(e: KeyboardEvent) => void>(() => {});
   keyHandler.current = (e: KeyboardEvent) => {
     const k = e.key;
+    // Confirmation de suppression ouverte : Entrée supprime, Échap annule, rien d'autre.
+    if (trashAsk) {
+      if (k === "Escape" || k === "Enter") {
+        e.preventDefault();
+        const t = trashAsk;
+        setTrashAsk(null);
+        if (k === "Enter") trash(t);
+      }
+      return;
+    }
     // Fenêtre ouverte (nouveau mail, transfert, réglages…) : aucun raccourci.
     const dialog = newMailOpen || !!forward || settingsOpen || composerOpen || !!delAsk || !!document.querySelector('[role="dialog"]:not([data-mails-help]), [aria-modal="true"], [role="alertdialog"]');
     if (dialog) return;
@@ -2014,7 +2063,7 @@ export function Mails() {
         const t = curTarget();
         if (t) {
           e.preventDefault();
-          trash(t);
+          askTrash(t);
         }
         return;
       }
@@ -2034,7 +2083,8 @@ export function Mails() {
       if (e.defaultPrevented || e.metaKey || (e.ctrlKey && !e.altKey)) return;
       const el = e.target as HTMLElement | null;
       if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
-      if (e.key === "Enter" && el?.closest("button, a")) return; // Entrée sur un bouton : son action
+      // Entrée sur un bouton : son action (sauf confirmation de suppression ouverte : Entrée supprime).
+      if (e.key === "Enter" && el?.closest("button, a") && !trashAskRef.current) return;
       if (document.visibilityState !== "visible" || !rootRef.current?.getClientRects().length) return;
       keyHandler.current(e);
     };
@@ -2230,7 +2280,7 @@ export function Mails() {
         tags={tagsOf(t)}
         onOpen={() => openThread({ threadId: t.threadId, subject: t.subject, box: t.box, contact: t.email, name: t.name })}
         onArchive={() => archive(target)}
-        onTrash={() => trash(target)}
+        onTrash={() => askTrash(target)}
         onToggleRead={() => void setRead(target, !t.unread)}
         onNotTodo={folder === "inbox" && needsReply(t, ignored) ? () => notTodo(t) : undefined}
       />
@@ -2610,7 +2660,7 @@ export function Mails() {
             { key: "unread", label: "Marquer non lu", icon: Mail, onClick: () => void setRead(tgt, true) },
             { key: "copy", label: "Copier le fil pour Claude", icon: Copy, onClick: () => void copyThread() },
             ...(threadCreator ? [{ key: "creator", label: `Ce que voit ${firstName(threadCreator.creator)}`, icon: MessageSquareText, onClick: openThreadCreator }] : []),
-            { key: "trash", label: "Corbeille", icon: Trash2, danger: true, onClick: () => trash(tgt) },
+            { key: "trash", label: "Supprimer", icon: Trash2, danger: true, onClick: () => askTrash(tgt) },
           ]}
         />
       </div>
@@ -2623,7 +2673,7 @@ export function Mails() {
           classNames={{ track: "border-transparent bg-transparent shadow-none backdrop-blur-none" }}
           items={[
             { id: "archive", label: "Archiver", icon: <Archive className="h-full w-full" />, shortcut: "e", onClick: () => archive(tgt) },
-            { id: "trash", label: "Corbeille", icon: <Trash2 className="h-full w-full" />, shortcut: "#", onClick: () => trash(tgt) },
+            { id: "trash", label: "Supprimer", icon: <Trash2 className="h-full w-full" />, shortcut: "#", onClick: () => askTrash(tgt) },
             { id: "unread", label: "Non lu", icon: <Mail className="h-full w-full" />, shortcut: "⇧U", onClick: () => void setRead(tgt, true) },
             ...(tgtTodo ? [{ id: "nottodo", label: "Pas à traiter", icon: <CircleSlash className="h-full w-full" />, onClick: () => notTodo(tgtTodo) }] : []),
             ...(threadCreator ? [{ id: "creator", label: `Ce que voit ${firstName(threadCreator.creator)}`, icon: <MessageSquareText className="h-full w-full" />, onClick: openThreadCreator }] : []),
@@ -3069,6 +3119,22 @@ export function Mails() {
           window.setTimeout(() => void refreshDrafts(), 2_000);
         }}
       />
+
+      {/* Supprimer un mail : corbeille Gmail de sa boîte (effacé par Gmail au bout de 30 jours). */}
+      {trashAsk && (
+        <ConfirmDialog
+          {...trashConfirmText(trashAsk.box)}
+          confirmLabel="Supprimer"
+          cancelLabel="Annuler"
+          danger
+          onCancel={() => setTrashAsk(null)}
+          onConfirm={() => {
+            const t = trashAsk;
+            setTrashAsk(null);
+            trash(t);
+          }}
+        />
+      )}
 
       {/* Supprimer un brouillon (Gmail : définitif ; appareil : copie locale). */}
       {delAsk && (
