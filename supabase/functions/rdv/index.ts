@@ -7,21 +7,51 @@
 //        rendez-vous Google Agenda avec lien Meet et invitation Google au contact,
 //        contact noté au carnet (séquence arrêtée : il a répondu), tâche « Visio : marque »
 //        avec la fiche pour Marc, push générique à l'agence, message Telegram à Marc
-//        (secrets ALFRED_BOT_TOKEN et TELEGRAM_CHAT_ID, comme agent-watchdog ; sans eux, rien).
+//        (secrets ALFRED_BOT_TOKEN et TELEGRAM_CHAT_ID, comme agent-watchdog ; sans eux, rien)
+//        et mail à la boîte partnerships@ (qui, quand, lien Meet, message du contact).
 // AUTH : verify_jwt = false (page publique). Garde-fous : CORS app seulement, piège à
 // robots, créneau revérifié au moment de réserver, 10 réservations par heure au plus,
 // aucun texte du visiteur dans la notification. Règles : _shared/rdv.ts.
 // ============================================================================
 
-import { APP_TIMEZONE, CALENDAR_ID, gcalFetch, getServiceClient, triggerSync } from "../_shared/google.ts";
+import { APP_TIMEZONE, CALENDAR_ID, gcalFetch, getAccessToken, getServiceClient, triggerSync } from "../_shared/google.ts";
+import { mimeMessage } from "../_shared/backup.ts";
 import { readAppState } from "../_shared/appState.ts";
 import { meetEventBody, meetLinkOf } from "../_shared/meetEvent.ts";
 import { makePayload, pushReady, sendTo } from "../_shared/push.ts";
 import { arreter, lireSequence } from "../_shared/sequence.ts";
 import { LEAD_TAG } from "../_shared/siteLead.ts";
-import { RDV_KEY, RDV_ORIGINS, creneauOk, creneauxLibres, lireRdv, lireReservation, quandFr, texteTelegramRdv, type Occupe, type RdvConfig } from "../_shared/rdv.ts";
+import { RDV_KEY, RDV_ORIGINS, creneauOk, creneauxLibres, lireRdv, lireReservation, mailRdv, quandFr, texteTelegramRdv, type Occupe, type RdvConfig } from "../_shared/rdv.ts";
 
 type Sb = ReturnType<typeof getServiceClient>;
+
+const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
+
+/** Message sur le Telegram de Marc, par le bot d'Alfred (mêmes secrets qu'agent-watchdog). */
+async function telegramMarc(text: string): Promise<void> {
+  const bot = Deno.env.get("ALFRED_BOT_TOKEN") ?? "";
+  const chat = Deno.env.get("TELEGRAM_CHAT_ID") ?? "";
+  if (!bot || !chat) return;
+  await fetch(`https://api.telegram.org/bot${bot}/sendMessage`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ chat_id: chat, text }),
+    signal: AbortSignal.timeout(4000),
+  });
+}
+
+/** Mail de la boîte partnerships@ à elle-même (connexion Google de l'app, comme monthly-backup). */
+async function mailAgence(sb: Sb, m: { subject: string; html: string }): Promise<void> {
+  const boite = `partnerships@${AGENCY_DOMAIN}`;
+  const token = await getAccessToken(sb);
+  const res = await fetch("https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "message/rfc822" },
+    body: mimeMessage({ from: `TTP Suite <${boite}>`, to: [boite], subject: m.subject, html: m.html }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) console.error("rdv mail agence", res.status);
+}
 
 async function occupe(sb: Sb, c: RdvConfig, now: Date): Promise<Occupe[]> {
   const res = await gcalFetch(sb, "/freeBusy", {
@@ -143,17 +173,9 @@ Deno.serve(async (req: Request) => {
   if (pushReady()) {
     await sendTo(sb, { agency: true }, makePayload({ kind: "team", title: "Visio réservée", body: "Un contact a réservé une visio. Détail dans la to-do et le planning.", url: "/?open=view&view=todo", tag: "ttp-rdv" })).catch(() => {});
   }
-  // Telegram de Marc : le push n'arrive que sur un téléphone abonné, ce message arrive toujours.
-  const bot = Deno.env.get("ALFRED_BOT_TOKEN") ?? "";
-  const chat = Deno.env.get("TELEGRAM_CHAT_ID") ?? "";
-  if (bot && chat) {
-    await fetch(`https://api.telegram.org/bot${bot}/sendMessage`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ chat_id: chat, text: texteTelegramRdv(r.jour, r.heure, c.duree) }),
-      signal: AbortSignal.timeout(4000),
-    }).catch(() => null);
-  }
+  // Deux traces en plus du push (qui n'arrive que sur un téléphone abonné), envoyées en même
+  // temps. Le rendez-vous est déjà pris : un envoi raté ne fait jamais échouer la réservation.
+  await Promise.allSettled([telegramMarc(texteTelegramRdv(r.jour, r.heure, c.duree)), mailAgence(sb, mailRdv({ ...r, duree: c.duree, meet: meet || undefined }))]);
   try {
     triggerSync("webhook");
   } catch {
