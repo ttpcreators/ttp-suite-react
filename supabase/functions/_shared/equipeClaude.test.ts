@@ -15,3 +15,20 @@ describe("ce que l'équipe fait par son Claude", () => {
     expect(ligneActionEquipe("creer_tache", JSON.stringify({ texte: "Relancer Nova" }))).toBe("tâche créée : Relancer Nova");
   });
 });
+
+import { doublonEquipe } from "./equipeClaude.ts";
+
+describe("pas de doublon de message dans l'équipe", () => {
+  const l = (summary: object | string, qui = "Gianni") => ({ tool: "creer_brouillon_mail", summary: typeof summary === "string" ? summary : JSON.stringify(summary), at: "2026-11-25T20:00:00Z", qui });
+  it("trouve un nouveau mail au même destinataire", () => {
+    expect(doublonEquipe([l({ a: "Adele@Exemple.fr", boite: "partnerships" })], ["adele@exemple.fr"], "")?.qui).toBe("Gianni");
+  });
+  it("lit un résumé coupé", () => {
+    expect(doublonEquipe([l('{"a":"mandy@exemple.fr","boite":"talent","message":"Hello Ma')], ["mandy@exemple.fr"], "")).not.toBeNull();
+  });
+  it("ne confond pas une réponse dans un fil avec un premier mail", () => {
+    expect(doublonEquipe([l({ a: "adele@exemple.fr", fil: "abc123" })], ["adele@exemple.fr"], "")).toBeNull();
+    expect(doublonEquipe([l({ a: "adele@exemple.fr", fil: "abc123" })], ["adele@exemple.fr"], "abc123")).not.toBeNull();
+    expect(doublonEquipe([l({ a: "autre@exemple.fr" })], ["adele@exemple.fr"], "")).toBeNull();
+  });
+});
