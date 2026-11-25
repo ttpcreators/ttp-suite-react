@@ -39,6 +39,7 @@ import { boxToken, boxError, parseBox } from "../_shared/gmailBox.ts";
 import { gfetch, classifyGmail, gmailMessage, GfetchError } from "../_shared/gfetch.ts";
 import { isSingleEmoji, reactionBody, reactionFallback, reactionSubject } from "../_shared/emailReaction.ts";
 import { fromHeader, pickSender, usableSendAs, type RawSendAs, type SendAs } from "../_shared/sendAs.ts";
+import { colonneAuteurAbsente, nomAuteur } from "../_shared/auteurEnvoi.ts";
 
 const GMAIL_SEND = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 const GMAIL_UPLOAD = "https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=multipart";
@@ -91,16 +92,17 @@ async function boxSendAs(token: string): Promise<SendAs[]> {
   return usableSendAs(d.sendAs ?? []);
 }
 
-async function isAgency(req: Request, sb: ReturnType<typeof getServiceClient>): Promise<boolean> {
+/** Compte agence qui appelle (son id), ou null : refus. Sert aussi à la mention « Envoyé par ». */
+async function agencyUserId(req: Request, sb: ReturnType<typeof getServiceClient>): Promise<string | null> {
   const authz = req.headers.get("Authorization") ?? "";
   const bearer = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
-  if (!bearer) return false;
+  if (!bearer) return null;
   const { data, error } = await sb.auth.getUser(bearer);
-  if (error || !data?.user) return false;
+  if (error || !data?.user) return null;
   const { data: prof, error: profErr } = await sb
     .from("profiles").select("role").eq("user_id", data.user.id).maybeSingle<{ role: string }>();
-  if (profErr || !prof) return false; // fail-closed
-  return prof.role === "agency";
+  if (profErr || !prof) return null; // fail-closed
+  return prof.role === "agency" ? data.user.id : null;
 }
 
 /** Base64url des octets UTF-8 (sans padding) — format attendu par Gmail (raw). */
@@ -175,7 +177,8 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
   const sb = getServiceClient();
-  if (!(await isAgency(req, sb))) return jsonRes({ error: "unauthorized" }, 401);
+  const userId = await agencyUserId(req, sb);
+  if (!userId) return jsonRes({ error: "unauthorized" }, 401);
 
   let body: {
     to?: string; cc?: string[] | string; bcc?: string[] | string; subject?: string; html?: string;
@@ -383,8 +386,10 @@ Deno.serve(async (req: Request) => {
   const threadId = (data as { threadId?: string }).threadId ?? null;
 
   // Journal unifié (best-effort : n'échoue pas l'envoi si la table n'existe pas encore).
+  // envoye_par / envoye_par_nom : qui de l'équipe a envoyé (mention « Envoyé par » de la page
+  // Mails). SQL du 25/11 pas encore lancé : on journalise sans (_shared/auteurEnvoi.ts).
   try {
-    const { error: logError } = await sb.from("email_activity").insert({
+    const row: Record<string, unknown> = {
       contact_email: to,
       contact_name: body.contactName ?? null,
       direction: "out",
@@ -393,7 +398,10 @@ Deno.serve(async (req: Request) => {
       source: body.source ?? "manual",
       thread_id: threadId,
       gmail_message_id: id,
-    });
+    };
+    const auteur = await nomAuteur(sb, userId);
+    let { error: logError } = await sb.from("email_activity").insert(auteur ? { ...row, envoye_par: auteur.id, envoye_par_nom: auteur.nom } : row);
+    if (logError && auteur && colonneAuteurAbsente(logError)) ({ error: logError } = await sb.from("email_activity").insert(row));
     if (logError) console.error("gmail-send journal", logError.message);
   } catch { /* table absente / RLS : on ignore */ }
 

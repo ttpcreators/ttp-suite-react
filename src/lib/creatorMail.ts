@@ -58,6 +58,8 @@ export type MailMessage = {
   hiddenFromCreator?: boolean;
   /** Emoji si ce message EST une réaction (creator-mail, 2026-10-24). */
   reaction?: string;
+  /** Vue agence seulement : prénom de qui l'a envoyé dans l'équipe (« Envoyé par », 2026-11-25). */
+  sentBy?: string;
 };
 export type MailNote = {
   id: string; body: string; created_at: string; agency_read_at: string | null;

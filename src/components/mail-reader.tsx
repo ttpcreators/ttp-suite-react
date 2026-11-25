@@ -260,7 +260,8 @@ export function MailItem({
   const [showQuoted, setShowQuoted] = useState(false);
   const snippet = useMemo(() => mailSnippet(m.html, m.text), [m.html, m.text]);
   const files = useMemo(() => m.attachments.filter((a) => !isInline(a)), [m.attachments]);
-  const name = m.fromAgency ? "TTP Creators" : m.from;
+  // Vue agence : « TTP Creators · Gianni » quand on sait qui de l'équipe l'a envoyé.
+  const name = m.fromAgency ? (m.sentBy ? `TTP Creators · ${m.sentBy}` : "TTP Creators") : m.from;
   const reduce = useReducedMotion();
   const t = useT();
   const lang = useLang();

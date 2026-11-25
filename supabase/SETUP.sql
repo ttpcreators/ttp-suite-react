@@ -1023,6 +1023,10 @@ create index if not exists seq_enroll_due_idx         on public.sequence_enrollm
 create index if not exists email_activity_contact_idx on public.email_activity (contact_email, created_at);
 create unique index if not exists email_activity_gmail_msg_uidx on public.email_activity (gmail_message_id) where gmail_message_id is not null;
 create index if not exists email_activity_dir_created_idx on public.email_activity (direction, created_at desc);
+-- « Envoyé par » (sql/2026-11-25-mails-envoye-par.sql) : qui de l'équipe a envoyé le mail.
+alter table public.email_activity add column if not exists envoye_par uuid;
+alter table public.email_activity add column if not exists envoye_par_nom text;
+create index if not exists email_activity_thread_idx on public.email_activity (thread_id) where thread_id is not null;
 alter table public.email_sequences      enable row level security;
 alter table public.sequence_enrollments enable row level security;
 alter table public.email_activity       enable row level security;
