@@ -18,6 +18,7 @@ export interface StatePayload {
   nonce: string;
   iat: number; // ms epoch
   sub?: string; // facultatif : pour qui (ex. id créatrice, connexion Instagram)
+  via?: string; // facultatif : d'où part la connexion (Instagram : espace, agence, lien)
 }
 
 function requireSecret(): string {
@@ -102,6 +103,7 @@ export async function signState(
     nonce: payload.nonce,
     iat: payload.iat ?? Date.now(),
     ...(payload.sub ? { sub: payload.sub } : {}),
+    ...(payload.via ? { via: payload.via } : {}),
   };
   const p = strToB64Url(JSON.stringify(full));
   const sig = bytesToB64Url(await hmac(p));

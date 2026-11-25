@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Instagram · TTP Creators</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
+         font-family: Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif; background: #f6f6f7; color: #111; }
+  main { background: #fff; border-radius: 16px; padding: 28px; max-width: 440px; width: 100%; box-sizing: border-box; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  p { line-height: 1.5; margin: 0 0 10px; color: #333; }
+  a.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 20px; margin-top: 8px;
+          border-radius: 999px; background: #111; color: #fff; text-decoration: none; font-weight: 600; font-size: 15px; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #111; color: #eee; }
+    main { background: #1c1c1e; box-shadow: none; }
+    p { color: #ccc; }
+    a.btn { background: #fff; color: #111; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1 id="titre">Instagram</h1>
+  <div id="texte"></div>
+</main>
+<script>
+  // Fin de la connexion Instagram d'une créatrice partie d'un LIEN (fonction ig-callback).
+  // ?statut=ok[&compte=<@>] : c'est fait. ?statut=erreur&raison=<code>[&r=<lien neuf>] : ce qui a
+  // coincé, quoi faire, et « Réessayer ». Tout passe par textContent : rien de ce qui vient de
+  // l'adresse n'est interprété comme du HTML. Messages = MESSAGES_RAISON de
+  // supabase/functions/_shared/igConnexion.ts (à garder identiques).
+  var q = new URLSearchParams(location.search);
+  var titre = document.getElementById("titre");
+  var texte = document.getElementById("texte");
+  function para(parts) {
+    var p = document.createElement("p");
+    parts.forEach(function (x) {
+      if (typeof x === "string") p.appendChild(document.createTextNode(x));
+      else { var b = document.createElement("b"); b.textContent = x.b; p.appendChild(b); }
+    });
+    texte.appendChild(p);
+  }
+  var MESSAGES = {
+    refus: ["Tu as refusé l'accès", "Instagram ne nous a rien transmis. Si c'était une erreur, réessaie et touche « Autoriser »."],
+    pas_pro: ["Ton compte Instagram n'est pas un compte professionnel", "Dans Instagram : Paramètres › Compte › Passer à un compte professionnel (Créateur), puis réessaie."],
+    pas_autorise: ["Ton compte n'est pas encore autorisé par Meta", "L'agence est prévenue : elle t'ajoute et te dit quand réessayer."],
+    expire: ["La connexion a expiré", "Ça a pris un peu trop de temps. Recommence, ça prend une minute."],
+    lien_invalide: ["Ce lien n'est plus valable", "Demande un nouveau lien à l'agence, ou connecte ton Instagram depuis ton espace TTP."],
+    agence: ["Problème de notre côté", "Ce n'est pas toi : l'agence est prévenue et règle ça. Tu pourras réessayer ensuite."]
+  };
+  if (q.get("statut") === "ok") {
+    titre.textContent = "Instagram connecté ✓";
+    var compte = q.get("compte") || "";
+    if (/^[A-Za-z0-9._]{1,30}$/.test(compte)) para(["Ton compte ", { b: "@" + compte }, " est relié à TTP Creators."]);
+    else para(["Ton compte Instagram est relié à TTP Creators."]);
+    para(["Tes stats (vues, comptes touchés, audience) arrivent maintenant toutes seules, sans capture d'écran. Tu peux fermer cette page."]);
+    para(["Tu peux retirer l'accès quand tu veux : Instagram › Paramètres › Sites web et apps."]);
+  } else {
+    var code = q.get("raison");
+    var m = Object.prototype.hasOwnProperty.call(MESSAGES, code) ? MESSAGES[code] : MESSAGES.agence;
+    titre.textContent = m[0];
+    para([m[1]]);
+    var r = q.get("r") || "";
+    if (/^[A-Za-z0-9_-]{10,400}\.[A-Za-z0-9_-]{10,100}$/.test(r) && code !== "agence" && code !== "pas_autorise" && code !== "lien_invalide") {
+      var a = document.createElement("a");
+      a.className = "btn";
+      a.textContent = "Réessayer";
+      a.href = "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ig-callback?lien=" + encodeURIComponent(r);
+      texte.appendChild(a);
+    }
+  }
+</script>
+</body>
+</html>

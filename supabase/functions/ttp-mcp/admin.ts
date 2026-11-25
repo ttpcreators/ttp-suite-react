@@ -28,6 +28,8 @@ import { gagneeHorsBilan, ligneAvance, ligneProspectSigne } from "../_shared/col
 import { listSendAs, parseMailBox, resolveSender, sendDraft, sendMail, type MailBox } from "./gmail.ts";
 import { LIEN_TTL_MS, PROJECT_URL, creatorBoxReady, listCreatorBoxes, normEmail } from "../_shared/creatorBox.ts";
 import { genNonce, signState } from "../_shared/state.ts";
+import { etatConnexion, LIEN_IG_TTL_MS, MESSAGES_RAISON, essaisRates, lireRaison, RAISON_AGENCE, signerLien, urlLien, type EssaiIg } from "../_shared/igConnexion.ts";
+import { loginReady } from "../_shared/instagram-login.ts";
 import type { Ctx } from "./oauth.ts";
 import { PROSPECTION_TOOLS, adressesDe, adressesInvalides, suiviApresEnvoi } from "./prospection.ts";
 import { verifierKitsDuMail } from "./kitGarde.ts";
@@ -717,6 +719,51 @@ const lienBoiteCreateur: AdminTool = {
   },
 };
 
+// ── 7 quater. Lien de connexion Instagram d'une créatrice (demande de Marc, 25 novembre 2026) ──
+const lienConnexionInstagram: AdminTool = {
+  name: "lien_connexion_instagram",
+  title: "Lien pour connecter l'Instagram d'une créatrice",
+  description:
+    "Donne le lien (valable 7 jours, pour cette créatrice seulement) qui connecte son compte Instagram pro à TTP Suite sans qu'elle ait à se connecter à l'app : elle l'ouvre (WhatsApp, Safari), se connecte à Instagram et touche « Autoriser » ; ses stats privées (vues, couverture, audience) arrivent ensuite toutes seules. Donne aussi l'état actuel (connectée, échecs et leur raison). Le lien ne part jamais tout seul : il va à Marc, qui l'envoie.",
+  inputSchema: {
+    type: "object",
+    properties: { createur: { type: "string", description: "Nom du créateur, tel qu'au roster" } },
+    required: ["createur"],
+    additionalProperties: false,
+  },
+  founder: true,
+  run: async (sb, _c, a) => {
+    const secret = Deno.env.get("STATE_SIGNING_SECRET") ?? "";
+    if (!loginReady() || !secret) return fail("La connexion Instagram n'est pas réglée : secrets IG_APP_ID, IG_APP_SECRET, IG_REDIRECT_URI ou STATE_SIGNING_SECRET manquants.");
+    const nom = str(a.createur, 80);
+    const { data } = await sb.from("creators").select("id, name, status, ig").ilike("name", nom.replace(/[\\%_]/g, (m) => `\\${m}`)).limit(1);
+    const c = (data as Json[] | null)?.[0];
+    if (!c?.id) return fail(`« ${nom} » n'est pas au roster (nom exact de sa fiche).`);
+    if (String(c.status ?? "").toLowerCase() === "inactif") return fail(`${c.name} est inactive : le lien serait refusé.`);
+    const ig = obj(c.ig) ?? {};
+    const { data: essais } = await sb.from("ig_connexions").select("at, ok, etape, raison, message").eq("creator_id", c.id).order("at", { ascending: false }).limit(20);
+    const liste = (essais as EssaiIg[] | null) ?? [];
+    const link = obj(ig.link) as { username?: string; expires?: string } | null;
+    const { etat, joursRestants } = etatConnexion({ link, jetonInvalide: ig.insightsWhy === "jeton", dernier: liste[0] ?? null });
+    const dernier = liste[0];
+    const ligneEtat =
+      etat === "connecte" ? `Déjà connectée${link?.username ? ` (@${link.username})` : ""}${joursRestants != null ? `, jeton valable encore ${joursRestants} j` : ""} : le lien sert seulement à reconnecter.`
+      : etat === "bientot_expire" ? `Connectée mais le jeton expire dans ${joursRestants} j sans avoir pu être prolongé : à reconnecter avec ce lien.`
+      : etat === "expire" ? "Connexion expirée : à reconnecter avec ce lien."
+      : etat === "echec" && dernier ? `${essaisRates(liste)} essai(s) raté(s), le dernier le ${String(dernier.at).slice(0, 10)} : ${RAISON_AGENCE[lireRaison(dernier.raison)]}${dernier.message ? ` (Meta : ${String(dernier.message).slice(0, 160)})` : ""}.`
+      : "Jamais tenté.";
+    const jeton = await signerLien(secret, String(c.id));
+    const jours = Math.round(LIEN_IG_TTL_MS / 86_400_000);
+    return ok([
+      `Lien de connexion Instagram de ${c.name}, valable ${jours} jours :`,
+      urlLien(jeton),
+      `État : ${ligneEtat}`,
+      "Elle l'ouvre sur son téléphone, se connecte à Instagram avec son compte pro (ou créateur) et touche « Autoriser ». Si ça coince, la page lui dit quoi faire (par exemple : " + MESSAGES_RAISON.pas_pro.texte + ")",
+      "Tant que Meta n'a pas validé l'app (App Review), son compte doit d'abord être « testeur Instagram » de l'app.",
+    ].join("\n"));
+  },
+};
+
 const boitesCreateurs: AdminTool = {
   name: "boites_createurs",
   title: "Boîtes Gmail des créateurs",
@@ -768,4 +815,4 @@ const envoyerDm: AdminTool = {
   },
 };
 
-export const ADMIN_TOOLS: AdminTool[] = [lireDonnees, creerElement, modifierElement, supprimerElement, reglagesApp, preparerFacture, preparerDevis, envoyerMail, envoyerBrouillon, envoyerBrouillonsValides, ...PROSPECTION_TOOLS, lienBoiteCreateur, boitesCreateurs, envoyerDm];
+export const ADMIN_TOOLS: AdminTool[] = [lireDonnees, creerElement, modifierElement, supprimerElement, reglagesApp, preparerFacture, preparerDevis, envoyerMail, envoyerBrouillon, envoyerBrouillonsValides, ...PROSPECTION_TOOLS, lienBoiteCreateur, lienConnexionInstagram, boitesCreateurs, envoyerDm];

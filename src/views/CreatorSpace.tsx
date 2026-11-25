@@ -22,7 +22,8 @@ import { writeTodoStatus } from "@/lib/todoStatus";
 import { namePattern, sameName } from "@/lib/nameMatch";
 import { toast } from "@/components/ui/toast";
 import { openLater } from "@/lib/openLater";
-import { consumeIgReturn, igConnect, igDisconnect, type IgCreator } from "@/lib/instagram";
+import { consumeIgReturn, etatConnexion, igConnect, igDisconnect, MESSAGES_RAISON, useIgConnexions, type IgCreator, type Raison } from "@/lib/instagram";
+import { IgConnexionBanner } from "@/components/ig-connexion-banner";
 import { IgFeedStats } from "@/components/ig-feed-stats";
 import { consumeTtReturn, ttConnect, ttDisconnect, type TtCreator } from "@/lib/tiktok";
 import { consumeYtReturn, ytConnect, ytDisconnect, type YtCreator } from "@/lib/youtube";
@@ -1312,11 +1313,14 @@ export function CreatorSpace({
   // Les messages sont lus au montage, puis affichés une fois la fiche chargée (pour
   // être dans la langue de l'espace).
   const returnMsgs = useRef<string[]>([]);
+  // Échec au retour d'Instagram (raison lue dans l'adresse) : bandeau « Réessayer » en haut.
+  const [igRetour, setIgRetour] = useState<Raison | null>(null);
+  const [igBandeauFerme, setIgBandeauFerme] = useState(false);
   useEffect(() => {
     const msgs = returnMsgs.current;
     const back = consumeIgReturn();
-    if (back === "connected") msgs.push("Instagram connecté ✓ Tes stats arrivent toutes seules");
-    else if (back === "error") msgs.push("Connexion Instagram annulée");
+    if (back?.statut === "connected") msgs.push("Instagram connecté ✓ Tes stats arrivent toutes seules");
+    else if (back?.statut === "error") setIgRetour(back.raison);
     const tBack = consumeTtReturn();
     if (tBack === "connected") msgs.push("TikTok connecté ✓ Tes stats arrivent toutes seules");
     else if (tBack === "error") msgs.push("Connexion TikTok annulée");
@@ -1372,6 +1376,14 @@ export function CreatorSpace({
     if (ok) setCreator((c) => (c ? { ...c, ig: { ...(c.ig ?? {}), link: null, insights: null } } : c));
     toast(ok ? t("Instagram déconnecté") : t("Erreur, réessaie"));
   };
+  // État de sa connexion Instagram, lu dans la base (table ig_connexions) : juste même
+  // si elle est revenue d'Instagram sur un autre navigateur que celui de départ.
+  const igEssais = useIgConnexions(preview ? null : creator?.id);
+  const igDernier = igEssais?.[0] ?? null;
+  const igEtat = etatConnexion({ link: creator?.ig?.link ?? null, jetonInvalide: creator?.ig?.insightsWhy === "jeton", dernier: igDernier });
+  // Dernier échec à montrer : celui du retour, sinon un échec de moins de 3 jours (pas l'agence qui règle).
+  const igEchecRecent: Raison | null =
+    igRetour ?? (igEtat.etat === "echec" && igDernier && Date.now() - Date.parse(igDernier.at) < 3 * 86400000 ? (MESSAGES_RAISON[igDernier.raison as Raison] ? (igDernier.raison as Raison) : "agence") : null);
   const sendStatsFiles = async (files: FileList | null) => {
     const list = Array.from(files ?? []).slice(0, 6); // 6 captures max
     if (list.length === 0) return;
@@ -2064,6 +2076,11 @@ export function CreatorSpace({
                 <span>
                   <span className="font-semibold">{t("Instagram connecté")}</span>
                   {t("{account} : tes stats Instagram arrivent toutes seules. Les captures ne servent plus que pour tes autres réseaux.", { account: creator.ig.link.username ? ` (@${creator.ig.link.username})` : "" })}
+                  {(igEtat.etat === "expire" || igEtat.etat === "bientot_expire") && !preview && (
+                    <button type="button" onClick={() => void connectIg()} disabled={igBusy} className="ml-1 font-semibold text-foreground underline underline-offset-2 disabled:opacity-50">
+                      {igEtat.etat === "expire" ? t("Lien expiré : reconnecter") : t("Expire dans {n} j : reconnecter", { n: igEtat.joursRestants ?? 0 })}
+                    </button>
+                  )}
                 </span>
               </span>
               {!preview && (
@@ -2080,6 +2097,11 @@ export function CreatorSpace({
               <div className="mb-2.5 text-[11px] leading-relaxed text-muted-foreground">
                 {t("Tes stats Instagram (vues, comptes touchés, audience) arrivent toutes seules chaque jour, sans capture. Il faut un compte pro ou créateur. Tu peux déconnecter quand tu veux.")}
               </div>
+              {igEchecRecent && (
+                <div role="status" className="mb-2.5 rounded-lg bg-panel px-3 py-2 text-[11px] leading-relaxed text-foreground">
+                  <span className="font-semibold">{t(MESSAGES_RAISON[igEchecRecent].titre)}</span> · {t(MESSAGES_RAISON[igEchecRecent].texte)}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => void connectIg()}
@@ -2087,7 +2109,7 @@ export function CreatorSpace({
                 title={preview ? "Le créateur le fait depuis son espace" : undefined}
                 className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground py-2.5 text-[12px] font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-40"
               >
-                {igBusy ? <Spin size={14} /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} {t("Connecter mon Instagram")}
+                {igBusy ? <Spin size={14} /> : <PlatformIcon platform="instagram" className="h-3.5 w-3.5" />} {igEchecRecent ? t("Réessayer") : t("Connecter mon Instagram")}
               </button>
             </>
           )}
@@ -2582,6 +2604,21 @@ export function CreatorSpace({
                 />
               )}
             </div>
+          )}
+
+          {/* Instagram : échec au retour (tous les onglets), ou jeton à reconnecter (accueil). */}
+          {!preview && (tab === "accueil" || igRetour) && (
+            <IgConnexionBanner
+              etat={tab === "accueil" ? igEtat.etat : "jamais"}
+              joursRestants={igEtat.joursRestants}
+              raison={igRetour ?? (tab === "accueil" && !igBandeauFerme && igEchecRecent && igEchecRecent !== "agence" && igEchecRecent !== "pas_autorise" ? igEchecRecent : null)}
+              busy={igBusy}
+              onRetry={() => void connectIg()}
+              onClose={() => {
+                setIgRetour(null);
+                setIgBandeauFerme(true);
+              }}
+            />
           )}
 
           {/* (Nav mobile : barre d'onglets flottante fixe en bas, voir plus bas.) */}

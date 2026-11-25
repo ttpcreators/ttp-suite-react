@@ -5,17 +5,24 @@
 //   `state` signé (anti-CSRF, 10 min) qui porte l'id de la créatrice ; Instagram
 //   renvoie ensuite vers ig-callback.
 // POST { action: "disconnect" } → efface le jeton (table ig_accounts) et le lien.
+// POST { action: "lien", creator } → { url, expires } : lien de connexion à envoyer
+//   par WhatsApp (7 jours, cette créatrice seulement, sans compte TTP) ; FONDATEURS
+//   seulement. Le lien mène à ig-callback?lien=…, qui le vérifie (_shared/igConnexion).
 // L'agence peut agir pour une créatrice : ajouter { creator: "<nom>" } (utile si
 // la créatrice est à côté et se connecte sur l'ordinateur de l'agence).
+// Départ en pleine page (window.location, jamais de fenêtre popup) : marche dans
+// Safari iPhone et les navigateurs intégrés d'Instagram et de WhatsApp. Tout l'état
+// voyage dans le state signé (créatrice, retour, d'où ça part) : ni cookie ni stockage.
 //
 // AUTH : verify_jwt = true + rôle vérifié dans profiles (créatrice = elle-même ;
-// agence = la créatrice nommée).
+// agence = la créatrice nommée ; lien = fondateurs).
 // ============================================================================
 
 import { corsHeaders, getServiceClient } from "../_shared/google.ts";
 import { genNonce, signState } from "../_shared/state.ts";
 import { authorizeUrl, loginReady } from "../_shared/instagram-login.ts";
 import { publicFeed } from "../_shared/igFeed.ts";
+import { LIEN_IG_TTL_MS, signerLien, urlLien } from "../_shared/igConnexion.ts";
 
 function allowedOrigin(raw: string): boolean {
   const allowed = (Deno.env.get("APP_ALLOWED_ORIGINS") ?? "").split(",").map((o) => o.trim()).filter(Boolean);
@@ -39,8 +46,8 @@ Deno.serve(async (req: Request) => {
   const { data: u } = bearer ? await sb.auth.getUser(bearer) : { data: null };
   const uid = u?.user?.id;
   if (!uid) return res({ error: "non_autorise" }, 401);
-  const { data: prof } = await sb.from("profiles").select("role, creator_name").eq("user_id", uid)
-    .maybeSingle<{ role: string; creator_name: string | null }>();
+  const { data: prof } = await sb.from("profiles").select("role, creator_name, agency_role").eq("user_id", uid)
+    .maybeSingle<{ role: string; creator_name: string | null; agency_role: string | null }>();
 
   let body: { action?: string; origin?: string; creator?: string } = {};
   try {
@@ -63,8 +70,15 @@ Deno.serve(async (req: Request) => {
   }
 
   if (!loginReady() || !Deno.env.get("STATE_SIGNING_SECRET")) return res({ error: "instagram_login_non_configure" });
+
+  if (body.action === "lien") {
+    if (prof?.role !== "agency" || prof.agency_role !== "founder") return res({ error: "fondateurs_seulement" }, 403);
+    const jeton = await signerLien(Deno.env.get("STATE_SIGNING_SECRET") ?? "", creator.id);
+    return res({ url: urlLien(jeton), expires: new Date(Date.now() + LIEN_IG_TTL_MS).toISOString() });
+  }
+
   const origin = String(body.origin ?? "");
   if (!allowedOrigin(origin)) return res({ error: "origine_refusee" }, 400);
-  const state = await signState({ origin, nonce: genNonce(), sub: creator.id });
+  const state = await signState({ origin, nonce: genNonce(), sub: creator.id, via: prof?.role === "agency" ? "agence" : "espace" });
   return res({ url: authorizeUrl(state) });
 });

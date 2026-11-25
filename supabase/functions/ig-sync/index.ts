@@ -2,6 +2,8 @@
 // ig-sync/index.ts : chiffres Instagram mis à jour tout seuls, chaque jour.
 // ----------------------------------------------------------------------------
 // Via l'outil officiel de Meta (_shared/instagram.ts, comptes PRO seulement) :
+//   0. Jetons des comptes connectés (passage complet) : prolongés pour TOUS avant le
+//      reste (prolongerJetons), date recopiée dans creators.ig.link.expires.
 //   1. Roster : abonnés, engagement public (12 derniers posts), posts/semaine,
 //      dernier post, relevé quotidien des abonnés → creators.ig. Les abonnés
 //      remplacent aussi creators.followers (si Instagram est le réseau principal)
@@ -30,7 +32,7 @@
 import { ratioPct } from "../_shared/engagementRate.ts";
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { discover, discoverImages, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, type IgPost, type IgResult } from "../_shared/instagram.ts";
-import { accountTotals, audience, freshToken, loginReady, ownMediaImages, postInsights, recentReels, type IgAccount, type Split } from "../_shared/instagram-login.ts";
+import { accountTotals, audience, freshToken, loginReady, ownMediaImages, postInsights, recentReels, refreshIfDue, type IgAccount, type Split } from "../_shared/instagram-login.ts";
 import { buildFeed, feedDir, feedThumbPath, missingThumbs, staleThumbs, type FeedPost, type PostStats } from "../_shared/igFeed.ts";
 import { brandMatcher } from "../_shared/collabPosts.ts";
 import { isMain, markStatsMonth, recordAutoMeasure } from "../_shared/autoStats.ts";
@@ -195,6 +197,8 @@ async function syncCreator(ctx: Ctx, c: CreatorRow): Promise<Json> {
   if (acc && loginReady()) {
     const token = await freshToken(ctx.sb, acc);
     own = { token, igId: acc.ig_user_id };
+    // Date d'expiration affichée (fiche, bandeau de l'espace) = celle du jeton, prolongé ou non.
+    if (prev.link && typeof prev.link === "object" && acc.expires_at) next.link = { ...(prev.link as Json), expires: acc.expires_at };
     const [tot, aud, reels] = await Promise.all([accountTotals(token, acc.ig_user_id), audience(token, acc.ig_user_id), recentReels(token, acc.ig_user_id)]);
     if ("error" in tot) next.insightsWhy = /token|session|oauth/i.test(tot.error) ? "jeton" : "insights";
     else {
@@ -443,6 +447,35 @@ async function syncConformite(ctx: Ctx, creators: CreatorRow[]): Promise<{ incid
   return { incidents: Object.keys(set).length };
 }
 
+// ── 0. Jetons des comptes connectés ──────────────────────────────────────────
+/**
+ * Prolonge, à CHAQUE passage du cron, le jeton de TOUS les comptes connectés (même
+ * créatrice inactive, même si Meta coupe la lecture des profils ou si le temps
+ * manque ensuite) et recopie la nouvelle date dans creators.ig.link.expires. Un jeton
+ * que Meta refuse de prolonger garde sa date : l'espace créatrice affiche « Reconnecte
+ * ton Instagram » à moins de 7 jours, et la fiche agence l'état (_shared/igConnexion).
+ */
+async function prolongerJetons(ctx: Ctx): Promise<{ prolonges: number; refus: number }> {
+  let prolonges = 0;
+  let refus = 0;
+  if (!loginReady()) return { prolonges, refus };
+  for (const acc of ctx.accounts.values()) {
+    const r = await refreshIfDue(ctx.sb, acc);
+    if (r.error) {
+      refus++;
+      console.error("ig-sync jeton", acc.creator_id, r.error);
+    }
+    if (!r.refreshed) continue;
+    prolonges++;
+    const { data: c } = await ctx.sb.from("creators").select("ig").eq("id", acc.creator_id).maybeSingle<{ ig: Json | null }>();
+    const link = c?.ig?.link;
+    if (link && typeof link === "object") {
+      await ctx.sb.from("creators").update({ ig: { ...(c?.ig ?? {}), link: { ...(link as Json), expires: acc.expires_at } } }).eq("id", acc.creator_id);
+    }
+  }
+  return { prolonges, refus };
+}
+
 // ── Chargements communs ──────────────────────────────────────────────────────
 async function loadShared(ctx: Ctx) {
   const [acc, brands] = await Promise.all([
@@ -515,6 +548,7 @@ Deno.serve(async (req: Request) => {
   }
 
   // ── Passage complet (cron) ──
+  const jetons = await prolongerJetons(ctx); // avant tout le reste : ne dépend ni du temps ni de Meta
   const { data: cr, error: crErr } = await sb.from("creators").select(CREATOR_COLS);
   if (crErr) return res({ error: "migration_manquante", detail: crErr.message }, 500);
   const creators = ((cr as CreatorRow[] | null) ?? []).filter((c) => (c.status ?? "actif").toLowerCase() !== "inactif");
@@ -541,7 +575,7 @@ Deno.serve(async (req: Request) => {
   brands.sort((a, b) => age(b.ig?.at) - age(a.ig?.at));
   const nContacts = await each(ctx, brands.slice(0, BRANDS_PER_RUN), (ct) => syncContact(ctx, ct));
 
-  const out = { creators: nCreators, collabs: nCollabs, contacts: nContacts, conformite, stopped: ctx.stop || undefined, ms: Date.now() - ctx.t0 };
+  const out = { jetons, creators: nCreators, collabs: nCollabs, contacts: nContacts, conformite, stopped: ctx.stop || undefined, ms: Date.now() - ctx.t0 };
   console.log("ig-sync", JSON.stringify(out));
   return res({ ...out, quota: await saveUsage(sb) });
 });

@@ -12,6 +12,19 @@ import { supabase } from "./supabase";
 import { useLiveKey } from "./useLive";
 import { getCache, setCache } from "./viewCache";
 import type { FeedPost } from "./igFeed";
+import { lireRaison, type EssaiIg, type Raison } from "../../supabase/functions/_shared/igConnexion.ts";
+
+// Règles de la connexion (raisons, messages, état, lien) : une seule source, partagée avec le serveur.
+export {
+  essaisRates,
+  etatConnexion,
+  lireRaison,
+  MESSAGES_RAISON,
+  RAISON_AGENCE,
+  type EssaiIg,
+  type EtatConnexion,
+  type Raison,
+} from "../../supabase/functions/_shared/igConnexion.ts";
 
 export type IgSplit = { label: string; pct: number }[];
 export type IgPostLite = {
@@ -174,14 +187,55 @@ export async function igDisconnect(creator?: string): Promise<boolean> {
   const { data, error } = await supabase.functions.invoke("ig-connect", { body: { action: "disconnect", creator } });
   return !error && !!(data as { ok?: boolean } | null)?.ok;
 }
-/** Retour d'Instagram (?instagram=connected|error) : nettoie l'adresse et renvoie l'issue. */
-export function consumeIgReturn(): "connected" | "error" | null {
+/**
+ * Retour d'Instagram (?instagram=connected | error&raison=…) : nettoie l'adresse et
+ * renvoie l'issue. La raison est une liste fermée (jamais un texte venu de l'adresse).
+ */
+export function consumeIgReturn(): { statut: "connected" } | { statut: "error"; raison: Raison } | null {
   const url = new URL(window.location.href);
   const flag = url.searchParams.get("instagram");
   if (!flag) return null;
+  const raison = lireRaison(url.searchParams.get("raison"));
   url.searchParams.delete("instagram");
+  url.searchParams.delete("raison");
   window.history.replaceState({}, "", url.toString());
-  return flag === "connected" ? "connected" : "error";
+  return flag === "connected" ? { statut: "connected" } : { statut: "error", raison };
+}
+
+/** Lien de connexion à envoyer par WhatsApp (fondateurs) : 7 jours, cette créatrice seulement. */
+export async function igLien(creator: string): Promise<{ url: string; expires: string } | { error: string }> {
+  const { data, error } = await supabase.functions.invoke("ig-connect", { body: { action: "lien", creator } });
+  const d = data as { url?: string; expires?: string; error?: string } | null;
+  if (!error && d?.url) return { url: d.url, expires: d.expires ?? "" };
+  return { error: d?.error === "instagram_login_non_configure" ? "La connexion Instagram n'est pas réglée côté serveur" : "Lien impossible pour l'instant (réservé aux fondateurs)" };
+}
+
+export type IgEssai = EssaiIg & { via?: string | null; ig_username?: string | null };
+/**
+ * Tentatives de connexion d'une créatrice (table ig_connexions, la plus récente
+ * d'abord) : lues dans la base, donc à jour même si elle est revenue d'Instagram sur un
+ * autre navigateur. null pendant la lecture ; [] si rien (ou SQL pas encore passé).
+ */
+export function useIgConnexions(creatorId: string | null | undefined, refresh = 0): IgEssai[] | null {
+  const [rows, setRows] = useState<IgEssai[] | null>(null);
+  const live = useLiveKey();
+  useEffect(() => {
+    if (!creatorId) return;
+    let alive = true;
+    void supabase
+      .from("ig_connexions")
+      .select("at, ok, etape, raison, message, via, ig_username")
+      .eq("creator_id", creatorId)
+      .order("at", { ascending: false })
+      .limit(20)
+      .then(({ data, error }) => {
+        if (alive) setRows(error ? [] : ((data as IgEssai[] | null) ?? []));
+      });
+    return () => {
+      alive = false;
+    };
+  }, [creatorId, live, refresh]);
+  return rows;
 }
 
 // ── Mise en forme ────────────────────────────────────────────────────────────
