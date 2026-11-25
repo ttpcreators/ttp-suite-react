@@ -55,7 +55,7 @@ export async function suivreReponses(sb: Sb, mails: Mail[], domaineAgence: strin
       continue;
     }
     const from = emailDe(m.from);
-    if (!from || from.endsWith("@" + domaineAgence) || estReponseAuto(m.subject, from)) continue;
+    if (!from || from.endsWith("@" + domaineAgence) || estReponseAuto(m.subject, from, m.snippet)) continue;
     const c = await contact(sb, from);
     const seq = c && "sequence" in c ? lireSequence(c.sequence) : null;
     const enSequence = !!seq && seq.statut === "en_cours";

@@ -20,6 +20,10 @@ describe("classerReponse", () => {
     expect(classerReponse("Re: Collab", "Revenez vers nous début 2027 svp.")).toBe("plus_tard");
     expect(classerReponse("Re: Collab", "Not right now, maybe next quarter.")).toBe("plus_tard");
   });
+  it("cas réels du 25/11", () => {
+    expect(classerReponse("Re: Comme convenu, des nouvelles pour 2027", "Bonjour, Et merci. Aucun budget confirmé pour le moment. Rediscutons de cela d'ici 3 semaines. À bientôt.")).toBe("plus_tard");
+    expect(classerReponse("Re: Tes partenariats", "Merci beaucoup pour ton message et pour tes jolis mots sur son univers. Elle est déjà accompagnée par notre agence pour l'ensemble de ses partenariats.")).toBe("refus");
+  });
   it("laisse le reste à lire", () => {
     expect(classerReponse("Re: Collaboration intéressante ?", "Bonjour Marc,")).toBe("a_lire");
     expect(classerReponse("Re: Collab", "")).toBe("a_lire");

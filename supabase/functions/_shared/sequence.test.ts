@@ -67,6 +67,8 @@ describe("mails reçus", () => {
   it("réponse automatique", () => {
     expect(estReponseAuto("Réponse automatique : absente jusqu'au 25")).toBe(true);
     expect(estReponseAuto("Out of Office")).toBe(true);
+    expect(estReponseAuto("Merci pour votre message ! Re: Ana et votre matcha", "contact@marque.fr", "Bonjour, Merci pour votre message ! Nous avons bien pris en compte votre demande")).toBe(true);
+    expect(estReponseAuto("Re: Ana et votre matcha", "camille@marque.fr", "Merci pour votre message, on adore Ana, vous avez ses tarifs ?")).toBe(false);
     expect(estReponseAuto("Re: Collab Léna x Nakd")).toBe(false);
     expect(estReponseAuto("Re: x", "noreply@marque.fr")).toBe(true);
   });

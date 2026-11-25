@@ -30,12 +30,13 @@ const REFUS = [
   /\bne (plus|pas) (nous|me) (contacter|recontacter|solliciter|ecrire)/, /\bretirez[- ](moi|nous)\b/, /\bdesinscri/, /\bunsubscribe\b/, /\bremove (me|us)\b/,
   /\bne correspond(ent)? pas\b/, /\bpas (dans )?notre (cible|strategie|ligne)\b/, /\bne (travaillons|travaille|faisons|fait) pas (avec|d'|de |appel)/,
   /\bnous (declinons|devons decliner)\b/, /\bdecliner (votre|cette)\b/, /\bpas de suite\b/, /\bne (pas )?donner suite\b/, /\bne pouvons pas donner suite\b/,
+  /\bdeja (accompagnee?s?|representee?s?|geree?s?|suivie?s?|managee?s?) par\b/, /\bdeja (en agence|dans une agence|avec une agence)\b/, /\b(already|currently) (represented|managed)\b/,
   /\bnot interested\b/, /\bno,? thanks?\b/, /\bwe (do not|don't) work with\b/, /\bnot a (good )?fit\b/, /\bpass on this\b/, /\bdecline\b/,
 ];
 const PLUS_TARD = [
   /\bpas (pour le|en ce) moment\b/, /\bpas le (bon )?moment\b/, /\bpas pour l'instant\b/, /\bplus tard\b/,
   /\b(revenez|revenir|reviens) vers (nous|moi)\b/, /\b(re)?contactez[- ](nous|moi) (en|dans|a partir|debut|courant)/, /\b(l'annee|l'an) prochaine?\b/,
-  /\bbudgets? (est|sont|deja|a ete|ont ete)? ?(boucle|alloue|epuise|ferme|utilise|consomme)s?\b/, /\bpas de budget\b/, /\bbudget (2027|de l'annee prochaine)\b/,
+  /\bbudgets? (est|sont|deja|a ete|ont ete)? ?(boucle|alloue|epuise|ferme|utilise|consomme)s?\b/, /\b(aucun|pas de) budget\b/, /\bpour le moment\b/, /\bd'ici (\d+|deux|trois|quatre|quelques) (semaines|mois)\b/, /\bredis?cut/, /\bbudget (2027|de l'annee prochaine)\b/,
   /\b(debut|courant|fin) (d'annee|de l'annee|janvier|fevrier|mars|2027)\b/, /\bau (prochain|1er|premier|2e|second) (trimestre|semestre)\b/,
   /\bnot (right )?now\b/, /\bnext (year|quarter)\b/, /\breach out (again )?(in|next|later)\b/, /\bbudget is (already )?(closed|allocated|spent)\b/, /\bmaybe later\b/,
 ];

@@ -136,8 +136,11 @@ export function lireEmailCheck(v: unknown): EmailCheck | null {
 // ── Mails reçus : réponse, réponse automatique, rebond ──────────────────────
 
 /** Réponse automatique (absence, accusé de réception) : n'arrête pas la séquence. */
-export function estReponseAuto(subject: string, from = ""): boolean {
+export function estReponseAuto(subject: string, from = "", snippet = ""): boolean {
   return /absence|absent|out of (the )?office|automatic reply|auto(matic)?[- ]?reply|r[ée]ponse automatique|accus[ée] de r[ée]ception|autoreply|en cong[ée]s?/i.test(subject) ||
+    // Objet réécrit par un répondeur (« Merci pour votre message ! Re: … », Anatae le 25/11).
+    /^\s*(merci pour votre (message|mail|demande|e-?mail)|thank you for (your|contacting))/i.test(subject) ||
+    /nous avons bien (pris en compte|re[çc]u) votre (demande|message|mail|e-?mail)|we (have )?received your (message|email|request)|this is an automated|merci de ne pas r[ée]pondre/i.test(snippet) ||
     /no-?reply|do-?not-?reply/i.test(from);
 }
 
