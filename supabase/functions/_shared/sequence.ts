@@ -4,9 +4,12 @@
 // points 1, 2 et 7 ; étapes de la stratégie).
 // ----------------------------------------------------------------------------
 // Colonnes `contacts.sequence` et `contacts.email_check` (jsonb, SQL 2026-11-20-sequences-contacts).
-//   J0 mail · J+1 LinkedIn · J+3 Instagram · J+5 mail · J+10 LinkedIn ou WhatsApp · J+20 mail
-// Une étape sur un canal que le contact n'a pas (pas de LinkedIn, pas d'Instagram, pas de
-// numéro) est sautée. La première réponse arrête la séquence ; un rebond aussi.
+//   Depuis le 25/11/2026 (décision de Gianni, après le premier lot) : 100 % mail,
+//   J0 premier mail · J+5 relance (nouvel angle) · J+12 dernière relance. Chaque relance est
+//   écrite à la main par Claude, personnalisée, dans le même fil. Pas d'étape LinkedIn,
+//   Instagram ni WhatsApp (on n'automatise pas ces réseaux).
+//   Les anciennes étapes (J+1, J+3, J+10, J+20) restent reconnues pour les séquences déjà en base.
+// La première réponse arrête la séquence ; un rebond aussi.
 // Règles PURES, testées par sequence.test.ts.
 // ============================================================================
 
@@ -19,8 +22,12 @@ export const ETAPES: EtapeDef[] = [
   { etape: "J+3", jour: 3, canal: "instagram", quoi: "réaction à une story, puis DM court" },
   { etape: "J+5", jour: 5, canal: "email", quoi: "mail avec un nouvel angle (exemple de contenu ou résultat)" },
   { etape: "J+10", jour: 10, canal: "linkedin", quoi: "message court LinkedIn, ou WhatsApp (vocal) si on a le numéro" },
+  { etape: "J+12", jour: 12, canal: "email", quoi: "dernière relance, courte et sympathique, sans insister" },
   { etape: "J+20", jour: 20, canal: "email", quoi: "mail de clôture, puis reprise au prochain temps fort" },
 ];
+
+/** Les étapes suivies aujourd'hui : 100 % mail (décision de Gianni du 25/11/2026). */
+export const ETAPES_MAIL = ["J0", "J+5", "J+12"];
 
 export type Reponse = "aucune" | "a_repondu" | "positive" | "negative";
 export type Sequence = {
@@ -39,23 +46,15 @@ export type Sequence = {
 export type EmailCheck = { statut: "ok" | "erreur"; raison: string; le: string };
 export type ContactCanaux = { linkedin?: unknown; instagram?: unknown; ig?: unknown; phone?: unknown };
 
-const vide = (v: unknown) => !String(v ?? "").trim();
-
 function addDays(iso: string, n: number): string {
   const d = new Date(iso + "T12:00:00Z");
   d.setUTCDate(d.getUTCDate() + n);
   return d.toISOString().slice(0, 10);
 }
 
-/** Les étapes possibles pour ce contact (canaux qu'il a). J+10 passe en WhatsApp sans LinkedIn. */
-export function etapesPour(c: ContactCanaux): EtapeDef[] {
-  const li = !vide(c.linkedin), ig = !vide(c.instagram) || !vide(c.ig), tel = !vide(c.phone);
-  return ETAPES.flatMap((e) => {
-    if (e.etape === "J+1") return li ? [e] : [];
-    if (e.etape === "J+3") return ig ? [e] : [];
-    if (e.etape === "J+10") return li ? [e] : tel ? [{ ...e, canal: "whatsapp" as const, quoi: "message court ou vocal WhatsApp" }] : [];
-    return [e];
-  });
+/** Les étapes de la séquence : 100 % mail, quels que soient les réseaux du contact. */
+export function etapesPour(_c: ContactCanaux): EtapeDef[] {
+  return ETAPES.filter((e) => ETAPES_MAIL.includes(e.etape));
 }
 
 /** Séquence lue en base (tolérante), ou null. */

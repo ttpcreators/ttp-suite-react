@@ -80,7 +80,9 @@ export function raisonPasRecrutable(username: string, p: ProfilBase): string | n
   }
   if (ARTISTE.test(bio)) return "artiste ou personnalité (album, tournée, rôle)";
   if (email && AGENCE_EMAIL.test(email)) return "adresse de contact d'une agence ou d'un manager";
-  if (/\b(management|mgmt|represented by|represente par|agence|agency|manager)\b/.test(bio)) return "déjà représenté (agence ou manager cité dans la bio)";
+  // Bio qui cite un agent, un manager ou une agence (25/11 : 2 créatrices sur 8 déjà en agence).
+  if (/\b(management|mgmt|represented by|represente par|agence|agency|manager|managed by|gere(e)? par|agent|booking|bookings|talents?)\b/.test(bio)) return "déjà représenté (agence ou manager cité dans la bio)";
+  if (/@[a-z0-9._]*(agency|agence|talent|mgmt|management|booking|prtnrs)[a-z0-9._]*/.test(bio)) return "déjà représenté (compte d'agence cité dans la bio)";
   const fr = parleFrancais(p);
   if (fr === false) return "ne publie pas en français";
   return null;

@@ -43,6 +43,11 @@ describe("raisonPasRecrutable", () => {
     expect(raisonPasRecrutable("lea.martin", { ...creatrice, email: "lea@talents-fictifs.com" })).toMatch(/agence/);
     expect(raisonPasRecrutable("lea.martin", { ...creatrice, bio: `${creatrice.bio}\nManagement @agence_fictive` })).toMatch(/représenté|agence/);
   });
+  it("écarte une bio qui cite un agent ou un compte d'agence", () => {
+    expect(raisonPasRecrutable("lea.martin", { ...creatrice, bio: `${creatrice.bio}\nCollabs : @maison_talents` })).toMatch(/représenté/);
+    expect(raisonPasRecrutable("lea.martin", { ...creatrice, bio: `${creatrice.bio}\nBooking : lea@fictif.fr` })).not.toBe(null);
+    expect(raisonPasRecrutable("lea.martin", { ...creatrice, bio: `${creatrice.bio}\nManaged by @fictive.agency` })).toMatch(/représenté/);
+  });
   it("écarte une bio étrangère", () => {
     expect(raisonPasRecrutable("anna", { name: "Anna", bio: "Fashion and travel for your daily life, based in Munich", followers: 300_000 })).toMatch(/français/);
   });

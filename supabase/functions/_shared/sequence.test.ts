@@ -5,35 +5,28 @@ const NOW = new Date("2026-11-20T10:00:00Z");
 const tout = { linkedin: "https://linkedin.com/in/x", instagram: "@marque", phone: "+33600000000" };
 
 describe("etapesPour", () => {
-  it("toutes les étapes avec LinkedIn et Instagram", () => {
-    expect(etapesPour(tout).map((e) => e.etape)).toEqual(["J0", "J+1", "J+3", "J+5", "J+10", "J+20"]);
-  });
-  it("mail seul : J0, J+5, J+20", () => {
-    expect(etapesPour({}).map((e) => e.etape)).toEqual(["J0", "J+5", "J+20"]);
-  });
-  it("sans LinkedIn mais avec numéro : J+10 en WhatsApp", () => {
-    const j10 = etapesPour({ phone: "06" }).find((e) => e.etape === "J+10");
-    expect(j10?.canal).toBe("whatsapp");
+  it("100 % mail, même avec LinkedIn, Instagram et numéro", () => {
+    expect(etapesPour(tout).map((e) => e.etape)).toEqual(["J0", "J+5", "J+12"]);
+    expect(etapesPour({}).map((e) => e.etape)).toEqual(["J0", "J+5", "J+12"]);
+    expect(etapesPour(tout).every((e) => e.canal === "email")).toBe(true);
   });
 });
 
 describe("séquence", () => {
-  it("démarre au J0 fait, prochaine J+1 LinkedIn le lendemain", () => {
+  it("démarre au J0 fait, prochaine relance mail à J+5", () => {
     const s = demarrerSequence(tout, "2026-11-20", NOW, "Léna");
-    expect(s).toMatchObject({ debut: "2026-11-20", faites: ["J0"], etape: "J+1", canal: "linkedin", prochaine: "2026-11-21", statut: "en_cours", reponse: "aucune", createur: "Léna" });
+    expect(s).toMatchObject({ debut: "2026-11-20", faites: ["J0"], etape: "J+5", canal: "email", prochaine: "2026-11-25", statut: "en_cours", reponse: "aucune", createur: "Léna" });
   });
-  it("mail seul : après le J0, le J+5 mail", () => {
+  it("J+5 puis J+12, puis finie", () => {
     const s = demarrerSequence({}, "2026-11-20", NOW);
-    expect(s).toMatchObject({ etape: "J+5", canal: "email", prochaine: "2026-11-25" });
     const s2 = apresMail(s, {}, NOW)!;
-    expect(s2).toMatchObject({ faites: ["J0", "J+5"], etape: "J+20", prochaine: "2026-12-10" });
+    expect(s2).toMatchObject({ faites: ["J0", "J+5"], etape: "J+12", prochaine: "2026-12-02" });
     const s3 = apresMail(s2, {}, NOW)!;
     expect(s3).toMatchObject({ statut: "finie", etape: null, prochaine: null });
   });
-  it("un mail n'avance pas une étape LinkedIn", () => {
-    const s = demarrerSequence(tout, "2026-11-20", NOW);
-    expect(apresMail(s, tout, NOW)).toBeNull();
-    expect(etapeFaite(s, tout, NOW)).toMatchObject({ etape: "J+3", canal: "instagram", prochaine: "2026-11-23" });
+  it("une ancienne séquence arrêtée sur J+3 Instagram passe au J+5 mail", () => {
+    const vieille = { ...demarrerSequence({}, "2026-11-25", NOW), etape: "J+3", canal: "instagram" as const, prochaine: "2026-11-28" };
+    expect(etapeFaite(vieille, tout, NOW)).toMatchObject({ faites: ["J0", "J+3"], etape: "J+5", canal: "email", prochaine: "2026-11-30" });
   });
   it("arrêtée : plus rien n'avance", () => {
     const s = arreter(demarrerSequence({}, "2026-11-20", NOW), "réponse", NOW, "a_repondu");
@@ -50,7 +43,7 @@ describe("séquence", () => {
 
 describe("aRelancer", () => {
   const a = { id: "a", sequence: demarrerSequence({}, "2026-11-10", NOW) }; // J+5 le 15
-  const b = { id: "b", sequence: demarrerSequence(tout, "2026-11-20", NOW) }; // J+1 le 21
+  const b = { id: "b", sequence: demarrerSequence(tout, "2026-11-16", NOW) }; // J+5 le 21
   const c = { id: "c", sequence: demarrerSequence({}, "2026-11-12", NOW), email_check: { statut: "erreur", raison: "rebond", le: "x" } };
   const d = { id: "d", sequence: arreter(demarrerSequence({}, "2026-11-01", NOW), "réponse", NOW) };
   it("date passée, en cours, adresse valable ; tri par date", () => {
@@ -58,8 +51,8 @@ describe("aRelancer", () => {
     expect(aRelancer([b, a], "2026-11-21").map((r) => r.id)).toEqual(["a", "b"]);
   });
   it("filtre par canal et par étape", () => {
-    expect(aRelancer([b, a], "2026-11-21", { canal: "linkedin" }).map((r) => r.id)).toEqual(["b"]);
-    expect(aRelancer([b, a], "2026-11-21", { etape: "J+5" }).map((r) => r.id)).toEqual(["a"]);
+    expect(aRelancer([b, a], "2026-11-21", { canal: "email" }).map((r) => r.id)).toEqual(["a", "b"]);
+    expect(aRelancer([b, a], "2026-11-21", { etape: "J+5" }).map((r) => r.id)).toEqual(["a", "b"]);
   });
 });
 
