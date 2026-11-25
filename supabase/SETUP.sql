@@ -378,6 +378,30 @@ create table if not exists public.ig_accounts (
 alter table public.ig_accounts enable row level security;
 revoke all on public.ig_accounts from anon, authenticated;
 
+-- Journal des connexions Instagram (sql/2026-11-25-ig-connexions) : une ligne par
+-- tentative (ig-callback), réussie ou non, avec l'étape, la raison et le message brut
+-- de Meta. Écriture serveur ; lecture agence + la créatrice pour ses lignes.
+create table if not exists public.ig_connexions (
+  id           bigint generated always as identity primary key,
+  at           timestamptz not null default now(),
+  creator_id   uuid references public.creators(id) on delete cascade,
+  via          text not null default 'espace',
+  etape        text not null,
+  ok           boolean not null default false,
+  raison       text,
+  message      text,
+  ig_username  text,
+  account_type text
+);
+create index if not exists ig_connexions_creator_idx on public.ig_connexions (creator_id, at desc);
+alter table public.ig_connexions enable row level security;
+revoke all on public.ig_connexions from anon, authenticated;
+grant select on public.ig_connexions to authenticated;
+drop policy if exists ig_connexions_lecture on public.ig_connexions;
+create policy ig_connexions_lecture on public.ig_connexions
+  for select to authenticated
+  using (public.is_agency() or creator_id in (select c.id from public.creators c where c.name = public.my_creator()));
+
 -- Sourcing + Radar à marques (sql/2026-10-13-instagram-sourcing) : profils Instagram
 -- lus par ig-sourcing (gardés 7 j) et marques citées par les créatrices. Écriture
 -- serveur seulement ; l'agence lit, et change le statut d'une marque du radar.

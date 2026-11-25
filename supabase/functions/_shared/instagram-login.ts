@@ -9,11 +9,14 @@
 // de l'API avec connexion Instagram »), IG_REDIRECT_URI (= URL de ig-callback).
 // Jetons rangés dans la table ig_accounts (aucune lecture possible depuis l'app).
 // Avant la validation de Meta (App Review), seuls les comptes ajoutés comme
-// « testeurs Instagram » de l'app peuvent se connecter.
+// « testeurs Instagram » de l'app peuvent se connecter. Chaque tentative (réussie
+// ou non) est notée dans ig_connexions par ig-callback ; règles pures dans
+// _shared/igConnexion.ts.
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { getJson, GRAPH_VERSION, postImage, tidySecret } from "./instagram.ts";
+import { estComptePro, messageBrut } from "./igConnexion.ts";
 
 const IG_APP_ID = tidySecret(Deno.env.get("IG_APP_ID"));
 const IG_APP_SECRET = tidySecret(Deno.env.get("IG_APP_SECRET"));
@@ -35,43 +38,72 @@ export function authorizeUrl(state: string): string {
   return u.toString();
 }
 
-/** code → jeton longue durée (60 j) + id et nom du compte. */
-export async function exchangeCode(code: string): Promise<{ token: string; expiresIn: number; userId: string; username: string } | { error: string }> {
+export type Echange =
+  | { ok: true; token: string; expiresIn: number; userId: string; username: string; accountType: string }
+  | { ok: false; etape: "echange" | "jeton_long" | "profil" | "compte_pas_pro"; message: string; username?: string; accountType?: string };
+
+/** Message d'erreur d'une réponse de Meta (formes api.instagram.com et graph.instagram.com). */
+function metaError(b: Record<string, unknown>): string {
+  const e = b.error as { message?: string; type?: string; code?: number } | string | undefined;
+  if (typeof b.error_message === "string") return messageBrut(`${b.error_type ?? "OAuthException"} ${b.code ?? ""}: ${b.error_message}`);
+  if (e && typeof e === "object") return messageBrut(`${e.type ?? "Erreur"} ${e.code ?? ""}: ${e.message ?? ""}`);
+  return messageBrut(e ?? b);
+}
+
+/**
+ * code → jeton longue durée (60 j) + id, @ et type du compte. En cas d'échec : l'étape
+ * et le message BRUT de Meta (noté dans ig_connexions par ig-callback). Le code ne sert
+ * qu'une fois, même quand l'échange échoue (vérifié le 25/11/2026 : « This authorization
+ * code has been used ») : pas de nouvel essai avec le même code.
+ */
+export async function exchangeCode(code: string): Promise<Echange> {
   const form = new URLSearchParams({ client_id: IG_APP_ID, client_secret: IG_APP_SECRET, grant_type: "authorization_code", redirect_uri: IG_REDIRECT_URI, code });
   let short: Record<string, unknown> = {};
   try {
     const r = await fetch("https://api.instagram.com/oauth/access_token", { method: "POST", body: form, signal: AbortSignal.timeout(15_000) });
-    short = await r.json().catch(() => ({}));
+    short = await r.json().catch(() => ({ error_message: `http_${r.status}` }));
   } catch {
-    return { error: "reseau" };
+    return { ok: false, etape: "echange", message: "reseau (api.instagram.com injoignable)" };
   }
   // Meta renvoie soit { access_token, user_id }, soit { data: [{ … }] }.
   const s = (Array.isArray(short.data) ? short.data[0] : short) as Record<string, unknown> | undefined;
   const shortToken = String(s?.access_token ?? "");
-  if (!shortToken) return { error: String((short.error_message ?? (short.error as { message?: string })?.message) || "code_refuse") };
+  if (!shortToken) return { ok: false, etape: "echange", message: metaError(short) || "code_refuse" };
   const long = await getJson(`https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(IG_APP_SECRET)}&access_token=${encodeURIComponent(shortToken)}`);
   const token = String(long.access_token ?? "");
-  if (!token) return { error: "jeton_long_refuse" };
+  if (!token) return { ok: false, etape: "jeton_long", message: metaError(long) || "jeton_long_refuse" };
   const me = await getJson(`${IG_GRAPH}/me?fields=user_id,username,account_type&access_token=${encodeURIComponent(token)}`);
   const userId = String(me.user_id ?? s?.user_id ?? "");
-  if (!userId) return { error: "profil_illisible" };
-  return { token, expiresIn: Number(long.expires_in ?? 5184000) || 5184000, userId, username: String(me.username ?? "") };
+  const username = String(me.username ?? "");
+  const accountType = String(me.account_type ?? "");
+  if (!userId) return { ok: false, etape: "profil", message: metaError(me) || "profil_illisible" };
+  if (estComptePro(accountType) === false) return { ok: false, etape: "compte_pas_pro", message: `account_type=${accountType}`, username, accountType };
+  return { ok: true, token, expiresIn: Number(long.expires_in ?? 5184000) || 5184000, userId, username, accountType };
 }
 
-/** Prolonge le jeton s'il expire dans moins de 20 jours (et a plus de 24 h). */
-export async function freshToken(sb: SupabaseClient, acc: IgAccount): Promise<string> {
+/**
+ * Prolonge le jeton s'il expire dans moins de 20 jours (Meta : jeton d'au moins 24 h,
+ * pas encore expiré). Renvoie ce qui s'est passé, pour le passage quotidien d'ig-sync.
+ */
+export async function refreshIfDue(sb: SupabaseClient, acc: IgAccount): Promise<{ refreshed: boolean; error?: string }> {
   const exp = acc.expires_at ? Date.parse(acc.expires_at) : 0;
   const last = Date.parse(acc.refreshed_at ?? "") || 0;
-  if (exp && exp - Date.now() > 20 * 86400000) return acc.token;
-  if (Date.now() - last < 86400000) return acc.token;
+  if (exp && exp - Date.now() > 20 * 86400000) return { refreshed: false };
+  if (Date.now() - last < 86400000) return { refreshed: false };
   const r = await getJson(`https://graph.instagram.com/refresh_access_token?grant_type=ig_refresh_token&access_token=${encodeURIComponent(acc.token)}`);
   const token = String(r.access_token ?? "");
-  if (!token) return acc.token;
+  if (!token) return { refreshed: false, error: metaError(r) || "prolongation_refusee" };
   const expires_at = new Date(Date.now() + (Number(r.expires_in ?? 5184000) || 5184000) * 1000).toISOString();
   const refreshed_at = new Date().toISOString();
-  await sb.from("ig_accounts").update({ token, expires_at, refreshed_at }).eq("creator_id", acc.creator_id);
+  const { error } = await sb.from("ig_accounts").update({ token, expires_at, refreshed_at }).eq("creator_id", acc.creator_id);
   Object.assign(acc, { token, expires_at, refreshed_at }); // pas de 2e prolongation dans le même passage
-  return token;
+  return error ? { refreshed: true, error: `enregistrement : ${error.message}` } : { refreshed: true };
+}
+
+/** Jeton à jour (prolongé si besoin) ; garde l'ancien si Meta refuse. */
+export async function freshToken(sb: SupabaseClient, acc: IgAccount): Promise<string> {
+  await refreshIfDue(sb, acc);
+  return acc.token;
 }
 
 type Val = { name?: string; total_value?: { value?: number; breakdowns?: { results?: { dimension_values?: string[]; value?: number }[] }[] }; values?: { value?: number }[] };

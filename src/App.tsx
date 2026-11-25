@@ -13,7 +13,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { openCommandPalette } from "@/lib/commandPalette";
 import { RestrictedViewsContext } from "@/lib/restrictedViews";
 import { Toaster, toast } from "@/components/ui/toast";
-import { consumeIgReturn } from "@/lib/instagram";
+import { consumeIgReturn, RAISON_AGENCE } from "@/lib/instagram";
 import { UndoSendBar } from "@/components/ui/undo-send";
 import { Notifications } from "@/components/ui/notifications";
 import { useNotifications } from "@/lib/useNotifications";
@@ -434,10 +434,14 @@ export default function App() {
   }, [theme]);
 
   // Retour de la connexion Instagram d'une créatrice faite depuis sa fiche (ig-callback).
+  // Comptes agence seulement : pour une créatrice, c'est son espace qui lit le retour
+  // (bandeau « Réessayer » avec la raison), il ne faut pas le lui prendre ici.
+  const igRetourAgence = profile?.role === "agency";
   useEffect(() => {
+    if (!igRetourAgence) return;
     const back = consumeIgReturn();
-    if (back) toast(back === "connected" ? "Instagram connecté ✓ Ses stats arrivent toutes seules" : "Connexion Instagram annulée");
-  }, []);
+    if (back) toast(back.statut === "connected" ? "Instagram connecté ✓ Ses stats arrivent toutes seules" : `Instagram non connecté : ${RAISON_AGENCE[back.raison]} (détail sur sa fiche)`);
+  }, [igRetourAgence]);
 
   // Mémorise la page courante pour la rouvrir au prochain refresh.
   useEffect(() => {

@@ -186,3 +186,59 @@ On peut l'envoyer dans la même demande que `instagram_manage_messages`.
 > she works with, replacing the screenshots creators used to send us by hand. Data is visible
 > only to the creator and our agency team, never sold or shared with third parties. The creator
 > can disconnect at any time from her space or from Instagram (Apps and websites).
+
+## Diagnostic du 25 novembre 2026 : « Error validating verification code »
+
+**Constat.** Aucune créatrice n'avait réussi à se connecter (`ig_accounts` vide). Le 25/11,
+6 essais (Chloé ×4, Léna, et Marc depuis une fiche ; Chrome Mac, Safari Mac, Safari iPhone) :
+Instagram renvoie bien un `code`, mais l'échange `api.instagram.com/oauth/access_token`
+répond chaque fois « Error validating verification code. Please make sure your redirect_uri
+is identical to the one you used in the OAuth dialog request ».
+
+**Vérifié sans rien changer.**
+- `IG_APP_ID` = `1794104085073381` (empreinte du secret) ; `IG_REDIRECT_URI` =
+  `https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ig-callback`, la même valeur au départ
+  et à l'échange (code identique en ligne et dans `main`).
+- Réponses de Meta à des essais sans effet : faux `client_id` → « Invalid platform app » ;
+  code inventé → « Invalid authorization code » ; code déjà essayé → « This authorization code
+  has been used ». Donc ni l'ID de l'app, ni un code abîmé (`#_`), ni un code utilisé deux
+  fois : le code est reconnu, c'est la vérification adresse de retour / app qui échoue. Et un
+  code raté est perdu (il faut recommencer depuis le début).
+- La page d'accord d'Instagram NE vérifie PAS l'adresse de retour avant la connexion (une
+  adresse au hasard passe aussi) : « la page s'ouvre » ne prouve pas que l'adresse est
+  enregistrée. La doc de Meta prévient que le tableau de bord peut ajouter un « / » final.
+- `…/ig-callback` et `…/ig-callback/` arrivent tous les deux à la fonction.
+
+**Causes, de la plus probable à la moins probable.**
+1. L'adresse enregistrée dans « Paramètres de connexion professionnelle » n'est pas
+   EXACTEMENT celle du secret (« / » final ajouté, adresse absente, ou enregistrée seulement
+   dans « Facebook Login »).
+2. `IG_APP_SECRET` n'est pas la clé secrète actuelle de l'app **Instagram** (clé
+   réinitialisée depuis le 14/10, ou clé de l'app Facebook). Impossible à tester sans un
+   vrai code : Meta vérifie le code avant la clé.
+3. Comptes sans rôle sur l'app pendant que les deux autorisations sont en accès standard :
+   n'explique pas l'échec de Marc, mais bloquera toutes les créatrices tant que l'App
+   Review n'est pas passée.
+
+**À faire dans Meta (Marc), dans l'ordre.**
+1. developers.facebook.com › Mes apps › l'app de TTP › menu **Instagram** › **Configuration
+   de l'API avec connexion Instagram**.
+2. Étape « 3. Configurer la connexion professionnelle Instagram » › **Paramètres de connexion
+   professionnelle** › **URI de redirection OAuth** : une ligne exactement
+   `https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ig-callback` → Enregistrer. Rouvrir
+   la page : si Meta a remis un « / » à la fin, garder sa version et poser la même dans le
+   secret (`supabase secrets set IG_REDIRECT_URI=https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ig-callback/ --project-ref zizvggziggswhrbuyhuo`).
+   L'« URL d'intégration » affichée à cette étape doit contenir la même adresse.
+3. Même page, **ID de l'app Instagram** = `1794104085073381` ; **Clé secrète de l'app
+   Instagram** › Afficher › la reposer : `read -s S; supabase secrets set IG_APP_SECRET="$S" --project-ref zizvggziggswhrbuyhuo; unset S`
+   (pas la clé de Paramètres › De base, qui est celle de l'app Facebook).
+4. **Rôles dans l'application** › Rôles › Ajouter des personnes › **Testeur Instagram** : le @
+   de chaque créatrice qui essaie avant la validation (chloe.dyr, lenaa.psl…). Elle accepte
+   dans Instagram › Paramètres › Sites web et apps › Invitations de testeur (ou
+   instagram.com/accounts/manage_access).
+5. **Mode de l'app** : En ligne (déjà le cas depuis le 15/10), ne pas repasser en développement.
+6. **Examen de l'app** › Autorisations et fonctionnalités : `instagram_business_basic` et
+   `instagram_business_manage_insights` › **Demander l'accès avancé** (vidéo : scénario plus
+   haut). Sans elle, seuls les testeurs peuvent se connecter.
+7. Essai avec un compte testeur : la fiche de la créatrice (vue agence) montre le résultat et
+   le message brut de Meta (table `ig_connexions`), et un push arrive aux fondateurs.

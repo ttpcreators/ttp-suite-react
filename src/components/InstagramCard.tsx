@@ -1,12 +1,15 @@
 import { EMPTY, fmtAgoSince } from "@/lib/dates";
 import { useState } from "react";
 import { Spin } from "@/components/ui/loader";
-import { ExternalLink, Link2, RefreshCw, Unlink } from "@/components/icons";
+import { Copy, ExternalLink, Link2, RefreshCw, Unlink } from "@/components/icons";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 import { fmtCompact } from "@/lib/timeSeries";
 import { PlatformIcon } from "@/components/ui/platform-icon";
-import { fmtAgo, fmtEr, fmtPerWeek, followersDelta, igConnect, igDisconnect, igRefresh, igWhyText, type IgCreator, type IgSplit } from "@/lib/instagram";
+import { essaisRates, etatConnexion, fmtAgo, fmtEr, fmtPerWeek, followersDelta, igConnect, igDisconnect, igLien, igRefresh, igWhyText, lireRaison, RAISON_AGENCE, useIgConnexions, type IgCreator, type IgSplit } from "@/lib/instagram";
+import { useIsFounder } from "@/lib/useFounder";
+
+const jour = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" }) : "—");
 
 /**
  * Fiche créatrice (agence) : ses chiffres Instagram du jour, donnés par Meta et
@@ -20,7 +23,24 @@ export function InstagramCard({ creatorId, name, ig, onChange, className }: {
   onChange: (ig: IgCreator) => void;
   className?: string;
 }) {
-  const [busy, setBusy] = useState<"" | "sync" | "link">("");
+  const [busy, setBusy] = useState<"" | "sync" | "link" | "lien">("");
+  const founder = useIsFounder();
+  const essais = useIgConnexions(creatorId);
+  const dernier = essais?.[0] ?? null;
+  const { etat, joursRestants } = etatConnexion({ link: ig?.link ?? null, jetonInvalide: ig?.insightsWhy === "jeton", dernier });
+  const rates = essaisRates(essais ?? []);
+  const [lien, setLien] = useState<string | null>(null);
+  // Lien de connexion à envoyer par WhatsApp (7 jours, cette créatrice seulement).
+  const copierLien = async () => {
+    setBusy("lien");
+    const r = await igLien(name);
+    setBusy("");
+    if ("error" in r) return toast(r.error, { variant: "error" });
+    setLien(r.url);
+    // Safari peut refuser la copie après l'attente : le lien reste affiché, sélectionnable.
+    const copie = await navigator.clipboard?.writeText(r.url).then(() => true, () => false);
+    toast(copie ? "Lien copié ✓ Valable 7 jours, à envoyer par WhatsApp" : "Lien prêt : copie-le ci-dessous");
+  };
   const refresh = async () => {
     setBusy("sync");
     const r = await igRefresh<IgCreator>("creator", creatorId);
@@ -95,12 +115,18 @@ export function InstagramCard({ creatorId, name, ig, onChange, className }: {
         {ig?.link ? (
           <>
             <div className="flex items-center justify-between gap-2">
-              <span className="flex items-center gap-1.5 text-[12px] font-medium text-signaltext">
-                <Link2 className="h-3.5 w-3.5" /> Compte connecté{ig.link.username ? ` (@${ig.link.username})` : ""}
+              <span className={cn("flex items-center gap-1.5 text-[12px] font-medium", etat === "connecte" ? "text-signaltext" : "text-dangertext")}>
+                <Link2 className="h-3.5 w-3.5" /> {etat === "expire" ? "Connexion expirée" : "Compte connecté"}{ig.link.username ? ` (@${ig.link.username})` : ""}
               </span>
               <button type="button" onClick={disconnect} disabled={!!busy} className="flex items-center gap-1 text-[11px] text-faint transition-colors hover:text-dangertext disabled:opacity-50">
                 <Unlink className="h-3 w-3" /> Déconnecter
               </button>
+            </div>
+            <div className="mt-1 text-[10px] text-faint">
+              Connecté le {jour(ig.link.at)}
+              {ig.link.expires ? ` · jeton valable jusqu'au ${jour(ig.link.expires)}` : ""}
+              {etat === "bientot_expire" ? ` · expire dans ${joursRestants} j sans avoir pu être prolongé : envoyer le lien` : ""}
+              {etat === "expire" ? " · à reconnecter : envoyer le lien" : ""}
             </div>
             {ins ? (
               <div className="mt-2 grid grid-cols-2 gap-2">
@@ -118,16 +144,50 @@ export function InstagramCard({ creatorId, name, ig, onChange, className }: {
             {ins && <div className="mt-2 text-[10px] text-faint">Reportées dans son media kit (vues, âge, villes, pays) · {fmtAgo(ins.at)}</div>}
           </>
         ) : (
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-[11px] leading-snug text-muted-foreground">Couverture, vues et audience : il connecte son Instagram (depuis son espace, ou ici avec lui).</span>
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="text-[11px] leading-snug text-muted-foreground">
+                {etat === "echec" && dernier
+                  ? <>
+                      <span className="font-medium text-dangertext">Connexion ratée</span> le {jour(dernier.at)}
+                      {rates > 1 ? ` (${rates} essais)` : ""} : {RAISON_AGENCE[lireRaison(dernier.raison)]}.
+                    </>
+                  : "Jamais connecté. Couverture, vues et audience : il connecte son Instagram (depuis son espace, ou ici avec lui)."}
+              </span>
+              <button
+                type="button"
+                onClick={connect}
+                disabled={!!busy}
+                className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+              >
+                {busy === "link" ? <Spin size={14} /> : <ExternalLink className="h-3.5 w-3.5" />} Connecter
+              </button>
+            </div>
+            {etat === "echec" && dernier?.message && (
+              <div className="mt-1.5 break-words rounded-lg bg-panel px-2.5 py-1.5 font-mono text-[10px] leading-snug text-faint">Meta : {dernier.message}</div>
+            )}
+          </>
+        )}
+        {founder && (
+          <div className="mt-3">
             <button
               type="button"
-              onClick={connect}
+              onClick={copierLien}
               disabled={!!busy}
-              className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
+              title="Lien signé, valable 7 jours, pour cette créatrice seulement : elle l'ouvre sans se connecter à TTP Suite"
+              className="flex min-h-9 items-center gap-1.5 rounded-full border border-border px-3 text-[11px] font-medium text-foreground transition-colors hover:bg-rowhover disabled:opacity-50"
             >
-              {busy === "link" ? <Spin size={14} /> : <ExternalLink className="h-3.5 w-3.5" />} Connecter
+              {busy === "lien" ? <Spin size={14} /> : <Copy className="h-3.5 w-3.5" />} Copier le lien de connexion
             </button>
+            {lien && (
+              <input
+                readOnly
+                value={lien}
+                onFocus={(e) => e.currentTarget.select()}
+                aria-label="Lien de connexion Instagram"
+                className="mt-2 w-full rounded-lg border border-border bg-panel px-2.5 py-1.5 font-mono text-[10px] text-foreground"
+              />
+            )}
           </div>
         )}
       </div>
