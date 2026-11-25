@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Données Instagram · TTP Creators</title>
+<style>
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;
+         font-family: Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif; background: #f6f6f7; color: #111; }
+  main { background: #fff; border-radius: 16px; padding: 28px; max-width: 440px; width: 100%; box-sizing: border-box; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  p { line-height: 1.5; margin: 0 0 10px; color: #333; }
+  .code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 17px; font-weight: 600; letter-spacing: .04em;
+          background: #f0f0f2; border-radius: 8px; padding: 10px 12px; margin: 4px 0 14px; display: inline-block; }
+  .en { font-size: 14px; color: #666; border-top: 1px solid #e6e6e8; padding-top: 12px; margin-top: 16px; }
+  a { color: inherit; }
+  @media (prefers-color-scheme: dark) {
+    body { background: #111; color: #eee; }
+    main { background: #1c1c1e; box-shadow: none; }
+    p { color: #ccc; }
+    .code { background: #2c2c2e; }
+    .en { color: #999; border-top-color: #333; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Tes données Instagram ont été supprimées</h1>
+  <p>TTP Creators a effacé l'accès à ton compte Instagram et les statistiques privées reçues de lui (vues, comptes touchés, audience).</p>
+  <div id="bloc-code" hidden>
+    <p>Code de confirmation :</p>
+    <div class="code" id="code"></div>
+  </div>
+  <p>Une question ? Écris à <a href="mailto:partnerships@ttpcreators.pro">partnerships@ttpcreators.pro</a> en donnant ce code.</p>
+  <p class="en" lang="en">Your Instagram data has been deleted. TTP Creators removed its access to your Instagram account and the private insights received from it. Keep the confirmation code above if you contact us.</p>
+</main>
+<script>
+  // Page de statut d'une demande de suppression des données Instagram (fonction
+  // ig-data-deletion, adresse donnée à Meta : ?code=IG-XXXXXXXXXX). Le code n'est
+  // affiché que s'il a la forme attendue, et par textContent (jamais comme du HTML).
+  var code = new URLSearchParams(location.search).get("code") || "";
+  if (/^IG-[A-HJ-NP-Z2-9]{10}$/.test(code)) {
+    document.getElementById("code").textContent = code;
+    document.getElementById("bloc-code").hidden = false;
+  }
+</script>
+</body>
+</html>
