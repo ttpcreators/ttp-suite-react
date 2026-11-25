@@ -11,6 +11,7 @@
 // Jamais exposés : coffre des mots de passe, IBAN, jetons de connexion.
 // ============================================================================
 
+import { OUTILS_EQUIPE, ligneActionEquipe } from "../_shared/equipeClaude.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { APP_TIMEZONE, CALENDAR_ID, gcalFetch, triggerSync } from "../_shared/google.ts";
 import { meetEventBody, meetLinkOf, parseMeetRequest } from "../_shared/meetEvent.ts";
@@ -2176,13 +2177,26 @@ const noterJournal: Tool = {
 const journalAgents: Tool = {
   name: "journal_agents",
   title: "Journal des agents",
-  description: "Ce que les agents de TTP (Alfred…) ont fait, décidé ou signalé, avec le détail, le plus récent d'abord (section Agents → Journal). Pour savoir où en est un dossier traité par un agent, ou ce qu'Alfred a fait pour Marc.",
+  description: "Ce que les agents de TTP (Alfred…) ont fait, décidé ou signalé, avec le détail, le plus récent d'abord (section Agents → Journal), puis ce que les autres membres de l'équipe ont fait par leur propre Claude (brouillons, contacts, tâches : Gianni qui prospecte, par exemple). Pour savoir où en est un dossier traité par un agent, ce qu'Alfred a fait pour Marc, ou ce que Gianni a déjà préparé.",
   founder: true,
   inputSchema: { type: "object", properties: { jours: { type: "number", description: "Nombre de jours (défaut 2, 30 au plus)" }, agent: { type: "string", description: "Un seul agent (facultatif)" } }, additionalProperties: false },
-  run: async (sb, _c, a) => {
+  run: async (sb, ctx, a) => {
     const jours = Math.min(30, Math.max(1, Math.round(Number(a.jours ?? 2)) || 2));
     const rows = await agentJournalSince(sb, jours, str(a.agent, 80) || null);
-    return ok([`# Journal des agents · ${jours} jour(s) · ${rows.length} entrée(s)`, lines(rows.map((e) => `- ${e.quand} · ${e.agent} · ${e.action}${e.detail ? `\n  ${e.detail.replace(/\n/g, "\n  ")}` : ""}`), "Rien de noté.")].join("\n"));
+    const out = [`# Journal des agents · ${jours} jour(s) · ${rows.length} entrée(s)`, lines(rows.map((e) => `- ${e.quand} · ${e.agent} · ${e.action}${e.detail ? `\n  ${e.detail.replace(/\n/g, "\n  ")}` : ""}`), "Rien de noté.")];
+    // L'équipe par son propre Claude (mcp_log), sauf celui qui demande : Alfred (compte de Marc) voit Gianni.
+    if (!str(a.agent, 80)) {
+      const depuis = new Date(Date.now() - jours * 86400000).toISOString();
+      const { data: logs } = await sb.from("mcp_log").select("user_id, tool, summary, at").eq("ok", true).neq("user_id", ctx.userId).in("tool", [...OUTILS_EQUIPE]).gte("at", depuis).order("at", { ascending: false }).limit(120);
+      const l = (logs as { user_id: string; tool: string; summary: string | null; at: string }[] | null) ?? [];
+      if (l.length) {
+        const ids = [...new Set(l.map((x) => x.user_id))];
+        const { data: profs } = await sb.from("profiles").select("user_id, display_name, role").in("user_id", ids);
+        const nom = new Map(((profs as Json[] | null) ?? []).map((p) => [String(p.user_id), String(p.display_name || p.role || "équipe").replace(/\.\w*$/, "")]));
+        out.push(`\n## L'équipe par son propre Claude · ${l.length} action(s)`, ...l.map((x) => `- ${new Date(x.at).toLocaleString("fr-FR", { timeZone: "Europe/Paris", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} · ${nom.get(x.user_id) ?? "équipe"} · ${ligneActionEquipe(x.tool, x.summary)}`));
+      }
+    }
+    return ok(out.join("\n"));
   },
 };
 
