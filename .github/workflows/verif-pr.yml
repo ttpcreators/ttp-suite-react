@@ -24,3 +24,23 @@ jobs:
           node-version: 22
       - run: npm ci
       - run: npm run build
+
+  # Le code des Edge Functions (supabase/functions) n'est pas compilé par « build » : on le
+  # contrôle ici avec Deno, comme Supabase l'exécute. Contrôle à part, pas encore exigé pour
+  # fusionner (le rendre obligatoire dans la règle de main quand il est vert depuis une semaine).
+  fonctions:
+    name: fonctions
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Contrôle des types des fonctions
+        run: |
+          set -euo pipefail
+          ls supabase/functions/*/index.ts > /tmp/fonctions.txt
+          echo "$(wc -l < /tmp/fonctions.txt) fonctions à contrôler"
+          deno check --quiet $(cat /tmp/fonctions.txt)
+
