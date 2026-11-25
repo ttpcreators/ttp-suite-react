@@ -38,6 +38,10 @@ jobs:
         with:
           deno-version: v2.x
       - name: Contrôle des types des fonctions
+        # Le package.json de l'app n'est pas celui des fonctions : Deno l'ignore et télécharge
+        # lui-même les paquets « npm: » des fonctions, comme Supabase au déploiement.
+        env:
+          DENO_NO_PACKAGE_JSON: "1"
         run: |
           set -euo pipefail
           ls supabase/functions/*/index.ts > /tmp/fonctions.txt
