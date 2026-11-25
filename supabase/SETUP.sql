@@ -2965,3 +2965,19 @@ create policy ne_plus_contacter_agence on public.ne_plus_contacter for all using
 revoke all on public.ne_plus_contacter from anon;
 
 create index if not exists email_activity_sortants_idx on public.email_activity (created_at desc) where direction = 'out';
+
+-- Sécurité (sql/2026-11-25-securite-fonctions-anon.sql) : les fonctions de déclencheur
+-- SECURITY DEFINER ne sont pas appelables par anon (un déclencheur ne vérifie pas ce droit).
+do $$
+declare f record;
+begin
+  for f in
+    select p.oid::regprocedure as sig
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where p.prosecdef and n.nspname in ('public', 'agent')
+      and pg_get_function_result(p.oid) = 'trigger'
+      and has_function_privilege('anon', p.oid, 'execute')
+  loop
+    execute format('revoke execute on function %s from anon, public', f.sig);
+  end loop;
+end $$;

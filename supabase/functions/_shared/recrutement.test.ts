@@ -34,6 +34,8 @@ describe("raisonPasRecrutable", () => {
     expect(raisonPasRecrutable("marque_fictive", { name: "Marque Fictive", bio: "Livraison offerte dès 50 €, nouvelle collection", followers: 300_000 })).toMatch(/marque/);
     expect(raisonPasRecrutable("fictif_officiel", { name: "Fictif", bio: "Le compte", followers: 300_000 })).toMatch(/marque/);
     expect(raisonPasRecrutable("courir_media", { name: "Courir Média", bio: "Le média n°1 de la course à pied", followers: 300_000 })).toMatch(/marque/);
+    expect(raisonPasRecrutable("grandmagasin", { name: "Grandmagasin", bio: "Tout commence au Grandmagasin 💚", followers: 600_000 })).toMatch(/marque/);
+    expect(raisonPasRecrutable("leamartin", { name: "Léa Martin", bio: "Je cuisine pour vous chez Léa", followers: 200_000 })).toBe(null);
     expect(raisonPasRecrutable("ciné_fictif", { name: "Cinémas Fictifs", bio: "Sorties et avant-premières", followers: 300_000 })).toMatch(/marque/);
   });
   it("écarte artistes et comptes déjà représentés", () => {

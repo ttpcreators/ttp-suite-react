@@ -73,6 +73,11 @@ export function raisonPasRecrutable(username: string, p: ProfilBase): string | n
   const email = plat(String(p.email ?? ""));
   if ((p.followers ?? 0) > MAX_ABONNES_RECRUTEMENT) return "plus de 2 millions d'abonnés";
   if (MARQUE.test(bio) || MARQUE_NOM.test(nom)) return "ressemble à une marque, un média ou un lieu";
+  // Un seul mot pour nom, le même que le @, repris dans la bio (« Tout commence au Printemps »).
+  const motNom = plat(String(p.name ?? "")).replace(/[^a-z0-9]+/g, " ").trim();
+  if (motNom.length >= 4 && !motNom.includes(" ") && motNom === plat(username).replace(/[^a-z0-9]+/g, "") && new RegExp(`\\b${motNom}\\b`).test(bio)) {
+    return "ressemble à une marque, un média ou un lieu";
+  }
   if (ARTISTE.test(bio)) return "artiste ou personnalité (album, tournée, rôle)";
   if (email && AGENCE_EMAIL.test(email)) return "adresse de contact d'une agence ou d'un manager";
   if (/\b(management|mgmt|represented by|represente par|agence|agency|manager)\b/.test(bio)) return "déjà représenté (agence ou manager cité dans la bio)";
