@@ -27,7 +27,7 @@
 // ============================================================================
 
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
-import { discover, engagementRate, igUser, metaReady, ownAccount, postsPerWeek, quotaPct, saveUsage, type IgProfile } from "../_shared/instagram.ts";
+import { discover, engagementRate, igUser, metaReady, ownAccount, postsPerWeek, quotaAuDepart, quotaPct, saveUsage, type IgProfile } from "../_shared/instagram.ts";
 import { brandAccountOk, handleCandidates, isCommonWord, isPlainWord, proseWords } from "../_shared/mentions.ts";
 import { agencyHint, emailsIn, isPaid } from "../_shared/signals.ts";
 import { MAX_OCTETS, adressesDans, genreEmail } from "../_shared/siteMarque.ts";
@@ -728,6 +728,13 @@ Deno.serve(async (req: Request) => {
   if (probe.error) return res({ error: "migration_manquante" });
 
   const done = async (b: Record<string, unknown>) => res({ ...b, quota: await saveUsage(sb) });
+  // Passages de fond (scan, vérification) : avant toute demande, le dernier relevé du quota
+  // (ig_quota) dit si Meta bloque ou si le quota de l'heure dépasse déjà le plafond du radar.
+  // La lecture des profils et l'import passent avant lui (_shared/quotaMeta.ts, audit du 24/11, M3).
+  if (body.mode === "verify" || !body.mode || body.mode === "scan") {
+    const attendre = await quotaAuDepart(sb, quotaMax);
+    if (attendre) ctx.stop = attendre;
+  }
   if (body.mode === "brand") return done(await fromBrand(ctx, String(body.brand ?? "")));
   if (body.mode === "list") return done(await fromList(ctx, Array.isArray(body.handles) ? body.handles : []));
   if (body.mode === "similar") return done(await similar(ctx, String(body.creator ?? "")));

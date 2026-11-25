@@ -12,7 +12,8 @@
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { discover, engagementRate, metaReady, postsPerWeek, quotaPct, saveState, saveUsage } from "./instagram.ts";
+import { discover, engagementRate, metaReady, postsPerWeek, quotaAuDepart, quotaPct, saveState, saveUsage } from "./instagram.ts";
+import { PLAFONDS } from "./quotaMeta.ts";
 import { AGENCES_CONNUES, agencesAvecSuivies, type AgenceConnue } from "./agenceDetection.ts";
 import { donneesBase, resumerProfil, type ProfilResume } from "./profilInstagram.ts";
 
@@ -20,7 +21,8 @@ type Json = Record<string, unknown>;
 type DbError = { code?: string; message?: string } | null;
 type Ligne = { username: string; data: Json | null; why: string | null; at: string | null };
 
-const QUOTA_MAX = 80;
+// La lecture des profils pour la prospection passe avant l'import et le radar (_shared/quotaMeta.ts).
+const QUOTA_MAX = PLAFONDS.profils;
 const JOUR = 86_400_000;
 export const RELIRE_APRES_JOURS = 30;
 export const ETAT_SCAN = "base_scan";
@@ -56,6 +58,8 @@ export async function lireProfils(sb: SupabaseClient, comptes: string[], o: { en
   const budget = o.budgetMs ?? 100_000;
   const out: Lecture = { profils: [], restants: [], arret: null, sansColonnes: false, erreursEcriture: [], quota: null };
   if (!metaReady()) return { ...out, restants: comptes, arret: "meta_non_configure" };
+  const attendre = await quotaAuDepart(sb, QUOTA_MAX);
+  if (attendre) return { ...out, restants: comptes, arret: attendre };
   const enregistrer = o.enregistrer !== false;
   const [agences, prevRes, exclRes] = await Promise.all([
     agencesConnues(sb),
