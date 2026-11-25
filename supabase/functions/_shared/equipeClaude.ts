@@ -43,3 +43,36 @@ export function ligneActionEquipe(tool: string, summary: string | null | undefin
       return `${tool.replace(/_/g, " ")}${qui ? ` · ${qui}` : ""}`;
   }
 }
+
+/** Les arguments d'une ligne de mcp_log, même quand le résumé a été coupé. */
+function argsDe(summary: string | null | undefined): Record<string, string> {
+  try {
+    const o = JSON.parse(String(summary ?? "{}"));
+    return Object.fromEntries(Object.entries(o).map(([k, v]) => [k, typeof v === "string" ? v : ""]));
+  } catch {
+    const m = (k: string) => new RegExp(`"${k}"\\s*:\\s*"([^"]*)`).exec(String(summary ?? ""))?.[1] ?? "";
+    return { a: m("a"), fil: m("fil"), boite: m("boite"), objet: m("objet") };
+  }
+}
+
+export type LigneMail = { tool: string; summary: string | null; at: string; qui: string };
+
+/**
+ * Un mail qu'un autre membre de l'équipe a déjà préparé ou envoyé (demande de Marc, 25 novembre
+ * 2026 : pas de doublon de message entre Alfred et Gianni) : pour un nouveau mail, le même
+ * destinataire ; pour une réponse, le même fil. Renvoie la ligne trouvée, ou null.
+ */
+export function doublonEquipe(lignes: LigneMail[], adresses: string[], fil: string): LigneMail | null {
+  const voulues = new Set(adresses.map((x) => x.trim().toLowerCase()).filter(Boolean));
+  for (const l of lignes) {
+    const a = argsDe(l.summary);
+    if (fil) {
+      if (a.fil && a.fil === fil) return l;
+      continue;
+    }
+    if (a.fil) continue; // une réponse dans un fil de l'autre n'empêche pas un premier mail ailleurs
+    const leurs = String(a.a ?? "").toLowerCase().split(/[,;\s]+/).filter((x) => x.includes("@"));
+    if (leurs.some((x) => voulues.has(x))) return l;
+  }
+  return null;
+}

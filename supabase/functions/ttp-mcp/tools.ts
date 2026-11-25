@@ -11,7 +11,7 @@
 // Jamais exposés : coffre des mots de passe, IBAN, jetons de connexion.
 // ============================================================================
 
-import { OUTILS_EQUIPE, ligneActionEquipe } from "../_shared/equipeClaude.ts";
+import { OUTILS_EQUIPE, doublonEquipe, ligneActionEquipe, type LigneMail } from "../_shared/equipeClaude.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { APP_TIMEZONE, CALENDAR_ID, gcalFetch, triggerSync } from "../_shared/google.ts";
 import { meetEventBody, meetLinkOf, parseMeetRequest } from "../_shared/meetEvent.ts";
@@ -1739,6 +1739,7 @@ const brouillonMail: Tool = {
       },
       envoyer_en_tant_que: { type: "string", description: "Facultatif : alias mail d'une créatrice (ex. anamilanovic@ttpcreators.pro, via alias_createurs ou fiche_createur) pour écrire EN SON NOM. Accepté seulement s'il est réglé dans « Envoyer en tant que » de la boîte dans Gmail ; les réponses de la marque reviennent sur l'alias." },
       createur: { type: "string", description: "Le créateur proposé dans ce mail de prospection (nom du roster). Son media kit est comparé aux chiffres réels : un kit faux bloque le brouillon. Reconnu aussi par son @, son adresse en cci, son alias ou son kit joint." },
+      forcer: { type: "boolean", description: "true seulement si Marc l'a demandé pour CE mail : un autre membre de l'équipe (Gianni, Marc) a déjà préparé ou envoyé un mail à ce destinataire, ou une réponse dans ce fil, et l'outil a refusé pour éviter un doublon." },
       chiffres_kit: {
         type: "array",
         maxItems: 5,
@@ -1749,7 +1750,7 @@ const brouillonMail: Tool = {
     required: ["boite", "a", "objet", "message"],
     additionalProperties: false,
   },
-  run: async (sb, _c, a) => {
+  run: async (sb, ctx, a) => {
     const p = await parseMailBox(sb, a.boite);
     if ("error" in p) return fail(p.error);
     const box = p.box;
@@ -1765,6 +1766,13 @@ const brouillonMail: Tool = {
     // réponse dans un fil existant reste possible.
     const npc = await bloquant(sb, adressesDe(to), !!fil);
     if (npc) return fail(`Brouillon non créé : ${npc}. Si c'est une erreur : ne_plus_contacter (action retirer).`);
+    // Pas de doublon dans l'équipe (demande de Marc, 25 novembre 2026) : un autre membre (Gianni par
+    // son Claude, ou Marc) a déjà écrit à ce destinataire depuis 15 jours, ou répondu dans ce fil
+    // depuis 2 jours. Refus, sauf `forcer` sur la demande de Marc.
+    if (a.forcer !== true) {
+      const d = await doublonDansEquipe(sb, ctx.userId, adressesDe(to), fil);
+      if (d) return fail(`Brouillon non créé : doublon. ${d.qui} a déjà ${d.tool === "envoyer_mail" ? "envoyé" : "préparé"} ${fil ? "une réponse dans ce fil" : `un mail à ${adressesDe(to).join(", ")}`} le ${new Date(d.at).toLocaleString("fr-FR", { timeZone: "Europe/Paris", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" })} (${ligneActionEquipe(d.tool, d.summary)}). Ne prépare rien de plus : dis le à Marc. forcer: true seulement s'il le demande pour ce mail.`);
+    }
     // Seulement le message : une note pour Marc ou un « [prénom] » partirait chez le destinataire.
     const probleme = problemeTexteDestinataire(str(a.message, 20000));
     if (probleme) return fail(probleme);
@@ -2173,6 +2181,20 @@ const noterJournal: Tool = {
     return ok(`✓ Noté dans le journal de ${ag.nom} : ${str(a.action, 120)}.`);
   },
 };
+
+/** Le dernier mail qu'un autre membre de l'équipe a préparé ou envoyé au même destinataire (15 jours) ou dans le même fil (2 jours). */
+async function doublonDansEquipe(sb: SupabaseClient, userId: string, adresses: string[], fil: string): Promise<LigneMail | null> {
+  if (!userId || (!adresses.length && !fil)) return null;
+  const depuis = new Date(Date.now() - (fil ? 2 : 15) * 86400000).toISOString();
+  let q = sb.from("mcp_log").select("user_id, tool, summary, at").eq("ok", true).neq("user_id", userId).in("tool", ["creer_brouillon_mail", "envoyer_mail"]).gte("at", depuis).order("at", { ascending: false }).limit(50);
+  q = fil ? q.ilike("summary", `%${fil}%`) : q.or(adresses.slice(0, 5).map((x) => `summary.ilike.%${x.replace(/[%,()]/g, "")}%`).join(","));
+  const { data, error } = await q;
+  if (error || !data?.length) return null;
+  const rows = data as { user_id: string; tool: string; summary: string | null; at: string }[];
+  const { data: profs } = await sb.from("profiles").select("user_id, display_name, role").in("user_id", [...new Set(rows.map((r) => r.user_id))]);
+  const nom = new Map(((profs as Json[] | null) ?? []).map((p) => [String(p.user_id), String(p.display_name || p.role || "Quelqu'un de l'équipe").replace(/\.\w*$/, "")]));
+  return doublonEquipe(rows.map((r) => ({ tool: r.tool, summary: r.summary, at: r.at, qui: nom.get(r.user_id) ?? "Quelqu'un de l'équipe" })), adresses, fil);
+}
 
 const journalAgents: Tool = {
   name: "journal_agents",
