@@ -24,6 +24,14 @@ describe("classerReponse", () => {
     expect(classerReponse("Re: Comme convenu, des nouvelles pour 2027", "Bonjour, Et merci. Aucun budget confirmé pour le moment. Rediscutons de cela d'ici 3 semaines. À bientôt.")).toBe("plus_tard");
     expect(classerReponse("Re: Tes partenariats", "Merci beaucoup pour ton message et pour tes jolis mots sur son univers. Elle est déjà accompagnée par notre agence pour l'ensemble de ses partenariats.")).toBe("refus");
   });
+  it("cas réels du 25/11, après-midi", () => {
+    expect(classerReponse("Re: Tes collabs", "Merci beaucoup pour ton message et pour tes mots, c'est adorable ! J'ai déjà confié cette partie à quelqu'un qui m'accompagne sur la gestion de mes collaborations")).toBe("refus");
+    expect(classerReponse("Re: Pierre, triathlète", "Bonjour, Merci pour votre message ! Nous n'avons, à date, pas de besoins sur ces sujets. Nous gardons en tête votre proposition au cas où la situation évoluerait.")).toBe("plus_tard");
+  });
+  it("une réponse pas claire n'est pas une « Visio »", () => {
+    const t = tacheReponse("a_lire", { marque: "Marque Fictive", email: "a@b.fr", objet: "Re: x", extrait: "J'ajoute Agathe dans la boucle", jour: "2026-11-25" });
+    expect(t.text).toBe("Réponse à lire : Marque Fictive");
+  });
   it("laisse le reste à lire", () => {
     expect(classerReponse("Re: Collaboration intéressante ?", "Bonjour Marc,")).toBe("a_lire");
     expect(classerReponse("Re: Collab", "")).toBe("a_lire");

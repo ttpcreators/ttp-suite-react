@@ -9,7 +9,7 @@
 //     datée plus tard ;
 //   - « refus » : non merci → tâche « Refus » qui PROPOSE la liste « ne plus contacter ».
 //     Rien n'est ajouté tout seul : c'est Gianni ou Marc qui décide ;
-//   - « a_lire » : rien de clair → tâche « Visio » comme avant, à lire.
+//   - « a_lire » : rien de clair → tâche « Réponse à lire : [marque] » (pas « Visio »).
 // Aucun mail n'est jamais envoyé ici. Règles PURES, testées par reponseProspect.test.ts.
 // ============================================================================
 
@@ -31,12 +31,13 @@ const REFUS = [
   /\bne correspond(ent)? pas\b/, /\bpas (dans )?notre (cible|strategie|ligne)\b/, /\bne (travaillons|travaille|faisons|fait) pas (avec|d'|de |appel)/,
   /\bnous (declinons|devons decliner)\b/, /\bdecliner (votre|cette)\b/, /\bpas de suite\b/, /\bne (pas )?donner suite\b/, /\bne pouvons pas donner suite\b/,
   /\bdeja (accompagnee?s?|representee?s?|geree?s?|suivie?s?|managee?s?) par\b/, /\bdeja (en agence|dans une agence|avec une agence)\b/, /\b(already|currently) (represented|managed)\b/,
+  /\bdeja confie\b/, /\bquelqu'un qui m'accompagne\b/, /\bdeja (une|un) (agent|manager|agence)\b/,
   /\bnot interested\b/, /\bno,? thanks?\b/, /\bwe (do not|don't) work with\b/, /\bnot a (good )?fit\b/, /\bpass on this\b/, /\bdecline\b/,
 ];
 const PLUS_TARD = [
   /\bpas (pour le|en ce) moment\b/, /\bpas le (bon )?moment\b/, /\bpas pour l'instant\b/, /\bplus tard\b/,
   /\b(revenez|revenir|reviens) vers (nous|moi)\b/, /\b(re)?contactez[- ](nous|moi) (en|dans|a partir|debut|courant)/, /\b(l'annee|l'an) prochaine?\b/,
-  /\bbudgets? (est|sont|deja|a ete|ont ete)? ?(boucle|alloue|epuise|ferme|utilise|consomme)s?\b/, /\b(aucun|pas de) budget\b/, /\bpour le moment\b/, /\bd'ici (\d+|deux|trois|quatre|quelques) (semaines|mois)\b/, /\bredis?cut/, /\bbudget (2027|de l'annee prochaine)\b/,
+  /\bbudgets? (est|sont|deja|a ete|ont ete)? ?(boucle|alloue|epuise|ferme|utilise|consomme)s?\b/, /\b(aucun|pas de) budget\b/, /\bpas de besoins?\b/, /\bgardons? (en tete|votre (contact|proposition))\b/, /\bau cas ou\b/, /\breviendra vers vous\b/, /\bpour le moment\b/, /\bd'ici (\d+|deux|trois|quatre|quelques) (semaines|mois)\b/, /\bredis?cut/, /\bbudget (2027|de l'annee prochaine)\b/,
   /\b(debut|courant|fin) (d'annee|de l'annee|janvier|fevrier|mars|2027)\b/, /\bau (prochain|1er|premier|2e|second) (trimestre|semestre)\b/,
   /\bnot (right )?now\b/, /\bnext (year|quarter)\b/, /\breach out (again )?(in|next|later)\b/, /\bbudget is (already )?(closed|allocated|spent)\b/, /\bmaybe later\b/,
 ];
@@ -79,7 +80,7 @@ function addDays(jour: string, n: number): string {
 /** Les textes possibles d'une tâche de réponse pour cette marque (pour ne pas en refaire une). */
 export const textesTaches = (marque: string) => {
   const m = marque.slice(0, 80);
-  return [`Visio : ${m}`, `Refus : ${m}`, `Recontacter : ${m}`];
+  return [`Visio : ${m}`, `Refus : ${m}`, `Recontacter : ${m}`, `Réponse à lire : ${m}`];
 };
 
 export type TacheReponse = { text: string; descr: string; priority: "haute" | "moyenne"; due: string };
@@ -124,14 +125,14 @@ export function tacheReponse(
     descr: [`${marque} a répondu à un mail de prospection.`, contact, reponse].join("\n"),
   };
   return {
-    text: base.text,
+    text: classe === "interesse" ? base.text : `Réponse à lire : ${marque}`,
     descr: [
       classe === "interesse" ? "Classement automatique : intéressé." : "Classement automatique : rien de clair, à lire.",
       base.descr,
-      `Pour fixer la visio, lui proposer de choisir un créneau ici : ${LIEN_RDV}`,
+      classe === "interesse" ? `Si elle demande un créneau, le lien de réservation : ${LIEN_RDV}` : "Lire sa réponse et décider de la suite (visio, relance plus tard, ou rien).",
       avant,
     ].join("\n"),
-    priority: "haute",
+    priority: classe === "interesse" ? "haute" : "moyenne",
     due: p.jour,
   };
 }
