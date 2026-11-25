@@ -436,6 +436,48 @@ create policy ig_radar_agency_read on public.ig_radar for select to authenticate
 drop policy if exists ig_radar_agency_update on public.ig_radar;
 create policy ig_radar_agency_update on public.ig_radar for update to authenticated
   using (public.is_agency()) with check (public.is_agency());
+-- Marques chaudes du radar (sql/2026-11-25-radar-marques-chaudes.sql) : lues par le connecteur.
+create or replace function public.radar_marques_chaudes(p_jours int default 30, p_limite int default 50)
+returns table (marque text, payes int, createurs text[], roster text[], dernier timestamptz)
+language sql
+stable
+security invoker
+set search_path = public
+as $$
+  with p as (
+    select r.brand, e
+    from public.ig_radar r
+    cross join lateral jsonb_array_elements(coalesce(r.posts, '[]'::jsonb)) e
+    where r.status = 'nouveau'
+      and r.last_seen > now() - make_interval(days => greatest(least(p_jours, 90), 1))
+      and jsonb_typeof(e) = 'object'
+      and (e->>'paid') = 'true'
+      -- CASE : la conversion n'est tentée que sur une date bien formée (ordre garanti).
+      and (case when (e->>'at') ~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}' then (e->>'at')::timestamptz end)
+          > now() - make_interval(days => greatest(least(p_jours, 90), 1))
+  ), agg as (
+    select brand,
+           count(*)::int as payes,
+           array_agg(distinct e->>'c') filter (where coalesce(e->>'c', '') <> '') as createurs,
+           array_agg(distinct e->>'c') filter (where (e->>'roster') = 'true' and coalesce(e->>'c', '') <> '') as roster,
+           max(case when (e->>'at') ~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}' then (e->>'at')::timestamptz end) as dernier
+    from p
+    group by brand
+  )
+  select a.brand, a.payes, coalesce(a.createurs, '{}'), coalesce(a.roster, '{}'), a.dernier
+  from agg a
+  join public.ig_profiles ip on ip.username = a.brand and (ip.data->>'isBrand') = 'true'
+  where not exists (
+    select 1 from public.contacts c
+    where regexp_replace(regexp_replace(lower(coalesce(c.instagram, '')), '^(https?://(www\.)?instagram\.com/|@)', ''), '[/?#].*$', '') = a.brand
+       or lower(replace(coalesce(c.brand, ''), ' ', '')) = a.brand
+  )
+  order by cardinality(coalesce(a.createurs, '{}')) desc, a.payes desc, a.dernier desc
+  limit greatest(least(p_limite, 200), 1);
+$$;
+
+revoke all on function public.radar_marques_chaudes(int, int) from public, anon, authenticated;
+grant execute on function public.radar_marques_chaudes(int, int) to service_role;
 
 -- Compteur de demandes à Meta (sql/2026-10-13-instagram-quota) : une ligne, écrite
 -- par les fonctions Instagram, lue par l'agence (Sourcing, Scouting).

@@ -58,6 +58,7 @@ import { genererDisposDuMois } from "../_shared/disposDuMoisDb.ts";
 import { REGLES_OFFRE, STRATEGIE_VERSION, strategieTexte } from "../_shared/strategie.ts";
 import { chargerTableau, tableauLundi, tableauTexte } from "../_shared/tableauLundi.ts";
 import { devisARelancer } from "../_shared/devisRelances.ts";
+import { lireMarqueChaude, texteMarquesChaudes, type MarqueChaude } from "../_shared/marquesChaudes.ts";
 import { IGNORES_KEY, controler, ligneProbleme, lireIgnores, sansIgnores, type ControleInput } from "../_shared/controle.ts";
 import { creatorFloor, creatorTarifText, gridDiff, methodText, pastRates, pastRatesText, readTarifGrid, type CreatorForTarif, type InvoiceItemForPast } from "../_shared/tarif.ts";
 
@@ -2859,9 +2860,28 @@ const postsCreateur: Tool = {
 const sourcing: Tool = {
   name: "sourcing",
   title: "Sourcing et radar à marques",
-  description: "Page Sourcing : radar à marques (marques citées par les créatrices, les plus actives d'abord, avec le nombre de posts et de partenariats payés) et agences concurrentes suivies (abonnés). Filtre facultatif par marque.",
-  inputSchema: { type: "object", properties: { marque: { type: "string" }, limite: { type: "number" } }, additionalProperties: false },
+  description: "Page Sourcing : radar à marques (marques citées par les créatrices, les plus actives d'abord, avec le nombre de posts et de partenariats payés) et agences concurrentes suivies (abonnés). Filtre facultatif par marque. Avec `chaudes` : les marques confirmées, absentes du carnet, qui ont payé un partenariat ces `jours` derniers jours (30 par défaut) à un créateur suivi par le radar, les plus suivies d'abord : à prospecter en premier (décision de Gianni du 25/11).",
+  inputSchema: {
+    type: "object",
+    properties: {
+      marque: { type: "string" },
+      limite: { type: "number" },
+      chaudes: { type: "boolean", description: "Marques qui paient déjà des créateurs (budget influence actif), hors carnet" },
+      jours: { type: "number", description: "Avec chaudes : période en jours (1 à 90, défaut 30)" },
+    },
+    additionalProperties: false,
+  },
   run: async (sb, _c, a) => {
+    if (a.chaudes === true) {
+      const jours = int(a.jours, 30, 1, 90);
+      const { data, error } = await sb.rpc("radar_marques_chaudes", { p_jours: jours, p_limite: int(a.limite, 30, 1, 200) });
+      if (error) {
+        if (/radar_marques_chaudes|PGRST202|42883/.test(`${error.code ?? ""} ${error.message}`)) return fail("Marques chaudes : le SQL 2026-11-25-radar-marques-chaudes n'est pas encore lancé.");
+        return fail(`Marques chaudes illisibles : ${error.message}`);
+      }
+      const liste = ((data as unknown[] | null) ?? []).map(lireMarqueChaude).filter((m): m is MarqueChaude => !!m);
+      return ok(texteMarquesChaudes(liste, jours));
+    }
     const lim = int(a.limite, 20, 1, 100);
     let q = sb.from("ig_radar").select("brand, posts, status, last_seen").order("last_seen", { ascending: false }).limit(1000);
     if (str(a.marque)) q = q.ilike("brand", like(str(a.marque, 80)));
