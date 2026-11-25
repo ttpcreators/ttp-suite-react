@@ -94,7 +94,7 @@ const contactsARelancer: AdminTool = {
   name: "contacts_a_relancer",
   title: "Contacts à relancer (séquences)",
   description:
-    `Les contacts dont la prochaine étape de séquence est due (date ≤ aujourd'hui par défaut), triés par date. Étapes : ${ETAPES.map((e) => `${e.etape} ${e.canal}`).join(" · ")} (une étape sans le canal est sautée). Filtres : canal (email, linkedin, instagram, whatsapp), étape (J+5…), jusqu'à une date. Une adresse en erreur n'est jamais proposée pour un mail. Pour chaque contact : ce qu'il faut faire, la créatrice proposée et l'historique. Rien n'est envoyé.`,
+    `Les contacts dont la prochaine étape de séquence est due (date ≤ aujourd'hui par défaut), triés par date. Étapes : 100 % mail (décision de Gianni du 25/11) : J0 premier mail · J+5 relance avec un nouvel angle · J+12 dernière relance ; chaque relance est écrite pour la personne, naturelle, dans le même fil, sans insister si elle a fermé la porte. Filtres : canal (email, linkedin, instagram, whatsapp), étape (J+5…), jusqu'à une date. Une adresse en erreur n'est jamais proposée pour un mail. Pour chaque contact : ce qu'il faut faire, la créatrice proposée et l'historique. Rien n'est envoyé.`,
   inputSchema: {
     type: "object",
     properties: {
