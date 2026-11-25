@@ -59,7 +59,10 @@ export async function suivreReponses(sb: Sb, mails: Mail[], domaineAgence: strin
     const c = await contact(sb, from);
     const seq = c && "sequence" in c ? lireSequence(c.sequence) : null;
     const enSequence = !!seq && seq.statut === "en_cours";
-    const fiche = c ?? { email: from, brand: from.split("@")[1] ?? from };
+    // Hors carnet : le nom affiché de l'expéditeur (« Marine Audineau »), sinon l'adresse entière
+    // (jamais « gmail.com », cas du 25/11).
+    const affiche = String(m.from ?? "").replace(/<[^>]*>/g, "").replace(/["']/g, "").trim();
+    const fiche = c ?? { email: from, brand: affiche && !affiche.includes("@") ? affiche : from };
     const marque = String(fiche.brand ?? "").trim() || from;
     // Hors séquence : seulement une adresse prospectée par la file d'envoi (90 jours),
     // et seulement sa première réponse : une tâche déjà créée depuis notre mail suffit.
