@@ -253,6 +253,8 @@ fonction avec `Authorization: Bearer <CRON_SECRET>`.
 | `ig-hashtag` | Posts par hashtag | `HashtagSearch.tsx` | oui | rôle agence | |
 | `ig-sync` | Chiffres Instagram du roster (+ feed des 12 derniers posts, images copiées dans `avatars/feed/`), des collabs, des marques ; conformité des posts (tâches internes + journal `conformiteIncidents`) | pg_cron, `instagram.ts`, `ig-callback` | non | CRON_SECRET ou agence | `20 5 * * *` et `30 14 * * *` |
 | `ig-connect` / `ig-callback` | Un créateur connecte son Instagram | `instagram.ts` / navigateur | oui / non | créateur ou agence / state signé | |
+| `ig-deauth` | Meta prévient qu'une créatrice a retiré l'app : jeton supprimé, `creators.ig.link` à null, ligne « annulation » dans `ig_connexions` | Meta (« URL de rappel pour les annulations d'autorisation ») | non | signature du `signed_request` (`IG_APP_SECRET`) | |
+| `ig-data-deletion` | Demande de suppression des données Instagram d'une créatrice : jeton, lien, statistiques privées (fiche, feed, posts de collabs, mesures auto) ; répond `{ url, confirmation_code }` (page `app.ttpcreators.pro/instagram-donnees/`) ; ligne « suppression » dans `ig_connexions` | Meta (« URL de la demande de suppression des données ») | non | signature du `signed_request` (`IG_APP_SECRET`) | |
 | `ig-sourcing` | Sourcing, radar à marques, concurrents | pg_cron, `Sourcing.tsx`, `RivalWatch.tsx` | non | CRON_SECRET ou agence | `40 */2 * * *` |
 | `ig-inbox` | DM du compte de l'agence | pg_cron, `Messages.tsx`, `ig-webhook` | non | CRON_SECRET ou agence | `25 * * * *` |
 | `ig-webhook` | Réception des DM en direct (Meta) | Meta | non | signature `X-Hub-Signature-256` | |
@@ -300,7 +302,9 @@ hiver : la fonction ne garde que le bon passage. Hors fonction : `ttp-app-state-
 | `youtube.ts`, `youtube-login.ts` | YouTube Data API (quota) et connexion d'un créateur | `yt-*` |
 | `mentions.ts` | Comptes cités dans un post (Meta retire les @) | `ig-sync`, `ig-sourcing` |
 | `conformite.ts` | Conformité des posts : mention « Collaboration commerciale » manquante, marque concurrente pendant une exclusivité | `ig-sync`, `tableauLundi.ts` |
-| `igFeed.ts` | Feed Instagram d'un créateur (posts, chiffres, chemins d'images) | `ig-sync`, `ig-connect` |
+| `igFeed.ts` | Feed Instagram d'un créateur (posts, chiffres, chemins d'images) | `ig-sync`, `ig-connect`, `igSuppression.ts` |
+| `metaSignedRequest.ts` | Vérifie le `signed_request` de Meta (HMAC-SHA256, base64url, `signature.payload`), lit `user_id` | `ig-deauth`, `ig-data-deletion` |
+| `igSuppression.ts` | Ce qu'on efface à l'annulation et à la suppression des données Instagram, code de confirmation, page de statut | `ig-deauth`, `ig-data-deletion` |
 | `controle.ts` | Contrôle qualité des données : brouillons échus, collab publiée sans facture, étapes en retard sur l'argent, créateur hors roster, prospect resté ouvert, cachet illisible, brief cassé, tâche cochée pas « Fait », fiche incomplète, étiquettes de contacts ; corrections sûres, problèmes masqués (blob `controleIgnores`) | app (`src/lib/controle.ts`, section « À corriger » d'Aujourd'hui), `ttp-mcp` (`controle_donnees`, Alfred au point de 9 h) |
 | `exclusivites.ts` | Exclusivités des créateurs : conflits marque × concurrents, lecture d'un contrat (règles fixes) | app (`useExclusivites.ts`, page Exclusivités, choix d'un créateur, Mails), `ttp-mcp` |
 | `disposDuMois.ts`, `disposDuMoisDb.ts` | Dispos du mois pour les agences : créateurs actifs, chiffres par réseau, prix agence indicatif (méthode TARIF), catégories prises en exclusivité sans la marque ; enregistrement dans `creator_lists.dispos` | app (`BaseCreateurs.tsx`, bouton « Générer les dispos du mois »), `ttp-mcp` (outil `dispos_du_mois`), `dispos-du-mois` |

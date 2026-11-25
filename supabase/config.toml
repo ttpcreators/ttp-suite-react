@@ -146,6 +146,15 @@ verify_jwt = true
 [functions.ig-callback]
 verify_jwt = false
 
+# ig-deauth / ig-data-deletion : rappels de Meta (annulation d'autorisation,
+# demande de suppression des données) → verify_jwt=false ; l'authenticité tient
+# à la signature HMAC du signed_request (IG_APP_SECRET, _shared/metaSignedRequest.ts).
+[functions.ig-deauth]
+verify_jwt = false
+
+[functions.ig-data-deletion]
+verify_jwt = false
+
 # ig-hashtag : recherche par hashtag (Scouting). JWT requis + rôle agence.
 [functions.ig-hashtag]
 verify_jwt = true
