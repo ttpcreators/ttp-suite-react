@@ -26,6 +26,8 @@ import { classerPersonnes, coutRecherche, enrichContact, lignePersonneFE, parseP
 import { FULLENRICH_KEY, enrichir, fe, result as resultatFullEnrich, why, type EnrichResult } from "../_shared/fullenrichApi.ts";
 import { MAX_OCTETS, adresseSite, domaineDuSite, emailsDuSite, ligneEmailSite, pagesALire, reseauxDuSite } from "../_shared/siteMarque.ts";
 import { cleCompte, decompte, ligneSansReponse, sansReponse, type FilDm, type ProfilDm, type TypeDemande } from "../_shared/dmSansReponse.ts";
+import { LIBELLES, etatRecrut, lireSuivi, noterMessage, texteSuivi, type Canal, type EtatRecrut } from "../_shared/recrutementSuivi.ts";
+import { readAppState } from "../_shared/appState.ts";
 
 type Json = Record<string, unknown>;
 const ok = (text: string) => ({ text });
@@ -560,4 +562,128 @@ const dmSansReponse: AdminTool = {
   },
 };
 
-export const AUTONOMIE_TOOLS: AdminTool[] = [importerHistorique, lireProfil, lireProfilsLot, scannerBaseTool, trouverEmailsMarque, trouverEmailPersonne, lireSiteMarque, dmSansReponse];
+
+// ── Recrutement des créateurs (audit du 24/11, M13 et M22) ─────────────────
+const parisJour = (d = new Date()) => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris" }).format(d);
+const ORDRE: EtatRecrut[] = ["a_repondu", "a_relancer", "a_contacter", "attente", "fini"];
+
+const createursAContacter: AdminTool = {
+  name: "createurs_a_contacter",
+  title: "Recrutement des créateurs : à contacter, à relancer",
+  description:
+    "Le suivi du recrutement des créateurs du Scouting : ceux qui ont répondu (DM ou mail) depuis notre premier message, ceux à relancer aujourd'hui (J+5 puis J+12), ceux « À contacter » jamais écrits, ceux en attente, et ceux qui n'ont pas répondu après deux relances. Pour chacun : @, abonnés, catégorie, e-mail, dates. Lecture seule. Pour trouver de nouveaux créateurs : base_createurs avec pour_recruter, puis ajouter_au_scouting et changer_statut_scouting (contacter). Après un DM ou un mail envoyé (après le « oui » de Gianni) : noter_contact_createur.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      etat: { type: "string", enum: ["a_repondu", "a_relancer", "a_contacter", "attente", "fini"], description: "Une seule catégorie (défaut : toutes)" },
+      limite: { type: "integer", minimum: 1, maximum: 200, description: "Fiches montrées par catégorie (défaut 30)" },
+    },
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const { data, error } = await sb.from("creator_pool").select("id, name, handle, email, tag, last_contacted").order("sort_order");
+    if (error) return fail("Le Scouting n'a pas pu être lu. Réessayer.");
+    let track: Record<string, Json>;
+    try {
+      track = ((await readAppState(sb)).poolTracking ?? {}) as Record<string, Json>;
+    } catch {
+      return fail("Le suivi du Scouting n'a pas pu être lu. Réessayer.");
+    }
+    const fiches = ((data as Json[] | null) ?? []).map((r) => {
+      const t = track[String(r.id)] ?? {};
+      const snaps = ((t.snaps as { date: string; value: number }[] | undefined) ?? []).slice().sort((x, y) => x.date.localeCompare(y.date));
+      return { r, t, status: String(t.status ?? "observation"), suivi: lireSuivi(t.recrut), abonnes: snaps.length ? snaps[snaps.length - 1].value : null, compte: cleCompte(r.handle) };
+    });
+    // Réponses : DM dont le dernier message vient d'eux, mails reçus de leur adresse.
+    const suivis = fiches.filter((f) => f.suivi);
+    const reponse = new Map<string, string>();
+    const comptes = [...new Set(suivis.map((f) => f.compte).filter(Boolean))];
+    for (let i = 0; i < comptes.length; i += 150) {
+      const { data: fils, error: e } = await sb.from("ig_threads").select("username, updated_at").eq("last_from_me", false).in("username", comptes.slice(i, i + 150));
+      if (e) return fail("Les DM n'ont pas pu être relus. Réessayer.");
+      for (const f of (fils as Json[] | null) ?? []) {
+        const j = parisJour(new Date(String(f.updated_at)));
+        const k = `ig:${cleCompte(f.username)}`;
+        if (!reponse.has(k) || reponse.get(k)! < j) reponse.set(k, j);
+      }
+    }
+    const emails = [...new Set(suivis.map((f) => str(f.r.email, 200).toLowerCase()).filter((e) => e.includes("@")))];
+    for (let i = 0; i < emails.length; i += 100) {
+      const { data: recus, error: e } = await sb.from("email_activity").select("contact_email, created_at").eq("direction", "in").in("contact_email", emails.slice(i, i + 100)).order("created_at", { ascending: false }).limit(1000);
+      if (e) return fail("Les mails reçus n'ont pas pu être relus. Réessayer.");
+      for (const m of (recus as Json[] | null) ?? []) {
+        const j = parisJour(new Date(String(m.created_at)));
+        const k = `mail:${String(m.contact_email).toLowerCase()}`;
+        if (!reponse.has(k) || reponse.get(k)! < j) reponse.set(k, j);
+      }
+    }
+    const today = parisJour();
+    const par = new Map<EtatRecrut, typeof fiches>();
+    for (const f of fiches) {
+      const rep = [reponse.get(`ig:${f.compte}`), reponse.get(`mail:${str(f.r.email, 200).toLowerCase()}`)].filter(Boolean).sort().pop() ?? null;
+      const e = etatRecrut(f.status, f.suivi, rep, today);
+      if (e === "hors_suivi") continue;
+      par.set(e, [...(par.get(e) ?? []), f]);
+    }
+    const voulu = str(a.etat, 20) as EtatRecrut;
+    const lim = int(a.limite, 30, 1, 200);
+    const out: string[] = [`# Recrutement des créateurs · ${ORDRE.map((e) => `${fr(par.get(e)?.length ?? 0)} ${LIBELLES[e].split(" (")[0].split(" :")[0].toLowerCase()}`).join(" · ")}`];
+    for (const e of ORDRE) {
+      if (voulu && voulu !== e) continue;
+      const l = par.get(e) ?? [];
+      if (!l.length) continue;
+      out.push(`\n## ${LIBELLES[e]} · ${fr(l.length)}`);
+      for (const f of l.slice(0, lim)) {
+        out.push(`- ${f.r.name} · ${f.r.handle ?? "sans @"}${f.abonnes != null ? ` · ${fr(f.abonnes)} abonnés` : ""}${f.r.tag ? ` · ${f.r.tag}` : ""}${f.r.email ? ` · ${f.r.email}` : ""} · ${texteSuivi(f.suivi)} [scouting ${f.r.id}]`);
+      }
+      if (l.length > lim) out.push(`… et ${fr(l.length - lim)} autre(s).`);
+    }
+    if (out.length === 1) out.push("Personne à suivre. Pour en trouver : base_createurs avec pour_recruter, puis ajouter_au_scouting.");
+    out.push("Avant d'écrire : relire l'historique (dm_instagram, rechercher_mails). Rien n'a été envoyé ni modifié.");
+    return ok(out.join("\n"));
+  },
+};
+
+const noterContactCreateur: AdminTool = {
+  name: "noter_contact_createur",
+  title: "Noter un DM ou un mail envoyé à un créateur du Scouting",
+  description:
+    "À appeler APRÈS avoir envoyé (avec le « oui » de Gianni) un DM ou un mail de recrutement à un créateur du Scouting : note la date et le canal, compte la relance et fixe la prochaine (J+5 puis J+12 ; après deux relances, le suivi s'arrête). Passe la fiche en « À contacter » si elle était « En observation ». N'envoie rien.",
+  write: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      profil: { type: "string", description: "Id donné par scouting ou createurs_a_contacter (ou nom exact)" },
+      canal: { type: "string", enum: ["dm", "email"] },
+    },
+    required: ["profil", "canal"],
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const key = str(a.profil, 120);
+    const { data } = /^[0-9a-f-]{36}$/i.test(key) ? await sb.from("creator_pool").select("id, name").eq("id", key).limit(1) : await sb.from("creator_pool").select("id, name").ilike("name", key.replace(/[\\%_]/g, (c) => `\\${c}`)).limit(2);
+    const list = (data as Json[] | null) ?? [];
+    if (list.length !== 1) return fail(list.length ? "Plusieurs fiches correspondent : donne l'id." : "Fiche introuvable dans le Scouting.");
+    const id = String(list[0].id);
+    let cur: Record<string, Json>;
+    try {
+      cur = ((await readAppState(sb)).poolTracking ?? {}) as Record<string, Json>;
+    } catch {
+      return fail("Le suivi du Scouting n'a pas pu être lu : rien n'a été noté. Réessayer.");
+    }
+    const avant = cur[id] ?? {};
+    const canal: Canal = str(a.canal) === "email" ? "email" : "dm";
+    const jour = parisJour();
+    const prec = lireSuivi(avant.recrut);
+    if (prec && prec.dernier === jour && !prec.fini) return ok(`${list[0].name} : un message est déjà noté aujourd'hui (${texteSuivi(prec)}). Rien de changé.`);
+    const recrut = noterMessage(prec, canal, jour);
+    const status = !avant.status || avant.status === "observation" ? "contacter" : avant.status;
+    // Seule l'entrée de CETTE fiche est réécrite (app_state_merge), avec ses autres clés.
+    const { error } = await sb.rpc("app_state_merge", { p_key: "poolTracking", p_set: { [id]: { ...avant, status, recrut } }, p_remove: [] });
+    if (error) return fail(`Rien n'a été noté : ${error.message}`);
+    await sb.from("creator_pool").update({ last_contacted: new Date().toISOString() }).eq("id", id).then(() => {}, () => {});
+    return ok(`${list[0].name} : ${recrut.relances ? `relance ${recrut.relances}` : "premier contact"} noté (${canal === "dm" ? "DM" : "mail"}). ${texteSuivi(recrut)}.`);
+  },
+};
+
+export const AUTONOMIE_TOOLS: AdminTool[] = [importerHistorique, lireProfil, lireProfilsLot, scannerBaseTool, trouverEmailsMarque, trouverEmailPersonne, lireSiteMarque, dmSansReponse, createursAContacter, noterContactCreateur];
