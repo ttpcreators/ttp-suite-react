@@ -14,7 +14,7 @@
 import { OUTILS_EQUIPE, doublonEquipe, ligneActionEquipe, type LigneMail } from "../_shared/equipeClaude.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { APP_TIMEZONE, CALENDAR_ID, gcalFetch, triggerSync } from "../_shared/google.ts";
-import { meetEventBody, meetLinkOf, parseMeetRequest } from "../_shared/meetEvent.ts";
+import { fusionInvites, meetEventBody, meetLinkOf, parseMeetRequest } from "../_shared/meetEvent.ts";
 import { doublonPlanning, type Candidat, type PlanEvent } from "../_shared/planningDoublon.ts";
 import { readAppState } from "../_shared/appState.ts";
 import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
@@ -1570,6 +1570,89 @@ const creerMeet: Tool = {
       r.invite ? `Invitation envoyée par Google à ${r.guests.join(", ")}.` : "Aucune invitation envoyée : donne le lien dans ta réponse.",
       ...(check.chevauche ? [`⚠ Même créneau que ${check.chevauche}.`] : []),
     ].join("\n"));
+  },
+};
+
+// Un rendez-vous déjà dans l'agenda (demande de Marc, 26 novembre 2026) : depuis son téléphone,
+// Alfred donne le lien Meet (et le crée s'il manque) et ajoute des invités, sans ordinateur.
+const inviterRdv: Tool = {
+  name: "inviter_rdv",
+  title: "Lien Meet et invités d'un rendez-vous existant",
+  description: "Pour un rendez-vous DÉJÀ dans le Planning : donne son lien Google Meet (`lien_meet` = true le crée s'il n'en a pas), et ajoute des invités (`invites`). L'invitation Google ne part aux nouveaux invités qu'avec `envoyer` = true, seulement après un « oui » explicite de l'utilisateur ; sinon ils sont ajoutés sans mail. Trouver le rendez-vous par son id (`evenement`, table events, ou ses 8 premiers caractères) ou par `date` + `cherche` (un mot du titre ou du nom). Ne crée jamais de rendez-vous : pour un nouveau, creer_meet.",
+  write: true,
+  inputSchema: {
+    type: "object",
+    properties: {
+      evenement: { type: "string", description: "Id du rendez-vous (table events), ou ses 8 premiers caractères" },
+      date: { type: "string", description: "AAAA-MM-JJ, avec `cherche`, si l'id n'est pas connu" },
+      cherche: { type: "string", description: "Un mot du titre ou de la personne (avec `date`)" },
+      invites: { type: "array", items: { type: "string" }, description: "Adresses mail à ajouter" },
+      envoyer: { type: "boolean", description: "true : Google envoie l'invitation aux nouveaux invités (après le « oui » de l'utilisateur)" },
+      lien_meet: { type: "boolean", description: "true : crée un lien Meet si le rendez-vous n'en a pas" },
+    },
+    additionalProperties: false,
+  },
+  run: async (sb, _c, a) => {
+    const id = str(a.evenement, 64);
+    let q = sb.from("events").select("id, date, time, title, who, google_event_id").eq("deleted", false).limit(5);
+    if (id) {
+      const p = estUuid(id) ? null : plageUuid(id);
+      q = p ? q.gte("id", p.de).lte("id", p.a) : q.eq("id", id);
+    } else {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(str(a.date, 10)) || !str(a.cherche)) return fail("Donne l'id du rendez-vous (`evenement`), ou `date` et `cherche`.");
+      const m = like(str(a.cherche, 80));
+      q = q.eq("date", str(a.date, 10)).or(`title.ilike.${m},who.ilike.${m}`);
+    }
+    const { data, error } = await q;
+    if (error) return fail(`Lecture du Planning impossible : ${error.message}`);
+    const rows = (data as Json[] | null) ?? [];
+    if (!rows.length) return fail("Rendez-vous introuvable dans le Planning (outil planning pour la liste, puis lire_donnees table events pour l'id).");
+    if (rows.length > 1) return fail(`Plusieurs rendez-vous correspondent : ${rows.map((r) => `${String(r.id).slice(0, 8)} « ${r.title} » ${r.date} ${r.time ?? ""}`).join(" ; ")}. Donne l'id.`);
+    const row = rows[0];
+    if (!row.google_event_id) return fail(`« ${row.title} » n'est pas encore dans Google Agenda (synchro en attente) : réessaie dans une minute.`);
+    const cal = `/calendars/${encodeURIComponent(CALENDAR_ID)}/events/${encodeURIComponent(String(row.google_event_id))}`;
+    let ev: { attendees?: { email?: string }[]; hangoutLink?: string; conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] } };
+    try {
+      const r = await gcalFetch(sb, cal, {}, { maxRetries: 2 });
+      if (!r.ok) return fail(`Rendez-vous introuvable dans Google Agenda (${r.status}).`);
+      ev = await r.json();
+    } catch (e) {
+      const m = String((e as Error)?.message ?? "");
+      return fail(m === "not_connected" || m === "invalid_grant" ? "Google Agenda n'est pas connecté à l'app (Planning → Google Agenda → Connecter)." : "Google Agenda ne répond pas, réessaie.");
+    }
+    const patch: Record<string, unknown> = {};
+    const nouveaux = Array.isArray(a.invites) ? a.invites : [];
+    let ajoutes: string[] = [];
+    if (nouveaux.length) {
+      const f = fusionInvites(ev.attendees, nouveaux);
+      if ("error" in f) return fail(`Invités non ajoutés : ${f.error}.`);
+      ajoutes = f.ajoutes;
+      if (ajoutes.length) patch.attendees = f.attendees;
+    }
+    let lien = meetLinkOf(ev);
+    if (!lien && a.lien_meet === true) patch.conferenceData = { createRequest: { requestId: crypto.randomUUID(), conferenceSolutionKey: { type: "hangoutsMeet" } } };
+    const envoyer = a.envoyer === true && ajoutes.length > 0;
+    if (Object.keys(patch).length) {
+      const r = await gcalFetch(sb, `${cal}?conferenceDataVersion=1&sendUpdates=${envoyer ? "all" : "none"}`, { method: "PATCH", body: JSON.stringify(patch) }, { maxRetries: 1 }).catch(() => null);
+      if (!r?.ok) return fail(r?.status === 403 ? "Le droit d'écrire dans l'agenda manque (reconnecter Google dans l'app)." : `Rendez-vous pas modifié (Google ${r?.status ?? "injoignable"}).`);
+      const apres = await r.json().catch(() => ({}));
+      lien = meetLinkOf(apres) || lien;
+      if (!lien && patch.conferenceData) {
+        await new Promise((ok) => setTimeout(ok, 1500));
+        const again = await gcalFetch(sb, cal, {}, { maxRetries: 1 }).catch(() => null);
+        if (again?.ok) lien = meetLinkOf(await again.json().catch(() => ({})));
+      }
+      try {
+        triggerSync("webhook");
+      } catch {
+        /* la synchro horaire suivra */
+      }
+    }
+    return ok([
+      `Rendez-vous « ${row.title} », ${frDay(String(row.date))}${row.time ? ` à ${String(row.time).slice(0, 5)}` : ""} (id ${String(row.id).slice(0, 8)}).`,
+      lien ? `Lien Google Meet : ${lien}` : a.lien_meet === true ? "Lien Meet pas encore prêt : redemande dans une minute." : "Pas de lien Meet (lien_meet: true pour en créer un).",
+      ajoutes.length ? (envoyer ? `Invitation Google envoyée à ${ajoutes.join(", ")}.` : `Ajouté(s) sans mail : ${ajoutes.join(", ")} (envoyer: true pour que Google envoie l'invitation).`) : nouveaux.length ? "Ces adresses étaient déjà invitées : rien de changé." : "",
+    ].filter(Boolean).join("\n"));
   },
 };
 
@@ -3222,7 +3305,7 @@ const lireContrat: Tool = {
 
 export const TOOLS: Tool[] = [
   pointDuJour, controleDonnees, strategie, tableauLundiTool, devisRelancer, rechercher, roster, ficheCreateur, verifierExclusivite, rechercherMails, lireMail, marquerLu, preparerReponseMail, dmInstagram, scouting, contacts, pipeline, collabs, contrats, planning, taches, factures, reversements, noterReversement, objectifs, modelesMails, ajouterModele, methodeTarif, aValider, ecarterProposition,
-  creerTache, cocherTache, creerEvenement, creerMeet, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, ajouterContacts, noterEchange, ajouterScouting, statutScouting, avancerCollab,
+  creerTache, cocherTache, creerEvenement, creerMeet, inviterRdv, statsCollab, aliasCreateurs, brouillonMail, brouillonPostInstagram, majChiffresMediakit, brouillonsClaude, supprimerBrouillon, ajouterContact, ajouterContacts, noterEchange, ajouterScouting, statutScouting, avancerCollab,
   mesAgents, lireAgent, proposerAction, noterLecon, memoireCreateur, noterJournal, journalAgents,
   lireBrief, resumerBrief, lireContrat,
   compta, journalActivite, corbeille, stats, bilans, checklist, postsInstagram, sourcing, baseCreateurs, disposDuMoisTool, notifications,

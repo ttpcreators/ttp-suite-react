@@ -36,3 +36,17 @@ describe("rendez-vous Meet", () => {
     expect(meetLinkOf({})).toBe("");
   });
 });
+
+import { fusionInvites } from "./meetEvent.ts";
+
+describe("invités ajoutés à un rendez-vous existant", () => {
+  it("garde les invités actuels et n'ajoute que les nouveaux", () => {
+    const r = fusionInvites([{ email: "Paul@exemple.fr" }], ["paul@exemple.fr", " lea@exemple.fr ", ""]);
+    if ("error" in r) throw new Error(r.error);
+    expect(r.ajoutes).toEqual(["lea@exemple.fr"]);
+    expect(r.attendees.map((a) => a.email)).toEqual(["Paul@exemple.fr", "lea@exemple.fr"]);
+  });
+  it("refuse une adresse invalide", () => {
+    expect(fusionInvites([], ["pas une adresse"])).toHaveProperty("error");
+  });
+});

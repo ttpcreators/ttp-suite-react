@@ -63,3 +63,27 @@ export function meetLinkOf(ev: { hangoutLink?: string; conferenceData?: { entryP
   if (ev.hangoutLink) return ev.hangoutLink;
   return ev.conferenceData?.entryPoints?.find((e) => e.entryPointType === "video")?.uri ?? "";
 }
+
+/**
+ * Invités d'un rendez-vous déjà dans l'agenda (demande de Marc, 26 novembre 2026 : inviter depuis
+ * son téléphone, par Alfred) : les invités actuels gardés, les nouveaux ajoutés sans doublon.
+ * Renvoie la liste complète pour Google, les adresses ajoutées, ou l'adresse invalide.
+ */
+export function fusionInvites(
+  actuels: { email?: string }[] | undefined,
+  nouveaux: unknown[],
+): { attendees: { email: string }[]; ajoutes: string[] } | { error: string } {
+  const garder = (actuels ?? []).filter((x) => x?.email).map((x) => ({ ...x, email: String(x.email) }));
+  const deja = new Set(garder.map((x) => x.email.toLowerCase()));
+  const ajoutes: string[] = [];
+  for (const n of nouveaux) {
+    const e = String(n ?? "").trim().toLowerCase();
+    if (!e) continue;
+    if (!EMAIL_RE.test(e)) return { error: `adresse invalide : ${e}` };
+    if (deja.has(e)) continue;
+    deja.add(e);
+    ajoutes.push(e);
+  }
+  if (garder.length + ajoutes.length > 30) return { error: "plus de 30 invités" };
+  return { attendees: [...garder, ...ajoutes.map((email) => ({ email }))], ajoutes };
+}
