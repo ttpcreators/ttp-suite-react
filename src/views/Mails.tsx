@@ -44,7 +44,9 @@ import { buildBrandIndex, collabTag, creatorTone, matchCollabs, relanceDays, typ
 import { LinkedCollabCard, MailTagChip } from "@/components/mail-collab";
 import { MailReactions } from "@/components/mail-reactions";
 import { canReact, reactionErrorText, reactionRecipients, splitReactions, type ReactionPill } from "@/lib/mailReactions";
-import { myDisplayName } from "@/lib/team";
+import { myDisplayName, teamNames } from "@/lib/team";
+import { auteurDuMessage, auteursDuFil, type SendLogRow } from "@/lib/sentBy";
+import { loadSendLog } from "@/lib/sentByDb";
 import { useIntent } from "@/lib/openIntent";
 import { addrOf, addrsOf, replyPlan } from "@/lib/mailReply";
 import { ignoreSender, unignoreSender, useIgnoredSenders } from "@/lib/mailIgnored";
@@ -471,9 +473,11 @@ function RowAction({ icon: Icon, label, shortcut, onClick, danger, side = "botto
 }
 
 /** Une conversation de la liste : expéditeur et heure, objet, une ligne d'extrait. */
-function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhoto, tags, onOpen, onArchive, onTrash, onToggleRead, onNotTodo }: {
+function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhoto, tags, sentBy, onOpen, onArchive, onTrash, onToggleRead, onNotTodo }: {
   t: InboxThread; folder: Folder; on: boolean; cursor: boolean; showBox: boolean; draft: boolean;
   creator: string | null; creatorPhoto: string | null;
+  /** Prénom de qui de l'équipe a envoyé le dernier mail du fil (« Envoyé par »), sinon "". */
+  sentBy?: string;
   /** Étiquettes de statut (collab liée, suivi créateur, relance), seulement si elles existent. */
   tags?: MailTag[];
   onOpen: () => void; onArchive: () => void; onTrash: () => void; onToggleRead: () => void;
@@ -529,7 +533,7 @@ function ThreadRow({ t, folder, on, cursor, showBox, draft, creator, creatorPhot
                   <span title="N'attend pas de réponse : hors « À traiter »" className="shrink-0 rounded bg-muted px-1.5 text-[11px] font-medium leading-[18px] text-muted-foreground">{KIND_LABEL[t.kind]}</span>
                 )}
                 <span className="min-w-0 truncate text-[12.5px] leading-[18px] text-muted-foreground">
-                  {t.direction === "out" && folder === "inbox" && <span className="text-faint">Toi : </span>}
+                  {sentBy ? <span className="text-faint">{sentBy} : </span> : t.direction === "out" && folder === "inbox" && <span className="text-faint">Toi : </span>}
                   {decodeEntities(t.snippet)}
                 </span>
               </span>
@@ -1300,7 +1304,51 @@ export function Mails() {
   // Non lus plus anciens que les fils chargés : demandés au serveur quand le filtre s'ouvre, pour
   // que « Non lus » montre le même chiffre que la boîte (audit du 2 nov., n° 56).
   const extraEff = useMemo(() => effList(unreadExtra), [unreadExtra, applyOv]); // eslint-disable-line react-hooks/exhaustive-deps
+  // « Envoyé par » (demande de Gianni du 25/11) : qui de l'équipe a envoyé chaque mail, lu
+  // dans le journal des envois (src/lib/sentBy.ts). Rien tant que le SQL n'est pas lancé.
+  const [sendLog, setSendLog] = useState<SendLogRow[]>([]);
+  const [teamNameMap, setTeamNameMap] = useState<Map<string, string>>(() => new Map());
+  const [sentByFilter, setSentByFilter] = useState("all");
+  useEffect(() => {
+    let alive = true;
+    void teamNames()
+      .then((m) => {
+        if (alive) setTeamNameMap(m);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const openThreadId = thread?.threadId ?? "";
+  const logKey = useMemo(() => {
+    const ids = boxAll.filter((t) => folder === "sent" || t.direction === "out").map((t) => t.threadId);
+    if (openThreadId) ids.push(openThreadId);
+    return [...new Set(ids)].sort().join(",");
+  }, [boxAll, folder, openThreadId]);
+  const sentCount = threadMsgs?.filter((m) => m.direction === "out").length ?? 0;
+  useEffect(() => {
+    if (!logKey) {
+      setSendLog([]);
+      return;
+    }
+    let alive = true;
+    void loadSendLog(logKey.split(",")).then((rows) => {
+      if (alive) setSendLog(rows);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [logKey, sentCount]);
+  const sentAuthors = useMemo(() => {
+    if (folder !== "sent") return [];
+    const s = new Set<string>();
+    for (const t of boxAll) for (const n of auteursDuFil(t.threadId, sendLog, teamNameMap)) s.add(n);
+    return [...s].sort((a, b) => a.localeCompare(b, "fr"));
+  }, [folder, boxAll, sendLog, teamNameMap]);
+  const sentByEff = folder === "sent" && sentAuthors.includes(sentByFilter) ? sentByFilter : "all";
   const boxThreads = useMemo(() => {
+    if (sentByEff !== "all") return boxAll.filter((t) => auteursDuFil(t.threadId, sendLog, teamNameMap).includes(sentByEff) || keyOf(t) === openKey);
     if (!(unreadOnly && folder === "inbox")) {
       if (todoOnly && folder === "inbox") return boxAll.filter((t) => needsReply(t, ignored) || keyOf(t) === openKey);
       return boxAll;
@@ -1309,7 +1357,7 @@ export function Mails() {
     const seen = new Set(here.map(keyOf));
     const more = extraEff.filter((t) => !seen.has(keyOf(t)) && (box === "all" || t.box === box) && (!creatorKey || rowCreators(t).includes(creatorKey)));
     return [...here, ...more];
-  }, [boxAll, unreadOnly, todoOnly, openKey, folder, extraEff, box, creatorKey, rowCreators, ignored]);
+  }, [boxAll, unreadOnly, todoOnly, openKey, folder, extraEff, box, creatorKey, rowCreators, ignored, sentByEff, sendLog, teamNameMap]);
   const todoCount = useMemo(() => boxAll.filter((t) => needsReply(t, ignored)).length, [boxAll, ignored]);
   const unreadLoaded = useMemo(() => boxAll.filter((t) => t.unread).length, [boxAll]);
   // Même chiffre que la pastille de la boîte (compte du serveur), sauf filtre par créateur.
@@ -1696,8 +1744,11 @@ export function Mails() {
         html: m.html,
         text: m.html ? "" : m.text,
         attachments: m.attachments ?? [],
+        sentBy: m.direction === "out" && thread
+          ? auteurDuMessage({ id: m.id, threadId: thread.threadId, ts: m.ts || new Date(m.date).getTime() }, sendLog, teamNameMap) || undefined
+          : undefined,
       })),
-    [split],
+    [split, thread, sendLog, teamNameMap],
   );
   const plan = useMemo(() => replyPlan(split.shown, thread?.contact ?? "", AGENCY_DOMAIN), [split, thread]);
   const replyName = thread
@@ -2278,6 +2329,7 @@ export function Mails() {
         creator={owner}
         creatorPhoto={owner ? photoOf(owner) : null}
         tags={tagsOf(t)}
+        sentBy={folder === "sent" || t.direction === "out" ? auteurDuMessage({ id: "", threadId: t.threadId, ts: t.ts }, sendLog, teamNameMap) : ""}
         onOpen={() => openThread({ threadId: t.threadId, subject: t.subject, box: t.box, contact: t.email, name: t.name })}
         onArchive={() => archive(target)}
         onTrash={() => askTrash(target)}
@@ -2326,6 +2378,17 @@ export function Mails() {
               { value: "unread", label: "Non lus", count: unreadHere || undefined },
               { value: "all", label: "Tout" },
             ]}
+          />
+        )}
+        {folder === "sent" && sentAuthors.length > 0 && (
+          <Tabs
+            className="mt-2"
+            size="sm"
+            fullWidth
+            label="Envoyés par"
+            value={sentByEff}
+            onValueChange={setSentByFilter}
+            items={[{ value: "all", label: "Tout" }, ...sentAuthors.map((n) => ({ value: n, label: n }))]}
           />
         )}
         {creatorFilter && (

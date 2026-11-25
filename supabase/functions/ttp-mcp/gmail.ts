@@ -443,7 +443,7 @@ export async function deleteClaudeDraft(sb: SupabaseClient, box: MailBox, draftI
 /** Un brouillon tel qu'il partira (pour le garde-fou des media kits avant l'envoi). */
 export type BrouillonLu = { from: string; to: string; cc: string; bcc: string; subject: string; text: string; files: string[]; reponse: boolean; kit: string };
 
-export async function sendDraft(sb: SupabaseClient, box: MailBox, draftId: string, expectFrom?: string, verifier?: (b: BrouillonLu) => Promise<string | null>): Promise<{ to: string; subject: string; threadId: string; from: string }> {
+export async function sendDraft(sb: SupabaseClient, box: MailBox, draftId: string, expectFrom?: string, verifier?: (b: BrouillonLu) => Promise<string | null>): Promise<{ to: string; subject: string; threadId: string; from: string; id: string }> {
   const token = await tokenFor(sb, box, "modify");
   const d = (await gjson(token, `${GMAIL}/drafts/${encodeURIComponent(draftId)}?format=${verifier ? "full" : "metadata"}`)) as DraftRes;
   const h = d.message?.payload?.headers;
@@ -465,7 +465,7 @@ export async function sendDraft(sb: SupabaseClient, box: MailBox, draftId: strin
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id: draftId }),
   });
-  return { to: header(h, "to"), subject: header(h, "subject"), threadId: String(res.threadId ?? d.message?.threadId ?? ""), from };
+  return { to: header(h, "to"), subject: header(h, "subject"), threadId: String(res.threadId ?? d.message?.threadId ?? ""), from, id: String(res.id ?? "") };
 }
 
 /**

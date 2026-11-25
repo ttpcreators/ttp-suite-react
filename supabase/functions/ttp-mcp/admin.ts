@@ -34,6 +34,7 @@ import type { Ctx } from "./oauth.ts";
 import { PROSPECTION_TOOLS, adressesDe, adressesInvalides, suiviApresEnvoi } from "./prospection.ts";
 import { verifierKitsDuMail } from "./kitGarde.ts";
 import { bloquant, journaliserEnvoi, verifierAvantEnvoi } from "./envois.ts";
+import { nomAuteur } from "../_shared/auteurEnvoi.ts";
 
 type Json = Record<string, unknown>;
 type Args = Record<string, unknown>;
@@ -540,7 +541,7 @@ const envoyerMail: AdminTool = {
   },
   write: true,
   founder: true,
-  run: async (sb, _c, a) => {
+  run: async (sb, ctx, a) => {
     const pb = await parseMailBox(sb, a.boite);
     if ("error" in pb) return fail(pb.error);
     const box: MailBox = pb.box;
@@ -575,7 +576,7 @@ const envoyerMail: AdminTool = {
         }
       }
       const r = await sendMail(sb, box, { to, cc, bcc, subject: str(a.objet, 300), html: mailHtml(text, sig), threadId: str(a.fil, 64) || undefined, from });
-      await journaliserEnvoi(sb, { box: String(box), to: to.join(", "), subject: r.subject, threadId: r.threadId, source: "claude" });
+      await journaliserEnvoi(sb, { box: String(box), to: to.join(", "), subject: r.subject, threadId: r.threadId, source: "claude", messageId: r.id, auteur: await nomAuteur(sb, ctx.userId) });
       const suivi = await suiviApresEnvoi(sb, to, { demarrer: a.demarrer_sequence === true, createur: str(a.createur, 80) || undefined }).catch(() => "");
       return ok(`✓ Mail envoyé ${from ? `de ${from.email}${from.name ? ` (${from.name})` : ""} via ${box}` : `depuis ${box.includes("@") ? box : `${box}@`}`} à ${to.join(", ")}${cc.length ? ` (cc ${cc.join(", ")})` : ""} · objet « ${r.subject} ».` + suivi + kit.note);
     } catch (e) {
@@ -608,7 +609,7 @@ const envoyerBrouillon: AdminTool = {
   },
   write: true,
   founder: true,
-  run: async (sb, _c, a) => {
+  run: async (sb, ctx, a) => {
     const pb = await parseMailBox(sb, a.boite);
     if ("error" in pb) return fail(pb.error);
     const box: MailBox = pb.box;
@@ -618,7 +619,7 @@ const envoyerBrouillon: AdminTool = {
     try {
       if (alias) await resolveSender(sb, box, alias);
       const r = await sendDraft(sb, box, id, alias || undefined, verifierAvantEnvoi(sb, str(a.createur, 80) || undefined));
-      await journaliserEnvoi(sb, { box: String(box), to: r.to, subject: r.subject, threadId: r.threadId, source: "claude" });
+      await journaliserEnvoi(sb, { box: String(box), to: r.to, subject: r.subject, threadId: r.threadId, source: "claude", messageId: r.id, auteur: await nomAuteur(sb, ctx.userId) });
       const suivi = await suiviApresEnvoi(sb, adressesDe(r.to), { demarrer: a.demarrer_sequence === true, createur: str(a.createur, 80) || undefined }).catch(() => "");
       return ok(`✓ Brouillon envoyé de ${r.from || `${box}@`} à ${r.to} · objet « ${r.subject} ».${suivi}`);
     } catch (e) {
@@ -654,7 +655,7 @@ const envoyerBrouillonsValides: AdminTool = {
   },
   write: true,
   founder: true,
-  run: async (sb, _c, a) => {
+  run: async (sb, ctx, a) => {
     const pb = await parseMailBox(sb, a.boite);
     if ("error" in pb) return fail(pb.error);
     const box: MailBox = pb.box;
@@ -676,7 +677,7 @@ const envoyerBrouillonsValides: AdminTool = {
       try {
         const r = await sendDraft(sb, box, id, alias || undefined, verifierAvantEnvoi(sb));
         partis++;
-        await journaliserEnvoi(sb, { box: String(box), to: r.to, subject: r.subject, threadId: r.threadId, source: "claude" });
+        await journaliserEnvoi(sb, { box: String(box), to: r.to, subject: r.subject, threadId: r.threadId, source: "claude", messageId: r.id, auteur: await nomAuteur(sb, ctx.userId) });
         const suivi = await suiviApresEnvoi(sb, adressesDe(r.to), { demarrer: a.demarrer_sequence === true }).catch(() => "");
         lignes.push(`✓ ${id} → ${r.to} · « ${r.subject} »${suivi.replace(/^\nSuivi : /, " · ")}`);
       } catch (e) {

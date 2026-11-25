@@ -19,6 +19,7 @@ import { lireEntetesBrouillon, parseMailBox, sendDraft, type BrouillonLu, type M
 import { verifierBrouillon } from "./kitGarde.ts";
 import { adressesInvalides, suiviApresEnvoi } from "./prospection.ts";
 import { instantParis } from "../_shared/rdv.ts";
+import { colonneAuteurAbsente, idDejaJournalise, lignesEnvoi, nomAuteur, sansAuteur, sansIdGmail, type Auteur } from "../_shared/auteurEnvoi.ts";
 import {
   MAX_PROGRAMMES, REGLES, adresses, cleSociete, coupeCircuit, dansLaFenetre, jourParis, ligneFile, planifier, quandCourt, raisonDeBloquer,
   type EnvoiRecent, type LigneFile, type NePlusContacter,
@@ -95,15 +96,22 @@ export function verifierAvantEnvoi(sb: SupabaseClient, createur?: string, doublo
   };
 }
 
-/** Journal des mails envoyés par Claude (email_activity, direction « out ») : une ligne par destinataire. */
-export async function journaliserEnvoi(sb: SupabaseClient, m: { box: string; to: string; subject: string; threadId?: string; source: string }): Promise<void> {
-  const lignes = adresses(m.to).map((e) => ({
-    contact_email: e, direction: "out", subject: m.subject.slice(0, 300), snippet: "Mail envoyé par Claude", source: m.source,
-    thread_id: m.threadId || null, box: m.box,
-  }));
+/**
+ * Journal des mails envoyés par Claude (email_activity, direction « out ») : une ligne par
+ * destinataire. `messageId` (id Gmail du mail parti) et `auteur` (qui de l'équipe a lancé
+ * l'envoi) servent à la mention « Envoyé par » de la page Mails (_shared/auteurEnvoi.ts).
+ * Base pas encore migrée ou id déjà journalisé : on réessaie sans, le journal ne se perd pas.
+ */
+export async function journaliserEnvoi(sb: SupabaseClient, m: { box: string; to: string; subject: string; threadId?: string; source: string; messageId?: string; auteur?: Auteur | null }): Promise<void> {
+  let lignes = lignesEnvoi(adresses(m.to), { subject: m.subject, snippet: "Mail envoyé par Claude", source: m.source, threadId: m.threadId, box: m.box, messageId: m.messageId, auteur: m.auteur });
   if (!lignes.length) return;
-  const { error } = await sb.from("email_activity").insert(lignes);
-  if (error) console.error("journal des envois", error.message);
+  for (let essai = 0; essai < 3; essai++) {
+    const { error } = await sb.from("email_activity").insert(lignes);
+    if (!error) return;
+    if (colonneAuteurAbsente(error) && lignes.some((l) => "envoye_par" in l)) lignes = sansAuteur(lignes);
+    else if (idDejaJournalise(error) && lignes.some((l) => "gmail_message_id" in l)) lignes = sansIdGmail(lignes);
+    else return console.error("journal des envois", error.message);
+  }
 }
 
 // ── Outils ──────────────────────────────────────────────────────────────────
@@ -346,7 +354,7 @@ async function etatCoupeCircuit(sb: SupabaseClient): Promise<string | null> {
   return coupeCircuit(partis.length, rebonds.size);
 }
 
-type Ligne = { id: string; boite: string; brouillon: string; destinataires: string; objet: string; createur: string | null; demarrer_sequence: boolean; essais: number; prevu_a: string };
+type Ligne = { id: string; boite: string; brouillon: string; destinataires: string; objet: string; createur: string | null; demarrer_sequence: boolean; essais: number; prevu_a: string; cree_par?: string | null };
 
 /** Un envoi de la file : vérifications, envoi, suivi. Renvoie ce qui s'est passé. */
 async function envoyerUne(sb: SupabaseClient, row: Ligne): Promise<string> {
@@ -368,7 +376,8 @@ async function envoyerUne(sb: SupabaseClient, row: Ligne): Promise<string> {
     if (invalide) return await fin("annule", { erreur: invalide.slice(0, 300) });
     const r = await sendDraft(sb, box, row.brouillon, undefined, verifierAvantEnvoi(sb, row.createur || undefined, true));
     await sb.from("envoi_file").update({ statut: "envoye", envoye_at: new Date().toISOString(), destinataires: r.to.slice(0, 500), objet: r.subject.slice(0, 300), erreur: null }).eq("id", row.id);
-    await journaliserEnvoi(sb, { box: String(box), to: r.to, subject: r.subject, threadId: r.threadId, source: "claude-file" });
+    // Auteur : la personne qui a programmé l'envoi (après son « oui »).
+    await journaliserEnvoi(sb, { box: String(box), to: r.to, subject: r.subject, threadId: r.threadId, source: "claude-file", messageId: r.id, auteur: await nomAuteur(sb, row.cree_par) });
     await suiviApresEnvoi(sb, adresses(r.to), { demarrer: row.demarrer_sequence, createur: row.createur || undefined }).catch(() => "");
     return `${row.id.slice(0, 8)} envoyé`;
   } catch (e) {
@@ -393,7 +402,7 @@ export async function traiterFile(sb: SupabaseClient): Promise<Json> {
   if (!dansLaFenetre(now)) return { ok: true, fenetre: false };
   const pause = await etatCoupeCircuit(sb);
   if (pause) return { ok: true, pause };
-  const { data, error } = await sb.from("envoi_file").select("id, boite, brouillon, destinataires, objet, createur, demarrer_sequence, essais, prevu_a")
+  const { data, error } = await sb.from("envoi_file").select("id, boite, brouillon, destinataires, objet, createur, demarrer_sequence, essais, prevu_a, cree_par")
     .eq("statut", "en_attente").lte("prevu_a", now.toISOString()).order("prevu_a", { ascending: true }).limit(50);
   if (error) return { ok: false, raison: error.message };
   const dus = (data as Ligne[] | null) ?? [];
