@@ -51,7 +51,8 @@ import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
 import { taskEventTitles } from "../_shared/taskEvent.ts";
 import { CONTRACT_DRAFTS_KEY, DRAFT_OPTS, choisirCreateur, estRepresentation, lireBrouillons, normaliserBrouillon, resumeBrouillon } from "../_shared/contractDraft.ts";
 import { ligneContrat, texteContrat, trouverContrats } from "../_shared/contractLecture.ts";
-import { cleanUser, construireBase, filtrerBase, ligneBase, type BaseMeta, type BaseRow } from "../_shared/baseCreateurs.ts";
+import { cleanUser, construireBase, filtrerBase, ligneBase, type BaseCreateur, type BaseMeta, type BaseRow } from "../_shared/baseCreateurs.ts";
+import { langueAVerifier, MAX_ABONNES_RECRUTEMENT, raisonPasRecrutable } from "../_shared/recrutement.ts";
 import { disposTexte, isMois, moisCourant, moisDecale } from "../_shared/disposDuMois.ts";
 import { genererDisposDuMois } from "../_shared/disposDuMoisDb.ts";
 import { REGLES_OFFRE, STRATEGIE_VERSION, strategieTexte } from "../_shared/strategie.ts";
@@ -2933,10 +2934,16 @@ const baseCreateurs: Tool = {
       tri: { type: "string", enum: ["abonnes", "engagement", "recent", "nom"] },
       limite: { type: "number", description: "20 par défaut, 50 au plus" },
       liste: { type: "string", description: "Titre ou adresse d'une liste pour une marque" },
+      pour_recruter: { type: "boolean", description: "Prospection de créateurs : seulement les comptes francophones de 100 000 à 2 millions d'abonnés (par défaut), sans agence, hors roster et Scouting, en écartant les marques, médias, lieux, artistes et comptes gérés par un manager. Les comptes dont la langue n'est pas claire sont montrés à part." },
     },
     additionalProperties: false,
   },
-  run: async (sb, _c, a) => {
+  run: async (sb, _c, a0) => {
+    // Prospection de créateurs (audit du 24/11, M14) : tranche 100 000 à 2 millions par défaut.
+    const recruter = a0.pour_recruter === true && !str(a0.liste, 120);
+    const a: Json = recruter
+      ? { ...a0, abonnes_min: typeof a0.abonnes_min === "number" ? a0.abonnes_min : 100_000, abonnes_max: typeof a0.abonnes_max === "number" ? a0.abonnes_max : MAX_ABONNES_RECRUTEMENT + 1, sans_agence: true, hors_ttp: true }
+      : a0;
     // Avec un seuil d'abonnés et sans liste, on ne lit que cette tranche : relire les 15 000
     // profils à chaque appel coûtait trop de calcul (le 24/11, six appels en même temps ont
     // fait tomber le connecteur : « CPU Time exceeded »). Tri par nom : sans tri, la lecture
@@ -2990,6 +2997,25 @@ const baseCreateurs: Tool = {
     }, now);
     const lim = int(a.limite, 20, 1, 50);
     const total = base.filter((c) => !c.excluded).length;
+    if (recruter) {
+      const ecartes = new Map<string, number>();
+      const gardes: BaseCreateur[] = [];
+      const aVerifier: BaseCreateur[] = [];
+      for (const c of found) {
+        const r = raisonPasRecrutable(c.username, c.data);
+        if (r) ecartes.set(r, (ecartes.get(r) ?? 0) + 1);
+        else (langueAVerifier(c.data) ? aVerifier : gardes).push(c);
+      }
+      const nb = (n: number) => n.toLocaleString("fr-FR");
+      return ok([
+        `# Créateurs à recruter · ${nb(gardes.length)} francophone(s) et ${nb(aVerifier.length)} à vérifier, sur ${nb(found.length)} compte(s) sans agence dans la tranche${gardes.length > lim ? ` · les ${lim} premiers` : ""}`,
+        ...gardes.slice(0, lim).map((c) => ligneBase(c, now)),
+        aVerifier.length ? `\n## Langue à vérifier (rien dans la bio ne dit qu'ils publient en français) · ${nb(aVerifier.length)}` : "",
+        ...aVerifier.slice(0, Math.min(10, lim)).map((c) => ligneBase(c, now)),
+        ecartes.size ? `\nÉcartés : ${[...ecartes].sort((x, y) => y[1] - x[1]).map(([r, n]) => `${nb(n)} ${r}`).join(" · ")}.` : "",
+        "Filtre automatique sur la bio : relis chaque profil avant de lui écrire (lire_profil_instagram), et regarde l'historique (dm_instagram, rechercher_mails).",
+      ].filter(Boolean).join("\n"));
+    }
     return ok([
       `# Base créateurs · ${found.length} trouvé(s) sur ${total}${borne.min !== null || borne.max !== null ? " dans cette tranche d'abonnés" : ""}${found.length > lim ? ` · les ${lim} premiers` : ""}`,
       ...found.slice(0, lim).map((c) => ligneBase(c, now)),
