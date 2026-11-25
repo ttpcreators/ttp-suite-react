@@ -27,15 +27,13 @@ export const loginReady = () => !!IG_APP_ID && !!IG_APP_SECRET && !!IG_REDIRECT_
 
 export type IgAccount = { creator_id: string; ig_user_id: string; username: string | null; token: string; expires_at: string | null; refreshed_at: string | null };
 
+// Construite comme l'« URL d'intégration » du tableau de bord Meta : adresse de retour
+// écrite en clair (non encodée). Encodée (%2F…), Meta refusait ensuite l'échange du code
+// avec « Error validating verification code… redirect_uri » (25/11/2026, 0 connexion réussie).
 export function authorizeUrl(state: string): string {
-  const u = new URL("https://www.instagram.com/oauth/authorize");
-  u.searchParams.set("client_id", IG_APP_ID);
-  u.searchParams.set("redirect_uri", IG_REDIRECT_URI);
-  u.searchParams.set("response_type", "code");
-  u.searchParams.set("scope", SCOPES);
-  u.searchParams.set("enable_fb_login", "0");
-  u.searchParams.set("state", state);
-  return u.toString();
+  return "https://www.instagram.com/oauth/authorize" +
+    `?force_reauth=true&client_id=${IG_APP_ID}&redirect_uri=${IG_REDIRECT_URI}` +
+    `&response_type=code&scope=${SCOPES}&state=${encodeURIComponent(state)}`;
 }
 
 export type Echange =
