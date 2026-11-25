@@ -19,7 +19,8 @@
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { GRAPH, META_IG_ID, getJson, graphWhy, igUser, metaReady, ownAccount, pageAccess, quotaPct, saveState, saveUsage, storePicture } from "./instagram.ts";
+import { GRAPH, META_IG_ID, getJson, graphWhy, igUser, metaReady, ownAccount, pageAccess, quotaAuDepart, quotaPct, saveState, saveUsage, storePicture } from "./instagram.ts";
+import { PLAFONDS } from "./quotaMeta.ts";
 import { ETAT_VIDE, curseurSuivant, ligneConversation, lireEtat, messagesDe, texteTranche, trancheEnCours, tropAncienne, type ConvMeta, type EtatHistorique, type MessageMeta, type Personne, type Tranche } from "./igHistorique.ts";
 
 export const ETAT_HISTORIQUE = "inbox_historique";
@@ -27,7 +28,8 @@ export const ETAT_HISTORIQUE = "inbox_historique";
 export const TOTAL_ANNONCE = 3045;
 const PAGE = 25;
 const ECART_MS = 400;
-const QUOTA_MAX = 80;
+// L'import passe après la lecture des profils, avant le radar (_shared/quotaMeta.ts).
+const QUOTA_MAX = PLAFONDS.import;
 const PAGES_IDS_MAX = 3; // pages d'identifiants lues pour trouver le premier message d'une longue conversation
 const enc = encodeURIComponent;
 
@@ -98,9 +100,12 @@ export async function trancheHistorique(sb: SupabaseClient, o: { pages?: number;
   let premierApproche = false;
   let sansColonne = false;
 
-  // Une demande à la fois, avec un écart minimum ; pause avant 80 % du quota.
+  // Une demande à la fois, avec un écart minimum ; pause avant le plafond de l'import.
+  // Avant la première : le dernier relevé (ig_quota) dit si Meta bloque ou si le quota est déjà haut.
+  const auDepart = await quotaAuDepart(sb, QUOTA_MAX);
   let dernierAppel = 0;
   const appel = async (url: string, ou: string, ms = 25_000): Promise<Record<string, unknown>> => {
+    if (dernierAppel === 0 && auDepart) throw new Arret(auDepart, auDepart === "meta_limite" ? "Meta limite encore l'app : l'import reprendra au même endroit à la prochaine tranche." : `Pause : le quota Meta de l'heure est déjà au-dessus de ${QUOTA_MAX} %. L'import reprend au même endroit à la prochaine tranche.`);
     // Relevé pris pendant CETTE tranche seulement (une fonction restée chaude garde l'ancien).
     const q = dernierAppel > 0 ? quotaPct() : null;
     if (q != null && q >= QUOTA_MAX) throw new Arret("quota_proche", `Pause : quota Meta à ${Math.round(q)} %. Relancer dans une heure, l'import reprend au même endroit.`);

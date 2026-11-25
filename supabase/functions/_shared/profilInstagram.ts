@@ -128,7 +128,7 @@ export function raisonEchec(why: string): string {
     case "compte_perso": return "introuvable, privé ou compte personnel (Business Discovery ne voit que les comptes professionnels publics)";
     case "nom_invalide": return "@ illisible";
     case "meta_limite": return "limite de Meta atteinte, à relancer plus tard";
-    case "quota_proche": return "pause : quota Meta à 80 %, à relancer dans une heure";
+    case "quota_proche": return "pause : quota Meta presque atteint, à relancer dans une heure";
     case "meta_jeton": return "jeton Meta expiré (META_TOKEN à régénérer par Marc)";
     case "meta_autorisation": return "autorisation Meta manquante";
     case "meta_validation": return "fonction non validée par Meta";

@@ -10,6 +10,7 @@
 // ============================================================================
 
 import { erSurAbonnes } from "./engagementRate.ts";
+import { raisonDAttendre, type Releve } from "./quotaMeta.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 // Collés à la main dans le Terminal : on enlève espaces et guillemets éventuels.
@@ -137,6 +138,20 @@ export async function saveUsage(sb: SupabaseClient): Promise<Record<string, unkn
     usage.limited = false;
     await sb.from("ig_quota").upsert({ id: 1, data, at: iso });
     return data;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Avant de commencer une tâche Instagram : relit le dernier relevé du quota (ig_quota) et dit
+ * s'il faut attendre (Meta a bloqué, ou relevé récent au-dessus du plafond de la tâche).
+ * Relevé illisible : on ne bloque pas (chaque tâche s'arrête de toute façon à son plafond).
+ */
+export async function quotaAuDepart(sb: SupabaseClient, plafond: number): Promise<"meta_limite" | "quota_proche" | null> {
+  try {
+    const { data, error } = await sb.from("ig_quota").select("data").eq("id", 1).maybeSingle<{ data: Releve }>();
+    return error ? null : raisonDAttendre(data?.data, plafond, Date.now());
   } catch {
     return null;
   }
