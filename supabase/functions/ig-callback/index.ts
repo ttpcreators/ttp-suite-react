@@ -7,7 +7,9 @@
 //    state signé de 10 min. Sans compte TTP, sans cookie ni localStorage.
 // 2. Retour d'Instagram : GET ?code=…&state=<signé> (ou ?error=… si refus).
 //    a. verifyState(state) → { origin, sub = id de la créatrice, via }.
-//    b. code → jeton 60 j + compte (id, @, type : un compte personnel est refusé).
+//    b. code → jeton + compte (id, @ ; un compte personnel est refusé). Connexion
+//       unifiée (IG_CONFIG_ID posé) ou ancienne connexion Instagram : voir
+//       _shared/instagram-login.ts.
 //    c. Jeton rangé dans ig_accounts (jamais lisible depuis l'app) ; creators.ig.link
 //       = { username, at, expires } pour l'affichage « Instagram connecté ».
 //    d. Première synchro de ses chiffres (ig-sync, en arrière-plan).
@@ -92,7 +94,7 @@ async function depuisLien(sb: SupabaseClient, jeton: string): Promise<Response> 
     return pageFin({ statut: "erreur", raison: "lien_invalide" });
   }
   if (!loginReady()) {
-    await noter(sb, { creatorId: c.id, via: "lien", etape: "configuration", ok: false, message: "secrets IG_APP_ID / IG_APP_SECRET / IG_REDIRECT_URI absents" });
+    await noter(sb, { creatorId: c.id, via: "lien", etape: "configuration", ok: false, message: "secrets de connexion Instagram absents (IG_REDIRECT_URI, IG_CONFIG_ID + META_APP_SECRET ou IG_APP_ID + IG_APP_SECRET)" });
     return pageFin({ statut: "erreur", raison: "agence" });
   }
   const state = await signState({ origin: PAGE_FIN_IG, nonce: genNonce(), sub: c.id, via: "lien" });
@@ -151,13 +153,14 @@ Deno.serve(async (req: Request) => {
     const detail = ["error", "error_reason", "error_description"].map((k) => url.searchParams.get(k)).filter(Boolean).join(" · ");
     return echec("autorisation", detail || "retour sans code");
   }
-  if (!loginReady()) return echec("configuration", "secrets IG_APP_ID / IG_APP_SECRET / IG_REDIRECT_URI absents");
+  if (!loginReady()) return echec("configuration", "secrets de connexion Instagram absents (IG_REDIRECT_URI, IG_CONFIG_ID + META_APP_SECRET ou IG_APP_ID + IG_APP_SECRET)");
 
   const r = await exchangeCode(code.replace(/#_$/, ""));
   if (!r.ok) return echec(r.etape, r.message, { username: r.username, accountType: r.accountType });
 
   const now = new Date();
-  const expires = new Date(now.getTime() + r.expiresIn * 1000).toISOString();
+  // Connexion unifiée avec un jeton sans fin (configuration « Jamais ») : pas de date.
+  const expires = r.expiresIn ? new Date(now.getTime() + r.expiresIn * 1000).toISOString() : null;
   const { error } = await sb.from("ig_accounts").upsert({
     creator_id: creatorId, ig_user_id: r.userId, username: r.username, token: r.token,
     expires_at: expires, scopes: SCOPES, connected_at: now.toISOString(), refreshed_at: now.toISOString(),
