@@ -1,17 +1,32 @@
 // ============================================================================
 // _shared/instagram-login.ts : statistiques PRIVÉES d'une créatrice, avec SON
-// accord (« Instagram API with Instagram Login »). Elle connecte son compte
-// Instagram pro une fois depuis l'app ; on garde un jeton de 60 jours, prolongé
-// tout seul par ig-sync. Donne ce que business discovery ne donne pas : couverture,
-// vues, audience (âge, genre, villes, pays) et stats de chaque post.
+// accord. Elle connecte son compte Instagram pro une fois (depuis l'app ou par le
+// lien WhatsApp) ; on garde un jeton. Donne ce que business discovery ne donne pas :
+// couverture, vues, audience (âge, genre, villes, pays) et stats de chaque post.
 //
-// Secrets : IG_APP_ID + IG_APP_SECRET (Meta → app → Instagram → « Configuration
-// de l'API avec connexion Instagram »), IG_REDIRECT_URI (= URL de ig-callback).
+// DEUX façons de se connecter, choisies par les secrets :
+// 1. « Connexion unifiée » (Instagram API with Unified Login, recommandée par Meta) :
+//    active dès que IG_CONFIG_ID est posé. Page de connexion de Facebook Login for
+//    Business (www.facebook.com/dialog/oauth + config_id), où la créatrice choisit
+//    « Instagram » ou « Facebook ». Code échangé sur graph.facebook.com avec l'ID et
+//    la clé secrète de l'APP META (META_APP_ID, META_APP_SECRET), puis compte lu par
+//    /me/assigned_instagram_accounts. Jeton « utilisateur système » (EAA…) dont la
+//    durée dépend de la configuration (« Jamais » conseillé) : pas de prolongation.
+//    Appels sur graph.facebook.com avec l'id du compte Instagram.
+// 2. « Connexion Instagram » (Business Login, ancienne, obsolète d'après Meta) :
+//    IG_APP_ID + IG_APP_SECRET, www.instagram.com/oauth/authorize, jeton IGAA… de
+//    60 jours prolongé par ig-sync, appels sur graph.instagram.com. Elle n'a jamais
+//    marché sur l'app « TTP Suite Scouting » (25/11/2026 : « Error validating
+//    verification code » à chaque échange). Meta : « You can only add one setup per
+//    app » ; or l'app a déjà la configuration « connexion Facebook » (webhooks, DM).
+//
+// IG_REDIRECT_URI (= URL de ig-callback) sert aux deux. Le type de jeton (EAA… ou
+// non) dit sur quel serveur appeler : les comptes déjà reliés ne cassent pas.
 // Jetons rangés dans la table ig_accounts (aucune lecture possible depuis l'app).
-// Avant la validation de Meta (App Review), seuls les comptes ajoutés comme
-// « testeurs Instagram » de l'app peuvent se connecter. Chaque tentative (réussie
-// ou non) est notée dans ig_connexions par ig-callback ; règles pures dans
-// _shared/igConnexion.ts.
+// Avant la validation de Meta (App Review), seuls les comptes qui ont un rôle sur
+// l'app ou sont « testeurs Instagram » peuvent se connecter. Chaque tentative
+// (réussie ou non) est notée dans ig_connexions par ig-callback ; règles pures
+// dans _shared/igConnexion.ts.
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -21,26 +36,51 @@ import { estComptePro, messageBrut } from "./igConnexion.ts";
 const IG_APP_ID = tidySecret(Deno.env.get("IG_APP_ID"));
 const IG_APP_SECRET = tidySecret(Deno.env.get("IG_APP_SECRET"));
 export const IG_REDIRECT_URI = tidySecret(Deno.env.get("IG_REDIRECT_URI"));
+// Connexion unifiée : l'app Meta « TTP Suite Scouting » (son ID n'est pas un secret).
+const META_APP_ID = tidySecret(Deno.env.get("META_APP_ID")) || "1085983370893343";
+const META_APP_SECRET = tidySecret(Deno.env.get("META_APP_SECRET"));
+const IG_CONFIG_ID = tidySecret(Deno.env.get("IG_CONFIG_ID"));
 const IG_GRAPH = `https://graph.instagram.com/${GRAPH_VERSION}`;
-export const SCOPES = "instagram_business_basic,instagram_business_manage_insights";
-export const loginReady = () => !!IG_APP_ID && !!IG_APP_SECRET && !!IG_REDIRECT_URI;
+const FB_GRAPH = `https://graph.facebook.com/${GRAPH_VERSION}`;
+
+/** Connexion unifiée active (configuration Facebook Login for Business posée). */
+export const unifiee = () => !!IG_CONFIG_ID && !!META_APP_SECRET;
+// Autorisations de la configuration (unifiée) ou demandées à Instagram (ancienne).
+export const SCOPES = unifiee() ? "instagram_basic,instagram_manage_insights" : "instagram_business_basic,instagram_business_manage_insights";
+export const loginReady = () => !!IG_REDIRECT_URI && (unifiee() || (!!IG_APP_ID && !!IG_APP_SECRET));
+
+/** Jeton de la connexion unifiée (jeton Meta « EAA… ») : appels sur graph.facebook.com. */
+export const jetonMeta = (token: string) => token.startsWith("EAA");
+const graphe = (token: string) => (jetonMeta(token) ? FB_GRAPH : IG_GRAPH);
 
 export type IgAccount = { creator_id: string; ig_user_id: string; username: string | null; token: string; expires_at: string | null; refreshed_at: string | null };
 
-// Construite comme l'« URL d'intégration » du tableau de bord Meta : adresse de retour
-// écrite en clair (non encodée). Encodée (%2F…), Meta refusait ensuite l'échange du code
-// avec « Error validating verification code… redirect_uri » (25/11/2026, 0 connexion réussie).
+/** Page d'accord : Facebook Login for Business (unifiée) ou Instagram (ancienne). */
 export function authorizeUrl(state: string): string {
+  if (unifiee()) {
+    // Meta : client_id = ID de l'app Meta, config_id, redirect_uri identique à celui de
+    // la configuration ; prompt=login montre toujours les choix Instagram ET Facebook.
+    const u = new URL("https://www.facebook.com/dialog/oauth");
+    u.searchParams.set("client_id", META_APP_ID);
+    u.searchParams.set("config_id", IG_CONFIG_ID);
+    u.searchParams.set("redirect_uri", IG_REDIRECT_URI);
+    u.searchParams.set("response_type", "code");
+    u.searchParams.set("override_default_response_type", "true");
+    u.searchParams.set("prompt", "login");
+    u.searchParams.set("state", state);
+    return u.toString();
+  }
+  // Construite comme l'« URL d'intégration » du tableau de bord Meta.
   return "https://www.instagram.com/oauth/authorize" +
     `?force_reauth=true&client_id=${IG_APP_ID}&redirect_uri=${IG_REDIRECT_URI}` +
     `&response_type=code&scope=${SCOPES}&state=${encodeURIComponent(state)}`;
 }
 
 export type Echange =
-  | { ok: true; token: string; expiresIn: number; userId: string; username: string; accountType: string }
+  | { ok: true; token: string; expiresIn: number | null; userId: string; username: string; accountType: string }
   | { ok: false; etape: "echange" | "jeton_long" | "profil" | "compte_pas_pro"; message: string; username?: string; accountType?: string };
 
-/** Message d'erreur d'une réponse de Meta (formes api.instagram.com et graph.instagram.com). */
+/** Message d'erreur d'une réponse de Meta (formes api.instagram.com et graph.*.com). */
 function metaError(b: Record<string, unknown>): string {
   const e = b.error as { message?: string; type?: string; code?: number } | string | undefined;
   if (typeof b.error_message === "string") return messageBrut(`${b.error_type ?? "OAuthException"} ${b.code ?? ""}: ${b.error_message}`);
@@ -49,12 +89,39 @@ function metaError(b: Record<string, unknown>): string {
 }
 
 /**
- * code → jeton longue durée (60 j) + id, @ et type du compte. En cas d'échec : l'étape
- * et le message BRUT de Meta (noté dans ig_connexions par ig-callback). Le code ne sert
- * qu'une fois, même quand l'échange échoue (vérifié le 25/11/2026 : « This authorization
- * code has been used ») : pas de nouvel essai avec le même code.
+ * code → jeton + id, @ et type du compte. En cas d'échec : l'étape et le message BRUT
+ * de Meta (noté dans ig_connexions par ig-callback). Le code ne sert qu'une fois, même
+ * quand l'échange échoue (vérifié le 25/11/2026 : « This authorization code has been
+ * used ») : pas de nouvel essai avec le même code.
  */
 export async function exchangeCode(code: string): Promise<Echange> {
+  return unifiee() ? await echangeUnifie(code) : await echangeInstagram(code);
+}
+
+/**
+ * Connexion unifiée : GET graph.facebook.com/oauth/access_token (ID + clé secrète de
+ * l'app Meta, et la même adresse de retour que la page d'accord), puis le compte
+ * Instagram partagé par /me/assigned_instagram_accounts (/me = l'utilisateur système
+ * de son portefeuille, pas son compte Instagram).
+ */
+async function echangeUnifie(code: string): Promise<Echange> {
+  const q = new URLSearchParams({ client_id: META_APP_ID, client_secret: META_APP_SECRET, redirect_uri: IG_REDIRECT_URI, code });
+  const t = await getJson(`${FB_GRAPH}/oauth/access_token?${q}`);
+  const token = String(t.access_token ?? "");
+  if (!token) return { ok: false, etape: "echange", message: metaError(t) || "code_refuse" };
+  const comptes = await getJson(`${FB_GRAPH}/me/assigned_instagram_accounts?fields=id,username&access_token=${encodeURIComponent(token)}`);
+  if (comptes.error) return { ok: false, etape: "profil", message: metaError(comptes) };
+  const liste = (comptes.data as { id?: string; username?: string }[] | undefined) ?? [];
+  const c = liste.find((x) => x.id);
+  if (!c) return { ok: false, etape: "profil", message: "aucun compte Instagram professionnel partagé avec l'app pendant la connexion" };
+  if (liste.length > 1) console.log("ig-login", `plusieurs comptes partagés (${liste.length}), premier gardé : @${c.username ?? c.id}`);
+  // Seuls les comptes professionnels peuvent être partagés : pas de account_type ici.
+  const expiresIn = Number(t.expires_in ?? 0) || null; // absent : n'expire pas (configuration « Jamais »)
+  return { ok: true, token, expiresIn, userId: String(c.id), username: String(c.username ?? ""), accountType: "" };
+}
+
+/** Ancienne connexion Instagram (Business Login) : jeton court → jeton 60 jours. */
+async function echangeInstagram(code: string): Promise<Echange> {
   const form = new URLSearchParams({ client_id: IG_APP_ID, client_secret: IG_APP_SECRET, grant_type: "authorization_code", redirect_uri: IG_REDIRECT_URI, code });
   let short: Record<string, unknown> = {};
   try {
@@ -82,8 +149,10 @@ export async function exchangeCode(code: string): Promise<Echange> {
 /**
  * Prolonge le jeton s'il expire dans moins de 20 jours (Meta : jeton d'au moins 24 h,
  * pas encore expiré). Renvoie ce qui s'est passé, pour le passage quotidien d'ig-sync.
+ * Jeton de la connexion unifiée : rien à prolonger ici (sa durée vient de la configuration).
  */
 export async function refreshIfDue(sb: SupabaseClient, acc: IgAccount): Promise<{ refreshed: boolean; error?: string }> {
+  if (jetonMeta(acc.token)) return { refreshed: false };
   const exp = acc.expires_at ? Date.parse(acc.expires_at) : 0;
   const last = Date.parse(acc.refreshed_at ?? "") || 0;
   if (exp && exp - Date.now() > 20 * 86400000) return { refreshed: false };
@@ -113,7 +182,7 @@ export async function accountTotals(token: string, igId: string): Promise<Totals
   const until = Math.floor(Date.now() / 1000);
   const since = until - 28 * 86400;
   const r = await getJson(
-    `${IG_GRAPH}/${igId}/insights?metric=reach,views,total_interactions,accounts_engaged&period=day&metric_type=total_value&since=${since}&until=${until}&access_token=${encodeURIComponent(token)}`,
+    `${graphe(token)}/${igId}/insights?metric=reach,views,total_interactions,accounts_engaged&period=day&metric_type=total_value&since=${since}&until=${until}&access_token=${encodeURIComponent(token)}`,
   );
   if (r.error) return { error: String((r.error as { message?: string }).message ?? "insights") };
   const by = new Map(((r.data as Val[] | undefined) ?? []).map((v) => [v.name, v]));
@@ -125,7 +194,7 @@ export type Split = { label: string; pct: number }[];
 export async function audience(token: string, igId: string): Promise<{ age: Split; gender: Split; city: Split; country: Split } | null> {
   const one = async (breakdown: string): Promise<Split> => {
     const r = await getJson(
-      `${IG_GRAPH}/${igId}/insights?metric=follower_demographics&period=lifetime&timeframe=this_month&metric_type=total_value&breakdown=${breakdown}&access_token=${encodeURIComponent(token)}`,
+      `${graphe(token)}/${igId}/insights?metric=follower_demographics&period=lifetime&timeframe=this_month&metric_type=total_value&breakdown=${breakdown}&access_token=${encodeURIComponent(token)}`,
     );
     const results = ((r.data as Val[] | undefined) ?? [])[0]?.total_value?.breakdowns?.[0]?.results ?? [];
     const total = results.reduce((s, x) => s + (x.value ?? 0), 0);
@@ -142,7 +211,7 @@ export async function audience(token: string, igId: string): Promise<{ age: Spli
 
 /** Stats privées d'un post (couverture, enregistrements, partages, vues). */
 export async function postInsights(token: string, mediaId: string): Promise<{ reach?: number; saves?: number; shares?: number; views?: number } | null> {
-  const ask = (metrics: string) => getJson(`${IG_GRAPH}/${mediaId}/insights?metric=${metrics}&access_token=${encodeURIComponent(token)}`);
+  const ask = (metrics: string) => getJson(`${graphe(token)}/${mediaId}/insights?metric=${metrics}&access_token=${encodeURIComponent(token)}`);
   // Toutes les mesures n'existent pas pour tous les formats : on retente plus court.
   let r = await ask("reach,saved,shares,views");
   if (r.error) r = await ask("reach,saved,shares");
@@ -155,7 +224,7 @@ export async function postInsights(token: string, mediaId: string): Promise<{ re
 /** Images de ses derniers posts (compte connecté) : id du post → adresse de l'image. */
 export async function ownMediaImages(token: string, igId: string, limit = 12): Promise<Map<string, string>> {
   const out = new Map<string, string>();
-  const list = await getJson(`${IG_GRAPH}/${igId}/media?fields=id,media_type,media_url,thumbnail_url&limit=${limit}&access_token=${encodeURIComponent(token)}`);
+  const list = await getJson(`${graphe(token)}/${igId}/media?fields=id,media_type,media_url,thumbnail_url&limit=${limit}&access_token=${encodeURIComponent(token)}`);
   if (list.error) return out;
   for (const m of (list.data as Record<string, unknown>[] | undefined) ?? []) {
     const src = postImage(m);
@@ -169,7 +238,7 @@ export async function ownMediaImages(token: string, igId: string, limit = 12): P
  * base du prix d'un reel (calculateur de prix, ligne Instagram du media kit).
  */
 export async function recentReels(token: string, igId: string): Promise<{ reelViews: number | null; reelReach: number | null; reels: number } | null> {
-  const list = await getJson(`${IG_GRAPH}/${igId}/media?fields=id,media_product_type,timestamp&limit=20&access_token=${encodeURIComponent(token)}`);
+  const list = await getJson(`${graphe(token)}/${igId}/media?fields=id,media_product_type,timestamp&limit=20&access_token=${encodeURIComponent(token)}`);
   if (list.error) return null;
   const reels = ((list.data as { id?: string; media_product_type?: string }[] | undefined) ?? [])
     .filter((m) => m.id && m.media_product_type === "REELS").slice(0, 8);

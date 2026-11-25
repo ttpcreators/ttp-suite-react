@@ -735,7 +735,7 @@ const lienConnexionInstagram: AdminTool = {
   founder: true,
   run: async (sb, _c, a) => {
     const secret = Deno.env.get("STATE_SIGNING_SECRET") ?? "";
-    if (!loginReady() || !secret) return fail("La connexion Instagram n'est pas réglée : secrets IG_APP_ID, IG_APP_SECRET, IG_REDIRECT_URI ou STATE_SIGNING_SECRET manquants.");
+    if (!loginReady() || !secret) return fail("La connexion Instagram n'est pas réglée : secrets IG_REDIRECT_URI, IG_CONFIG_ID + META_APP_SECRET (connexion unifiée) ou IG_APP_ID + IG_APP_SECRET, ou STATE_SIGNING_SECRET manquants.");
     const nom = str(a.createur, 80);
     const { data } = await sb.from("creators").select("id, name, status, ig").ilike("name", nom.replace(/[\\%_]/g, (m) => `\\${m}`)).limit(1);
     const c = (data as Json[] | null)?.[0];
