@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 // @ts-expect-error : module JavaScript d'Alfred, sans types.
-import { decider, heureReprise, lireReprise, lireSortie, messageAttente, messageEchec, oublierRepriseSi, VEILLE, VIGIE, quand, repriseDue } from "../passage.mjs";
+import { bilanConso, ligneConso, decider, heureReprise, lireReprise, lireSortie, messageAttente, messageEchec, oublierRepriseSi, VEILLE, VIGIE, quand, repriseDue } from "../passage.mjs";
 
 // Mercredi 12 novembre 2026, 12 h 56 (heure locale).
 const MAINTENANT = new Date(2026, 10, 12, 12, 56).getTime();
@@ -168,5 +168,29 @@ describe("Alfred : la reprise toute seule par l'écoute", () => {
     expect(existsSync(join(d, "etat", "reprise.json"))).toBe(true);
     oublierRepriseSi(d, brut);
     expect(existsSync(join(d, "etat", "reprise.json"))).toBe(false);
+  });
+});
+
+describe("la consommation de chaque passage", () => {
+  const sortie = JSON.stringify({ type: "result", subtype: "success", is_error: false, duration_ms: 84000, num_turns: 23, total_cost_usd: 0.4123, usage: { input_tokens: 1200, cache_read_input_tokens: 80000, cache_creation_input_tokens: 5000, output_tokens: 3000 } });
+  it("note une ligne par passage", () => {
+    const l = ligneConso(sortie, { mode: "la veille", modele: "sonnet", envois: 0, quand: new Date("2026-11-26T10:00:00Z") });
+    expect(l.split("\t")).toEqual(["2026-11-26T10:00:00.000Z", "la veille", "sonnet", "84", "23", "86200", "3000", "0.412", "0", "ok"]);
+  });
+  it("note un passage raté ou illisible sans planter", () => {
+    expect(ligneConso("pas du json", { mode: "le point du matin", modele: "opus" }).split("\t").slice(1)).toEqual(["le point du matin", "opus", "0", "0", "0", "0", "0.000", "0", "raté"]);
+  });
+  it("fait le bilan par sorte de passage", () => {
+    const maintenant = Date.parse("2026-11-26T12:00:00Z");
+    const lignes = [
+      ligneConso(sortie, { mode: "la veille", modele: "sonnet", envois: 0, quand: new Date("2026-11-26T10:00:00Z") }),
+      ligneConso(sortie, { mode: "la veille", modele: "sonnet", envois: 1, quand: new Date("2026-11-26T11:00:00Z") }),
+      ligneConso(sortie, { mode: "vieux", modele: "opus", envois: 1, quand: new Date("2026-10-01T11:00:00Z") }),
+    ].join("\n");
+    const b = bilanConso(lignes, { jours: 7, maintenant });
+    expect(b).toContain("2 passages");
+    expect(b).toContain("- la veille : 2 passage(s), 100 % des jetons, 84 s et 23 tours en moyenne, 1 sans rien envoyer à Marc");
+    expect(b).not.toContain("vieux");
+    expect(bilanConso("", { maintenant })).toContain("Aucun passage");
   });
 });

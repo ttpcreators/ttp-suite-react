@@ -86,6 +86,7 @@ if [[ "$1" != "--reponse" ]]; then
   garder etat/conversation.md 400
   garder etat/suivi.md 600
   garder etat/mises-a-jour.log 500
+  garder etat/conso.log 6000
   # Le journal de l'écoute reste ouvert par elle : raccourci sur place (sinon elle écrirait dans le vide).
   [ -f etat/ecoute.log ] && (( $(wc -l < etat/ecoute.log) > 3000 )) && { tail -n 3000 etat/ecoute.log > etat/ecoute.log.tmp && cat etat/ecoute.log.tmp > etat/ecoute.log; rm -f etat/ecoute.log.tmp; }
 fi
@@ -296,7 +297,7 @@ interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_factu
 # (trouvé le 2026-11-12). En plus, chaque commande Bash le ramène dans son dossier (plus bas).
 ici="/$PWD"
 allowed=("Read($ici/**)" "Edit($ici/etat/**)" "WebFetch" "WebSearch" "Skill" "Bash(node telegram.mjs telecharger:*)" "Bash(node telegram.mjs joindre:*)" "Bash(node telegram.mjs raccourcis)" "Bash(node telegram.mjs preparer:*)" "Bash(node telegram.mjs deposer:*)"
-  "Bash(node telegram.mjs piece-mail:*)" "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)" "Bash(node araignee.mjs:*)"
+  "Bash(node telegram.mjs piece-mail:*)" "Bash(node passage.mjs conso-bilan:*)" "Bash(node spark.mjs:*)" "Bash(node whatsapp.mjs:*)" "Bash(node araignee.mjs:*)"
   "mcp__legifrance")
 # mcp__legifrance : les codes, lois et décisions de justice, en lecture seule (fiches/juridique.md).
 denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash(spark:*)"
@@ -404,6 +405,8 @@ lancer() {
   # Déjà envoyé au fil de l'eau : Marc a eu sa réponse (au moins en partie).
   deja=0
   [ -f "$ENVOI/.deja-cite" ] && deja=1
+  # La consommation du passage (demande de Marc, 26 novembre 2026) : mesurer avant d'alléger.
+  node passage.mjs conso "$SORTIE" "$mode" "$modele" "$(( ${#envois} + deja ))" 2>> "$LOG" || true
 }
 
 rm -f "$ENVOI"/* "$ENVOI"/.deja-cite "$ENVOI"/.silence
