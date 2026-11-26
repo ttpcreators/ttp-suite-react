@@ -2854,7 +2854,7 @@ const brouillonPostInstagram: Tool = {
 const majChiffresMediakit: Tool = {
   name: "maj_chiffres_mediakit",
   title: "Mettre à jour les chiffres d'un media kit",
-  description: "Met à jour les CHIFFRES d'une plateforme du media kit d'un créateur (abonnés, engagement, vues moyennes, vues des stories), visibles aussitôt sur sa page ttpcreators.pro/mediakit. Ne touche à rien d'autre (bio, marques, tarifs, photos, autres réseaux). À n'appeler qu'après le « oui » de Marc sur les nouveaux chiffres, et seulement avec des chiffres relevés dans l'app (fiche_createur, section « Media kit », qui donne l'appel exact quand le kit est à corriger), jamais estimés. Un kit à corriger bloque les mails de prospection du créateur jusqu'à cette mise à jour. Engagement : celui de l'app, même base que le kit.",
+  description: "Met à jour les CHIFFRES d'une plateforme du media kit d'un créateur (abonnés, engagement, vues moyennes, vues des stories), visibles aussitôt sur sa page ttpcreators.pro/mediakit. Ne touche à rien d'autre (bio, marques, tarifs, photos, autres réseaux). À n'appeler qu'après le « oui » de Marc sur les nouveaux chiffres, ou par Alfred à la revue du 1er du mois selon ses règles (chiffres récents, écart raisonnable, bouton Annuler), et seulement avec des chiffres relevés dans l'app (fiche_createur, section « Media kit », qui donne l'appel exact quand le kit est à corriger), jamais estimés. Un kit à corriger bloque les mails de prospection du créateur jusqu'à cette mise à jour. Engagement : celui de l'app, même base que le kit.",
   write: true,
   founder: true,
   inputSchema: {
