@@ -8,9 +8,11 @@
 //                                                 la reprise (etat/reprise.json), écrit le message pour Marc
 //   node passage.mjs attente <mode> <origine>     code 3 (et le message pour Marc) si la limite court encore
 //   node passage.mjs reussi                       le passage a marché : plus de reprise prévue
+//   node passage.mjs conso <sortie.json> <mode> <modèle> <envois>   une ligne de plus dans etat/conso.log
+//   node passage.mjs conso-bilan [jours]          ce qui consomme, par sorte de passage (7 jours par défaut)
 // <origine> : « marc » (il vient d'écrire), « auto » (launchd, toutes les heures) ou « reprise »
 // (l'écoute relance une réponse remise à plus tard).
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -233,6 +235,68 @@ function remettreEnFile(here) {
   }
 }
 
+// ── La consommation de chaque passage (demande de Marc, 26 novembre 2026) ───────────────────
+// Mesurer avant d'alléger : une ligne par passage dans etat/conso.log (date, sorte de passage,
+// modèle, durée, tours, jetons, coût indicatif, fichiers envoyés à Marc), puis un bilan par sorte.
+
+/** Le dernier objet « result » de la sortie de Claude, ou null. */
+function resultat(brut) {
+  for (const ligne of String(brut ?? "").trim().split("\n").reverse()) {
+    try {
+      const o = JSON.parse(ligne);
+      if (o && o.type === "result") return o;
+    } catch {
+      // pas du JSON
+    }
+  }
+  return null;
+}
+
+/** Une ligne de etat/conso.log, séparée par des tabulations. */
+export function ligneConso(brut, { mode, modele, envois = 0, quand = new Date() }) {
+  const j = resultat(brut) ?? {};
+  const u = j.usage ?? {};
+  const entree = (Number(u.input_tokens) || 0) + (Number(u.cache_read_input_tokens) || 0) + (Number(u.cache_creation_input_tokens) || 0);
+  const champs = [
+    quand.toISOString(),
+    String(mode ?? "").replace(/\t/g, " "),
+    String(modele ?? ""),
+    Math.round((Number(j.duration_ms) || 0) / 1000),
+    Number(j.num_turns) || 0,
+    entree,
+    Number(u.output_tokens) || 0,
+    (Number(j.total_cost_usd) || 0).toFixed(3),
+    Number(envois) || 0,
+    j.subtype === "success" && !j.is_error ? "ok" : "raté",
+  ];
+  return champs.join("\t");
+}
+
+/** Le bilan par sorte de passage sur les `jours` derniers jours, trié par jetons. */
+export function bilanConso(texte, { jours = 7, maintenant = Date.now() } = {}) {
+  const depuis = maintenant - jours * 86400000;
+  const par = new Map();
+  for (const l of String(texte ?? "").split("\n")) {
+    const c = l.split("\t");
+    if (c.length < 10 || !(Date.parse(c[0]) >= depuis)) continue;
+    const m = par.get(c[1]) ?? { n: 0, secondes: 0, tours: 0, jetons: 0, cout: 0, vides: 0 };
+    m.n++;
+    m.secondes += Number(c[3]) || 0;
+    m.tours += Number(c[4]) || 0;
+    m.jetons += (Number(c[5]) || 0) + (Number(c[6]) || 0);
+    m.cout += Number(c[7]) || 0;
+    if ((Number(c[8]) || 0) === 0) m.vides++;
+    par.set(c[1], m);
+  }
+  const lignes = [...par.entries()].sort((a, b) => b[1].jetons - a[1].jetons);
+  const total = lignes.reduce((t, [, m]) => t + m.jetons, 0) || 1;
+  if (!lignes.length) return `Aucun passage noté sur ${jours} jour(s) (etat/conso.log).`;
+  return [
+    `Consommation d'Alfred, ${jours} derniers jours (${lignes.reduce((t, [, m]) => t + m.n, 0)} passages)`,
+    ...lignes.map(([mode, m]) => `- ${mode} : ${m.n} passage(s), ${Math.round((m.jetons / total) * 100)} % des jetons, ${Math.round(m.secondes / m.n)} s et ${Math.round(m.tours / m.n)} tours en moyenne, ${m.vides} sans rien envoyer à Marc, coût indicatif ${m.cout.toFixed(2)} $`),
+  ].join("\n");
+}
+
 function main() {
   const here = dirname(fileURLToPath(import.meta.url));
   const [cmd, ...args] = process.argv.slice(2);
@@ -245,6 +309,11 @@ function main() {
     return console.log(`${r.type}\t${r.raison.replace(/\t/g, " ")}`);
   }
   if (cmd === "texte") return process.stdout.write(lireSortie(lire(args[0])).texte);
+  if (cmd === "conso") {
+    const [sortie, mode, modele, envois] = args;
+    return appendFileSync(join(here, "etat", "conso.log"), ligneConso(lire(sortie), { mode, modele, envois: Number(envois) || 0 }) + "\n");
+  }
+  if (cmd === "conso-bilan") return console.log(bilanConso(lire(join(here, "etat", "conso.log")), { jours: Number(args[0]) || 7, maintenant }));
   if (cmd === "reussi") return rmSync(fichierReprise, { force: true });
   if (cmd === "attente") {
     const [mode, origine] = args;
