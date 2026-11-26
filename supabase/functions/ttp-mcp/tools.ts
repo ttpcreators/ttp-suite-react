@@ -2191,17 +2191,22 @@ const statutScouting: Tool = {
 const avancerCollab: Tool = {
   name: "avancer_collab",
   title: "Changer l'étape d'une collab",
-  description: "Passe une collab à une étape (1 Signature, 2 Brief transmis, 3 Concept validé, 4 Tournage, 5 Validation marque, 6 Publication, 7 Stats à 7 jours, 8 Facture envoyée, 9 Paiement marque reçu, 10 Créateur payé, 11 Bilan).",
+  description: "Passe une collab à une étape (1 Signature, 2 Brief transmis, 3 Concept validé, 4 Tournage, 5 Validation marque, 6 Publication, 7 Stats à 7 jours, 8 Facture envoyée, 9 Paiement marque reçu, 10 Créateur payé, 11 Bilan). Une collab n'avance que vers l'avant ; revenir à une étape d'avant (bouton Annuler, correction de Marc) demande `revenir` = true. Renvoie l'étape d'avant, pour pouvoir annuler.",
   write: true,
-  inputSchema: { type: "object", properties: { collab: { type: "string", description: "Id de la collab (outil collabs)" }, etape: { type: "number" } }, required: ["collab", "etape"], additionalProperties: false },
+  inputSchema: { type: "object", properties: { collab: { type: "string", description: "Id de la collab (outil collabs)" }, etape: { type: "number" }, revenir: { type: "boolean", description: "true pour revenir à une étape d'avant (Annuler, correction de Marc)" } }, required: ["collab", "etape"], additionalProperties: false },
   run: async (sb, _c, a) => {
     const id = str(a.collab, 40);
     if (!/^[0-9a-f-]{36}$/i.test(id)) return fail("Id de collab invalide.");
     const step = int(a.etape, 0, 1, 11);
     if (!step) return fail("Étape entre 1 et 11.");
+    const { data: avant } = await sb.from("collabs").select("step").eq("id", id).maybeSingle<{ step: number | null }>();
+    if (!avant) return fail("Collab introuvable.");
+    const ancienne = Number(avant.step) || 1;
+    if (step === ancienne) return ok(`Déjà à l'étape ${step} « ${COLLAB_STEPS[step - 1]} » : rien de changé.`);
+    if (step < ancienne && a.revenir !== true) return fail(`La collab est déjà à l'étape ${ancienne} « ${COLLAB_STEPS[ancienne - 1]} », plus loin que ${step} : rien de changé (revenir: true seulement pour annuler ou sur la demande de Marc).`);
     const { data, error } = await sb.from("collabs").update({ step, updated_at: new Date().toISOString() }).eq("id", id).select("brand, creator").maybeSingle<{ brand: string; creator: string | null }>();
     if (error || !data) return fail("Collab introuvable ou non modifiée.");
-    return ok(`${data.brand} × ${titleCase(data.creator)} : étape ${step} « ${COLLAB_STEPS[step - 1]} ».\n${lienApp("collabs", id)}`);
+    return ok(`${data.brand} × ${titleCase(data.creator)} : étape ${step} « ${COLLAB_STEPS[step - 1]} » (avant : étape ${ancienne} « ${COLLAB_STEPS[ancienne - 1]} »).\n${lienApp("collabs", id)}`);
   },
 };
 
