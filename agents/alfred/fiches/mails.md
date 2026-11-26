@@ -164,15 +164,8 @@ Choix de Marc : chaque personne intéressante qui lui écrit entre dans la page 
 
 ## Les nouvelles des marques sur une collab
 
-Demande de Marc, 23 novembre 2026 : un mail de marque qui fait avancer une collab ne doit pas rester sans suite dans l'app. Quand tu lis (point, veille, boîte zéro) un mail d'une marque ou de son agence qui dit en substance :
-- « paiement envoyé », « virement fait », « c'est réglé » : étape 9 (Paiement marque reçu) ;
-- « vidéo validée », « c'est bon pour nous », « go pour publier » : étape 5 (Validation marque) ;
-- « c'est publié », « le post est en ligne » : étape 6 (Publication) ;
-- « voici les stats », une capture ou un fichier de résultats : étape 7 (Stats à 7 jours) ;
-
-tu retrouves la collab (`collabs` : la marque, le créateur, la campagne du fil) et tu déposes une proposition avec `proposer_action` : `agent` « Alfred », `type` « avancer_collab », `collab` (son id), `etape`, `contenu` = la phrase du mail qui le prouve, avec l'expéditeur et la date, et `contexte` en une ligne. Marc la valide d'un clic dans « À valider » : l'app fait avancer la collab, rien d'autre ne part. Tu n'appelles pas `avancer_collab` toi même pour ces quatre cas.
-- La collab est déjà à cette étape ou plus loin : l'outil refuse, tu n'insistes pas. Déjà proposée : l'outil le dit, tu ne redéposes rien.
-- Plusieurs collabs possibles (même marque, plusieurs créateurs) ou aucune : pas de proposition, une ligne à Marc avec la question.
-- Un paiement annoncé ne passe jamais une facture en payée : la facture suit toujours « Les paiements reçus » (fiche argent), avec son propre bouton.
+Demande de Marc, 23 puis 26 novembre 2026 : un mail de marque (ou un message du créateur) qui fait avancer une collab ne reste jamais sans suite dans l'app. Quand tu lis (point, veille, boîte zéro, WhatsApp) qu'une étape est passée (« vidéo validée », « c'est en ligne », « voici les stats », « j'ai tourné »…), tu retrouves la collab (`collabs` : la marque, le créateur, la campagne du fil) et tu la fais avancer toi même avec `avancer_collab`, selon les preuves de « Tenir les collabs à jour ». Puis une ligne à Marc sous « Dans l'app », avec la phrase qui le prouve, l'expéditeur et la date, et le bouton Annuler.
+- **L'argent reste à Marc** : « paiement envoyé », « virement fait » n'avance pas la collab toi même : `proposer_action` (`type` « avancer_collab », `etape` 9, `contenu` = la phrase du mail, avec l'expéditeur et la date), Marc valide d'un clic dans « À valider ». Et la facture suit toujours « Les paiements reçus » (fiche argent), avec son propre bouton.
+- La collab est déjà à cette étape ou plus loin : l'outil ne change rien, tu n'insistes pas.
+- Plusieurs collabs possibles (même marque, plusieurs créateurs) ou aucune : rien n'avance, une ligne à Marc avec la question.
 - La suite de chaque étape ne change pas : la réponse à la marque, le contrôle de la publication (voir « Le contrôle du jour de publication »), le bilan après les stats (voir « Les bilans et les renouvellements »).
-

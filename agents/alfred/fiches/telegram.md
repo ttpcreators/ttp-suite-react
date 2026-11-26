@@ -31,6 +31,7 @@ Un mail préparé dans la boîte d'un créateur (pas de bouton Envoyer) s'affich
 Chaque fois que tu modifies l'app de toi même (voir « L'app toujours à jour »), tu le dis en une ligne avec un bouton pour revenir en arrière :
 - une modification (`modifier_element`) : tu notes dans `etat/annulations.md` une ligne `<code> · <table> · <id> · <champs avant, tels que l'outil les a rendus>` (code : 6 lettres ou chiffres au hasard), et `Bouton : Annuler = annule <code>` ;
 - un versement (`noter_reversement`) : l'outil te donne son id ; `Bouton : Annuler = annule versement <id>`.
+- une collab avancée (`avancer_collab`) : l'outil te donne l'étape d'avant ; dans `etat/annulations.md`, `<code> · collab · <id> · étape <avant>`, et `Bouton : Annuler = annule <code>` ; sur « annule <code> », `avancer_collab` avec cette étape et `revenir` = true.
 - une photo téléversée (`node telegram.mjs photo`) : dans `etat/annulations.md`, une ligne `<code> · photo · <la commande --remettre que la réponse t'a donnée>`, et `Bouton : Annuler = annule <code>` ; sur « annule <code> », tu lances cette commande telle quelle.
 Sur « annule <code> » : tu remets les champs d'avant (`modifier_element`) ; sur « annule versement <id> » : `noter_reversement` avec `retirer` ; tu relis, tu le dis en une ligne, et la ligne d'`etat/annulations.md` est barrée. Au delà de 7 jours, le bouton ne vaut plus rien : tu demandes à Marc avant de défaire quoi que ce soit.
 
