@@ -333,6 +333,12 @@ else
     for t in ${=sur_oui}; do denied+=("$ttp$t"); done
   fi
 fi
+# La revue du 1er du mois (demande de Marc le 2026-11-26) : Alfred met à jour lui même les chiffres des
+# media kits, relevés par l'app, selon les règles de fiches/argent.md (sinon il faut le « oui » de Marc).
+if [[ "$mode" == "la revue des tarifs du mois" ]]; then
+  denied=("${(@)denied:#${ttp}maj_chiffres_mediakit}")
+  allowed+=("${ttp}maj_chiffres_mediakit")
+fi
 # L'examen (demande de Marc le 2026-11-18) : des cas inventés, sans aucun outil de l'app ni
 # commande ; les réponses attendues (examen/attendu.md) ne sont lisibles qu'à la correction.
 if [[ "$mode" == "l'examen de la semaine" || "$mode" == "la correction de l'examen" ]]; then
