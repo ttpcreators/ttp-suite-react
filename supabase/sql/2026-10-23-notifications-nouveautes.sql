@@ -1,5 +1,11 @@
 -- ════════════════════════════════════════════════════════════════════════════
 -- Titre Supabase : « Nouveautés · repères « nouveau » agence ↔ créateur »
+-- NE PLUS RELANCER (note du 27/11) : todos_activity et la règle activity_events_read sont
+-- remplacées par 2026-11-24-reperes-taches-internes.sql puis par la vague 1
+-- (2026-11-27-taches-pour-createur.sql, 2026-11-27-reperes-depots-infos.sql), et
+-- activity_actor, activity_actor_name par 2026-11-27-acteur-connecteur.sql. Relancé, il
+-- les remettrait dans leur version du 23/10, sans aucune erreur : les créateurs reliraient
+-- les repères des tâches internes, et les écritures d'Alfred ne laisseraient plus de repère.
 -- 2026-10-23 · Quand l'AGENCE écrit sur un objet partagé avec un créateur (tâche :
 -- texte, description, sous-tâche, point d'avancement ; idée ; brief ; remarque ou statut
 -- d'un mail), LE CRÉATEUR reçoit un repère « nouveau » ; quand le CRÉATEUR écrit,
@@ -19,7 +25,8 @@
 -- Regroupement : un même objet, même type de changement, pas encore lu, modifié il y
 -- a moins de 10 minutes → la ligne existante est mise à jour (compteur + extrait), pas
 -- de nouvelle ligne.
--- Relançable sans risque. L'app marche avant ce SQL (aucun repère, aucune erreur).
+-- Était relançable sans risque jusqu'au 24/11 (voir plus haut). L'app marche avant ce SQL
+-- (aucun repère, aucune erreur).
 -- ════════════════════════════════════════════════════════════════════════════
 
 create table if not exists public.activity_events (

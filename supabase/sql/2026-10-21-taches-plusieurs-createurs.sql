@@ -2,6 +2,12 @@
 -- 2026-10-21 : une tâche de la To-do peut concerner PLUSIEURS créateurs.
 -- Titre Supabase : « To-do · plusieurs créateurs »
 -- ----------------------------------------------------------------------------
+-- NE PLUS RELANCER (note du 27/11) : ses règles todos_read, todos_update et todos_delete
+-- sont remplacées par 2026-11-24-taches-internes-privees.sql, puis todos_delete et la garde
+-- todos_creators_guard par 2026-11-27-taches-pour-createur.sql (vague 1). Relancé, il les
+-- remettrait dans leur version du 21/10, sans aucune erreur : les créateurs reliraient les
+-- tâches internes de l'agence, et la vague 1 serait défaite.
+--
 -- `todos.creators` (text[]) = tous les créateurs de la tâche. `todos.creator` reste
 -- le PREMIER de la liste : tous les lecteurs existants (notifications, corbeille,
 -- planning, connecteur Claude…) continuent de marcher sans changement.
@@ -21,7 +27,7 @@
 -- 4) Pièces jointes : un créateur ouvre aussi celles des tâches partagées avec lui.
 -- 5) Reprise : creators = {creator} pour les tâches existantes.
 -- Sans ce SQL, l'app marche comme avant (un seul créateur par tâche).
--- Déjà foldé dans SETUP.sql. Peut être relancé sans risque.
+-- Déjà foldé dans SETUP.sql. Était relançable sans risque jusqu'au 24/11 (voir plus haut).
 -- ============================================================================
 
 alter table public.todos add column if not exists creators text[] not null default '{}';
