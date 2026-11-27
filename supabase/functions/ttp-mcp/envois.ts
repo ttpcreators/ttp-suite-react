@@ -26,7 +26,6 @@ import {
   MAX_PROGRAMMES, REGLES, adresses, cleSociete, dansLaFenetre, etatPalier, jourParis, ligneFile, planifier, quandCourt, raisonDeBloquer,
   type EnvoiRecent, type EtatPalier, type LigneFile, type NePlusContacter,
 } from "../_shared/fileEnvoi.ts";
-import { makePayload, sendTo } from "../_shared/push.ts";
 
 type Json = Record<string, unknown>;
 const ok = (text: string) => ({ text });
@@ -379,16 +378,32 @@ async function etatCoupeCircuit(sb: SupabaseClient, now = new Date()): Promise<E
   return { ...etatPalier(envoyes, rebonds, minutes), envoyes, rebonds };
 }
 
-/** Pause : la note sur les mails en attente, et une seule alerte (push) aux fondateurs par pause. */
+/**
+ * Alerte de pause sur le Telegram de Gianni seulement (décision de Gianni du 27/11 : pas Marc,
+ * pas de notification dans l'app). Secrets Supabase GIANNI_TELEGRAM_BOT_TOKEN et
+ * GIANNI_TELEGRAM_CHAT_ID ; sans eux, pas d'alerte (la pause se voit dans file_envoi).
+ */
+async function telegramGianni(texte: string): Promise<boolean> {
+  const bot = Deno.env.get("GIANNI_TELEGRAM_BOT_TOKEN") ?? "";
+  const chat = Deno.env.get("GIANNI_TELEGRAM_CHAT_ID") ?? "";
+  if (!bot || !chat) return false;
+  const r = await fetch(`https://api.telegram.org/bot${bot}/sendMessage`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ chat_id: chat, text: texte }),
+    signal: AbortSignal.timeout(4000),
+  }).catch(() => null);
+  return !!r?.ok;
+}
+
+/** Pause : la note sur les mails en attente, et une seule alerte Telegram à Gianni par jour. */
 async function signalerPause(sb: SupabaseClient, message: string): Promise<void> {
   const jour = jourParis(new Date());
   const note = `en pause le ${jour} : ${message}`.slice(0, 300);
   const { data } = await sb.from("envoi_file").update({ erreur: note }).eq("statut", "en_attente")
     .or(`erreur.is.null,erreur.not.ilike.en pause le ${jour}*`).select("id");
   if (!(data as Json[] | null)?.length) return;
-  await sendTo(sb, { agency: true, audience: "founders" }, makePayload({
-    kind: "team", title: "Envois de prospection en pause", body: message, url: "/", tag: `ttp-coupe-circuit-${jour}`,
-  })).catch(() => undefined);
+  await telegramGianni(`⛔ TTP · envois de prospection en pause\n${message}`);
 }
 
 type Ligne = { id: string; boite: string; brouillon: string; destinataires: string; objet: string; createur: string | null; demarrer_sequence: boolean; essais: number; prevu_a: string; cree_par?: string | null; valide_le?: string | null };
