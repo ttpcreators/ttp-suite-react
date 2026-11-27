@@ -17,7 +17,7 @@
 
 import { CIBLES_MENSUELLES, VOLUMES_SEMAINE } from "./strategie.ts";
 import { amountOf } from "./reversements.ts";
-import { readJournal } from "./conformite.ts";
+import { incidentCompte, readJournal } from "./conformite.ts";
 
 export type Canal = "email" | "linkedin" | "instagram" | "whatsapp" | "tel" | "autre";
 export const CANAUX: { key: Canal; label: string; cible: number | null }[] = [
@@ -308,7 +308,8 @@ export async function chargerTableau(sb: Sb, now: Date, quotes: TableauIn["quote
     events: events.data ?? [],
     quotes,
     // Clé absente du blob (ig-sync pas encore déployé) : « non mesuré », jamais 0 inventé.
-    incidents: journalConformite == null ? null : Object.values(readJournal(journalConformite)).map((e) => ({ at: e.at })),
+    // Une exclusivité encore « à confirmer » n'est pas un incident (elle se vérifie d'abord).
+    incidents: journalConformite == null ? null : Object.values(readJournal(journalConformite)).filter((e) => incidentCompte(e.type)).map((e) => ({ at: e.at })),
     signatures: ids.map((id) => {
       const c = byId.get(id) ?? {};
       return { reached_at: dates.get(id), cachet: c.cachet, creator: c.creator, brand: c.brand };
