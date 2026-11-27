@@ -52,6 +52,11 @@
     lien_invalide: ["Ce lien n'est plus valable", "Demande un nouveau lien à l'agence, ou connecte ton Instagram depuis ton espace TTP."],
     agence: ["Problème de notre côté", "Ce n'est pas toi : l'agence est prévenue et règle ça. Tu pourras réessayer ensuite."]
   };
+  // En plus du message, propre au lien : Meta renvoie « refus » aussi quand on quitte un écran
+  // d'erreur (compte pas encore ajouté chez Meta, par exemple).
+  var AIDE = {
+    refus: "Instagram t'a montré une erreur au lieu du bouton « Autoriser » ? Ce n'est pas un refus : préviens l'agence, elle vérifie ton compte avec toi."
+  };
   if (q.get("statut") === "ok") {
     titre.textContent = "Instagram connecté ✓";
     var compte = q.get("compte") || "";
@@ -64,6 +69,7 @@
     var m = Object.prototype.hasOwnProperty.call(MESSAGES, code) ? MESSAGES[code] : MESSAGES.agence;
     titre.textContent = m[0];
     para([m[1]]);
+    if (Object.prototype.hasOwnProperty.call(AIDE, code)) para([AIDE[code]]);
     var r = q.get("r") || "";
     if (/^[A-Za-z0-9_-]{10,400}\.[A-Za-z0-9_-]{10,100}$/.test(r) && code !== "agence" && code !== "pas_autorise" && code !== "lien_invalide") {
       var a = document.createElement("a");

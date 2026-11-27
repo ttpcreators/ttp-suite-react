@@ -2,12 +2,15 @@
 // monthly-backup/index.ts : sauvegarde mensuelle envoyée par mail aux fondateurs.
 // ----------------------------------------------------------------------------
 // Une archive .zip avec :
-//   • un CSV par table utile (contacts, roster, collabs, briefs, factures, to-do,
-//     planning, scouting, gifting, documents…), lisible dans Excel ;
+//   • un CSV par table du travail de l'agence (contacts, roster, collabs, briefs,
+//     factures, to-do, mails, DM, liste « ne plus contacter », mémoire d'Alfred…),
+//     lisible dans Excel. La liste complète, et les tables exclues exprès (jetons,
+//     quotas, journaux, caches) : _shared/backupTables.ts ; une table que la liste ne
+//     classe pas est signalée dans le mail (contrôle des tables en base) ;
 //   • les réglages de l'agence (blob __app_state__) en JSON, SANS le coffre des mots
 //     de passe (credVault) ;
 //   • les PDF des media kits publiés sur le site (créateurs + agence) ;
-//   • un LISEZMOI.txt.
+//   • un LISEZMOI.txt, qui dit aussi ce qui n'est pas dans l'archive.
 // L'archive est aussi rangée dans Storage, bucket PRIVÉ « backups » (aucune politique :
 // seul le serveur y accède ; les membres de l'agence ne voient pas les factures),
 // et le mail contient un lien de téléchargement valable 30 jours. Si l'archive dépasse
@@ -34,32 +37,51 @@ import { readAppState } from "../_shared/appState.ts";
 import { backupMonth, mediakitPages, mediakitSlug, mimeMessage, pdfLinksIn, safeAppState, toCsv } from "../_shared/backup.ts";
 import { DriveFail, ensureFolder, putFile, type DriveError } from "../_shared/drive.ts";
 import { BACKUP_STATUS_KEY, statusFromResult, type BackupResult, type BackupStatus } from "../_shared/backupStatus.ts";
+import { fichierCsv, nomTable, type Schema, TABLES_SAUVEES, tablesDeLApi, tablesNonClassees, type TableSauvee, texteExclusions } from "../_shared/backupTables.ts";
 
 const SITE = "https://ttpcreators.pro";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
 const ATTACH_MAX = 20 * 1024 * 1024;
 const PDF_MAX = 15 * 1024 * 1024;
 
-/** Tables sauvegardées (les jetons de connexion, abonnements push et quotas n'y sont jamais). */
-const TABLES = [
-  "contacts", "creators", "collabs", "collab_steps", "briefs", "invoices", "todos", "todo_routines", "events",
-  "gifting", "documents", "ideas", "prospects", "creator_pool", "athlete_pool", "creator_roadmap",
-  "creator_mail_settings", "creator_mail_status_log", "creator_mail_notes", "agency_mediakit", "email_sequences",
-];
-
 type Sb = ReturnType<typeof getServiceClient>;
 
-/** Lignes d'une table. `partial` : la lecture s'est arrêtée sur une erreur (table absente,
- *  illisible, ou coupée en route) : la sauvegarde le dit au lieu de passer pour complète. */
-async function allRows(sb: Sb, table: string): Promise<{ rows: Record<string, unknown>[]; partial: boolean }> {
+/** Lignes d'une table (schéma public ou agent). `partial` : la lecture s'est arrêtée sur une
+ *  erreur (table absente, illisible, ou coupée en route) : la sauvegarde le dit au lieu de
+ *  passer pour complète. */
+async function allRows(sb: Sb, t: TableSauvee): Promise<{ rows: Record<string, unknown>[]; partial: boolean }> {
   const out: Record<string, unknown>[] = [];
+  const cols = t.colonnes ?? "*";
   for (let from = 0; from < 200_000; from += 1000) {
-    const { data, error } = await sb.from(table).select("*").range(from, from + 999);
+    const q = t.schema === "public" ? sb.from(t.table).select(cols) : sb.schema(t.schema).from(t.table).select(cols);
+    const { data, error } = await q.range(from, from + 999);
     if (error) return { rows: out, partial: true };
-    out.push(...((data ?? []) as Record<string, unknown>[]));
+    // Colonnes choisies à l'exécution : le type déduit par supabase-js ne veut rien dire ici.
+    out.push(...((data ?? []) as unknown as Record<string, unknown>[]));
     if (!data || data.length < 1000) break;
   }
   return { rows: out, partial: false };
+}
+
+/**
+ * Tables réellement en base dans un schéma (description OpenAPI de l'API, clé service),
+ * au format de nomTable. null si l'API ne répond pas comme prévu : le contrôle est sauté.
+ */
+async function tablesEnBase(schema: Schema): Promise<string[] | null> {
+  const url = Deno.env.get("SUPABASE_URL");
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return null;
+  try {
+    const r = await fetch(`${url}/rest/v1/`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}`, Accept: "application/openapi+json", ...(schema === "public" ? {} : { "Accept-Profile": schema }) },
+      signal: AbortSignal.timeout(15_000),
+    });
+    if (!r.ok) return null;
+    const noms = tablesDeLApi(await r.json());
+    return noms ? noms.map((table) => nomTable({ schema, table })) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function founderEmails(sb: Sb): Promise<string[]> {
@@ -132,14 +154,29 @@ async function runBackup(sb: Sb, now: Date): Promise<Out> {
   const files: Record<string, Uint8Array> = {};
   const counts: { name: string; n: string }[] = [];
 
-  // 1) Tables → CSV
+  // 1) Tables → CSV (liste complète : _shared/backupTables.ts)
   const missing: string[] = []; // ce qui manque ou est incomplet dans cette sauvegarde
-  for (const t of TABLES) {
+  for (const t of TABLES_SAUVEES) {
+    const nom = nomTable(t);
     const { rows, partial } = await allRows(sb, t);
-    if (partial) missing.push(rows.length ? `${t} (incomplète)` : t);
+    if (partial) missing.push(rows.length ? `${nom} (incomplète)` : nom);
     if (partial && !rows.length) continue;
-    files[`donnees/${t}.csv`] = strToU8(toCsv(rows));
-    counts.push({ name: t, n: `${rows.length} ligne${rows.length > 1 ? "s" : ""}${partial ? " · incomplète" : ""}` });
+    files[fichierCsv(t)] = strToU8(toCsv(rows));
+    counts.push({ name: nom, n: `${rows.length} ligne${rows.length > 1 ? "s" : ""}${partial ? " · incomplète" : ""}` });
+  }
+
+  // 1 bis) Contrôle : une table en base que la liste ne classe pas (ni sauvegardée, ni exclue
+  // exprès) n'est pas dans l'archive : le mail et l'état de la sauvegarde le disent.
+  const nonClassees: string[] = [];
+  let controle = true;
+  for (const schema of ["public", "agent"] as const) {
+    const enBase = await tablesEnBase(schema);
+    if (!enBase) {
+      controle = false;
+      console.error("monthly-backup contrôle des tables illisible", schema);
+      continue;
+    }
+    nonClassees.push(...tablesNonClassees(enBase));
   }
 
   // 2) Réglages de l'agence (sans le coffre)
@@ -178,9 +215,12 @@ async function runBackup(sb: Sb, now: Date): Promise<Out> {
   files["LISEZMOI.txt"] = strToU8(
     `Sauvegarde TTP Suite de ${month}.\r\n\r\n` +
       "donnees/ : un fichier CSV par liste de l'app (ouvrir avec Excel ou Numbers ; séparateur point-virgule).\r\n" +
+      "donnees/agent/ : la mémoire, les leçons et le travail d'Alfred.\r\n" +
       "reglages-agence.json : réglages de l'agence (factures, contrats, notes…), sans le coffre des mots de passe.\r\n" +
       "media-kits/ : les media kits publiés sur ttpcreators.pro (créateurs et agence).\r\n\r\n" +
-      "Document confidentiel : coordonnées de contacts et données de facturation.\r\n",
+      `${texteExclusions()}\r\n` +
+      (nonClassees.length ? `\r\nAttention : tables nouvelles en base, pas encore classées, donc pas sauvegardées : ${nonClassees.join(", ")}.\r\n` : "") +
+      "\r\nDocument confidentiel : coordonnées de contacts et données de facturation.\r\n",
   );
 
   const zip = zipSync(files, { level: 6 });
@@ -238,11 +278,15 @@ async function runBackup(sb: Sb, now: Date): Promise<Out> {
   if (!to.length) return { status: 409, body: { error: "aucun_destinataire", drive } };
   const attach = zip.length <= ATTACH_MAX;
   const mb = (zip.length / 1024 / 1024).toFixed(1).replace(".", ",");
+  // État de la sauvegarde : ce qui n'a pas pu être lu, et les tables pas classées.
+  const manque = [...missing, ...nonClassees.map((n) => `${n} (table pas classée)`)];
   const html =
     `<p>Bonjour,</p><p>Voici la sauvegarde mensuelle de TTP Suite (${month}).` +
     (attach ? " L'archive est jointe à ce mail." : ` L'archive fait ${mb} Mo : trop lourde pour être jointe, elle est à télécharger avec le lien ci-dessous.`) +
     `</p>` +
     (missing.length ? `<p style="color:#b00020"><b>Sauvegarde incomplète.</b> Non lu ce jour-là : ${missing.join(", ")}. Relance « Envoyer maintenant » dans Paramètres.</p>` : "") +
+    (nonClassees.length ? `<p style="color:#b00020"><b>Tables pas sauvegardées.</b> Nouvelles en base, pas encore classées : ${nonClassees.join(", ")}. À ajouter à la liste de la sauvegarde (_shared/backupTables.ts).</p>` : "") +
+    (controle ? "" : `<p style="color:#777;font-size:12px">Contrôle des tables en base impossible ce jour-là : la liste de l'app fait foi.</p>`) +
     (link ? `<p><a href="${link}">Télécharger la sauvegarde (${mb} Mo)</a> · lien valable 30 jours.</p>` : "") +
     driveNote +
     `<table style="border-collapse:collapse;font-size:13px">${counts.map((c) => `<tr><td style="padding:2px 12px 2px 0">${c.name}</td><td style="padding:2px 0;color:#555">${c.n}</td></tr>`).join("")}</table>` +
@@ -250,7 +294,7 @@ async function runBackup(sb: Sb, now: Date): Promise<Out> {
   const raw = mimeMessage({
     from: `TTP Suite <partnerships@${AGENCY_DOMAIN}>`,
     to,
-    subject: `Sauvegarde TTP Suite · ${month}${missing.length ? " · incomplète" : ""}`,
+    subject: `Sauvegarde TTP Suite · ${month}${manque.length ? " · incomplète" : ""}`,
     html,
     attachments: attach ? [{ filename: name, mimeType: "application/zip", bytes: zip }] : [],
   });
@@ -266,5 +310,5 @@ async function runBackup(sb: Sb, now: Date): Promise<Out> {
     console.error("monthly-backup send", sent.status, (await sent.text()).slice(0, 300));
     return { status: 502, body: { error: "envoi_echoue", stored: !up.error, drive } };
   }
-  return { status: 200, body: { ok: true, month, files: Object.keys(files).length, bytes: zip.length, attached: attach, recipients: to.length, missing, drive } };
+  return { status: 200, body: { ok: true, month, files: Object.keys(files).length, bytes: zip.length, attached: attach, recipients: to.length, missing: manque, drive } };
 }

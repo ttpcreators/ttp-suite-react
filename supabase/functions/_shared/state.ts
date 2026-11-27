@@ -5,13 +5,15 @@
 //
 // Le state est signé HMAC-SHA256 avec STATE_SIGNING_SECRET (secret serveur, JAMAIS
 // exposé au front). Format : base64url(payloadJson) + "." + base64url(hmac).
-// Payload : { origin, nonce, iat }. TTL 10 min. Comparaison à temps constant.
+// Payload : { origin, nonce, iat }. TTL 10 min par défaut ; l'appelant peut en passer
+// une autre à verifyState (ig-callback : 30 min pour un départ par lien, voir
+// _shared/igRetour.ts). Comparaison à temps constant.
 //
 // signState() est appelé par google-connect-url / ig-connect (serveur) ;
 // verifyState() par google-oauth-callback / ig-callback. Le front ne signe RIEN : il reçoit l'URL déjà signée.
 // ============================================================================
 
-const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+export const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 export interface StatePayload {
   origin: string;

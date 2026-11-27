@@ -106,6 +106,9 @@ L'assistant n'a que la clé publique : il écrit le SQL, Marc le lance. L'app do
    commentaire qui renvoie au fichier daté.
 3. **La sécurité** : nouvelle table = RLS activée, lecture large et écriture stricte
    (`is_agency() or creator = my_creator()`), jamais `creator is null` dans une écriture.
+   Nouvelle table = aussi la classer pour la sauvegarde mensuelle
+   (`supabase/functions/_shared/backupTables.ts` : sauvegardée, ou exclue avec sa raison),
+   sinon le build échoue.
 4. **Le repli dans l'app** : tant que la colonne n'existe pas, Supabase répond une erreur
    (code `42703` ou `PGRST204`, message qui cite la colonne). Détecter ce cas et relire ou
    écrire sans la colonne. Modèles :
