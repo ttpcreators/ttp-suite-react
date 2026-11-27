@@ -37,6 +37,13 @@ describe("état de la sauvegarde mensuelle", () => {
     expect(backupStatusLine(s, NOW).text).toBe("Dernière sauvegarde : 1 nov. à 03:00 · échec : Google n'est pas connecté");
   });
 
+  it("mail gardé faute de destinataire sûr : la raison en français", () => {
+    expect(backupStatusLine(statusFromResult(START, END, "cron", { error: "destinataires_inconnus" }), NOW).text).toBe(
+      "Dernière sauvegarde : 1 nov. à 03:00 · échec : aucune adresse de la liste des destinataires n'est un compte fondateur",
+    );
+    expect(backupErrorText("reglages_illisibles")).toBe("réglages illisibles, destinataires inconnus");
+  });
+
   it("erreur inconnue : message court générique", () => {
     expect(backupErrorText("TypeError: boom")).toBe("erreur inattendue");
     expect(backupErrorText(undefined)).toBe("erreur inattendue");

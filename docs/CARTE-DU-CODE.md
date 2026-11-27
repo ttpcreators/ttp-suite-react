@@ -298,7 +298,7 @@ hiver : la fonction ne garde que le bon passage. Hors fonction : `ttp-app-state-
 | `activityText.ts` | Phrase lisible du journal de l'équipe (aussi importé par l'app) | `team-notify`, `useNotifications.ts`, `Activite.tsx` |
 | `state.ts` | `state` OAuth signé (anti-CSRF, 10 min par défaut) | fonctions `*-connect`, `*-callback`, `google-*` |
 | `igRetour.ts` | Retour d'Instagram : 30 min pour un départ par lien (10 min depuis l'app), tâche interne « Aider … à connecter Instagram » après 2 essais ratés en 24 h | `ig-callback` |
-| `backupTables.ts` | Sauvegarde mensuelle : chaque table sauvegardée ou exclue exprès (raison dans le LISEZMOI), contrôle des tables en base ; le test fait échouer le build si une table créée dans `supabase/` n'est pas classée | `monthly-backup` |
+| `backupTables.ts` | Sauvegarde mensuelle : chaque table sauvegardée (lue page par page dans l'ordre de sa clé primaire, `lireTable`) ou exclue exprès (raison dans le LISEZMOI), contrôle des tables en base ; le test fait échouer le build si une table créée dans `supabase/` n'est pas classée | `monthly-backup` |
 | `instagram.ts`, `instagram-login.ts` | API de Meta (lecture des comptes pro, connexion d'un créateur, quota) | fonctions `ig-*` et radars |
 | `tiktok.ts` | TikTok Login Kit | `tt-*` |
 | `youtube.ts`, `youtube-login.ts` | YouTube Data API (quota) et connexion d'un créateur | `yt-*` |

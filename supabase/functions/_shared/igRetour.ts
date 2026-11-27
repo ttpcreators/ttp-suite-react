@@ -9,13 +9,14 @@
 // • Tâche interne « Aider <prénom> à connecter Instagram » : créée après 2 essais ratés
 //   en 24 h, EN PLUS du push aux fondateurs ; une seule ouverte par créateur ; jamais
 //   visible par lui (visible_createur false, sans étiquette « Claude ») ; cochée toute
-//   seule quand la connexion réussit.
+//   seule quand la connexion réussit. Sans pièce jointe : la To-do n'ouvre pas encore un
+//   lien vers une fiche du Roster (elle le prendrait pour un fichier). La description dit
+//   où regarder : Roster › fiche du créateur › carte Instagram.
 // Testé par igRetour.test.ts.
 // ============================================================================
 
 import { STATE_TTL_MS } from "./state.ts";
 import { type EssaiIg, essaisRates } from "./igConnexion.ts";
-import { deepLinkUrl } from "./pushPayload.ts";
 
 /** Durée acceptée pour un départ par lien. */
 export const DUREE_STATE_LIEN_MS = 30 * 60_000;
@@ -63,9 +64,10 @@ export const jourParis = (d: Date): string =>
   new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 
 /** Ce que l'agence lit dans la tâche : où voir le détail, et quoi vérifier ensemble. */
-export function texteAide(rates: number): string {
+export function texteAide(rates: number, nom: string): string {
+  const fiche = String(nom ?? "").trim() ? `Roster › fiche de ${prenomAide(nom)} › carte Instagram` : "sa fiche du Roster, carte Instagram";
   return [
-    `${rates} essais ratés en 24 h. Le détail (raison, message de Meta) est sur sa fiche, carte Instagram.`,
+    `${rates} essais ratés en 24 h. Le détail (raison, message de Meta) : ${fiche}.`,
     "À vérifier ensemble :",
     "1. compte Instagram Professionnel ou Créateur ;",
     "2. tant que Meta n'a pas validé l'app : son @ ajouté comme « Testeur Instagram » (Meta › Rôles dans l'application), invitation acceptée dans Instagram › Paramètres › Sites web et apps ;",
@@ -74,11 +76,14 @@ export function texteAide(rates: number): string {
   ].join("\n");
 }
 
-/** Ligne à insérer dans todos. Interne : visible_createur false, pour_createur laissé à sa valeur par défaut (false). */
-export function ligneAide(o: { nom: string; creatorId: string; rates: number; now: Date }): Record<string, unknown> {
+/**
+ * Ligne à insérer dans todos. Interne : visible_createur false, pour_createur laissé à sa
+ * valeur par défaut (false). Pas de pièce jointe (voir l'en-tête).
+ */
+export function ligneAide(o: { nom: string; rates: number; now: Date }): Record<string, unknown> {
   return {
     text: titreAide(o.nom),
-    descr: texteAide(o.rates),
+    descr: texteAide(o.rates, o.nom),
     due: jourParis(o.now),
     creator: o.nom,
     creators: [o.nom],
@@ -89,7 +94,6 @@ export function ligneAide(o: { nom: string; creatorId: string; rates: number; no
     done: false,
     visible_createur: false,
     sort_order: Math.floor(o.now.getTime() / 1000),
-    attachments: [{ name: "Voir sa fiche", size: "", path: deepLinkUrl({ open: "view", view: "roster", item: o.creatorId }) }],
   };
 }
 

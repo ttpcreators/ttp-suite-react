@@ -13,13 +13,13 @@ import {
   prenomAide,
   ratesRecents,
   stateExpire,
+  texteAide,
   titreAide,
 } from "./igRetour.ts";
 import { STATE_TTL_MS } from "./state.ts";
 
 const now = Date.parse("2026-11-27T12:00:00Z");
 const MIN = 60_000;
-const ID = "00000000-0000-4000-8000-000000000001";
 const essai = (minutesAvant: number, ok = false) => ({ at: new Date(now - minutesAvant * MIN).toISOString(), ok });
 
 describe("temps accepté au retour d'Instagram", () => {
@@ -60,8 +60,8 @@ describe("tâche « Aider … à connecter Instagram »", () => {
     expect(fautAide([essai(0), essai(25 * 60)], now)).toBe(false);
     expect(ratesRecents([essai(0), essai(1), essai(2), essai(30 * 60)], now)).toBe(3);
   });
-  it("interne : jamais visible par le créateur, sans étiquette Claude, avec un lien vers sa fiche", () => {
-    const l = ligneAide({ nom: "CRÉATRICE A", creatorId: ID, rates: 2, now: new Date("2026-11-27T23:30:00Z") });
+  it("interne : jamais visible par le créateur, sans étiquette Claude, la description dit où trouver sa fiche", () => {
+    const l = ligneAide({ nom: "CRÉATRICE A", rates: 2, now: new Date("2026-11-27T23:30:00Z") });
     expect(l).toMatchObject({
       text: "Aider Créatrice à connecter Instagram",
       creator: "CRÉATRICE A",
@@ -72,13 +72,20 @@ describe("tâche « Aider … à connecter Instagram »", () => {
       done: false,
       visible_createur: false,
       due: "2026-11-28",
-      attachments: [{ name: "Voir sa fiche", size: "", path: `/?open=view&view=roster&item=${ID}` }],
     });
     expect("pour_createur" in l).toBe(false);
     expect(String(l.tag)).not.toMatch(/claude/i);
     expect(String(l.descr)).toContain("2 essais ratés en 24 h");
+    expect(String(l.descr)).toContain("Roster › fiche de Créatrice › carte Instagram");
     expect(String(l.descr)).toContain("Testeur Instagram");
     expect(String(l.descr)).not.toMatch(/[—–]/);
+  });
+  it("sans pièce jointe : la To-do prendrait un lien vers une fiche pour un fichier", () => {
+    // Todo.tsx (openAttachment) n'ouvre que les liens « /?open=mails » et les adresses http(s) ;
+    // tout autre chemin part vers le stockage des fichiers et échoue.
+    const l = ligneAide({ nom: "CRÉATRICE A", rates: 2, now: new Date("2026-11-27T12:00:00Z") });
+    expect("attachments" in l).toBe(false);
+    expect(texteAide(3, "")).toContain("sa fiche du Roster, carte Instagram");
   });
   it("cochée toute seule à la connexion réussie, la description gardée", () => {
     const f = aideFaite("Détail d'avant", new Date("2026-11-27T12:00:00Z"));

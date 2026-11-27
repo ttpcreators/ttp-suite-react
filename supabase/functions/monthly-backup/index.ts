@@ -24,7 +24,8 @@
 // Autorisation « drive.file » (l'app ne voit que ses propres fichiers). Sans elle : le mail
 // part quand même et dit quoi faire.
 // Destinataires : les comptes fondateurs (adresse de connexion), ou la liste
-// `backupRecipients` des réglages si elle existe.
+// `backupRecipients` des réglages si elle existe, limitée à ses adresses de fondateurs ;
+// si aucune ne l'est, le mail ne part pas (règles : destinatairesSauvegarde, _shared/backup.ts).
 // Envoi : boîte partnerships@ (connexion Google de l'app, droit gmail.send).
 // verify_jwt = false (config.toml) : l'appel du cron n'est pas un JWT.
 // Sortie : { ok, month, files, bytes, attached, recipients } ou { error }.
@@ -34,10 +35,10 @@
 import { zipSync, strToU8 } from "npm:fflate@0.8.2";
 import { CRON_SECRET, corsHeaders, getAccessToken, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { readAppState } from "../_shared/appState.ts";
-import { backupMonth, mediakitPages, mediakitSlug, mimeMessage, pdfLinksIn, safeAppState, toCsv } from "../_shared/backup.ts";
+import { backupMonth, destinatairesSauvegarde, mediakitPages, mediakitSlug, mimeMessage, pdfLinksIn, safeAppState, toCsv } from "../_shared/backup.ts";
 import { DriveFail, ensureFolder, putFile, type DriveError } from "../_shared/drive.ts";
 import { BACKUP_STATUS_KEY, statusFromResult, type BackupResult, type BackupStatus } from "../_shared/backupStatus.ts";
-import { fichierCsv, nomTable, type Schema, TABLES_SAUVEES, tablesDeLApi, tablesNonClassees, type TableSauvee, texteExclusions } from "../_shared/backupTables.ts";
+import { fichierCsv, type Ligne, lireTable, nomTable, type Schema, TABLES_SAUVEES, tablesDeLApi, tablesNonClassees, type TableSauvee, texteExclusions } from "../_shared/backupTables.ts";
 
 const SITE = "https://ttpcreators.pro";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
@@ -46,21 +47,19 @@ const PDF_MAX = 15 * 1024 * 1024;
 
 type Sb = ReturnType<typeof getServiceClient>;
 
-/** Lignes d'une table (schéma public ou agent). `partial` : la lecture s'est arrêtée sur une
- *  erreur (table absente, illisible, ou coupée en route) : la sauvegarde le dit au lieu de
- *  passer pour complète. */
-async function allRows(sb: Sb, t: TableSauvee): Promise<{ rows: Record<string, unknown>[]; partial: boolean }> {
-  const out: Record<string, unknown>[] = [];
-  const cols = t.colonnes ?? "*";
-  for (let from = 0; from < 200_000; from += 1000) {
-    const q = t.schema === "public" ? sb.from(t.table).select(cols) : sb.schema(t.schema).from(t.table).select(cols);
-    const { data, error } = await q.range(from, from + 999);
-    if (error) return { rows: out, partial: true };
+/** Lignes d'une table (schéma public ou agent), page par page dans l'ordre de sa clé
+ *  (règles : lireTable, _shared/backupTables.ts). `partial` : la lecture s'est arrêtée
+ *  (table absente, illisible, coupée en route ou trop grosse) : la sauvegarde le dit au
+ *  lieu de passer pour complète. */
+function allRows(sb: Sb, t: TableSauvee): Promise<{ rows: Ligne[]; partial: boolean }> {
+  return lireTable(t, async ({ apres, depuis, taille }) => {
+    let q = (t.schema === "public" ? sb.from(t.table) : sb.schema(t.schema).from(t.table)).select(t.colonnes ?? "*");
+    if (apres !== undefined) q = q.gt(t.cle[0], apres);
+    for (const c of t.cle) q = q.order(c, { ascending: true });
+    const { data, error } = await q.range(depuis, depuis + taille - 1);
     // Colonnes choisies à l'exécution : le type déduit par supabase-js ne veut rien dire ici.
-    out.push(...((data ?? []) as unknown as Record<string, unknown>[]));
-    if (!data || data.length < 1000) break;
-  }
-  return { rows: out, partial: false };
+    return { data: data as unknown as Ligne[] | null, error };
+  });
 }
 
 /**
@@ -181,10 +180,12 @@ async function runBackup(sb: Sb, now: Date): Promise<Out> {
 
   // 2) Réglages de l'agence (sans le coffre)
   let state: Record<string, unknown> = {};
+  let reglagesLus = true; // sinon on ne sait pas à qui envoyer (backupRecipients) : pas de mail
   try {
     state = await readAppState(sb); // ligne commune + ligne argent des fondateurs
   } catch {
     state = {};
+    reglagesLus = false;
     missing.push("réglages de l'agence");
   }
   files["reglages-agence.json"] = strToU8(JSON.stringify(safeAppState(state), null, 2));
@@ -268,14 +269,15 @@ async function runBackup(sb: Sb, now: Date): Promise<Out> {
           ? `<p style="color:#b00020">Pas rangée dans Google Drive : reconnecte Google dans Paramètres pour autoriser Drive.</p>`
           : `<p style="color:#b00020">Pas rangée dans Google Drive cette fois (Drive injoignable).</p>`;
 
-  // 6) Mail aux fondateurs
-  const listed = Array.isArray(state.backupRecipients) ? (state.backupRecipients as unknown[]).map((x) => String(x).trim().toLowerCase()).filter((x) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x)) : [];
-  // Une sauvegarde contient tout l'argent de l'agence : elle ne part que chez des fondateurs.
-  // `backupRecipients` sert seulement à en choisir certains parmi eux.
-  const founders = (await founderEmails(sb)).map((x) => x.trim().toLowerCase());
-  const chosen = listed.filter((x) => founders.includes(x));
-  const to = chosen.length ? chosen : founders;
-  if (!to.length) return { status: 409, body: { error: "aucun_destinataire", drive } };
+  // 6) Mail aux fondateurs. Une sauvegarde contient tout l'argent de l'agence : elle ne part
+  // que chez des fondateurs ; `backupRecipients` sert seulement à en choisir certains. Sans
+  // destinataire sûr, pas de mail : l'archive est déjà dans Storage (et Drive).
+  const dest = destinatairesSauvegarde(state.backupRecipients, await founderEmails(sb), reglagesLus);
+  if ("error" in dest) return { status: 409, body: { error: dest.error, stored: !up.error, drive } };
+  const to = dest.to;
+  const ecartees = dest.ignorees
+    ? `<p style="color:#b00020">Pas envoyée à ${dest.ignorees === 1 ? "1 adresse" : `${dest.ignorees} adresses`} de la liste des destinataires (réglage backupRecipients) : ce ne sont pas des adresses de connexion de fondateurs.</p>`
+    : "";
   const attach = zip.length <= ATTACH_MAX;
   const mb = (zip.length / 1024 / 1024).toFixed(1).replace(".", ",");
   // État de la sauvegarde : ce qui n'a pas pu être lu, et les tables pas classées.
@@ -287,6 +289,7 @@ async function runBackup(sb: Sb, now: Date): Promise<Out> {
     (missing.length ? `<p style="color:#b00020"><b>Sauvegarde incomplète.</b> Non lu ce jour-là : ${missing.join(", ")}. Relance « Envoyer maintenant » dans Paramètres.</p>` : "") +
     (nonClassees.length ? `<p style="color:#b00020"><b>Tables pas sauvegardées.</b> Nouvelles en base, pas encore classées : ${nonClassees.join(", ")}. À ajouter à la liste de la sauvegarde (_shared/backupTables.ts).</p>` : "") +
     (controle ? "" : `<p style="color:#777;font-size:12px">Contrôle des tables en base impossible ce jour-là : la liste de l'app fait foi.</p>`) +
+    ecartees +
     (link ? `<p><a href="${link}">Télécharger la sauvegarde (${mb} Mo)</a> · lien valable 30 jours.</p>` : "") +
     driveNote +
     `<table style="border-collapse:collapse;font-size:13px">${counts.map((c) => `<tr><td style="padding:2px 12px 2px 0">${c.name}</td><td style="padding:2px 0;color:#555">${c.n}</td></tr>`).join("")}</table>` +

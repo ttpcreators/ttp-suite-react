@@ -97,7 +97,7 @@ async function suivreAide(sb: SupabaseClient, creatorId: string, ok: boolean) {
       .order("at", { ascending: false }).limit(20);
     const liste = (essais as EssaiIg[] | null) ?? [];
     if (!fautAide(liste, now.getTime())) return;
-    const { error: e2 } = await sb.from("todos").insert(ligneAide({ nom, creatorId, rates: ratesRecents(liste, now.getTime()), now }));
+    const { error: e2 } = await sb.from("todos").insert(ligneAide({ nom, rates: ratesRecents(liste, now.getTime()), now }));
     if (e2) console.error("ig-callback tâche d'aide", e2.message);
   } catch (err) {
     console.error("ig-callback tâche d'aide", (err as Error).message);
