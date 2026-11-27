@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { collabTabRedirect, discussionStage, negotiationCounts, normalizeCollabTab, normalizeMissionTab, sortDiscussions } from "./collabTabs";
+import { collabTabRedirect, discussionStage, negotiationCounts, normalizeCollabTab, normalizeMissionTab, sortDiscussions, stageEnregistre } from "./collabTabs";
 
 describe("onglets de Collabs et de Missions", () => {
   it("les anciennes pages Gifting et Pipeline ouvrent Collabs sur le bon onglet", () => {
@@ -37,5 +37,32 @@ describe("onglets de Collabs et de Missions", () => {
       { stage: "Négociation", proposal: null, value: "400" },
       { stage: "Négociation", proposal: null, value: "800 – 1 100 € HT" },
     ]).proposed).toBe(2500);
+  });
+  it("étape écrite en valeur ou en libellé : ramenée à la valeur enregistrée", () => {
+    expect(["Repérée", "contactée", "En négociation", " Signée ", "Perdue", "Perdu", "Prospection", "", null, "Autre"].map(stageEnregistre)).toEqual([
+      "Prospection", "Contact", "Négociation", "Signé", "Perdu", "Perdu", "Prospection", null, null, null,
+    ]);
+  });
+  it("le créateur ne voit ni une marque seulement repérée, ni une piste perdue (constats D2, W22)", () => {
+    const l = sortDiscussions([
+      { id: "a", brand: "A", deliverables: null, stage: "Repérée", created_at: "2026-11-01" },
+      { id: "b", brand: "B", deliverables: null, stage: "Perdue", created_at: "2026-11-02" },
+      { id: "c", brand: "C", deliverables: null, stage: "Prospection", created_at: "2026-11-03" },
+      { id: "d", brand: "D", deliverables: null, stage: "Contactée", created_at: "2026-11-04" },
+      { id: "e", brand: "E", deliverables: null, stage: "En négociation", created_at: "2026-11-05" },
+      { id: "f", brand: "F", deliverables: null, stage: null, created_at: "2026-11-06" },
+      { id: "g", brand: "G", deliverables: null, stage: "Étape inconnue", created_at: "2026-11-07" },
+    ]);
+    expect(l.map((x) => [x.id, x.stage])).toEqual([["e", "Négociation"], ["d", "Contact"]]);
+    expect(l.map((x) => discussionStage(x.stage))).toEqual(["En discussion", "Premier contact"]);
+  });
+  it("une piste perdue ne compte nulle part, libellés compris", () => {
+    expect(negotiationCounts([
+      { stage: "Perdu", proposal: { target: 2000 } },
+      { stage: "Perdue", proposal: null, value: "900 €" },
+      { stage: "Repérée", proposal: null, value: "300" },
+      { stage: "Contactée", proposal: null, value: "—" },
+      { stage: "Signée", proposal: { target: 5000 } },
+    ])).toEqual({ open: 2, spotted: 1, contacted: 1, negotiating: 0, signed: 1, proposed: 300 });
   });
 });

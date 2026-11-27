@@ -114,15 +114,19 @@ export function creatorsColumnMissing(e: { code?: string | null; message?: strin
   return /creators/i.test(e.message ?? "") && (e.code === "42703" || e.code === "PGRST204" || /column|schema cache|does not exist/i.test(e.message ?? ""));
 }
 
+/** Étiquette posée par Alfred ou un assistant (« Claude · … ») : Alfred et les règles du 24/11 s'en servent. */
+export const isClaudeTag = (tag: string | null | undefined): boolean => /^\s*claude\b/i.test(tag ?? "");
+
 /**
  * Champs à écrire pour une liste de créateurs : `creator` = le premier (ou null, tâche
- * agence), `tag`, et `creators` seulement si la colonne existe.
+ * agence), `tag`, et `creators` seulement si la colonne existe. `currentTag` : l'étiquette
+ * actuelle de la tâche ; une étiquette « Claude · … » est gardée telle quelle (constat W4).
  */
-export function creatorsPatch(list: readonly string[], withColumn: boolean): { creator: string | null; tag: string; creators?: string[] } {
+export function creatorsPatch(list: readonly string[], withColumn: boolean, currentTag?: string | null): { creator: string | null; tag: string; creators?: string[] } {
   const names = normalizeCreators(list);
   return {
     creator: names[0] ?? null,
-    tag: names.length ? "CRÉATEUR" : "AGENCE",
+    tag: currentTag && isClaudeTag(currentTag) ? currentTag : names.length ? "CRÉATEUR" : "AGENCE",
     ...(withColumn ? { creators: names } : {}),
   };
 }

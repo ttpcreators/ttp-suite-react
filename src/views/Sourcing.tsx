@@ -32,6 +32,8 @@ import { Overlay } from "@/components/mobile/ios-sheet";
 import { fmtCompact } from "@/lib/timeSeries";
 import { EMPTY, fmtDay } from "@/lib/dates";
 import { fmtEr, igWhyText, noteQuota } from "@/lib/instagram";
+import { loadRadar, RADAR_ERROR_TEXT, RADAR_LIMIT, type RadarLoadError } from "@/lib/radarLoad";
+import { reportError } from "@/lib/errorReport";
 import { MetaQuotaBadge } from "@/components/MetaQuotaBadge";
 import { OutreachComposer } from "@/components/OutreachComposer";
 import { SourcingGuide, type GuideTool } from "@/components/SourcingGuide";
@@ -1619,7 +1621,7 @@ function RadarTool() {
 
 function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
   const [rows, setRows] = useState<RadarRow[] | null>(null);
-  const [missing, setMissing] = useState(false);
+  const [loadErr, setLoadErr] = useState<RadarLoadError | null>(null);
   const [profiles, setProfiles] = useState<Record<string, Prof & { why?: string | null }>>({});
   const [knownBrands, setKnownBrands] = useState<{ handles: Set<string>; names: Set<string> }>({ handles: new Set(), names: new Set() });
   const [rosterNames, setRosterNames] = useState<Record<string, string>>({});
@@ -1650,14 +1652,29 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
   useEffect(() => {
     let alive = true;
     void (async () => {
-      const r = await supabase.from("ig_radar").select("brand, posts, status, first_seen, last_seen").order("last_seen", { ascending: false }).limit(1000);
+      // En deux temps (src/lib/radarLoad.ts) : les marques sans leurs posts, puis les posts
+      // par paquets. Un seul gros SELECT dépassait parfois la limite de 8 s de la base.
+      const r = await loadRadar<Omit<RadarRow, "posts">, RadarPost>({
+        list: async (since) => {
+          let q = supabase.from("ig_radar").select("brand, status, first_seen, last_seen");
+          if (since) q = q.gt("last_seen", since);
+          const { data, error } = await q.order("last_seen", { ascending: false }).order("brand").limit(RADAR_LIMIT);
+          return { data: data as Omit<RadarRow, "posts">[] | null, error };
+        },
+        posts: async (brands) => {
+          const { data, error } = await supabase.from("ig_radar").select("brand, posts").in("brand", brands);
+          return { data: data as { brand: string; posts: RadarPost[] | null }[] | null, error };
+        },
+      }, Date.now());
       if (!alive) return;
-      if (r.error) {
-        setMissing(true);
-        setRows([]);
+      if (!r.ok) {
+        // « Pas encore activée » seulement si la table manque ; sinon un vrai message et Réessayer.
+        if (r.error !== "absente") reportError(new Error(`ig_radar ${r.detail}`), { source: "radar" });
+        setLoadErr(r.error);
         return;
       }
-      const list = (r.data as RadarRow[] | null) ?? [];
+      setLoadErr(null);
+      const list: RadarRow[] = r.rows;
       setRows(list);
       // Profils des marques et des créateurs cités (abonnés, bio, « est-ce une marque ? »).
       const users = [...new Set(list.flatMap((x) => [x.brand, ...x.posts.map((p) => p.c)]))];
@@ -1819,14 +1836,27 @@ function BrandRadar({ platformTabs }: { platformTabs?: ReactNode } = {}) {
   const statusCounts = { nouveau: 0, pipeline: 0, ignore: 0 } as Record<RadarRow["status"], number>;
   for (const r of rows ?? []) statusCounts[r.status] = (statusCounts[r.status] ?? 0) + 1;
 
-  if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement du radar…</AnimatedBadge>;
-  if (missing) {
+  if (loadErr) {
+    const retry = () => {
+      setLoadErr(null);
+      setRows(null);
+      setReload((n) => n + 1);
+    };
     return (
-      <div className="rounded-[22px] bg-surface px-6 py-10 text-center text-sm text-muted-foreground">
-        Cette partie n'est pas encore activée : une mise à jour est en attente (voir Réglages › Diagnostic).
+      <div className="flex flex-col gap-3">
+        {platformTabs && <div className="rounded-[22px] bg-surface p-3 sm:p-5">{platformTabs}</div>}
+        <div className="rounded-[22px] bg-surface px-6 py-10 text-center text-sm text-muted-foreground">
+          <p>{RADAR_ERROR_TEXT[loadErr]}</p>
+          {loadErr !== "absente" && (
+            <button type="button" onClick={retry} className="mx-auto mt-4 flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
+              <RotateCcw className="h-3.5 w-3.5" /> Réessayer
+            </button>
+          )}
+        </div>
       </div>
     );
   }
+  if (rows === null) return <AnimatedBadge status="loading" size="sm">Chargement du radar…</AnimatedBadge>;
 
   const TILES = [
     { v: "clients" as const, icon: Wallet, title: "Clients potentiels", short: "Clients", n: counts.clients, text: "Elles paient ou offrent des produits à des créateurs de ta niche.", on: "border-primary bg-primary/[0.04]", dot: "bg-primary text-primary-foreground" },

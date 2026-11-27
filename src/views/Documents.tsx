@@ -16,10 +16,12 @@ import { dbTrash } from "@/lib/trash";
 import { toast } from "@/components/ui/toast";
 import { useCreators } from "@/lib/useCreators";
 import { notifyCreator } from "@/lib/push";
+import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
+import { NewDot } from "@/components/ui/new-dot";
 import { getCache, setCache } from "@/lib/viewCache";
 import { goToTab, viewableUrl } from "@/lib/openLater";
 import { useEffect, useRef, useState } from "react";
-import { PencilLine, LayoutGrid, ReceiptText, FileSignature, FileText, Download, Eye, Share2, X, Trash2, BarChart3, ChevronLeft, type LucideIcon } from "@/components/icons";
+import { PencilLine, LayoutGrid, ReceiptText, FileSignature, FileText, Download, Eye, Share2, X, Trash2, BarChart3, ChevronLeft, Clapperboard, type LucideIcon } from "@/components/icons";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { Overlay } from "@/components/mobile/ios-sheet";
@@ -34,11 +36,15 @@ type Row = {
   path: string;
   created_at: string;
   sort_order: number;
+  /** Collab du dépôt d'un créateur fait depuis une mission (SQL 2026-11-27 ; absente avant). */
+  collab_id?: string | null;
 };
 
 type TypeMeta = { label: string; icon: LucideIcon; className: string; tagClassName: string };
 
 const DOC_TYPE_META: Record<string, TypeMeta> = {
+  // Photos et vidéos envoyées par un créateur depuis une mission (« Envoyer mon contenu »).
+  contenu: { label: "Contenu", icon: Clapperboard, className: "bg-progress-soft text-progress", tagClassName: "bg-progress-soft text-progress" },
   brief: { label: "Brief", icon: PencilLine, className: "bg-info-soft text-info", tagClassName: "bg-info-soft text-info" },
   mediakit: { label: "Media kit", icon: LayoutGrid, className: "bg-progress-soft text-progress", tagClassName: "bg-progress-soft text-progress" },
   facture: { label: "Facture", icon: ReceiptText, className: "bg-ok-soft text-ok", tagClassName: "bg-ok-soft text-ok" },
@@ -50,6 +56,7 @@ const metaFor = (type: string): TypeMeta => DOC_TYPE_META[type] ?? DOC_TYPE_META
 
 // Format d'icône représentatif d'un DOSSIER (type de doc).
 const TYPE_FMT: Record<string, FormatFileProps> = {
+  contenu: "img",
   stats: "img",
   facture: "pdf",
   mediakit: "pptx",
@@ -106,6 +113,10 @@ export function Documents() {
   const [pageQ, setPageQ] = useState("");
   const live = useLiveKey();
   const creators = useCreators();
+  // Dépôts d'un créateur pas encore vus par l'agence (repère « document », SQL 2026-11-27) :
+  // point « nouveau », effacé à l'ouverture ou à l'aperçu du fichier.
+  const activity = useActivityEvents("agency");
+  const isNew = (r: Row) => activity.keys.has(`document:${r.id}`);
 
   const [formOpen, setFormOpen] = useState(false);
   const [docType, setDocType] = useState("autre");
@@ -193,6 +204,7 @@ export function Documents() {
       toast("Fichier indisponible");
       return;
     }
+    void markActivityRead("document", row.id);
     if (isExternalUrl(row.path)) {
       window.open(row.path, "_blank", "noopener");
       return;
@@ -214,6 +226,7 @@ export function Documents() {
       toast("Fichier indisponible");
       return;
     }
+    void markActivityRead("document", row.id);
     if (isExternalUrl(row.path)) {
       // Lien externe (Drive, Canva…) : souvent non intégrable en iframe → carte « Ouvrir ».
       setPreviewDoc({ name: row.name, url: row.path, kind: "other" });
@@ -311,10 +324,14 @@ export function Documents() {
   const docCreators = [...new Set(((rows ?? []).map((r) => r.creator).filter(Boolean) as string[]))].sort((a, b) => a.localeCompare(b, "fr"));
 
   // Dossiers « portails » par type — pour ne pas se noyer dans la masse.
-  const TYPE_ORDER = ["stats", "facture", "contract", "mediakit", "brief", "autre"];
+  const TYPE_ORDER = ["contenu", "stats", "facture", "contract", "mediakit", "brief", "autre"];
   const normType = (t: string | null | undefined) => (t && t in DOC_TYPE_META && t !== "autre" ? t : "autre");
   const typeCount: Record<string, number> = {};
-  for (const r of filtered) typeCount[normType(r.type)] = (typeCount[normType(r.type)] ?? 0) + 1;
+  const newCount: Record<string, number> = {};
+  for (const r of filtered) {
+    typeCount[normType(r.type)] = (typeCount[normType(r.type)] ?? 0) + 1;
+    if (isNew(r)) newCount[normType(r.type)] = (newCount[normType(r.type)] ?? 0) + 1;
+  }
   const folders = TYPE_ORDER.filter((t) => (typeCount[t] ?? 0) > 0);
 
   // Carte document réutilisable (liste plate en recherche + dans un dossier).
@@ -325,7 +342,10 @@ export function Documents() {
       <li key={row.id} className="flex items-center gap-4 rounded-2xl border border-border bg-surface px-4 py-3 shadow-sm transition-colors hover:bg-rowhover">
         <div className="shrink-0 self-center pr-1"><FileCard formatFile={fileFormatOf(row.name, row.type)} /></div>
         <button type="button" onClick={() => openDoc(row)} className="min-w-0 flex-1 text-left" title="Ouvrir / télécharger">
-          <div className="truncate text-[13px] font-semibold text-foreground hover:underline">{row.name}</div>
+          <div className="truncate text-[13px] font-semibold text-foreground hover:underline">
+            {isNew(row) && <NewDot label="Envoyé par le créateur, pas encore vu" className="mr-1.5 align-middle" />}
+            {row.name}
+          </div>
           <div className="mt-0.5 truncate text-[10px] text-faint">{details}</div>
         </button>
         {row.creator ? (
@@ -447,8 +467,14 @@ export function Documents() {
                 >
                   <div className="shrink-0 pr-1"><FileCard formatFile={TYPE_FMT[t] ?? "doc"} /></div>
                   <div className="min-w-0">
-                    <div className="truncate text-[13px] font-semibold text-foreground">{M.label}</div>
-                    <div className="text-[11px] text-faint">{typeCount[t]} document{typeCount[t] > 1 ? "s" : ""}</div>
+                    <div className="truncate text-[13px] font-semibold text-foreground">
+                      {newCount[t] ? <NewDot label="Du nouveau d'un créateur" className="mr-1.5 align-middle" /> : null}
+                      {M.label}
+                    </div>
+                    <div className="text-[11px] text-faint">
+                      {typeCount[t]} document{typeCount[t] > 1 ? "s" : ""}
+                      {newCount[t] ? ` · ${newCount[t]} nouveau${newCount[t] > 1 ? "x" : ""}` : ""}
+                    </div>
                   </div>
                 </button>
               );

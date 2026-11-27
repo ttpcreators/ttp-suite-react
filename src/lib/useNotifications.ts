@@ -4,11 +4,13 @@ import { getAppState, invalidateAppState, refreshAppState, saveAppStateKey } fro
 import { useLiveKey } from "./useLive";
 import { EMPTY, fmtAgoSince, fmtDay, todayISO } from "./dates";
 import { titleCase } from "./utils";
+import { conceptColumnsMissing, conceptState } from "./briefConcept";
 import { toast } from "@/components/ui/toast";
 import type { NotificationItem } from "@/components/ui/notifications";
 import { teamNames } from "./team";
 import { closeMailThreadNotifications } from "./appBadge";
 import { activityText } from "../../supabase/functions/_shared/activityText";
+import { isOverdueInvoice } from "./relance";
 import { upcomingBirthdays } from "../../supabase/functions/_shared/birthdays";
 import { couper } from "../../supabase/functions/_shared/texteSur.ts";
 
@@ -33,7 +35,7 @@ let dismissQueue: Promise<void> = Promise.resolve();
 // Dernier blob agence bien lu (repli quand une relecture échoue).
 let lastApp: Record<string, unknown> = {};
 
-/** Notifications dérivées des vraies données : activité créateur, factures en retard, briefs à valider, événements.
+/** Notifications dérivées des vraies données : activité créateur, factures en retard, briefs et concepts à valider, événements.
  *  Les IDs sont STABLES (contenu, pas index) pour que l'effacement persiste :
  *  les ids effacés sont mémorisés dans le blob agence `notifDismissed`. */
 export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: string[]) => void } {
@@ -59,7 +61,8 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
     const emailSince = new Date(Date.now() - 3 * 86400000).toISOString(); // emails reçus : 72 h
     Promise.all([
-      supabase.from("invoices").select("id,party,amount,status").eq("status", "retard"),
+      // Factures en retard : même règle que Facturation (statut « retard », ou « attente » échue).
+      supabase.from("invoices").select("id,party,amount,status,date").in("status", ["retard", "attente"]),
       supabase.from("briefs").select("id,brand,creator,status").eq("status", "valider"),
       supabase.from("events").select("id,date,time,title").or("deleted.is.null,deleted.eq.false").gte("date", todayStr).order("date").limit(3),
       // Blob frais, mais partagé avec le rafraîchissement des pages (une seule lecture par
@@ -87,7 +90,9 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
         .order("created_at", { ascending: false }).limit(15),
       teamNames(),
       supabase.from("creators").select("name,birth,status"),
-    ]).then(([inv, br, ev, app, tdC, idC, evC, mailIn, bugs, mailAvis, mailNotes, team, names, crea]) => {
+      // Concepts proposés par les créateurs (colonnes du SQL 2026-11-23 ; absentes : aucune ligne).
+      supabase.from("briefs").select("id,brand,creator,concept,concept_status,concept_at").eq("concept_status", "propose"),
+    ]).then(([inv, br, ev, app, tdC, idC, evC, mailIn, bugs, mailAvis, mailNotes, team, names, crea, conc]) => {
       if (!alive) return;
       if (inv.error || br.error || ev.error) {
         console.error("Chargement des notifications échoué:", { inv: inv.error, br: br.error, ev: ev.error });
@@ -218,7 +223,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           }),
         );
       }
-      ((inv.data as { id: string; party: string; amount: string }[]) ?? []).forEach((i) =>
+      ((inv.data as { id: string; party: string; amount: string; status: string; date: string | null }[]) ?? []).filter((i) => isOverdueInvoice(i)).forEach((i) =>
         out.push({
           id: `inv:${i.id}`,
           title: "Facture en retard",
@@ -238,6 +243,24 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           kind: "brief",
         }),
       );
+      // Concept à valider : le créateur attend l'agence, qui valide dans la fiche collab (page
+      // Collabs, bloc « Côté créateur »). Un nouveau concept refait une ligne (sa date dans l'id).
+      if (conc.error) {
+        if (!conceptColumnsMissing(conc.error)) console.warn("Concepts à valider non lus:", conc.error.message);
+      } else {
+        ((conc.data as { id: string; brand: string | null; creator: string | null; concept: string | null; concept_status: string | null; concept_at: string | null }[]) ?? [])
+          .filter((b) => conceptState(b) === "propose")
+          .forEach((b) =>
+            out.push({
+              id: `concept:${b.id}:${b.concept_at ?? ""}`,
+              title: "Concept à valider",
+              page: "collabs",
+              description: `${b.brand?.trim() || EMPTY}${b.creator ? ` × ${titleCase(b.creator)}` : ""}`,
+              time: b.concept_at ? agoLabel(b.concept_at) : "en attente",
+              kind: "brief",
+            }),
+          );
+      }
       ((ev.data as { id: string; date: string; time: string; title: string }[]) ?? []).forEach((e) =>
         out.push({
           id: `ev:${e.id}`,

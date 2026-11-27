@@ -30,6 +30,8 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PageFrame } from "@/components/ui/page-header";
 import { VIEW_HINTS } from "@/lib/viewHints";
 import { Login } from "@/components/Login";
+import { PasswordRecoveryScreen } from "@/components/password-form";
+import { retourDuLien } from "@/lib/passwordRecovery";
 import { FAVORIS_BASE, FAVORIS_ID, MAX_PINS, NAV, findItem, findPinnable, viewTitle, withFavorites, type NavFamily, type NavItem, type ViewId } from "@/lib/nav";
 import { NavSubContext, NavSubSetContext } from "@/lib/navSub";
 import { setTeamSession } from "@/lib/team";
@@ -50,6 +52,10 @@ import { PAGE_MERGES, pageMerge } from "@/lib/pageMerges";
 import { MergedPage } from "@/components/ui/merged-page";
 import { useAppBadge, useCloseMailNotifications } from "@/lib/appBadge";
 import { unreadCount, useNotifLocal } from "@/lib/notifLocal";
+
+// Lien du mail « Mot de passe oublié » : lu au chargement, avant que Supabase ne retire le
+// jeton de l'adresse (l'évènement PASSWORD_RECOVERY peut partir avant l'abonnement plus bas).
+const RETOUR_LIEN = typeof window !== "undefined" ? retourDuLien(window.location.hash, window.location.search) : null;
 
 // Vues chargées à la demande (code-splitting → démarrage plus léger, mobile compris).
 const RosterTabs = lazy(lazyImport(() => import("@/views/RosterTabs").then((m) => ({ default: m.RosterTabs }))));
@@ -272,6 +278,15 @@ function TabBar({
   );
 }
 
+/** Retire de l'adresse ce qu'y a laissé un lien de connexion (jeton, erreur, « # » vide). */
+function cleanAuthHash() {
+  try {
+    if (window.location.hash !== "" || window.location.href.endsWith("#")) window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+  } catch {
+    /* adresse non modifiable : sans gravité */
+  }
+}
+
 /** Tient à jour la signature de l'agence que posent les contrats (lib/agencySignature.ts). */
 function AgencySignatureSync() {
   const { data } = useAppState<unknown>((st) => st[SIGNATURE_KEY] ?? null);
@@ -281,6 +296,8 @@ function AgencySignatureSync() {
 
 export default function App() {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
+  // Session ouverte par le lien « Mot de passe oublié » : on demande d'abord le nouveau mot de passe.
+  const [recovery, setRecovery] = useState(RETOUR_LIEN === "recovery");
   const [active, setActive] = useState<ViewId>(() => {
     // Restaure la dernière page ouverte (évite de retomber sur l'accueil à chaque refresh).
     try {
@@ -545,11 +562,21 @@ export default function App() {
         window.location.reload();
         return;
       }
+      if (e === "PASSWORD_RECOVERY") setRecovery(true);
       hadSession ||= !!s;
       setSession(s);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  // Lien périmé : l'erreur est dite sur l'écran de connexion, l'adresse est remise au propre.
+  useEffect(() => {
+    if (RETOUR_LIEN === "expired") cleanAuthHash();
+  }, []);
+  const finishRecovery = () => {
+    cleanAuthHash();
+    setRecovery(false);
+  };
 
   // Rôle de l'utilisateur connecté (agence vs créateur). Clé = id utilisateur (pas
   // l'objet session, renouvelé à chaque rafraîchissement du jeton).
@@ -816,7 +843,7 @@ export default function App() {
       </div>
     );
   }
-  if (!session) return <Login />;
+  if (!session) return <Login lienPerime={RETOUR_LIEN === "expired"} />;
   if (profile === undefined) {
     // Session OK mais profil pas encore chargé. Si les réessais ont tous échoué, on
     // propose une sortie (Réessayer / Se déconnecter) plutôt qu'un spinner sans fin.
@@ -852,6 +879,9 @@ export default function App() {
       </div>
     );
   }
+
+  // Lien « Mot de passe oublié » : choisir le nouveau mot de passe avant d'entrer (agence ou créateur).
+  if (recovery) return <PasswordRecoveryScreen creatorName={profile?.role === "creator" ? profile.creator_name : null} onDone={finishRecovery} />;
 
   // Espace CRÉATEUR : vue dédiée quand un créateur se connecte
   if (profile?.role === "creator" && profile.creator_name) {

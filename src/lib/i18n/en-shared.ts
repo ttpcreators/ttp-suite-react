@@ -156,11 +156,11 @@ export const EN_SHARED: Record<string, string> = {
   "Activer": "Turn on",
   "Désactiver": "Turn off",
   "Reste au courant en temps réel": "Stay up to date in real time",
-  "Reçois une alerte sur ton téléphone dès que ton agence t'ajoute une tâche, un brief, un gifting ou un document.":
-    "Get an alert on your phone as soon as your agency adds a task, a brief, a gift or a document for you.",
-  "Nouveaux briefs & deals": "New briefs & deals",
+  "Tu reçois une alerte quand ton agence te confie une tâche, ajoute un rendez-vous ou un document.":
+    "You'll get an alert when your agency gives you a task or adds a meeting or a document.",
   "Cadeaux / gifting reçus": "Gifts received",
   "Tâches et documents ajoutés": "New tasks and documents",
+  "Rendez-vous ajoutés": "New meetings",
   "Nouveaux mails des marques": "New emails from brands",
   "Activées sur ce téléphone": "On for this phone",
   "Sur iPhone :": "On iPhone:",
@@ -204,4 +204,23 @@ export const EN_SHARED: Record<string, string> = {
   "{label} n'a pas pu s'afficher": "{label} couldn't be displayed",
   "Le reste de l'app fonctionne. Tu peux réessayer.": "The rest of the app is working. You can try again.",
   "Chargement": "Loading",
+
+  // ── Mot de passe (oublié, ou changé dans les réglages) ──────────────────────
+  "Mot de passe": "Password",
+  "Changer": "Change",
+  "Nouveau mot de passe": "New password",
+  "Confirme le mot de passe": "Confirm the password",
+  "Afficher le mot de passe": "Show password",
+  "Masquer le mot de passe": "Hide password",
+  "6 caractères au moins.": "At least 6 characters.",
+  "Les deux mots de passe ne sont pas identiques.": "The two passwords don't match.",
+  "Le mot de passe doit être différent de l'ancien.": "The password must be different from the old one.",
+  "Pour des raisons de sécurité, reconnecte-toi puis réessaie.": "For security reasons, log in again and try again.",
+  "Mot de passe changé ✓": "Password changed ✓",
+  "Choisis ton nouveau mot de passe": "Choose your new password",
+  "Tu l'utiliseras pour te connecter à ton espace.": "You'll use it to log in to your space.",
+  "Ton nouveau mot de passe est enregistré.": "Your new password is saved.",
+  "Si tu utilises l'app installée sur ton téléphone, ouvre-la et connecte-toi avec ce mot de passe.": "If you use the app installed on your phone, open it and log in with this password.",
+  "Continuer": "Continue",
+  "Plus tard": "Later",
 };
