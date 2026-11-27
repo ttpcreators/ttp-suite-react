@@ -15,6 +15,8 @@
  */
 
 import { supabase } from "@/lib/supabase";
+import { creerPlanificateur, type IssueLancement } from "@/lib/synchroPlanifiee";
+import { sessionAgence } from "@/lib/team";
 
 /* ------------------------------------------------------------------ *
  * Types                                                               *
@@ -111,6 +113,30 @@ export async function triggerSync(): Promise<SyncResult> {
   if (error) throw error;
   if (!data?.ok) throw new Error("Synchronisation refusée par le serveur");
   return data;
+}
+
+/** Relance de fond après un enregistrement (`google-sync`, trigger=app), sans message à l'écran. */
+async function lancerApresEcriture(): Promise<IssueLancement> {
+  const { data, error } = await supabase.functions.invoke<SyncResult>(
+    "google-sync",
+    { method: "POST", body: { trigger: "app" } },
+  );
+  if (error || !data?.ok) return "erreur";
+  return data.skipped === "locked" ? "verrou" : "fait";
+}
+
+const relanceAgenda = creerPlanificateur(lancerApresEcriture);
+
+/**
+ * Un rendez-vous vient d'être enregistré, modifié ou supprimé par l'agence (Planning, espace
+ * créateur vu par l'agence, tâche cochée) : la synchro part vers Google Agenda quelques
+ * secondes après, au lieu d'attendre le passage horaire (src/lib/synchroPlanifiee.ts). Une
+ * session créateur ne la lance pas (google-sync refuse les créateurs) : ses rendez-vous partent
+ * au passage horaire.
+ */
+export function synchroAgendaApresEcriture(): void {
+  if (!sessionAgence()) return;
+  relanceAgenda.planifier();
 }
 
 /** Déconnecte le compte Google (`google-disconnect`). */

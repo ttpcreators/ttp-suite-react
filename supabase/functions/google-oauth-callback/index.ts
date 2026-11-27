@@ -15,6 +15,9 @@
 //
 // AUTH : config.toml -> verify_jwt = false (redirect navigateur GET, pas de JWT ;
 // l'authenticité tient au state signé).
+//
+// JOURNAL : une ligne pour le passage initial, `google-oauth-callback {…}`
+// (déclencheur « connexion », mêmes chiffres que google-sync), ou l'erreur.
 // ============================================================================
 
 import {
@@ -24,6 +27,7 @@ import {
   waitUntil,
 } from "../_shared/google.ts";
 import { verifyState } from "../_shared/state.ts";
+import { ligneErreur, ligneJournal } from "../_shared/synchroAgenda.ts";
 
 const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const WATCH_TTL_SECONDS = 604_800;
@@ -186,7 +190,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     // Sync full initial (survit à la réponse via waitUntil).
-    waitUntil(runSyncCycle(sb, "full").catch((e) => console.error("initial sync failed", e)));
+    const t0 = Date.now();
+    const contexte = { declencheur: "connexion", mode: "full" };
+    waitUntil(runSyncCycle(sb, "full").then(
+      (r) => console.log("google-oauth-callback", JSON.stringify(ligneJournal(contexte, r, Date.now() - t0))),
+      (e) => console.error("google-oauth-callback", JSON.stringify(ligneErreur(contexte, e, Date.now() - t0))),
+    ));
 
     // 6. Succès.
     return Response.redirect(successRedirect, 302);

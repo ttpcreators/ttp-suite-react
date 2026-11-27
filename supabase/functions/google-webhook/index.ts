@@ -16,6 +16,11 @@
 // état, puis, quand le passage lancé est fini, envoyés, reçus, supprimés, durée
 // (ou « saute: verrou » si un passage tournait déjà). Avant le 27/11/2026, rien
 // n'était écrit quand tout allait bien : la boucle avec Google est restée invisible.
+//
+// AVIS SAUTÉ : le passage en cours lit Google après son envoi, donc il reprend un
+// changement signalé pendant l'envoi. Seul un changement arrivé pendant sa lecture
+// (ses dernières secondes) attend le passage suivant, au plus tard le cron horaire.
+// Un nouvel essai quelques secondes plus tard est possible sans SQL : à décider.
 // ============================================================================
 
 import {

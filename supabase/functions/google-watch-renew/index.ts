@@ -11,6 +11,9 @@
 //   2. Lit sync_state. Si le channel expire dans > 48 h -> no-op.
 //   3. Sinon : crée un NOUVEAU channel (gcalWatch persiste dans sync_state),
 //      stoppe l'ancien (best effort), lance un sync de rattrapage inline.
+//
+// JOURNAL : une ligne pour ce passage de rattrapage, `google-watch-renew {…}`
+// (déclencheur « renew », mêmes chiffres que google-sync), ou l'erreur.
 // ============================================================================
 
 import {
@@ -23,6 +26,7 @@ import {
   runSyncCycle,
   waitUntil,
 } from "../_shared/google.ts";
+import { ligneErreur, ligneJournal } from "../_shared/synchroAgenda.ts";
 
 const RENEW_THRESHOLD_MS = 48 * 60 * 60 * 1000;
 const CHANNEL_TTL_SECONDS = 604800;
@@ -68,7 +72,12 @@ Deno.serve(async (req: Request): Promise<Response> => {
     }
 
     // Sync de rattrapage inline (couvre la fenêtre de bascule).
-    waitUntil(runSyncCycle(sb, "incremental").catch((e) => console.error("renew sync failed", e)));
+    const t0 = Date.now();
+    const contexte = { declencheur: "renew", mode: "incremental" };
+    waitUntil(runSyncCycle(sb, "incremental").then(
+      (r) => console.log("google-watch-renew", JSON.stringify(ligneJournal(contexte, r, Date.now() - t0))),
+      (e) => console.error("google-watch-renew", JSON.stringify(ligneErreur(contexte, e, Date.now() - t0))),
+    ));
 
     return json({
       ok: true, renewed: true,

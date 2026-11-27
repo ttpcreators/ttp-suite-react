@@ -2,60 +2,208 @@ import { describe, expect, it } from "vitest";
 import {
   aEnvoyer,
   actionGoogle,
+  appliquerLecture,
+  type BaseAgenda,
   bilanVide,
+  type Champs,
   choixLecture,
   declencheurSync,
   ecrituresApresEnvoi,
+  envoyerVersGoogle,
+  type EvenementGoogle,
+  type GoogleAgenda,
   issueEnvoi,
+  type LigneEvent,
   ligneErreur,
   ligneJournal,
   noterEnvoi,
-  type LigneSync,
 } from "./synchroAgenda.ts";
 
 // ----------------------------------------------------------------------------
-// Une petite base simulée : le déclencheur touch_updated_at tel qu'il est en prod, et
-// l'écriture conditionnelle de runSyncCycle. Données fictives.
+// Une base et un Google simulés, données fictives. Le passage testé ici est le vrai
+// (envoyerVersGoogle, appliquerLecture), celui que runSyncCycle appelle. Reste hors test :
+// les deux adaptateurs de _shared/google.ts (baseAgenda : requêtes Supabase ; googleAgenda :
+// appels HTTP à Google), courts, qui ne décident rien. La base imite le déclencheur
+// touch_updated_at tel qu'il est en prod : une écriture serveur remet updated_at à now() sauf
+// si la ligne passe en sync_source 'google'.
 // ----------------------------------------------------------------------------
 
-type Ligne = LigneSync & { id: string; title: string };
+type Ligne = LigneEvent & { title: string; deleted_at?: string | null };
+type EvG = { id: string; etag: string; updated: string; summary: string; status: "confirmed" | "cancelled" };
 
 const T0 = "2026-11-20T10:00:00.000Z";
+const plus = (iso: string, ms: number) => new Date(Date.parse(iso) + ms).toISOString();
 
-/** Écriture serveur (service_role) : le déclencheur remet updated_at à now() sauf si sync_source = 'google'. */
-function ecritureServeur(avant: Ligne, champs: Record<string, unknown>, horlogeBase: string): Ligne {
-  const apres = { ...avant, ...champs } as Ligne;
-  if (apres.sync_source !== "google") apres.updated_at = horlogeBase;
-  return apres;
+/** Horloge commune à la base et à Google : chaque lecture avance d'une milliseconde. */
+function horlogeSimulee(): () => string {
+  let t = Date.parse(T0);
+  return () => new Date((t += 1)).toISOString();
 }
 
-/** Modification dans l'app (ou par Alfred) : sync_source 'agence' et updated_at = now(). */
-function ecritureApp(avant: Ligne, champs: Partial<Ligne>, horlogeBase: string): Ligne {
-  return { ...avant, ...champs, sync_source: "agence", updated_at: horlogeBase };
-}
-
-/** Écriture SOUS CONDITION que updated_at n'ait pas bougé depuis la lecture (comme runSyncCycle). */
-function ecrireSiInchangee(base: Ligne, lue: Ligne, champs: Record<string, unknown>, horlogeBase: string): { ligne: Ligne; ecrite: boolean } {
-  if (base.updated_at !== lue.updated_at) return { ligne: base, ecrite: false };
-  return { ligne: ecritureServeur(base, champs, horlogeBase), ecrite: true };
-}
-
-/** Un rendez-vous créé dans l'app, déjà envoyé une fois, puis modifié dans l'app. */
-function rdvModifie(): Ligne {
+function baseSimulee(h: () => string) {
+  const lignes = new Map<string, Ligne>();
+  const pannes = { lecture: false, ecriture: false, ecritureSiInchangee: false, ajout: "" };
+  /** Appelé une fois juste après une lecture par id Google (modification faite pendant la lecture). */
+  let pendantLecture: (() => void) | null = null;
+  const appliquer = (id: string, champs: Champs) => {
+    const apres = { ...lignes.get(id)!, ...champs } as Ligne;
+    if (apres.sync_source !== "google") apres.updated_at = h(); // déclencheur touch_updated_at (clé service)
+    lignes.set(id, apres);
+  };
+  const base: BaseAgenda<Ligne> = {
+    async lignesAgence() {
+      if (pannes.lecture) throw new Error("events_read_failed:panne");
+      return [...lignes.values()].filter((l) => l.sync_source === "agence").map((l) => ({ ...l }));
+    },
+    async parIdGoogle(idGoogle) {
+      if (pannes.lecture) throw new Error("events_read_failed:panne");
+      const l = [...lignes.values()].find((x) => x.google_event_id === idGoogle);
+      const copie = l ? { ...l } : null;
+      const p = pendantLecture;
+      pendantLecture = null;
+      p?.();
+      return copie;
+    },
+    async ecrireSiInchangee(ligne, champs) {
+      if (pannes.ecritureSiInchangee) return { ecrite: false, erreur: "panne" };
+      if (lignes.get(ligne.id)?.updated_at !== ligne.updated_at) return { ecrite: false, erreur: null };
+      appliquer(ligne.id, champs);
+      return { ecrite: true, erreur: null };
+    },
+    async ecrire(id, champs) {
+      if (pannes.ecriture) return "panne";
+      appliquer(id, champs);
+      return null;
+    },
+    async ajouter(champs) {
+      if (pannes.ajout) return pannes.ajout;
+      const deja = [...lignes.values()].find((x) => x.google_event_id === champs.google_event_id);
+      const id = deja?.id ?? `rdv-g${lignes.size + 1}`;
+      lignes.set(id, { ...(deja ?? {}), id, ...champs } as Ligne);
+      return null;
+    },
+  };
   return {
-    id: "rdv-1",
-    title: "Tournage marque fictive",
-    google_event_id: "evg-1",
-    google_etag: '"e1"',
-    updated_at: "2026-11-20T09:59:00.000Z",
-    last_synced_at: "2026-11-20T09:00:00.000Z",
-    sync_source: "agence",
-    deleted: false,
+    base,
+    lignes,
+    pannes,
+    set pendantLecture(f: (() => void) | null) {
+      pendantLecture = f;
+    },
+    /** Modification dans l'app ou par Alfred : sync_source 'agence' et updated_at = now(). */
+    ecritureApp(id: string, champs: Partial<Ligne>) {
+      lignes.set(id, { ...lignes.get(id)!, ...champs, sync_source: "agence", updated_at: h() });
+    },
   };
 }
 
-const plus = (iso: string, ms: number) => new Date(Date.parse(iso) + ms).toISOString();
+function googleSimule(h: () => string) {
+  const evenements = new Map<string, EvG>();
+  const appels: string[] = [];
+  let n = 0;
+  let nId = 0;
+  const reglages = {
+    /** Appelé à chaque envoi, avant que Google réponde (modification faite pendant l'envoi). */
+    pendant: null as ((action: string, ligne: Ligne) => void) | null,
+    /** Statut imposé au prochain envoi (refus de Google). */
+    statutImpose: 0,
+    /** Création acceptée mais réponse illisible. */
+    sansCorps: false,
+  };
+  const nouvelEtag = () => `"e${++n}"`;
+  const ajouterChezGoogle = (summary: string): EvG => {
+    const ev: EvG = { id: `evg-${++nId}`, etag: nouvelEtag(), updated: h(), summary, status: "confirmed" };
+    evenements.set(ev.id, ev);
+    return ev;
+  };
+  const google: GoogleAgenda<Ligne> = {
+    async envoyer(action, ligne) {
+      appels.push(action);
+      reglages.pendant?.(action, ligne);
+      if (reglages.statutImpose) {
+        const statut = reglages.statutImpose;
+        reglages.statutImpose = 0;
+        return { statut, g: {} };
+      }
+      if (action === "creer") {
+        const ev = ajouterChezGoogle(ligne.title);
+        return { statut: 200, g: reglages.sansCorps ? {} : { id: ev.id, etag: ev.etag } };
+      }
+      const ev = evenements.get(ligne.google_event_id ?? "");
+      if (action === "supprimer") {
+        if (!ev || ev.status === "cancelled") return { statut: 410, g: {} };
+        Object.assign(ev, { status: "cancelled", etag: nouvelEtag(), updated: h() });
+        return { statut: 204, g: {} };
+      }
+      if (!ev) return { statut: 404, g: {} };
+      if (ligne.google_etag && ligne.google_etag !== ev.etag) return { statut: 412, g: {} };
+      Object.assign(ev, { summary: ligne.title, etag: nouvelEtag(), updated: h() });
+      return { statut: 200, g: { id: ev.id, etag: ev.etag } };
+    },
+    async lire(idGoogle) {
+      appels.push("lire");
+      const ev = evenements.get(idGoogle);
+      return ev ? { statut: 200, g: { ...ev } } : { statut: 404, g: null };
+    },
+    champs: (g) => ({ title: (g as EvenementGoogle & { summary?: string }).summary ?? "(sans titre)" }),
+  };
+  return {
+    google,
+    evenements,
+    appels,
+    reglages,
+    ajouterChezGoogle,
+    /** Modification faite dans Google Agenda (par l'équipe, un invité, inviter_rdv…). */
+    modifierChezGoogle(id: string, summary: string) {
+      Object.assign(evenements.get(id)!, { summary, etag: nouvelEtag(), updated: h() });
+    },
+  };
+}
 
+function monde() {
+  const h = horlogeSimulee();
+  const b = baseSimulee(h);
+  const g = googleSimule(h);
+  const journal: Record<string, unknown>[] = [];
+  const noter = (q: Record<string, unknown>) => {
+    journal.push(q);
+  };
+  return {
+    h,
+    b,
+    g,
+    journal,
+    ligne: (id = "rdv-1") => b.lignes.get(id)!,
+    /** Un passage d'envoi complet, avec son bilan. */
+    async passage() {
+      const bilan = bilanVide();
+      await envoyerVersGoogle(b.base, g.google, bilan, noter, h);
+      return bilan;
+    },
+    /** La lecture d'un rendez-vous de Google. */
+    lire: (ev: EvenementGoogle) => appliquerLecture(b.base, g.google, ev, h(), noter),
+    /** Un rendez-vous créé dans l'app, déjà envoyé une fois (même etag des deux côtés). */
+    rdvSynchro(id = "rdv-1", titre = "Tournage marque fictive") {
+      const ev = g.ajouterChezGoogle(titre);
+      const t = h();
+      b.lignes.set(id, {
+        id, title: titre, google_event_id: ev.id, google_etag: ev.etag,
+        updated_at: t, last_synced_at: t, sync_source: "google", deleted: false,
+      });
+      return ev;
+    },
+    /** Un rendez-vous créé dans l'app, jamais envoyé. */
+    rdvNouveau(id = "rdv-2", titre = "Shooting fictif") {
+      b.lignes.set(id, {
+        id, title: titre, google_event_id: null, google_etag: null,
+        updated_at: h(), last_synced_at: null, sync_source: "agence", deleted: false,
+      });
+    },
+  };
+}
+
+// ----------------------------------------------------------------------------
+// Les décisions
 // ----------------------------------------------------------------------------
 
 describe("aEnvoyer", () => {
@@ -88,9 +236,13 @@ describe("actionGoogle", () => {
 
 describe("issueEnvoi", () => {
   it("2xx : envoyé", () => {
-    expect(issueEnvoi("creer", 200)).toBe("envoye");
+    expect(issueEnvoi("creer", 200, { id: "evg-1" })).toBe("envoye");
     expect(issueEnvoi("modifier", 200)).toBe("envoye");
     expect(issueEnvoi("supprimer", 204)).toBe("envoye");
+  });
+  it("création acceptée sans id lisible : refus (rien ne peut être marqué)", () => {
+    expect(issueEnvoi("creer", 200)).toBe("refus");
+    expect(issueEnvoi("creer", 200, { etag: '"e1"' })).toBe("refus");
   });
   it("404 ou 410 sur une suppression : déjà parti, c'est fait", () => {
     expect(issueEnvoi("supprimer", 404)).toBe("envoye");
@@ -113,133 +265,33 @@ describe("issueEnvoi", () => {
   });
 });
 
-describe("la boucle du 27/11/2026", () => {
-  it("avant : l'écriture d'après envoi laissait la ligne à envoyer (le déclencheur remettait now())", () => {
-    const lue = rdvModifie();
-    const t = plus(T0, 600);
-    const ancienne = ecritureServeur(lue, { google_etag: '"e2"', last_synced_at: t, updated_at: t }, plus(t, 21));
-    expect(aEnvoyer(ancienne)).toBe(true); // repartait à chaque passage
-  });
-
-  it("maintenant : un envoi réussi sort la ligne de la file, et le passage suivant n'envoie plus rien", () => {
-    const lue = rdvModifie();
-    const t = plus(T0, 600);
-    const e = ecrituresApresEnvoi("modifier", "envoye", t, lue, { etag: '"e2"' });
-    const r = ecrireSiInchangee(lue, lue, e.marquer!, plus(t, 21));
-    expect(r.ecrite).toBe(true);
-    expect(r.ligne).toMatchObject({ sync_source: "google", google_etag: '"e2"', updated_at: t, last_synced_at: t });
-    expect([r.ligne].filter(aEnvoyer)).toEqual([]);
-  });
-
-  it("une modification de l'app ou d'Alfred la remet dans la file", () => {
-    const lue = rdvModifie();
-    const t = plus(T0, 600);
-    const synchro = ecrireSiInchangee(lue, lue, ecrituresApresEnvoi("modifier", "envoye", t, lue, { etag: '"e2"' }).marquer!, t).ligne;
-    const apres = ecritureApp(synchro, { title: "Tournage déplacé" }, plus(t, 5000));
-    expect(aEnvoyer(apres)).toBe(true);
-    expect(actionGoogle(apres)).toBe("modifier");
-  });
-
+describe("ecrituresApresEnvoi", () => {
+  const ligne = { google_etag: '"e1"' };
   it("chaque écriture qui marque passe à 'google' et aligne updated_at sur last_synced_at", () => {
-    const lue = rdvModifie();
-    const t = plus(T0, 600);
-    const cas: [Parameters<typeof ecrituresApresEnvoi>[0], Parameters<typeof ecrituresApresEnvoi>[1]][] = [
-      ["creer", "envoye"], ["modifier", "envoye"], ["supprimer", "envoye"], ["aucune", "envoye"], ["modifier", "absent"],
-    ];
-    for (const [action, issue] of cas) {
-      const m = ecrituresApresEnvoi(action, issue, t, lue, { id: "evg-2", etag: '"e2"' }).marquer;
-      expect(m).toMatchObject({ sync_source: "google", updated_at: t, last_synced_at: t });
-    }
-  });
-});
-
-describe("la course : modification pendant l'envoi", () => {
-  it("modification : jamais marquée synchronisée, repart avec le nouvel etag", () => {
-    const lue = rdvModifie();
-    const enBase = ecritureApp(lue, { title: "Titre changé pendant l'envoi" }, plus(T0, 200));
-    const t = plus(T0, 600);
-    const e = ecrituresApresEnvoi("modifier", "envoye", t, lue, { etag: '"e2"' });
-    const r = ecrireSiInchangee(enBase, lue, e.marquer!, t);
-    expect(r.ecrite).toBe(false);
-    const apres = ecritureServeur(r.ligne, e.siModifiee!, plus(t, 30));
-    expect(apres.title).toBe("Titre changé pendant l'envoi");
-    expect(apres.google_etag).toBe('"e2"'); // le prochain envoi ne tombera pas sur un 412
-    expect(aEnvoyer(apres)).toBe(true);
-  });
-
-  it("création : l'id Google est gardé, le passage suivant modifie au lieu de recréer (pas de doublon)", () => {
-    const lue: Ligne = { ...rdvModifie(), google_event_id: null, google_etag: null, last_synced_at: null };
-    const enBase = ecritureApp(lue, { title: "Renommé pendant la création" }, plus(T0, 200));
-    const t = plus(T0, 600);
-    const e = ecrituresApresEnvoi("creer", "envoye", t, lue, { id: "evg-9", etag: '"e1"' });
-    const r = ecrireSiInchangee(enBase, lue, e.marquer!, t);
-    expect(r.ecrite).toBe(false);
-    const apres = ecritureServeur(r.ligne, e.siModifiee!, plus(t, 30));
-    expect(apres.google_event_id).toBe("evg-9");
-    expect(aEnvoyer(apres)).toBe(true);
-    expect(actionGoogle(apres)).toBe("modifier");
-  });
-
-  it("supprimée dans l'app pendant la création : le passage suivant la supprime chez Google", () => {
-    const lue: Ligne = { ...rdvModifie(), google_event_id: null, google_etag: null, last_synced_at: null };
-    const enBase = ecritureApp(lue, { deleted: true }, plus(T0, 200));
-    const t = plus(T0, 600);
-    const e = ecrituresApresEnvoi("creer", "envoye", t, lue, { id: "evg-9", etag: '"e1"' });
-    const apres = ecritureServeur(ecrireSiInchangee(enBase, lue, e.marquer!, t).ligne, e.siModifiee!, plus(t, 30));
-    expect(aEnvoyer(apres)).toBe(true);
-    expect(actionGoogle(apres)).toBe("supprimer");
-  });
-
-  it("restaurée pendant la suppression : recréée une fois chez Google, avec la version de l'app", () => {
-    const lue: Ligne = { ...rdvModifie(), deleted: true };
-    const enBase = ecritureApp(lue, { deleted: false }, plus(T0, 200));
-    const t = plus(T0, 600);
-    const e = ecrituresApresEnvoi("supprimer", "envoye", t, lue);
-    const r = ecrireSiInchangee(enBase, lue, e.marquer!, t);
-    expect(r.ecrite).toBe(false);
-    const apres = ecritureServeur(r.ligne, e.siModifiee!, plus(t, 30));
-    expect(aEnvoyer(apres)).toBe(true);
-    expect(actionGoogle(apres)).toBe("creer");
-  });
-
-  it("ce qu'on écrit quand la ligne a bougé ne la marque jamais", () => {
-    const lue = rdvModifie();
-    const t = plus(T0, 600);
     for (const action of ["creer", "modifier", "supprimer", "aucune"] as const) {
-      const s = ecrituresApresEnvoi(action, "envoye", t, lue, { id: "evg-2", etag: '"e2"' }).siModifiee;
-      for (const cle of ["last_synced_at", "updated_at", "sync_source"]) expect(s ?? {}).not.toHaveProperty(cle);
+      const m = ecrituresApresEnvoi(action, "envoye", T0, ligne, { id: "evg-2", etag: '"e2"' }).marquer;
+      expect(m).toMatchObject({ sync_source: "google", updated_at: T0, last_synced_at: T0 });
     }
   });
-});
-
-describe("réponses de Google qui ne marquent rien", () => {
-  it("404 ou 410 sur une modification : la ligne sort de la file mais n'est jamais recréée", () => {
-    const lue = rdvModifie();
-    const t = plus(T0, 600);
-    for (const statut of [404, 410]) {
-      const e = ecrituresApresEnvoi("modifier", issueEnvoi("modifier", statut), t, lue);
-      expect(e.siModifiee).toBeNull();
-      expect(e.marquer).not.toHaveProperty("google_event_id"); // id gardé : la lecture peut encore la marquer supprimée
-      const apres = ecrireSiInchangee(lue, lue, e.marquer!, t).ligne;
-      expect(apres.google_event_id).toBe("evg-1");
-      expect(aEnvoyer(apres)).toBe(false);
-      expect(actionGoogle(apres)).not.toBe("creer");
-    }
+  it("ce qui s'écrit sans condition ne marque jamais la ligne", () => {
+    const cas = [
+      ...(["creer", "modifier", "supprimer", "aucune"] as const).map((a) => ecrituresApresEnvoi(a, "envoye", T0, ligne, { id: "evg-2", etag: '"e2"' })),
+      ecrituresApresEnvoi("modifier", "absent", T0, ligne),
+    ];
+    for (const e of cas) for (const cle of ["last_synced_at", "updated_at", "sync_source"]) expect(e.sinon ?? {}).not.toHaveProperty(cle);
   });
-
-  it("412, refus ou réponse sans id à une création : rien n'est écrit, la ligne reste à envoyer", () => {
-    const lue = rdvModifie();
-    const t = plus(T0, 600);
-    expect(ecrituresApresEnvoi("modifier", "conflit", t, lue)).toEqual({ marquer: null, siModifiee: null });
-    expect(ecrituresApresEnvoi("modifier", "refus", t, lue)).toEqual({ marquer: null, siModifiee: null });
-    expect(ecrituresApresEnvoi("creer", "envoye", t, lue, {})).toEqual({ marquer: null, siModifiee: null });
-    expect(aEnvoyer(lue)).toBe(true);
+  it("404 ou 410 sur une modification : id effacé sans marquer, comme avant", () => {
+    expect(ecrituresApresEnvoi("modifier", "absent", T0, ligne)).toEqual({ marquer: null, sinon: { google_event_id: null, google_etag: null } });
   });
-
+  it("412, refus ou création sans id : rien n'est écrit", () => {
+    expect(ecrituresApresEnvoi("modifier", "conflit", T0, ligne)).toEqual({ marquer: null, sinon: null });
+    expect(ecrituresApresEnvoi("modifier", "refus", T0, ligne)).toEqual({ marquer: null, sinon: null });
+    expect(ecrituresApresEnvoi("creer", "envoye", T0, ligne, {})).toEqual({ marquer: null, sinon: null });
+  });
   it("modification acceptée sans etag lisible : l'ancien etag est gardé", () => {
-    const e = ecrituresApresEnvoi("modifier", "envoye", T0, rdvModifie(), {});
+    const e = ecrituresApresEnvoi("modifier", "envoye", T0, ligne, {});
     expect(e.marquer).toMatchObject({ google_etag: '"e1"' });
-    expect(e.siModifiee).toBeNull();
+    expect(e.sinon).toBeNull();
   });
 });
 
@@ -262,14 +314,284 @@ describe("choixLecture", () => {
     expect(choixLecture({ google_etag: null, updated_at: T0 }, { updated: plus(T0, 1000) }, plus(T0, 2000))).toBe("prendre_google");
     expect(choixLecture({ google_etag: null, updated_at: T0 }, { updated: plus(T0, -1000) }, plus(T0, 2000))).toBe("garder_app");
   });
-  it("garder_app puis etag retenu : le prochain envoi part avec l'etag de Google au lieu d'un 412", () => {
-    const lue = rdvModifie(); // modifiée dans l'app, etag "e1" périmé (Google est à "e3")
-    expect(choixLecture(lue, { etag: '"e3"', updated: "2026-11-20T09:30:00.000Z" }, T0)).toBe("garder_app");
-    const apres = ecritureServeur(lue, { google_etag: '"e3"' }, plus(T0, 10));
-    expect(apres.google_etag).toBe('"e3"');
-    expect(aEnvoyer(apres)).toBe(true);
+});
+
+// ----------------------------------------------------------------------------
+// Le passage (envoi), avec la base et Google simulés
+// ----------------------------------------------------------------------------
+
+describe("envoi : la boucle du 27/11/2026", () => {
+  it("un envoi réussi sort la ligne de la file, le passage suivant n'envoie plus rien", async () => {
+    const m = monde();
+    m.rdvSynchro();
+    m.b.ecritureApp("rdv-1", { title: "Tournage déplacé" });
+    expect(await m.passage()).toMatchObject({ pushed: 1, conflits: 0, refus: 0 });
+    expect(m.ligne()).toMatchObject({ sync_source: "google", google_etag: m.g.evenements.get("evg-1")!.etag });
+    expect(m.g.evenements.get("evg-1")!.summary).toBe("Tournage déplacé");
+    const appels = m.g.appels.length;
+    expect((await m.passage()).pushed).toBe(0);
+    expect(m.g.appels.length).toBe(appels); // plus rien ne part vers Google
+  });
+
+  it("une modification de l'app ou d'Alfred la remet dans la file", async () => {
+    const m = monde();
+    m.rdvSynchro();
+    m.b.ecritureApp("rdv-1", { title: "Tournage déplacé" });
+    await m.passage();
+    m.b.ecritureApp("rdv-1", { title: "Tournage déplacé à 15 h" });
+    expect(aEnvoyer(m.ligne())).toBe(true);
+    expect((await m.passage()).pushed).toBe(1);
+    expect(m.g.evenements.get("evg-1")!.summary).toBe("Tournage déplacé à 15 h");
   });
 });
+
+describe("envoi : modification faite pendant l'envoi", () => {
+  it("modification : jamais marquée synchronisée, elle repart au passage suivant sans 412", async () => {
+    const m = monde();
+    m.rdvSynchro();
+    m.b.ecritureApp("rdv-1", { title: "Version 1" });
+    m.g.reglages.pendant = () => {
+      m.g.reglages.pendant = null;
+      m.b.ecritureApp("rdv-1", { title: "Version 2" });
+    };
+    expect((await m.passage()).pushed).toBe(1);
+    expect(m.ligne()).toMatchObject({ sync_source: "agence", google_etag: m.g.evenements.get("evg-1")!.etag });
+    expect(aEnvoyer(m.ligne())).toBe(true);
+    expect(await m.passage()).toMatchObject({ pushed: 1, conflits: 0 });
+    expect(m.g.evenements.get("evg-1")!.summary).toBe("Version 2");
+    expect(aEnvoyer(m.ligne())).toBe(false);
+  });
+
+  it("création : l'id Google est gardé, pas de doublon chez Google", async () => {
+    const m = monde();
+    m.rdvNouveau();
+    m.g.reglages.pendant = () => {
+      m.g.reglages.pendant = null;
+      m.b.ecritureApp("rdv-2", { title: "Shooting renommé" });
+    };
+    await m.passage();
+    expect(m.ligne("rdv-2").google_event_id).toBe("evg-1");
+    expect(actionGoogle(m.ligne("rdv-2"))).toBe("modifier");
+    await m.passage();
+    expect(m.g.evenements.size).toBe(1);
+    expect(m.g.evenements.get("evg-1")!.summary).toBe("Shooting renommé");
+  });
+
+  it("supprimée dans l'app pendant la création : supprimée chez Google au passage suivant", async () => {
+    const m = monde();
+    m.rdvNouveau();
+    m.g.reglages.pendant = () => {
+      m.g.reglages.pendant = null;
+      m.b.ecritureApp("rdv-2", { deleted: true });
+    };
+    await m.passage();
+    expect(actionGoogle(m.ligne("rdv-2"))).toBe("supprimer");
+    expect((await m.passage()).deleted).toBe(1);
+    expect(m.g.evenements.get("evg-1")!.status).toBe("cancelled");
+    expect(aEnvoyer(m.ligne("rdv-2"))).toBe(false);
+  });
+
+  it("restaurée dans l'app pendant la suppression : recréée une fois chez Google", async () => {
+    const m = monde();
+    m.rdvSynchro();
+    m.b.ecritureApp("rdv-1", { deleted: true });
+    m.g.reglages.pendant = () => {
+      m.g.reglages.pendant = null;
+      m.b.ecritureApp("rdv-1", { deleted: false });
+    };
+    await m.passage();
+    expect(m.ligne()).toMatchObject({ google_event_id: null, deleted: false });
+    expect((await m.passage()).pushed).toBe(1);
+    expect(m.ligne().google_event_id).toBe("evg-2");
+    expect((await m.passage()).pushed).toBe(0);
+  });
+
+  it("écriture refusée après l'envoi : journalisée, l'etag de Google est quand même retenu", async () => {
+    const m = monde();
+    m.rdvSynchro();
+    m.b.ecritureApp("rdv-1", { title: "Tournage déplacé" });
+    m.b.pannes.ecritureSiInchangee = true;
+    await m.passage();
+    expect(m.journal).toContainEqual({ ecriture_refusee: "rdv-1", erreur: "panne" });
+    expect(m.ligne().google_etag).toBe(m.g.evenements.get("evg-1")!.etag); // le prochain envoi ne tombera pas en 412
+    expect(aEnvoyer(m.ligne())).toBe(true);
+  });
+});
+
+describe("envoi : réponses de Google", () => {
+  it("404 sur une modification : comme avant, id effacé et rendez-vous recréé une fois au passage suivant", async () => {
+    const m = monde();
+    m.rdvSynchro();
+    m.g.evenements.delete("evg-1"); // purgé chez Google, ou un autre compte Google après une reconnexion
+    m.b.ecritureApp("rdv-1", { title: "Modifié dans l'app" });
+    expect((await m.passage()).absents).toBe(1);
+    expect(m.journal).toContainEqual({ absent_de_google: "rdv-1", statut: 404, recree_au_passage_suivant: true });
+    expect(m.ligne()).toMatchObject({ google_event_id: null, google_etag: null, sync_source: "agence" });
+    expect((await m.passage()).pushed).toBe(1);
+    expect(m.g.evenements.size).toBe(1);
+    expect(m.ligne().google_event_id).toBe("evg-2");
+    expect((await m.passage()).pushed).toBe(0);
+  });
+
+  it("412, Google plus récent : relu dans le même passage, sa version entre dans l'app", async () => {
+    const m = monde();
+    m.rdvSynchro();
+    m.b.ecritureApp("rdv-1", { title: "Titre de l'app" });
+    m.g.modifierChezGoogle("evg-1", "Titre de Google"); // plus tard que l'app
+    const etag = m.g.evenements.get("evg-1")!.etag;
+    expect(await m.passage()).toMatchObject({ conflits: 1, pulled: 1, pushed: 0 });
+    expect(m.journal).toContainEqual({ conflit: "rdv-1" });
+    expect(m.ligne()).toMatchObject({ title: "Titre de Google", sync_source: "google", google_etag: etag });
+    expect(m.g.evenements.get("evg-1")!.etag).toBe(etag); // Google n'est pas réécrit
+  });
+
+  it("412, l'app plus récente (changement Google déjà lu, etag périmé) : relu, et la version de l'app part dans le même passage", async () => {
+    const m = monde();
+    m.rdvSynchro();
+    m.g.modifierChezGoogle("evg-1", "Titre de Google"); // lu par un ancien passage sans garder l'etag
+    m.b.ecritureApp("rdv-1", { title: "Titre de l'app" }); // plus tard
+    expect(await m.passage()).toMatchObject({ conflits: 1, pushed: 1 });
+    expect(m.g.evenements.get("evg-1")!.summary).toBe("Titre de l'app");
+    expect(m.ligne()).toMatchObject({ sync_source: "google", google_etag: m.g.evenements.get("evg-1")!.etag });
+    expect((await m.passage()).pushed).toBe(0);
+  });
+
+  it("412 encore au second envoi : on s'arrête là (pas de boucle), la ligne reste à envoyer", async () => {
+    const m = monde();
+    m.rdvSynchro();
+    m.g.modifierChezGoogle("evg-1", "Titre de Google");
+    m.b.ecritureApp("rdv-1", { title: "Titre de l'app" });
+    let envois = 0;
+    m.g.reglages.pendant = (action) => {
+      if (action === "modifier" && ++envois === 2) m.g.modifierChezGoogle("evg-1", "Encore changé chez Google");
+    };
+    expect((await m.passage()).conflits).toBe(2);
+    expect(m.journal).toContainEqual({ conflit: "rdv-1", encore: true });
+    expect(m.g.appels.filter((a) => a === "modifier")).toHaveLength(2);
+    expect(aEnvoyer(m.ligne())).toBe(true);
+  });
+
+  it("refus de Google (503 après les essais) : rien n'est écrit, la ligne repart au passage suivant", async () => {
+    const m = monde();
+    m.rdvSynchro();
+    m.b.ecritureApp("rdv-1", { title: "Tournage déplacé" });
+    const avant = { ...m.ligne() };
+    m.g.reglages.statutImpose = 503;
+    expect(await m.passage()).toMatchObject({ pushed: 0, refus: 1, statutsRefus: [503] });
+    expect(m.journal).toContainEqual({ refus_google: "rdv-1", action: "modifier", statut: 503 });
+    expect(m.ligne()).toEqual(avant);
+    expect((await m.passage()).pushed).toBe(1);
+  });
+
+  it("création acceptée sans id lisible : comptée en refus (200), rien n'est marqué", async () => {
+    const m = monde();
+    m.rdvNouveau();
+    m.g.reglages.sansCorps = true;
+    expect(await m.passage()).toMatchObject({ pushed: 0, refus: 1, statutsRefus: [200] });
+    expect(m.journal).toContainEqual({ refus_google: "rdv-2", action: "creer", statut: 200, reponse_sans_id: true });
+    expect(m.ligne("rdv-2").google_event_id).toBeNull();
+  });
+});
+
+// ----------------------------------------------------------------------------
+// La lecture d'un rendez-vous de Google
+// ----------------------------------------------------------------------------
+
+describe("appliquerLecture", () => {
+  it("même etag que la dernière version synchronisée : rien n'est écrit (notre envoi qui revient)", async () => {
+    const m = monde();
+    const ev = m.rdvSynchro();
+    const avant = { ...m.ligne() };
+    expect(await m.lire({ ...ev })).toBeNull();
+    expect(m.ligne()).toEqual(avant);
+  });
+
+  it("l'app plus récente : etag de Google retenu ; écriture ratée : le passage s'arrête", async () => {
+    const m = monde();
+    m.rdvSynchro();
+    m.g.modifierChezGoogle("evg-1", "Titre de Google");
+    m.b.ecritureApp("rdv-1", { title: "Titre de l'app" });
+    const ev = { ...m.g.evenements.get("evg-1")! };
+    m.b.pannes.ecriture = true;
+    await expect(m.lire(ev)).rejects.toThrow("events_write_failed:panne");
+    m.b.pannes.ecriture = false;
+    expect(await m.lire(ev)).toBe("garde");
+    expect(m.ligne()).toMatchObject({ title: "Titre de l'app", google_etag: ev.etag });
+  });
+
+  it("Google plus récent : pris sous condition ; ligne modifiée pendant la lecture : etag seul retenu, ou arrêt si l'écriture rate", async () => {
+    const m = monde();
+    m.rdvSynchro();
+    m.g.modifierChezGoogle("evg-1", "Titre de Google");
+    const ev = { ...m.g.evenements.get("evg-1")! };
+    m.b.pendantLecture = () => m.b.ecritureApp("rdv-1", { title: "Titre de l'app, à l'instant" });
+    expect(await m.lire(ev)).toBe("garde");
+    expect(m.ligne()).toMatchObject({ title: "Titre de l'app, à l'instant", google_etag: ev.etag, sync_source: "agence" });
+
+    const m2 = monde();
+    m2.rdvSynchro();
+    m2.g.modifierChezGoogle("evg-1", "Titre de Google");
+    m2.b.pendantLecture = () => {
+      m2.b.ecritureApp("rdv-1", { title: "Titre de l'app, à l'instant" });
+      m2.b.pannes.ecriture = true;
+    };
+    await expect(m2.lire({ ...m2.g.evenements.get("evg-1")! })).rejects.toThrow("events_write_failed:panne");
+  });
+
+  it("Google plus récent, ligne inchangée : sa version entre dans l'app", async () => {
+    const m = monde();
+    m.rdvSynchro();
+    m.g.modifierChezGoogle("evg-1", "Titre de Google");
+    const ev = { ...m.g.evenements.get("evg-1")! };
+    expect(await m.lire(ev)).toBe("pulled");
+    expect(m.ligne()).toMatchObject({ title: "Titre de Google", google_etag: ev.etag, sync_source: "google", updated_at: ev.updated });
+  });
+
+  it("refusé par la base pour ses données : journalisé, le passage continue", async () => {
+    const m = monde();
+    m.rdvSynchro();
+    m.g.modifierChezGoogle("evg-1", "Titre de Google");
+    m.b.pannes.ecritureSiInchangee = true;
+    expect(await m.lire({ ...m.g.evenements.get("evg-1")! })).toBeNull();
+    expect(m.journal).toContainEqual({ lecture_refusee: "rdv-1", erreur: "panne" });
+  });
+
+  it("lecture de la base ratée : le passage s'arrête (le curseur n'avance pas)", async () => {
+    const m = monde();
+    const ev = m.rdvSynchro();
+    m.b.pannes.lecture = true;
+    await expect(m.lire({ ...ev, etag: '"autre"' })).rejects.toThrow("events_read_failed");
+  });
+
+  it("suppression annoncée par Google : marquée supprimée ; écriture ratée : le passage s'arrête", async () => {
+    const m = monde();
+    const ev = m.rdvSynchro();
+    m.b.pannes.ecriture = true;
+    await expect(m.lire({ ...ev, status: "cancelled" })).rejects.toThrow("events_write_failed:panne");
+    m.b.pannes.ecriture = false;
+    expect(await m.lire({ ...ev, status: "cancelled" })).toBe("deleted");
+    expect(m.ligne()).toMatchObject({ deleted: true, sync_source: "google" });
+    expect(await m.lire({ ...ev, status: "cancelled" })).toBeNull(); // déjà supprimée
+  });
+
+  it("nouveau rendez-vous de Google : ajouté en 'google' ; refusé par la base : journalisé, le passage continue", async () => {
+    const m = monde();
+    const ev = m.g.ajouterChezGoogle("Appel marque fictive");
+    expect(await m.lire({ ...ev })).toBe("pulled");
+    const ajoutee = [...m.b.lignes.values()].find((l) => l.google_event_id === ev.id)!;
+    expect(ajoutee).toMatchObject({ title: "Appel marque fictive", sync_source: "google", google_etag: ev.etag });
+    expect(aEnvoyer(ajoutee)).toBe(false);
+
+    const autre = m.g.ajouterChezGoogle("Autre appel fictif");
+    m.b.pannes.ajout = "panne";
+    expect(await m.lire({ ...autre })).toBeNull();
+    expect(m.journal).toContainEqual({ nouveau_refuse: autre.id.slice(0, 8), erreur: "panne" });
+  });
+});
+
+// ----------------------------------------------------------------------------
+// Bilan et journal
+// ----------------------------------------------------------------------------
 
 describe("bilan et journal", () => {
   it("compte chaque réponse", () => {
@@ -305,6 +627,11 @@ describe("bilan et journal", () => {
     });
   });
 
+  it("verrou perdu après l'envoi : ce qui est parti est quand même dit", () => {
+    const b = { ...bilanVide(), pushed: 3, verrouPerdu: true };
+    expect(ligneJournal({ declencheur: "cron" }, b, 130_000)).toEqual({ declencheur: "cron", envoyes: 3, recus: 0, supprimes: 0, verrou_perdu: true, ms: 130_000 });
+  });
+
   it("passage sauté parce qu'un autre tourne", () => {
     expect(ligneJournal({ canal: "reconnu" }, { skipped: "locked" }, 15)).toEqual({ canal: "reconnu", saute: "verrou", ms: 15 });
   });
@@ -314,9 +641,10 @@ describe("bilan et journal", () => {
     expect((ligneErreur({}, "x".repeat(500), 1).erreur as string).length).toBe(300);
   });
 
-  it("déclencheur de google-sync : valeur connue, sinon l'app ou « inconnu »", () => {
+  it("déclencheur de google-sync : étiquette connue, sinon l'app ou « inconnu »", () => {
     expect(declencheurSync("cron", "cron")).toBe("cron");
     expect(declencheurSync("manual", "agency")).toBe("manual");
+    expect(declencheurSync("app", "agency")).toBe("app"); // relance automatique de l'app
     expect(declencheurSync(undefined, "agency")).toBe("app");
     expect(declencheurSync("n'importe quoi", "cron")).toBe("inconnu");
     expect(declencheurSync(42, undefined)).toBe("inconnu");

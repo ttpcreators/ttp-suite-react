@@ -23,6 +23,10 @@ export function setTeamSession(uid: string | null) {
   teamUid = uid;
   myName = null;
 }
+/** Session agence (profil chargé, rôle 'agency') ? Une session créateur ou pas encore chargée : non. */
+export function sessionAgence(): boolean {
+  return teamUid !== null;
+}
 
 let pokeTimer: number | null = null;
 /** Après une action : prévient l'équipe (actions rapprochées regroupées en une notification). */

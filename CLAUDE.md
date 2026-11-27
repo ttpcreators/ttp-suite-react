@@ -251,7 +251,9 @@ Plusieurs audits adversariaux menés (identité et privilège, OWASP). Détail d
     fondateurs : lue et écrite automatiquement par les mêmes fonctions (voir
     `docs/ARCHITECTURE.md`). Côté serveur, lire le blob avec `_shared/appState.ts`.
 - **Événements Agenda** : toute modification depuis l'app repasse par `src/lib/db.ts` (qui
-  pose `sync_source = 'agence'` pour la synchro Google).
+  pose `sync_source = 'agence'` pour la synchro Google, puis la relance quelques secondes
+  après : `synchroAgendaApresEcriture` de `src/lib/googleCalendar.ts`). Une écriture faite
+  ailleurs appelle aussi cette relance, sinon elle attend le passage horaire.
 - **Mises en ligne sans écran d'erreur** :
   - chaque build écrit `version.json` (`vite.config.ts`) ;
   - `src/lib/appUpdate.ts` le surveille ;

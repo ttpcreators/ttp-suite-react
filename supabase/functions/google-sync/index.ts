@@ -11,11 +11,23 @@
 //
 // La logique de sync vit dans _shared/google.ts (runSyncCycle) — source unique.
 // Sortie : { ok, pulled, pushed, deleted, resynced, conflits, absents, refus,
-// statutsRefus } ou { ok:true, skipped:'locked' }.
+// statutsRefus, verrouPerdu? } ou { ok:true, skipped:'locked' }.
 //
-// JOURNAL : une ligne par passage, `google-sync {…}` : déclencheur (cron, manual,
-// webhook, renew, app), mode, envoyés, reçus, supprimés, durée, ou l'erreur. Le cron
-// horaire (17 * * * *) reste indispensable : Google n'envoie pas toujours d'avis.
+// JOURNAL : une ligne par passage, `google-sync {…}` : déclencheur, accès (« secret »
+// des crons ou « compte » agence), mode, envoyés, reçus, supprimés, durée, ou l'erreur.
+// Le déclencheur est une ÉTIQUETTE choisie par l'appelant, pas une preuve de l'origine :
+//   - « cron » : la tâche horaire de la minute 17 (google-sync-hourly), mais aussi le
+//     connecteur (ttp-mcp : creer_evenement, cocher_tache, creer_element,
+//     modifier_element, supprimer_element) ;
+//   - « webhook » : rdv, meet-invite et le connecteur (creer_meet, inviter_rdv). Jamais
+//     un avis de Google : ceux-là sont dans le journal de google-webhook ;
+//   - « manual » : le bouton « Synchroniser » de l'app ; « app » : la relance
+//     automatique de l'app après un enregistrement de rendez-vous (googleCalendar.ts) ;
+//   - « renew » n'arrive pas ici : google-watch-renew et google-oauth-callback lancent
+//     leur passage elles-mêmes et l'écrivent dans leur propre journal.
+// Des étiquettes distinctes (rdv, meet, connecteur) demanderaient de redéployer rdv,
+// meet-invite et ttp-mcp : à faire plus tard. Le cron horaire reste indispensable :
+// Google n'envoie pas toujours d'avis.
 // ============================================================================
 
 import {
@@ -80,7 +92,11 @@ Deno.serve(async (req: Request) => {
     body = {};
   }
   const mode = body.mode === "full" ? "full" : "incremental";
-  const contexte = { declencheur: declencheurSync(body.trigger, auth.via), mode };
+  const contexte = {
+    declencheur: declencheurSync(body.trigger, auth.via),
+    acces: auth.via === "cron" ? "secret" : "compte",
+    mode,
+  };
   const t0 = Date.now();
 
   const sb = getServiceClient();

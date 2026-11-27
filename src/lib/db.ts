@@ -1,9 +1,12 @@
 import { supabase } from "./supabase";
 import { pokeTeam } from "./team";
+import { synchroAgendaApresEcriture } from "./googleCalendar";
 
 /**
  * Helpers de mutation Supabase (miroir de _dbInsert / _dbUpdate / _dbDelete de
  * l'ancienne app). Les tables ont la RLS : agence = tout, créateur = ses données.
+ * Un rendez-vous (`events`) écrit ici relance la synchro Google Agenda quelques
+ * secondes après (session agence seulement, googleCalendar.ts).
  */
 
 export async function dbInsert<T extends Record<string, unknown>>(
@@ -16,6 +19,7 @@ export async function dbInsert<T extends Record<string, unknown>>(
     return null;
   }
   pokeTeam(table); // prévient l'équipe agence (« Gianni a ajouté… »)
+  if (table === "events") synchroAgendaApresEcriture();
   return (data && (data[0] as T & { id: string })) || null;
 }
 
@@ -38,6 +42,7 @@ export async function dbUpdate(
   // arrière (ex : un créateur qui tente d'éditer un évènement multi-créateurs de l'agence).
   const ok = (data?.length ?? 0) > 0;
   if (ok) pokeTeam(table, patch);
+  if (ok && table === "events") synchroAgendaApresEcriture();
   return ok;
 }
 
@@ -55,7 +60,10 @@ export async function dbDelete(table: string, id: string): Promise<boolean> {
       console.warn(`[db] soft-delete events:`, error.message);
       return false;
     }
-    if (data?.length) pokeTeam("events", { deleted: true });
+    if (data?.length) {
+      pokeTeam("events", { deleted: true });
+      synchroAgendaApresEcriture();
+    }
     return (data?.length ?? 0) > 0;
   }
 
