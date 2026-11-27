@@ -1,15 +1,64 @@
 import { describe, expect, it } from "vitest";
 import {
-  besoinValidation, canonique, citeBrouillon, inviteExterne, lireOutil, memeAppel, modifieApres, problemeOutilPropose, refusBrouillons, refusOutil,
-  texteOutil, validationBrouillon, validationOutil, validationValable, type Validation,
+  besoinValidation, canonique, citeBrouillon, inviteExterne, lireOutil, memeAppel, modifieApres, noteValideur, problemeOutilPropose, refusBrouillons, refusOutil,
+  texteOutil, validationBrouillon, validationOutil, validationTient, validationValable, type PropositionRelue, type Validation,
 } from "./verrouAgent.ts";
 
 const AGENCE = "ttpcreators.pro";
 const MAINTENANT = Date.parse("2026-11-27T12:00:00Z");
 const MARC = "11111111-1111-1111-1111-111111111111";
+const ASSOCIE = "33333333-3333-3333-3333-333333333333";
 const COMPTES = new Set([MARC]);
 const v = (x: Partial<Validation>): Validation => ({
   id: "a1", type: "brouillon_mail", contexte: null, lien_spark: null, outil: null, valide_par: MARC, valide_le: "2026-11-27T11:00:00Z", ...x,
+});
+
+describe("le valideur choisi pour une connexion (Paramètres › Connexions Claude)", () => {
+  const deux = new Set([MARC, ASSOCIE]);
+  it("sans valideur : tout compte agence, comme avant", () => {
+    expect(validationValable(v({ valide_par: ASSOCIE }), deux, MAINTENANT)).toBe(true);
+    expect(validationValable(v({ valide_par: ASSOCIE }), deux, MAINTENANT, null)).toBe(true);
+  });
+  it("avec valideur : seule sa validation compte", () => {
+    expect(validationValable(v({ valide_par: ASSOCIE }), deux, MAINTENANT, MARC)).toBe(false);
+    expect(validationValable(v({ valide_par: MARC }), deux, MAINTENANT, MARC)).toBe(true);
+    // Le valideur doit rester un compte agence.
+    expect(validationValable(v({ valide_par: MARC }), new Set([ASSOCIE]), MAINTENANT, MARC)).toBe(false);
+    const vs = [v({ id: "b", contexte: "brouillon r-1", valide_par: ASSOCIE })];
+    expect(validationBrouillon(vs, "r-1", deux, MAINTENANT)?.id).toBe("b");
+    expect(validationBrouillon(vs, "r-1", deux, MAINTENANT, MARC)).toBeNull();
+    const args = { table: "todos", id: "x" };
+    const os = [v({ id: "c", type: "alerte", outil: { nom: "supprimer_element", arguments: args }, valide_par: ASSOCIE })];
+    expect(validationOutil(os, "supprimer_element", args, deux, MAINTENANT)?.id).toBe("c");
+    expect(validationOutil(os, "supprimer_element", args, deux, MAINTENANT, MARC)).toBeNull();
+  });
+  it("le refus le dit", () => {
+    expect(noteValideur(null)).toBeNull();
+    expect(refusBrouillons("programmer_envoi", [{ id: "r-1", pourquoi: "pas validé" }], noteValideur("Marc"))).toContain("seule une validation de Marc compte");
+    expect(refusOutil("supprimer_element", { id: "x" }, noteValideur("Marc")).split("\n").at(-1)).toBe("Pour cette connexion, seule une validation de Marc compte.");
+    expect(refusBrouillons("programmer_envoi", [{ id: "r-1", pourquoi: "pas validé" }])).not.toContain("seule une validation");
+  });
+});
+
+describe("juste avant un envoi de la file : la validation tient encore", () => {
+  const p = (x: Partial<PropositionRelue>): PropositionRelue => ({ ...v({ contexte: "brouillon r-1 · boîte talent" }), statut: "valide", ...x });
+  it("validée, ou marquée envoyée par l'agent après la programmation : le mail part", () => {
+    expect(validationTient(p({}), "r-1", COMPTES)).toBeNull();
+    expect(validationTient(p({ statut: "envoye" }), "r-1", COMPTES)).toBeNull();
+    expect(validationTient(p({ contexte: null, lien_spark: "https://mail.google.com/mail/#drafts?compose=r-1" }), "r-1", COMPTES)).toBeNull();
+  });
+  it("retirée, écartée, supprimée ou d'un compte parti : le mail ne part pas", () => {
+    expect(validationTient(null, "r-1", COMPTES)).toContain("introuvable");
+    expect(validationTient(p({ statut: "a_valider" }), "r-1", COMPTES)).toContain("retirée");
+    expect(validationTient(p({ statut: "ecarte" }), "r-1", COMPTES)).toContain("écartée");
+    expect(validationTient(p({ statut: "modifie_envoye" }), "r-1", COMPTES)).toContain("à la main");
+    expect(validationTient(p({ valide_par: null }), "r-1", COMPTES)).toContain("retirée");
+    expect(validationTient(p({ valide_par: ASSOCIE }), "r-1", COMPTES)).toContain("n'est plus de l'agence");
+  });
+  it("la proposition doit toujours citer ce brouillon", () => {
+    expect(validationTient(p({ contexte: "brouillon r-12 · boîte talent" }), "r-1", COMPTES)).toContain("ne cite plus");
+    expect(validationTient(p({ type: "alerte" }), "r-1", COMPTES)).toContain("ne cite plus");
+  });
 });
 
 describe("ce qu'un appel d'agent demande", () => {

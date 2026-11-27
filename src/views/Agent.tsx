@@ -24,7 +24,10 @@ import { mergeAppStateKey, useAppState as useAgentAppState } from "@/lib/appStat
 import { AValiderFile } from "@/components/a-valider-file";
 import { avanceCollabOf, gesteValider, statutApresValidation, texteModifie, typeAffiche } from "@/lib/aValider";
 import { avancerCollabDepuisFile, noterModification } from "@/lib/aValiderDb";
+import { lireConnexionsClaude } from "@/lib/connexionsClaudeDb";
+import { teamNames } from "@/lib/team";
 import { couper } from "../../supabase/functions/_shared/texteSur.ts";
+import { origineProposition, prenom, type ConnexionClaude } from "../../supabase/functions/_shared/connexionsClaude.ts";
 
 /**
  * Section « Agents » (Espace Agence, fondateurs) : les agents de TTP, créés et réglés
@@ -46,6 +49,9 @@ type Action = {
   cree_le: string; traite_le: string | null; agent_id?: string | null;
   /** Appel d'outil proposé par un agent (verrou du connecteur, SQL 2026-11-27-securite-alfred). */
   outil?: unknown;
+  /** Compte et connexion qui ont déposé la proposition (SQL 2026-11-27-verrou-connexions). */
+  cree_par?: string | null;
+  grant_id?: string | null;
 };
 type Prospect = {
   id: string; marque: string; signal: string | null; signal_date: string | null;
@@ -211,6 +217,11 @@ export function AgentView() {
 
   const [cockpits, setCockpits] = useState<Cockpit[]>([]);
   const [actions, setActions] = useState<Action[]>([]);
+  // Qui a déposé chaque proposition (Alfred, le Claude de Gianni, celui de Marc) : connexions de
+  // l'agence (fonction réservée aux fondateurs) et prénoms des comptes. Vides avant le SQL du 27/11.
+  const [connexions, setConnexions] = useState<Map<string, ConnexionClaude>>(() => new Map());
+  const [noms, setNoms] = useState<Map<string, string>>(() => new Map());
+  const [monId, setMonId] = useState<string | null>(null);
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [cercle, setCercle] = useState<Cercle[]>([]);
   const [memoire, setMemoire] = useState<Memoire[]>([]);
@@ -295,6 +306,20 @@ export function AgentView() {
     return () => { active = false; };
   }, [live]);
 
+  // Connexions et prénoms, pour dire qui a déposé chaque proposition. À part : une lecture ratée
+  // (SQL pas lancé) laisse la page telle qu'avant, sans origine.
+  useEffect(() => {
+    let active = true;
+    void Promise.all([lireConnexionsClaude(), teamNames(), supabase.auth.getSession()]).then(([cx, nm, s]) => {
+      if (!active) return;
+      if (cx.etat === "ok") setConnexions(new Map(cx.liste.map((c) => [c.id, c])));
+      setNoms(nm);
+      setMonId(s.data.session?.user.id ?? null);
+    }, () => {});
+    return () => { active = false; };
+  }, [live]);
+  const origineDe = (a: Pick<Action, "cree_par" | "grant_id">) => origineProposition(a, connexions, noms);
+
   // ── mutations (schéma agent) + trace dans le journal pour l'agent ──
   const upd = async (table: string, id: string, patch: Record<string, unknown>): Promise<boolean> => {
     // .select("id") : 0 ligne touchée (RLS / ligne absente) = échec, pas un faux succès.
@@ -367,7 +392,17 @@ export function AgentView() {
   // « Valider » dans la file : même statut et même circuit qu'avant (aValider.ts) ; un texte
   // modifié par Marc remplace le contenu, et l'avant / après part au journal pour l'agent.
   const valider = async (a: Action, opts: { texte?: string; silencieux?: boolean } = {}): Promise<boolean> => {
-    const geste = gesteValider(a, alfred?.id ?? null);
+    // Déposée par une connexion « agent autonome » : un mail passe en « valide » (l'agent
+    // l'envoie), comme un mail d'Alfred ; le serveur n'accepte rien d'autre de cette connexion.
+    const origine = origineDe(a);
+    const geste = gesteValider({ ...a, connexion_agent: origine?.agent === true }, alfred?.id ?? null);
+    // Valideur choisi pour cette connexion (Paramètres › Connexions Claude) : seule sa validation
+    // compte pour le serveur, inutile de valider à sa place.
+    if (origine?.valideur && monId && origine.valideur !== monId && statutApresValidation(geste) === "valide") {
+      toast(`Validation réservée à ${prenom(noms.get(origine.valideur))} pour cette connexion`);
+      return false;
+    }
+    const parAlfred = !!alfred?.id && a.agent_id === alfred.id;
     const texte = opts.texte !== undefined && texteModifie(a.contenu, opts.texte) ? opts.texte.trim() : null;
     // Copie dans le geste lui même (avant tout await : Safari l'exige).
     if (geste === "copier_envoye" && !opts.silencieux) {
@@ -392,7 +427,12 @@ export function AgentView() {
       return traiter(cur, "envoye", { ...(opts.silencieux ? { message: null } : { message: r.message }), trace: ["marc_etape", `${a.cible ?? ""} · étape ${av.etape}`] });
     }
     const statut = statutApresValidation(geste);
-    if (statut === "valide") return traiter(cur, "valide", opts.silencieux || geste !== "alfred_fait" ? quiet : { message: "Validé ✓ Alfred le fait." });
+    if (statut === "valide") {
+      const message = geste === "alfred_fait"
+        ? (parAlfred ? "Validé ✓ Alfred le fait." : "Validé ✓ L'agent le fait.")
+        : (parAlfred ? "Validé ✓ Alfred l'envoie dans la minute." : "Validé ✓ L'agent l'envoie à son prochain passage.");
+      return traiter(cur, "valide", opts.silencieux ? quiet : { message });
+    }
     return traiter(cur, "envoye", opts.silencieux ? quiet : { message: geste === "copier_envoye" ? "Validé ✓ Message copié" : "Validé ✓" });
   };
   const deciderProspect = async (p: Prospect, statut: "valide" | "ecarte") => {
@@ -671,8 +711,13 @@ export function AgentView() {
           <Empty text={traiteesSemaine > 0 ? `Rien à valider. ${traiteesSemaine} action${traiteesSemaine > 1 ? "s" : ""} traitée${traiteesSemaine > 1 ? "s" : ""} ces 7 derniers jours.` : "Rien à valider pour le moment."} />
         ) : (
           <AValiderFile
-            items={shownQueue}
+            items={shownQueue.map((a) => ({ ...a, connexion_agent: origineDe(a)?.agent === true }))}
             alfredId={alfred?.id ?? null}
+            origine={(a) => {
+              const o = origineDe(a as Action);
+              if (!o) return null;
+              return o.valideur ? `${o.texte} · validation : ${prenom(noms.get(o.valideur))}` : o.texte;
+            }}
             meta={(a) => {
               const t = typeAffiche(a);
               const m = ACTION_META[t] ?? { label: a.type, icon: Send };

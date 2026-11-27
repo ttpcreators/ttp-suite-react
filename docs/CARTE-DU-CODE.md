@@ -92,7 +92,7 @@ pour toute l'équipe dans Paramètres → Apparence → « Couleurs des classeur
 | `Templates.tsx` | `templates` | Modèles de mails et de messages (rangée par défaut). |
 | `Checklist.tsx` | `checklist` | Checklists par collaboration (rangée par défaut). |
 | `Acces.tsx` | `acces` (F) (`comptes`, `emails`) | Comptes de l'équipe et des créateurs ; `emails` rend `CredentialVault.tsx`. |
-| `Parametres.tsx` | `parametres` | Réglages de l'agence et de l'app (notifications, pages affichées, signatures, connecteur Claude…). |
+| `Parametres.tsx` | `parametres` | Réglages de l'agence et de l'app (notifications, pages affichées, signatures, connecteur Claude…). Entrée « Connexions Claude » pour les fondateurs seulement : toutes les connexions de l'agence, case « agent autonome », valideur, « Couper l'accès » (`src/lib/connexionsClaudeDb.ts`). |
 | `Diagnostique.tsx` | `diagnostique` (F) | Santé de l'app : audits, disponibilité, incidents, bugs remontés. |
 | `Corbeille.tsx` | `corbeille` (hors menu) | Éléments supprimés, à restaurer ou effacer (30 jours). Ouverte depuis le menu, l'écran « Plus » ou la recherche. |
 
@@ -226,7 +226,7 @@ Règle : la logique pure (sans React ni Supabase) vit dans `src/lib/<nom>.ts`, a
 | Scouting et sourcing | `scouting.ts`, `niche.ts`, `sourcingScore.ts`, `igRivals.ts`, `ttRadar.ts`, `scoutToRoster.ts` (un profil du Scouting qui signe passe au roster, sans doublon), `spiderEngine.ts` (moteur des pattes de l'araignée, partagé avec les vidéos TTP) |
 | Réseaux sociaux | `instagram.ts`, `igFeed.ts`, `igPlanner.ts`, `tiktok.ts`, `youtube.ts`, `rosterAudience.ts` (chiffres du jour TikTok et YouTube, colonnes `creators.tt` et `creators.yt`) |
 | Media kits | `mediakitSlug.ts` (même calcul que le site), `mediakitThemes.ts` (mêmes ids que le site), `mediakitBiosEn.ts`, `mediakitRates.ts` + `mediakitRatesDb.ts` (prix de la page Tarifs → grille « Tarifs indicatifs » du kit), `mediakitRoster.ts` (état du kit de chaque créateur), `mediakitControleDb.ts` (bouton « Mettre à jour » : chiffres réels mis dans le kit) |
-| Équipe, agents, notifications | `team.ts`, `useMyName.ts`, `agentAvatars.ts`, `push.ts`, `appBadge.ts`, `useNotifications.ts`, `notifLocal.ts`, `notifTexts.ts`, `aValider.ts` + `aValiderDb.ts` (file « À valider » de la page Agents : ce que « Valider » déclenche), `alfredApp.ts` (Alfred dans l'app, miroir de `_shared/alfredPont.ts`), `widgetScript.ts` (lanceur du widget iPhone pour Scriptable, fonction `widget`) |
+| Équipe, agents, notifications | `team.ts`, `useMyName.ts`, `agentAvatars.ts`, `push.ts`, `appBadge.ts`, `useNotifications.ts`, `notifLocal.ts`, `notifTexts.ts`, `aValider.ts` + `aValiderDb.ts` (file « À valider » de la page Agents : ce que « Valider » déclenche), `connexionsClaudeDb.ts` (connexions Claude de l'agence, fondateurs : liste et réglages par fonctions SQL), `alfredApp.ts` (Alfred dans l'app, miroir de `_shared/alfredPont.ts`), `widgetScript.ts` (lanceur du widget iPhone pour Scriptable, fonction `widget`) |
 | Agenda et divers | `googleCalendar.ts`, `gifting.ts`, `openLater.ts` (ouvrir un onglet après un `await` sur iPhone), `eventKind.ts` (type d'un évènement deviné d'après son titre, copie dans `_shared/eventKind.ts`), `ficheComplete.ts` (fiche créateur « complète à X % ») |
 
 ## 6. Edge Functions (`supabase/functions/`)
@@ -387,7 +387,8 @@ commandes en base contiennent le secret des crons : ne jamais les recopier dans 
 | `appState.ts` | Lecture du blob agence côté serveur : ligne commune et ligne argent (`__finance_state__`, fondateurs), la seconde l'emportant | `ttp-mcp`, `daily-digest`, `creator-report`, `ig-sync`, `ig-data-deletion`, `monthly-backup`, `rdv`, `widget`, `disposDuMoisDb.ts` |
 | `mcpAdmin.ts` | Accès complet des fondateurs dans le connecteur : tables lisibles et modifiables, colonnes interdites, suppression vers la Corbeille, calculs des factures ; un texte envoyé dans une colonne JSON est relu en objet | `ttp-mcp` (`admin.ts`, `tools.ts`), `creator-box-mail` |
 | `mcpJournal.ts` | La ligne écrite dans `mcp_log` à chaque appel d'outil, avec la raison d'un échec (`error`) | `ttp-mcp` (`callTool`) |
-| `verrouAgent.ts` | Verrou des agents autonomes : ce qu'un appel d'agent doit faire valider dans la page Agents (`besoinValidation`, `OUTILS_A_VALIDER`) | `ttp-mcp` (`verrou.ts`, `tools.ts`, `envois.ts`) |
+| `verrouAgent.ts` | Verrou des agents autonomes : ce qu'un appel d'agent doit faire valider dans la page Agents (`besoinValidation`, `OUTILS_A_VALIDER`), valideur imposé par la connexion, validation relue juste avant un envoi de la file (`validationTient`) | `ttp-mcp` (`verrou.ts`, `tools.ts`, `envois.ts`) |
+| `connexionsClaude.ts` | Connexions du connecteur vues par les fondateurs (lecture de `connexions_claude()`, tri, titre) et origine d'une proposition d'agent (« Claude de Gianni », « l'agent autonome de Marc ») | `ttp-mcp` (`tools.ts` : `a_valider`), app (Paramètres › Connexions Claude, page Agents) |
 | `oauthRetour.ts` | Adresses de retour autorisées du connecteur (Claude, ChatGPT, agents en local) et destination montrée sur la page d'accord | `ttp-mcp` (`oauth.ts`), `src/connecteur/main.tsx` |
 | `equipeClaude.ts` | Ce que les autres membres de l'équipe ont fait par leur propre Claude (lu dans `mcp_log`), et l'anti-doublon d'équipe des brouillons (15 jours pour un nouveau mail, 2 jours dans un fil) | `ttp-mcp` (`tools.ts`) |
 | `alfredOutils.ts` | Logique des outils `objectifs`, `modeles_mails` et `ajouter_modele` | `ttp-mcp` |
@@ -411,7 +412,7 @@ commandes en base contiennent le secret des crons : ne jamais les recopier dans 
 | `contactAjout.ts`, `contactTags.ts` | Ajout de contacts sans doublon (e-mail, LinkedIn ou @), par lots ; liste fermée des catégories d'un contact | `ttp-mcp` (`ajouter_contact`, `ajouter_contacts`), app (Contacts) |
 | `dejaEchange.ts` | Avant un brouillon : les derniers échanges avec ce destinataire, dans toutes les boîtes | `ttp-mcp` (`creer_brouillon_mail`) |
 | `piecesJointes.ts` | Joindre des fichiers à un brouillon Gmail | `ttp-mcp`, `alfred-pont` |
-| `fileEnvoi.ts` | File d'envoi des mails de prospection : heures de bureau, écart entre deux mails, plafond par jour et par boîte, règle des 30 jours par société, coupe-circuit sur les rebonds | `ttp-mcp` (`envois.ts` : `programmer_envoi`, `file_envoi`, `annuler_envoi`, `ne_plus_contacter`, route `file-envoi`) |
+| `fileEnvoi.ts` | File d'envoi des mails de prospection : heures de bureau, écart entre deux mails, plafond par jour et par boîte, règle des 30 jours par société, coupe-circuit sur les rebonds (ceux des adresses sans fiche lus dans le journal des mails : `rebondsDuJournal`, qui bloquent l'adresse tant que sa fiche n'est pas revérifiée : `rebondsQuiComptent`), réponses malgré la liste « ne plus contacter » (`reponseMalgreListe`) | `ttp-mcp` (`envois.ts` : `programmer_envoi`, `file_envoi`, `annuler_envoi`, `ne_plus_contacter`, route `file-envoi`) |
 | `mxCheck.ts` | Le domaine d'une adresse peut-il recevoir des mails ? (DNS public) | `ttp-mcp` (`prospection.ts`) |
 | `sequence.ts` | Séquence de prospection d'une fiche contact (J0, J+5, J+12, tout par mail) | `ttp-mcp`, `gmail-poll` (`sequences.ts`), `rdv`, app (Contacts) |
 | `reponseProspect.ts` | Classe la réponse d'un prospect (intéressé, plus tard, refus, à lire) et la tâche à créer | `gmail-poll` (`sequences.ts`) |

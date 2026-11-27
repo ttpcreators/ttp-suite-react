@@ -1,11 +1,15 @@
-import { fmtDayTime } from "@/lib/dates";
+import { fmtDay, fmtDayTime } from "@/lib/dates";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SIGNATURE_KEY, scribble, validSig, type SignatureData } from "@/lib/agencySignature";
 import { SignaturePad } from "@/components/signature-pad";
 import {
   BellRing, Smartphone, Sunrise, History, LogOut, Palette, MessageCircle, Bot, Copy, Unplug, PenLine, Sparkles,
-  Search, ChevronRight, ChevronDown, X, type LucideIcon,
+  Search, ChevronRight, ChevronDown, X, KeyRound, type LucideIcon,
 } from "@/components/icons";
+import { useIsFounder } from "@/lib/useFounder";
+import { lireConnexionsClaude, lireFondateurs, reglerConnexionClaude, type ReglageConnexion } from "@/lib/connexionsClaudeDb";
+import { titreConnexion, type ConnexionClaude } from "../../supabase/functions/_shared/connexionsClaude.ts";
+import { HelpTip } from "@/components/ui/help-tip";
 import { supabase, SUPABASE_URL, SUPABASE_KEY } from "@/lib/supabase";
 import { useTheme } from "@/lib/theme";
 import { ACCENT_PRESETS, ACCENT_GRADIENTS, getAccent, setAccent, isHex, parseGradient, THEME_CHOICES, type ThemeChoice } from "@/lib/accent";
@@ -103,6 +107,13 @@ const ENTRIES: Entry[] = [
     sections: [{ title: "Assistants IA", keywords: ["claude", "chatgpt", "openai", "connecteur", "assistant", "ia", "agent", "mcp", "accès", "connexion"] }],
   },
   {
+    // Fondateurs seulement (FONDATEURS_SEULEMENT) : toutes les connexions de l'agence.
+    id: "connexions", label: "Connexions Claude", group: "Prospection et IA", icon: KeyRound, tile: INK_TILE,
+    hint: "Toutes les connexions Claude de l'agence : qui, depuis quand, dernier usage. Coupe une connexion ou marque-la « agent autonome ».",
+    keywords: ["connecteur", "agent autonome", "verrou", "couper", "accès"],
+    sections: [{ title: "Connexions Claude", keywords: ["claude", "connecteur", "agent", "autonome", "verrou", "valideur", "couper", "accès", "alfred"] }],
+  },
+  {
     id: "appareil", label: "Cet appareil", group: "Notifications", icon: Smartphone, tile: TONE_SOLID.progress,
     hint: "Réception des notifications push sur l'appareil que tu utilises en ce moment.",
     keywords: ["push", "notifications", "activer", "test"],
@@ -148,6 +159,8 @@ const ENTRIES: Entry[] = [
   },
 ];
 const ENTRY_IDS = ENTRIES.map((e) => e.id);
+/** Entrées montrées aux fondateurs seulement (la fonction SQL refuse aussi les autres comptes). */
+const FONDATEURS_SEULEMENT = ["connexions"];
 /** Onglets « dossier » : un par groupe de la liste ci-dessus. */
 const TABS = settingsTabs(ENTRIES);
 const TAB_IDS = TABS.map((t) => t.value);
@@ -947,7 +960,9 @@ function TonePicker({ label, shown, chosen, onPick }: { label: string; shown: Fo
 /**
  * Assistants IA (Claude, ChatGPT, agents) : adresse du connecteur et marche à suivre,
  * connexions actives de CE compte (coupables en un clic) et journal de ce que
- * l'assistant a consulté ou fait.
+ * l'assistant a consulté ou fait. Un fondateur voit ses connexions dans « Connexions
+ * Claude », juste en dessous (avec celles de toute l'agence) : la liste d'ici ne s'affiche
+ * alors pas (une info une seule fois par page), sauf tant que la fonction SQL manque.
  */
 const MCP_URL = "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ttp-mcp";
 type Grant = { id: string; client_name: string | null; created_at: string; last_used_at: string | null };
@@ -966,10 +981,25 @@ const TOOL_LABELS: Record<string, string> = {
 };
 const fmtWhen = (iso: string) => fmtDayTime(iso);
 
-function ClaudePane() {
+function ClaudePane({ fondateur }: { fondateur: boolean | null }) {
   const [grants, setGrants] = useState<Grant[] | null>(null);
   const [log, setLog] = useState<McpLog[]>([]);
   const [off, setOff] = useState(false); // tables pas encore créées
+  // Fondateur : la liste de toute l'agence (Connexions Claude) est-elle lisible ? null = on ne sait pas encore.
+  const [toutesLisibles, setToutesLisibles] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (fondateur !== true) return;
+    let actif = true;
+    void lireConnexionsClaude().then((r) => {
+      if (actif) setToutesLisibles(r.etat === "ok");
+    }, () => {
+      if (actif) setToutesLisibles(false);
+    });
+    return () => {
+      actif = false;
+    };
+  }, [fondateur]);
+  const listeIci = fondateur === false || (fondateur === true && toutesLisibles === false);
   const [busy, setBusy] = useState<string | null>(null);
   const load = async () => {
     const [g, l] = await Promise.all([
@@ -1024,7 +1054,7 @@ function ClaudePane() {
         <Card hint="Pas encore activé : une mise à jour est en attente." />
       ) : (
         <>
-          <Card title="Connexions actives">
+          {listeIci && <Card title="Connexions actives">
             {grants === null ? (
               <p className="text-[12px] text-muted-foreground">Chargement…</p>
             ) : grants.length === 0 ? (
@@ -1044,7 +1074,7 @@ function ClaudePane() {
                 ))}
               </ul>
             )}
-          </Card>
+          </Card>}
           {log.length > 0 && (
             <Card title="Dernières utilisations">
               <ul className="flex flex-col divide-y divide-border">
@@ -1061,6 +1091,138 @@ function ClaudePane() {
         </>
       )}
     </>
+  );
+}
+
+/**
+ * Connexions Claude (fondateurs) : toutes les connexions du connecteur de l'agence, pas
+ * seulement les siennes (enquête du 27/11 : une connexion tournait seule depuis des semaines
+ * sans être visible dans l'app des autres fondateurs). Pour chacune : nom, compte, dates, appels
+ * sur 7 jours, case « agent autonome » (verrou de la page Agents) et, pour une connexion
+ * d'agent, le seul compte dont la validation compte. Lecture et réglages par les fonctions SQL
+ * réservées aux fondateurs (lib/connexionsClaudeDb.ts) ; chaque réglage est noté dans le
+ * journal des agents.
+ */
+function ConnexionsPane() {
+  type Lecture = { etat: "chargement" } | { etat: "sql" } | { etat: "erreur" } | { etat: "ok"; liste: ConnexionClaude[] };
+  const [lecture, setLecture] = useState<Lecture>({ etat: "chargement" });
+  const [fondateurs, setFondateurs] = useState<{ id: string; nom: string }[]>([]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [arme, setArme] = useState<string | null>(null); // « Couper l'accès » en deux temps
+  const [retrait, setRetrait] = useState<string | null>(null); // décocher « agent » en deux temps (retire le verrou)
+  const lire = () => Promise.all([lireConnexionsClaude(), lireFondateurs()]);
+  const appliquer = ([r, f]: Awaited<ReturnType<typeof lire>>) => {
+    setFondateurs(f);
+    setLecture(r.etat === "ok" ? r : r.etat === "sql" ? { etat: "sql" } : { etat: "erreur" });
+  };
+  const charger = async () => appliquer(await lire());
+  useEffect(() => {
+    let actif = true;
+    void lire().then((x) => {
+      if (actif) appliquer(x);
+    }, () => setLecture({ etat: "erreur" }));
+    return () => {
+      actif = false;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const regler = async (c: ConnexionClaude, reglage: ReglageConnexion, fait: string) => {
+    if (busy) return;
+    setBusy(c.id);
+    const erreur = await reglerConnexionClaude(c.id, reglage);
+    setBusy(null);
+    setArme(null);
+    setRetrait(null);
+    if (erreur) return toast(erreur);
+    toast(fait);
+    void charger();
+  };
+  if (lecture.etat === "chargement") return <Card anchor="Connexions Claude"><p className="text-[12px] text-muted-foreground">Chargement…</p></Card>;
+  if (lecture.etat === "sql") return <Card anchor="Connexions Claude" hint="Pas encore activé : une mise à jour est en attente." />;
+  if (lecture.etat === "erreur") return <Card anchor="Connexions Claude" hint="Lecture impossible pour l'instant, réessaie plus tard." />;
+  const actives = lecture.liste.filter((c) => !c.coupeeLe);
+  const nomFondateur = (n: string) => n.charAt(0).toUpperCase() + n.slice(1);
+  const meta = (c: ConnexionClaude) => [
+    `Créée le ${fmtDay(c.creeLe)}`,
+    c.dernierUsage ? `utilisée le ${fmtDayTime(c.dernierUsage)}` : "jamais utilisée",
+    `${c.appels7j.toLocaleString("fr-FR")} appel${c.appels7j > 1 ? "s" : ""} en 7 j`,
+  ].join(" · ");
+  return (
+    <Card anchor="Connexions Claude" title="Connexions de l'agence">
+      {actives.length === 0 ? (
+        <p className="text-[12px] text-muted-foreground">Aucune.</p>
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {actives.map((c) => (
+            <li key={c.id} className={cn("rounded-[12px] bg-panel px-3 py-2.5", busy === c.id && "opacity-60")}>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-medium text-foreground">{titreConnexion(c)}</span>
+                  <span className="block text-[11px] text-muted-foreground">{meta(c)}</span>
+                </span>
+                {arme === c.id ? (
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    <button type="button" onClick={() => setArme(null)} className="flex h-8 items-center rounded-full border border-border px-3 text-[12px] font-medium hover:bg-rowhover">
+                      Annuler
+                    </button>
+                    <button type="button" onClick={() => void regler(c, { couper: true }, "Accès coupé ✓")} disabled={!!busy}
+                      className="flex h-8 items-center gap-1.5 rounded-full bg-danger/10 px-3 text-[12px] font-semibold text-dangertext hover:bg-danger/20 disabled:opacity-50">
+                      <Unplug className="h-3.5 w-3.5" /> Couper ?
+                    </button>
+                  </span>
+                ) : (
+                  <button type="button" onClick={() => setArme(c.id)} disabled={!!busy}
+                    className="flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-border px-3 text-[12px] font-medium text-destructive hover:bg-rowhover disabled:opacity-50">
+                    <Unplug className="h-3.5 w-3.5" /> Couper l'accès
+                  </button>
+                )}
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-2 text-[12px]">
+                <span className="flex items-center gap-2 text-foreground">
+                  <Toggle checked={c.agent} label={`Agent autonome : ${titreConnexion(c)}`}
+                    onChange={(v) => (v ? void regler(c, { agent: true }, "Agent autonome ✓ Ses envois attendent une validation dans la page Agents") : setRetrait(c.id))} />
+                  Agent autonome
+                  <HelpTip title="Agent autonome">
+                    <span>Ses envois (brouillons, file d'envoi) et ses actions irréversibles (suppression, facture, versement, réglages) attendent une validation dans la page Agents. Un « oui » écrit ailleurs ne suffit pas.</span>
+                    <span>La case vaut pour toute la connexion, conversations comprises.</span>
+                  </HelpTip>
+                  {retrait === c.id && (
+                    <span className="flex items-center gap-1.5">
+                      <button type="button" onClick={() => setRetrait(null)} className="flex h-8 items-center rounded-full border border-border px-3 text-[12px] font-medium hover:bg-rowhover">
+                        Annuler
+                      </button>
+                      <button type="button" onClick={() => void regler(c, { agent: false }, "Agent autonome retiré : plus de validation exigée")} disabled={!!busy}
+                        className="flex h-8 items-center rounded-full bg-danger/10 px-3 text-[12px] font-semibold text-dangertext hover:bg-danger/20 disabled:opacity-50">
+                        Retirer ?
+                      </button>
+                    </span>
+                  )}
+                </span>
+                {c.agent && (
+                  <span className="flex items-center gap-2 text-muted-foreground">
+                    Validé par
+                    <select value={c.valideur ?? ""} disabled={!!busy} aria-label={`Qui valide : ${titreConnexion(c)}`}
+                      onChange={(e) => {
+                        const v = e.target.value || null;
+                        const nom = fondateurs.find((f) => f.id === v)?.nom;
+                        void regler(c, { valideur: v }, nom ? `Seule la validation de ${nomFondateur(nom)} comptera ✓` : "Tout fondateur peut valider ✓");
+                      }}
+                      className="h-8 rounded-[10px] bg-field px-2 text-[12px] text-foreground outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-50">
+                      <option value="">Tout fondateur</option>
+                      {fondateurs.map((f) => <option key={f.id} value={f.id}>{nomFondateur(f.nom)}</option>)}
+                      {c.valideur && !fondateurs.some((f) => f.id === c.valideur) && <option value={c.valideur}>Compte qui n'est plus fondateur</option>}
+                    </select>
+                    <HelpTip title="Validé par">
+                      <span>Le seul compte dont la validation compte, dans la page Agents, pour les envois et les actions de cette connexion.</span>
+                      <span>« Tout fondateur » : n'importe quel fondateur, y compris celui de la connexion.</span>
+                    </HelpTip>
+                  </span>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
   );
 }
 
@@ -1243,12 +1405,16 @@ export function Parametres() {
   });
   const [query, setQuery] = useState("");
   const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
-  const hits = useMemo(() => searchSettings(ENTRIES, query), [query]);
+  // Entrées réservées aux fondateurs (Connexions Claude) : cachées aux autres comptes.
+  const founderEtat = useIsFounder();
+  const founder = founderEtat === true;
+  const entries = useMemo(() => (founder ? ENTRIES : ENTRIES.filter((e) => !FONDATEURS_SEULEMENT.includes(e.id))), [founder]);
+  const hits = useMemo(() => searchSettings(entries, query), [entries, query]);
   const groups = useMemo(() => groupHits(hits), [hits]);
 
   // Ouvre une entrée (et une carte) : bascule sur l'onglet de son groupe puis défile jusqu'à elle.
   const openEntry = (id: string, sectionTitle?: string | null) => {
-    const t = settingsTarget(ENTRIES, id, sectionTitle);
+    const t = settingsTarget(entries, id, sectionTitle);
     if (!t) return;
     setTab(t.tab);
     setPendingAnchor(t.anchor);
@@ -1259,11 +1425,11 @@ export function Parametres() {
   const navSub = useNavSub();
   useEffect(() => {
     const target = navSub ?? (typeof window !== "undefined" && window.location.hash.startsWith("#reglage-") ? window.location.hash : null);
-    const t = settingsTargetFor(ENTRIES, target);
+    const t = settingsTargetFor(entries, target);
     if (!t) return;
     setTab(t.tab);
     setPendingAnchor(t.anchor);
-  }, [navSub, setTab]);
+  }, [navSub, setTab, entries]);
 
   // Carte ou bloc visé (résultat de recherche, ancre) : défile jusqu'à lui une fois l'onglet rendu.
   useEffect(() => {
@@ -1338,7 +1504,9 @@ export function Parametres() {
           </Card>
         );
       case "claude":
-        return <ClaudePane />;
+        return <ClaudePane fondateur={founderEtat} />;
+      case "connexions":
+        return <ConnexionsPane />;
       case "appareil":
         return (
           <>
@@ -1567,7 +1735,7 @@ export function Parametres() {
       {/* Un onglet « dossier » par groupe (comme Agents) : ses entrées les unes sous les autres. */}
       <FolderTabs label="Rubriques des réglages" orderKey="parametres" items={TABS} value={tab} onValueChange={setTab} maxTabWidth={208}>
         <div className="@container mx-auto flex w-full max-w-3xl flex-col gap-10 py-1">
-          {entriesOfTab(ENTRIES, tab).map((entry) => (
+          {entriesOfTab(entries, tab).map((entry) => (
             <section key={entry.id} id={entryAnchor(entry.id)} aria-label={entry.label} className="scroll-mt-6">
               <div className="flex items-start gap-3">
                 <EntryIcon entry={entry} />

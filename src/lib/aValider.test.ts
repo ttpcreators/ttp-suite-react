@@ -60,6 +60,15 @@ describe("gesteValider : même statut qu'avant", () => {
   it("sans Alfred connu, un mail est marqué envoyé", () => {
     expect(gesteValider(p({ type: "brouillon_mail", agent_id: ALFRED }), null)).toBe("marquer_envoye");
   });
+  it("un mail déposé par une connexion « agent autonome » passe en « valide », quel que soit l'agent nommé", () => {
+    const g = gesteValider(p({ type: "brouillon_mail", agent_id: null, connexion_agent: true }), ALFRED);
+    expect(g).toBe("alfred_envoie");
+    expect(statutApresValidation(g)).toBe("valide");
+    expect(gesteValider(p({ type: "brouillon_mail", agent_id: null, connexion_agent: true }), null)).toBe("alfred_envoie");
+    expect(gesteValider(p({ type: "brouillon_mail", agent_id: null, connexion_agent: false }), ALFRED)).toBe("marquer_envoye");
+    // Un message à copier reste à copier, même venu d'un agent.
+    expect(gesteValider(p({ type: "whatsapp", connexion_agent: true }), ALFRED)).toBe("copier_envoye");
+  });
 });
 
 describe("modeModifier", () => {

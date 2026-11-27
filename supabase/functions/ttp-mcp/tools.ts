@@ -29,6 +29,7 @@ import { AUTONOMIE_TOOLS } from "./autonomie.ts";
 import { ENVOI_TOOLS, bloquant } from "./envois.ts";
 import { verrouAgent } from "./verrou.ts";
 import { canonique, lireOutil, memeAppel, problemeOutilPropose, texteOutil, type OutilPropose } from "../_shared/verrouAgent.ts";
+import { lireConnexion, origineProposition, type ConnexionClaude } from "../_shared/connexionsClaude.ts";
 import { adressesDe, adressesInvalides } from "./prospection.ts";
 import { addressList, mailHtml, sparkLink } from "../_shared/mcpAdmin.ts";
 import { guessEventKind } from "../_shared/eventKind.ts";
@@ -772,6 +773,33 @@ const contrats: Tool = {
 /** Proposition qu'un agent a lui même déclarée périmée (« PÉRIMÉ … à écarter »). */
 const isStale = (r: Json) => /^\s*p[ée]rim[ée]/i.test(String(r.contexte ?? ""));
 
+/**
+ * Qui a déposé chaque proposition (id → « l'agent autonome de Marc », « Claude de Gianni »…),
+ * d'après son compte et sa connexion (SQL 2026-11-27-verrou-connexions). Rien pour les plus
+ * anciennes ; jamais bloquant : une lecture ratée laisse la liste sans origine.
+ */
+async function originesDe(sb: SupabaseClient, rows: Json[]): Promise<Map<string, string>> {
+  const ids = (k: string) => [...new Set(rows.map((r) => r[k]).filter((x): x is string => typeof x === "string" && estUuid(x)))];
+  const grants = ids("grant_id");
+  if (!grants.length && !ids("cree_par").length) return new Map();
+  const { data: gs } = grants.length ? await sb.from("mcp_grants").select("*").in("id", grants) : { data: [] as Json[] };
+  const lignes = (gs as Json[] | null) ?? [];
+  const comptes = [...new Set([...ids("cree_par"), ...lignes.map((g) => String(g.user_id ?? ""))].filter(estUuid))];
+  const { data: profs } = comptes.length ? await sb.from("profiles").select("user_id, display_name").in("user_id", comptes) : { data: [] as Json[] };
+  const noms = new Map(((profs as Json[] | null) ?? []).map((p) => [String(p.user_id), String(p.display_name ?? "")]));
+  const connexions = new Map<string, ConnexionClaude>();
+  for (const g of lignes) {
+    const c = lireConnexion({ id: g.id, nom: g.client_name, compte: g.user_id, compte_nom: noms.get(String(g.user_id)), cree_le: g.created_at, dernier_usage: g.last_used_at, coupee_le: g.revoked_at, agent: g.agent, valideur: g.valideur });
+    if (c) connexions.set(c.id, c);
+  }
+  const out = new Map<string, string>();
+  for (const r of rows) {
+    const o = origineProposition({ cree_par: r.cree_par as string | null, grant_id: r.grant_id as string | null }, connexions, noms);
+    if (o) out.set(String(r.id), o.texte);
+  }
+  return out;
+}
+
 const aValider: Tool = {
   name: "a_valider",
   title: "File « À valider » des agents",
@@ -799,7 +827,10 @@ const aValider: Tool = {
       const p = lireOutil(r.outil);
       return p ? `\n  Outil à appeler${r.statut === "valide" ? " maintenant" : " après validation"}, exactement : ${p.nom} ${canonique(p.arguments)}` : "";
     };
-    const line = (r: Json) => `- [${r.type}] ${r.cible ?? ""} · ${nameOf(r)} · ${frDay(String(r.cree_le))} [proposition ${r.id}]${r.contexte ? `\n  Contexte : ${String(r.contexte).slice(0, 300)}` : ""}${r.contenu ? `\n  Message : ${String(r.contenu).slice(0, 500)}` : ""}${outilDe(r)}`;
+    // Qui l'a déposée (connexion) : Alfred, le Claude de Gianni et celui de Marc ne se confondent plus.
+    const origines = await originesDe(sb, rows).catch(() => new Map<string, string>());
+    const origineDe = (r: Json) => (origines.get(String(r.id)) ? ` (${origines.get(String(r.id))})` : "");
+    const line = (r: Json) => `- [${r.type}] ${r.cible ?? ""} · ${nameOf(r)}${origineDe(r)} · ${frDay(String(r.cree_le))} [proposition ${r.id}]${r.contexte ? `\n  Contexte : ${String(r.contexte).slice(0, 300)}` : ""}${r.contenu ? `\n  Message : ${String(r.contenu).slice(0, 500)}` : ""}${outilDe(r)}`;
     // Les corrections de Marc (journal `marc_modifie`, écrit par la page Agents quand il modifie
     // un texte avant de le valider) : l'agent les relit pour apprendre.
     let modifs = "";
@@ -1867,10 +1898,11 @@ const brouillonMail: Tool = {
     const cci = addressList(str(a.cci, 500));
     if (!cci) return fail("Adresse en copie cachée (cci) invalide.");
     const fil = str(a.fil, 40);
-    // Liste « ne plus contacter » (refus, demande d'arrêt, rebond) : pas de nouveau mail. Une
-    // réponse dans un fil existant reste possible.
+    // Liste « ne plus contacter » (refus, demande d'arrêt, rebond), adresse en erreur ou rebond :
+    // pas de nouveau mail. Une réponse dans un fil existant passe seulement pour les raisons de
+    // REGLES.reponseMalgreListe (_shared/fileEnvoi.ts : aucune tant que Marc n'a pas choisi).
     const npc = await bloquant(sb, adressesDe(to), !!fil);
-    if (npc) return fail(`Brouillon non créé : ${npc}. Si c'est une erreur : ne_plus_contacter (action retirer).`);
+    if (npc) return fail(`Brouillon non créé : ${npc}.${/ne plus contacter/.test(npc) ? " Si c'est une erreur : ne_plus_contacter (action retirer)." : ""}`);
     // Pas de doublon dans l'équipe (demande de Marc, 25 novembre 2026) : un autre membre (Gianni par
     // son Claude, ou Marc) a déjà écrit à ce destinataire depuis 15 jours, ou répondu dans ce fil
     // depuis 2 jours. Refus, sauf `forcer` sur la demande de Marc.
@@ -2381,6 +2413,9 @@ const lireAgent: Tool = {
 /** Lien d'une proposition « avancer la collab » : la collab et l'étape, lus par l'app (src/lib/aValider.ts). */
 const lienAvance = (collab: string, etape: number) => `https://app.ttpcreators.pro/?open=view&view=collabs&item=${collab}&avancer=1&etape=${etape}`;
 const ACTION_TYPES = ["whatsapp", "instagram", "linkedin", "brouillon_mail", "alerte", "avancer_collab"];
+/** Colonnes agent.actions.cree_par et grant_id absentes (SQL 2026-11-27-verrou-connexions pas encore lancé). */
+const origineAbsente = (e: { code?: string; message?: string }) =>
+  /cree_par|grant_id/.test(e.message ?? "") && (e.code === "42703" || e.code === "PGRST204" || /column/i.test(e.message ?? ""));
 
 const proposerAction: Tool = {
   name: "proposer_action",
@@ -2410,7 +2445,7 @@ const proposerAction: Tool = {
     required: ["agent", "type", "contenu"],
     additionalProperties: false,
   },
-  run: async (sb, _c, a) => {
+  run: async (sb, ctx, a) => {
     const ag = await findAgent(sb, str(a.agent, 80));
     let type = ACTION_TYPES.includes(str(a.type)) ? str(a.type) : "alerte";
     let lien = /^https?:\/\//i.test(str(a.lien, 500)) ? str(a.lien, 500) : null;
@@ -2452,8 +2487,16 @@ const proposerAction: Tool = {
       lien = null; // jamais lu comme une autre action (avancer une collab) par la page Agents
       contenu = texteOutil(p, vise.title, str(a.contenu, 2000));
     }
-    const row = { type, cible, contexte, contenu, lien_spark: lien, statut: "a_valider", agent_id: ag?.id ?? null, ...(outil ? { outil } : {}) };
+    // Qui propose : le compte et la connexion du jeton (SQL 2026-11-27-verrou-connexions), pour
+    // distinguer dans la page Agents Alfred, le Claude de Gianni et celui de Marc. Avant ce SQL,
+    // la proposition est déposée sans eux.
+    const origine = { cree_par: ctx.userId, grant_id: ctx.grantId };
+    let row: Record<string, unknown> = { type, cible, contexte, contenu, lien_spark: lien, statut: "a_valider", agent_id: ag?.id ?? null, ...(outil ? { outil } : {}), ...origine };
     let { data, error } = await sb.schema("agent").from("actions").insert(row).select("id").single();
+    if (error && origineAbsente(error)) {
+      row = Object.fromEntries(Object.entries(row).filter(([k]) => !(k in origine)));
+      ({ data, error } = await sb.schema("agent").from("actions").insert(row).select("id").single());
+    }
     if (error && outil && (error.code === "42703" || error.code === "PGRST204" || /outil/i.test(error.message))) {
       return fail("Proposition non déposée : l'appel d'outil à valider demande le SQL 2026-11-27-securite-alfred, pas encore lancé. Dépose une alerte simple pour que Marc le fasse lui même.");
     }
@@ -3405,7 +3448,7 @@ export async function callTool(sb: SupabaseClient, ctx: Ctx, name: string, args:
     if (!v.ok) res = fail(v.texte);
     else {
       apres = v.apres;
-      res = await t.run(sb, v.validations ? { ...ctx, validations: v.validations } : ctx, args ?? {});
+      res = await t.run(sb, v.validations ? { ...ctx, validations: v.validations, propositions: v.propositions } : ctx, args ?? {});
     }
   } catch (e) {
     res = fail(`Erreur : ${(e as Error).message}`);

@@ -18,6 +18,8 @@ type Props = {
   alfredId: string | null;
   meta: (a: FileItem) => { label: string; icon: LucideIcon; alerte: boolean };
   agentBadge: (a: FileItem) => ReactNode;
+  /** Qui l'a déposée (« Claude de Gianni », « l'agent autonome de Marc ») ; null si on ne sait pas. */
+  origine?: (a: FileItem) => string | null;
   copied: string | null;
   onCopier: (a: FileItem) => void;
   /** `texte` : le texte modifié par Marc ; `silencieux` : validation d'une sélection. */
@@ -40,7 +42,7 @@ const validerBtn = "flex h-11 items-center gap-1.5 rounded-full bg-primary px-4 
 // Case à cocher dans un <label> de 44 px sur téléphone (la case garde son dessin de 16 px).
 const caseLabel = "grid size-11 shrink-0 cursor-pointer place-items-center md:size-auto";
 
-export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopier, onValider, onEcarter, onSelectionFaite }: Props) {
+export function AValiderFile({ items, alfredId, meta, agentBadge, origine, copied, onCopier, onValider, onEcarter, onSelectionFaite }: Props) {
   // Proposition courante retenue par son id : une nouvelle arrivée en tête ne change pas la cible.
   const [courantId, setCourantId] = useState<string | null>(null);
   const dernierePos = useRef(0);
@@ -188,11 +190,14 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopi
         const geste = gesteValider(a, alfredId);
         const mode = modeModifier(a);
         const busy = occupe.has(a.id);
-        const titreValider = geste === "alfred_envoie" ? "Alfred l'envoie dans la minute (V)"
-          : geste === "alfred_fait" ? "Alfred fait exactement cette action (V)"
+        // Proposé par Alfred, ou par une autre connexion « agent autonome » (le texte le dit).
+        const parAlfred = !!alfredId && a.agent_id === alfredId;
+        const titreValider = geste === "alfred_envoie" ? (parAlfred ? "Alfred l'envoie dans la minute (V)" : "L'agent l'envoie à son prochain passage (V)")
+          : geste === "alfred_fait" ? (parAlfred ? "Alfred fait exactement cette action (V)" : "L'agent fait exactement cette action (V)")
           : geste === "avancer_collab" ? "La collab avance à cette étape (V)"
           : geste === "copier_envoye" ? "Copie le message et le marque envoyé (V)"
           : "Marque comme fait (V)";
+        const qui = origine?.(a) ?? null;
         return (
           <div key={a.id} ref={(el) => { if (el) cartes.current.set(a.id, el); else cartes.current.delete(a.id); }}
             onClick={() => setCourantId(a.id)}
@@ -214,6 +219,7 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopi
               <span className="hidden shrink-0 sm:inline-flex">{agentBadge(a)}</span>
               <span className="ml-auto shrink-0 text-[10px] tabular-nums text-faint">{fmtDayTime(a.cree_le)}</span>
             </div>
+            {qui && <p className="mt-0.5 truncate text-[10px] text-faint">Proposé par {qui}</p>}
             {a.contexte && <p className={cn("mt-1 text-[11px] leading-relaxed text-muted-foreground", !active && "line-clamp-1")}>{a.contexte}</p>}
             {ed ? (
               <textarea autoFocus value={ed.texte} rows={Math.min(14, Math.max(4, ed.texte.split("\n").length + 1))}

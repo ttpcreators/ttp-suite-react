@@ -33,8 +33,15 @@ export type Ctx = {
   userId: string; grantId: string; founder: boolean; name: string;
   /** Connexion d'un agent autonome (Alfred) : envois et actions irréversibles validés dans l'app (verrou.ts). */
   agent: boolean;
+  /**
+   * Seul compte dont la validation compte pour cette connexion (mcp_grants.valideur, réglé dans
+   * Paramètres › Connexions Claude, SQL 2026-11-27-verrou-connexions) ; null = tout compte agence.
+   */
+  valideur?: string | null;
   /** Pour un agent : brouillon → date de sa validation dans la page Agents (posé par verrou.ts). */
   validations?: Record<string, string>;
+  /** Pour un agent : brouillon → id de la proposition validée (posé par verrou.ts, relu avant l'envoi de la file). */
+  propositions?: Record<string, string>;
 };
 
 const enc = new TextEncoder();
@@ -265,13 +272,17 @@ export async function authenticate(sb: SupabaseClient, bearer: string): Promise<
   const { data: tok } = await sb.from("mcp_tokens").select("grant_id, expires_at, revoked_at")
     .eq("token_hash", await sha256hex(bearer)).eq("kind", "access").maybeSingle<{ grant_id: string; expires_at: string; revoked_at: string | null }>();
   if (!tok || tok.revoked_at || Date.parse(tok.expires_at) < Date.now()) return null;
-  // « * » : la colonne `agent` n'existe qu'après le SQL 2026-11-27-securite-alfred ; avant, rien ne change.
-  const { data: g } = await sb.from("mcp_grants").select("*").eq("id", tok.grant_id).maybeSingle<{ user_id: string; revoked_at: string | null; last_used_at: string | null; agent?: boolean | null }>();
+  // « * » : la colonne `agent` n'existe qu'après le SQL 2026-11-27-securite-alfred, `valideur`
+  // qu'après le SQL 2026-11-27-verrou-connexions ; avant, rien ne change.
+  const { data: g } = await sb.from("mcp_grants").select("*").eq("id", tok.grant_id).maybeSingle<{ user_id: string; revoked_at: string | null; last_used_at: string | null; agent?: boolean | null; valideur?: string | null }>();
   if (!g || g.revoked_at) return null;
   const { data: prof } = await sb.from("profiles").select("role, agency_role, display_name").eq("user_id", g.user_id).maybeSingle<{ role: string; agency_role: string | null; display_name: string | null }>();
   if (prof?.role !== "agency") return null;
   if (!g.last_used_at || Date.now() - Date.parse(g.last_used_at) > 5 * 60_000) {
     await sb.from("mcp_grants").update({ last_used_at: new Date().toISOString() }).eq("id", tok.grant_id);
   }
-  return { userId: g.user_id, grantId: tok.grant_id, founder: prof.agency_role === "founder", name: prof.display_name ?? "", agent: g.agent === true };
+  return {
+    userId: g.user_id, grantId: tok.grant_id, founder: prof.agency_role === "founder", name: prof.display_name ?? "", agent: g.agent === true,
+    valideur: typeof g.valideur === "string" && g.valideur ? g.valideur : null,
+  };
 }
