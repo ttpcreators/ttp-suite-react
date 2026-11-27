@@ -1,5 +1,6 @@
 import { peekInvoicePrefill, putInvoicePrefill, takeInvoicePrefill } from "@/lib/invoicePrefill";
-import { addDaysISO, nextQuoteRef, quoteShownStatus, QUOTE_STATUS_LABEL, QUOTE_STATUS_OPTIONS, QUOTE_VALIDITY_DAYS, type QuoteShownStatus, type QuoteStatus } from "@/lib/quotes";
+import { addDaysISO, collabAProposer, collabDepuisDevis, nextQuoteRef, quoteShownStatus, QUOTE_STATUS_LABEL, QUOTE_STATUS_OPTIONS, QUOTE_VALIDITY_DAYS, type QuoteShownStatus, type QuoteStatus } from "@/lib/quotes";
+import { requestIntent } from "@/lib/openIntent";
 import { useSetNavSub } from "@/lib/navSub";
 import { setCollabLink } from "@/lib/collabLinksDb";
 import { autoFacturePayee } from "@/lib/collabAutoDb";
@@ -24,6 +25,7 @@ import {
   ChevronRight,
   Check,
   FileSignature,
+  Handshake,
 } from "@/components/icons";
 import { StatsBento } from "@/components/ui/stats-bento";
 import { brouillonsLegende, encaisserLegende, encaisserResume } from "@/lib/facturationResume";
@@ -54,6 +56,8 @@ import { parisDay, readSettings } from "@/lib/compta";
 import { printHtml } from "@/lib/printPdf";
 import { docHead, pdfFileTitle, ttpLogoImg } from "@/lib/pdfDoc";
 import { notifyCreator } from "@/lib/push";
+import { factureDonneReversement } from "@/lib/argentPush";
+import { partyBrand } from "@/lib/brandRecord";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { PhoneMenu } from "@/components/ui/phone-bar";
 import { IosSheet, Overlay } from "@/components/mobile/ios-sheet";
@@ -76,6 +80,8 @@ type Row = {
   sort_order: number | null;
   /** Jour du passage en « Payée » (SQL 2026-11-01-factures-garde-fous.sql), sinon absent. */
   paid_at?: string | null;
+  /** Collab de la facture (lecture `select *`) : dit qui encaisse (page Compta). */
+  collab_id?: string | null;
 };
 
 type BankAccount = { id: string; label: string; holder: string; bank: string; iban: string; bic: string };
@@ -676,6 +682,19 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
   const [commissions, setCommissions] = useState<Record<string, number>>({});
   const [quotes, setQuotes] = useState<Quote[]>([]);
   const inited = useRef(false);
+  // Onglet Devis : collabs de l'agence, pour proposer « Créer la collab » sur un devis accepté
+  // qui n'en a pas encore (constat WC1). Lecture ratée : pas de proposition.
+  const [collabsLite, setCollabsLite] = useState<{ brand: string | null; creator: string | null; status: string | null; step: number | null }[] | null>(null);
+  useEffect(() => {
+    if (!quoteMode) return;
+    let alive = true;
+    void supabase.from("collabs").select("brand,creator,status,step").then(({ data, error }) => {
+      if (alive && !error) setCollabsLite((data as { brand: string | null; creator: string | null; status: string | null; step: number | null }[] | null) ?? []);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [quoteMode, live]);
 
   const [statusFilter, setStatusFilter] = useStickyState<InvoiceStatus | "Tous">("facturation:statut", ["Tous", "brouillon", "attente", "payee", "retard", "annulee"], "Tous");
   const [quoteFilter, setQuoteFilter] = useStickyState<QuoteShownStatus | "Tous">("devis:statut", ["Tous", "brouillon", "envoye", "accepte", "refuse", "expire"], "Tous");
@@ -1085,6 +1104,13 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
     if (q.status === "brouillon") void patchQuote(q, { status: "envoye" }, `Devis ${q.ref} marqué « Envoyé »`);
   }
 
+  /** Devis accepté → formulaire de collab prérempli (page Collabs) ; rien n'est créé sans « Créer ». */
+  function collabFromQuote(q: Quote) {
+    const t = totalsOf(q.items ?? [], q.franchise, q.vatRate, q.commissionRate);
+    requestIntent("collab:new", JSON.stringify(collabDepuisDevis(q, t.ht)));
+    window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "collabs" }));
+  }
+
   /** Devis accepté → nouvelle facture (onglet Factures) avec tout son contenu, à vérifier puis enregistrer. */
   function convertQuote(q: Quote) {
     if (q.invoiceId) return toast(`Ce devis est déjà la facture ${q.invoiceRef ?? ""}`.trim());
@@ -1180,9 +1206,14 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
     }
     // Facture créée depuis une collab (ou champ « Collab ») : lien enregistré à part, jamais bloquant.
     if (draft.collabId && id) void setCollabLink("invoices", id, draft.collabId);
-    // Prévient le créateur (si notifs activées) quand SA facture passe à « Payée ».
+    // La marque a payé : le créateur est prévenu que son versement arrive (constat W15), seulement
+    // si la facture lui donne un reversement (ni commission, ni marque qui le paie en direct).
+    // Sans montant ni numéro de facture ; le serveur écrit le texte dans sa langue.
     if (!wasPaid && draft.status === "payee" && draft.creator) {
-      notifyCreator("invoice", draft.creator, `Ta facture ${draft.ref} a été réglée 💸`);
+      const collabId = draft.collabId || invoices.find((x) => x.id === id)?.collab_id || null;
+      const brand = draft.brand.trim();
+      if (brand && factureDonneReversement({ kind: draft.kind, collabId }, (appData?.collabCashMode as Record<string, string> | undefined) ?? {}))
+        notifyCreator("brand-paid", draft.creator, `${brand} a payé · ton versement arrive`, undefined, brand);
     }
     // Facture d'une collab passée « Payée » : la collab atteint « Paiement marque reçu » (jamais bloquant).
     if (!wasPaid && draft.status === "payee" && id) void autoFacturePayee(id, draft.collabId).then((msgs) => msgs.forEach((m) => toast(m)));
@@ -1757,7 +1788,23 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
               const t = htOfQuote(q);
               const st = shown(q);
               const party = q.creator ? `${q.brand} × ${firstName(q.creator)}` : q.brand;
+              // Devis accepté sans collab en cours pour cette marque et ce créateur : on propose de la créer.
+              const proposeCollab = collabAProposer(q, collabsLite);
+              const collabBtn = proposeCollab ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    collabFromQuote(q);
+                  }}
+                  className="inline-flex h-7 shrink-0 items-center gap-1 rounded-full bg-primary px-2.5 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+                  title="Ouvre le formulaire de collab prérempli. Le prospect de la marque passe « Signé » à la création."
+                >
+                  <Handshake className="h-3.5 w-3.5" /> Créer la collab
+                </button>
+              ) : null;
               const items: ActionItem[] = [
+                ...(proposeCollab ? [{ key: "collab", label: "Créer la collab", icon: Handshake, onClick: () => collabFromQuote(q) }] : []),
                 { key: "edit", label: "Modifier", icon: Pencil, onClick: () => void openEditQuote(q) },
                 { key: "preview", label: "Aperçu", icon: Eye, onClick: () => setPreview({ html: quoteHTML(q), ref: q.ref, email: q.clientEmail, brand: party }) },
                 { key: "send", label: "Envoyer au client", icon: Send, onClick: () => sendQuote(q) },
@@ -1770,7 +1817,14 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
                   status={q.status}
                   shown={st}
                   onPick={(v) => {
-                    void patchQuote(q, { status: v }, v === "accepte" && !q.invoiceId ? `Devis ${q.ref} accepté : « Transformer en facture » dans son menu` : `Devis ${q.ref} : ${QUOTE_STATUS_LABEL[v]}`);
+                    const collabToo = v === "accepte" && collabAProposer({ ...q, status: v }, collabsLite);
+                    void patchQuote(
+                      q,
+                      { status: v },
+                      v === "accepte" && !q.invoiceId
+                        ? `Devis ${q.ref} accepté : ${collabToo ? "« Créer la collab » et " : ""}« Transformer en facture » dans son menu`
+                        : `Devis ${q.ref} : ${QUOTE_STATUS_LABEL[v]}`,
+                    );
                   }}
                 />
               );
@@ -1787,6 +1841,7 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
                     <span className="text-right text-[12px] tabular-nums text-muted-foreground">{euroUi(t.ttc)}</span>
                     <span className="text-center text-[11px] font-medium text-muted-foreground">{uiDate(q.dueDate)}</span>
                     <span className="flex items-center justify-end gap-2">
+                      {collabBtn}
                       {badge}
                       <span onClick={(e) => e.stopPropagation()}>
                         <ActionMenu items={items} />
@@ -1809,7 +1864,8 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
                         <span className="text-lg font-bold tracking-tight text-foreground">{euroUi(t.ht)} <span className="text-[11px] font-medium text-muted-foreground">HT</span></span>
                         <span className="text-[11px] font-medium text-muted-foreground">Valable jusqu'au {uiDate(q.dueDate)}</span>
                       </span>
-                      <span onClick={(e) => e.stopPropagation()}>
+                      <span className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                        {collabBtn}
                         <ActionMenu items={items} />
                       </span>
                     </div>
@@ -1969,7 +2025,10 @@ export function Facturation({ mode = "factures" }: { mode?: "factures" | "devis"
                 return toast("Statut non enregistré, réessaie");
               }
               toast(`Facture ${r.ref} : ${metaOf(status).label}`);
-              if (status === "payee" && before !== "payee" && r.creator) notifyCreator("invoice", r.creator, `Ta facture ${r.ref} a été réglée 💸`);
+              // La marque a payé (constat W15) : même règle que l'éditeur, sans montant ni numéro.
+              const brand = partyBrand(r.party);
+              if (status === "payee" && before !== "payee" && r.creator && brand && factureDonneReversement({ kind: detailsFor(r).kind, collabId: r.collab_id }, (appData?.collabCashMode as Record<string, string> | undefined) ?? {}))
+                notifyCreator("brand-paid", r.creator, `${brand} a payé · ton versement arrive`, undefined, brand);
               // Collab de la facture : étape « Paiement marque reçu » (jamais bloquant).
               if (status === "payee" && before !== "payee") void autoFacturePayee(r.id).then((msgs) => msgs.forEach((m) => toast(m)));
             };

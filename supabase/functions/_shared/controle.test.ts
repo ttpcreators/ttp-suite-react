@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  TITRE_MAX, controler, court, createursSousContrat, dateIso, lectureCachet, ligneProbleme, lireIgnores, sansIgnores, urlDe, versementDepuis,
+  TITRE_MAX, collabEnCours, collabOuverte, controler, court, createursSousContrat, dateIso, lectureCachet, ligneProbleme, lireIgnores, sansIgnores, urlDe, versementDepuis,
   type ControleInput, type CtrlCollab, type CtrlCreator,
 } from "./controle.ts";
 
@@ -20,6 +20,8 @@ const base = (o: Partial<ControleInput> = {}): ControleInput => ({
   payouts: {},
   cashModes: {},
   contractHistory: [{ creator: "LEA TEST", config: {} }],
+  details: {},
+  taux: { roster: { "LEA TEST": 20 }, memorises: {} },
   ...o,
 });
 const regles = (o: Partial<ControleInput>) => controler(base(o)).map((p) => p.regle);
@@ -75,7 +77,8 @@ describe("facture en brouillon échue", () => {
 });
 
 describe("étapes en retard sur l'argent", () => {
-  const payee = { id: "i1", ref: "2026-90", status: "payee", collab_id: "c1", paid_at: "2026-11-10T10:00:00Z", creator: "LEA TEST" };
+  // 750 € HT, commission 20 % (fiche roster) : 600 € dus au créateur.
+  const payee = { id: "i1", ref: "2026-90", status: "payee", amount: "750 €", collab_id: "c1", paid_at: "2026-11-10T10:00:00Z", creator: "LEA TEST" };
   it("facture payée, collab publiée mais avant l'étape 9", () => {
     const out = controler(base({ collabs: [collab({ step: 6 })], invoices: [payee] }));
     expect(out.map((p) => p.regle)).toEqual(["etape_paiement"]);
@@ -87,16 +90,25 @@ describe("étapes en retard sur l'argent", () => {
     expect(out[0].gravite).toBe("basse");
     expect(out[0].decision).toBe(false);
   });
-  it("versement noté depuis le paiement, collab à l'étape 9 : étape 10 attendue (une seule ligne)", () => {
-    const out = controler(base({ collabs: [collab({ step: 9 })], invoices: [payee], payouts: { "LÉA TEST": [{ date: "2026-11-15", amount: 600 }] } }));
+  it("part du créateur entièrement versée, collab à l'étape 9 : étape 10 attendue (une seule ligne)", () => {
+    const out = controler(base({ collabs: [collab({ step: 9 })], invoices: [payee], payouts: { "LEA TEST": [{ date: "2026-11-15", amount: 600 }] } }));
     expect(out.map((p) => p.regle)).toEqual(["etape_reversement"]);
+    expect(out[0].detail).toContain("entièrement versée");
   });
   it("versement noté mais collab avant l'étape 9 : seulement l'étape 9 réclamée", () => {
-    const out = controler(base({ collabs: [collab({ step: 8 })], invoices: [payee], payouts: { "LÉA TEST": [{ date: "2026-11-15", amount: 600 }] } }));
+    const out = controler(base({ collabs: [collab({ step: 8 })], invoices: [payee], payouts: { "LEA TEST": [{ date: "2026-11-15", amount: 600 }] } }));
     expect(out.map((p) => p.regle)).toEqual(["etape_paiement"]);
   });
-  it("versement plus ancien que le paiement : pas compté", () => {
-    expect(regles({ collabs: [collab({ step: 9 })], invoices: [payee], payouts: { "LEA TEST": [{ date: "2026-10-01", amount: 600 }] } })).toEqual([]);
+  it("le versement solde une facture plus ancienne, pas celle-ci : pas d'étape 10 (constat D4)", () => {
+    const ancienne = { id: "i0", ref: "2026-50", status: "payee", amount: "750 €", collab_id: "c0", paid_at: "2026-10-01T10:00:00Z", creator: "LEA TEST" };
+    expect(regles({ collabs: [collab({ step: 9 })], invoices: [ancienne, payee], payouts: { "LEA TEST": [{ date: "2026-11-15", amount: 600 }] } })).toEqual([]);
+  });
+  it("part versée en partie : pas d'étape 10", () => {
+    expect(regles({ collabs: [collab({ step: 9 })], invoices: [payee], payouts: { "LEA TEST": [{ date: "2026-11-15", amount: 300 }] } })).toEqual([]);
+  });
+  it("sans les détails des factures ni les taux (connecteur) : l'étape 10 n'est jamais proposée", () => {
+    expect(regles({ collabs: [collab({ step: 9 })], invoices: [payee], payouts: { "LEA TEST": [{ date: "2026-11-15", amount: 600 }] }, details: null })).toEqual([]);
+    expect(regles({ collabs: [collab({ step: 9 })], invoices: [payee], payouts: { "LEA TEST": [{ date: "2026-11-15", amount: 600 }] }, taux: undefined })).toEqual([]);
   });
   it("la marque paie le créateur : rien à reverser", () => {
     expect(regles({ collabs: [collab({ step: 9 })], invoices: [payee], payouts: { "LEA TEST": [{ date: "2026-11-15", amount: 600 }] }, cashModes: { c1: "createur" } })).toEqual([]);
@@ -320,5 +332,72 @@ describe("outils", () => {
     const list = controler(base({ todos: [{ id: "t1", text: "a", done: true, status: "" }, { id: "t2", text: "b", done: true, status: "" }] }));
     expect(sansIgnores(list, lireIgnores({ "tache_cochee:t1": { at: "2026-11-23" } })).map((p) => p.id)).toEqual(["tache_cochee:t2"]);
     expect(lireIgnores(["x"])).toEqual({});
+  });
+});
+
+describe("commission due quand la marque paie le créateur en direct (constat D6)", () => {
+  const annulee = { id: "i9", ref: "2026-99", status: "annulee", amount: "900 €", collab_id: "c1", creator: "LEA TEST" };
+  it("seule facture annulée, collab en cours : signalée, décision de Marc", () => {
+    const out = controler(base({ collabs: [collab({ step: 5 })], invoices: [annulee] }));
+    expect(out.map((p) => p.regle)).toEqual(["facture_annulee_seule"]);
+    expect(out[0].detail).toContain("encaissement « créateur »");
+    expect(out[0].decision).toBe(true);
+  });
+  it("une autre facture vivante, une collab bouclée, ou déjà en encaissement « créateur » : rien", () => {
+    const vivante = { id: "i10", ref: "2026-100", status: "attente", amount: "900 €", collab_id: "c1", creator: "LEA TEST" };
+    expect(regles({ collabs: [collab({ step: 5 })], invoices: [annulee, vivante] })).toEqual([]);
+    expect(regles({ collabs: [collab({ step: 11, status: "gagnee" })], invoices: [annulee] })).toEqual([]);
+    expect(regles({ collabs: [collab({ step: 5 })], invoices: [annulee], cashModes: { c1: "createur" } })).toEqual([]);
+  });
+  it("encaissement « créateur », marque payée (étape 9), aucune facture de commission : à facturer", () => {
+    const out = controler(base({ collabs: [collab({ step: 9 })], cashModes: { c1: "createur" } }));
+    expect(out.map((p) => p.regle)).toEqual(["commission_a_facturer"]);
+    expect(out[0].lien).toEqual({ vue: "compta" });
+  });
+  it("facture de commission déjà faite, avant l'étape 9, ou factures pas lues (membre) : rien", () => {
+    const com = { id: "i11", ref: "2026-101", status: "attente", amount: "180 €", collab_id: "c1", creator: "LEA TEST" };
+    expect(regles({ collabs: [collab({ step: 9 })], cashModes: { c1: "createur" }, invoices: [com], details: { i11: { kind: "commission" } } })).toEqual([]);
+    expect(regles({ collabs: [collab({ step: 7 })], cashModes: { c1: "createur" } })).toEqual([]);
+    expect(regles({ collabs: [collab({ step: 9 })], cashModes: { c1: "createur" }, invoices: null })).toEqual([]);
+  });
+});
+
+describe("dépôt d'un créateur sans suite (constat W5)", () => {
+  const depot = { id: "d1", creator: "LEA TEST", type: "facture", name: "Facture", path: "creator-uploads/u1/facture-1.pdf", created_at: "2026-11-18T10:00:00Z", collab_id: null };
+  it("plus de 3 jours, repère pas lu : signalé (facture : gravité haute)", () => {
+    const out = controler(base({ depots: [depot], depotsNonLus: ["d1"] }));
+    expect(out.map((p) => p.regle)).toEqual(["depot_sans_suite"]);
+    expect(out[0].gravite).toBe("haute");
+    expect(out[0].id).toBe("depot_sans_suite:d1");
+    expect(out[0].lien).toEqual({ vue: "documents", recherche: "LEA TEST" });
+  });
+  it("vu, trop récent, versement noté depuis, ou dépôts pas lus : rien", () => {
+    expect(regles({ depots: [depot], depotsNonLus: [] })).toEqual([]);
+    expect(regles({ depots: [{ ...depot, created_at: "2026-11-21T10:00:00Z" }], depotsNonLus: ["d1"] })).toEqual([]);
+    expect(regles({ depots: [depot], depotsNonLus: ["d1"], payouts: { "LEA TEST": [{ date: "2026-11-19", amount: 100 }] } })).toEqual([]);
+    expect(regles({ depots: null, depotsNonLus: ["d1"] })).toEqual([]);
+  });
+});
+
+describe("media kit incomplet (constat D5)", () => {
+  it("créateur actif dont le kit en ligne n'a ni bio ni photos : signalé", () => {
+    const out = controler(base({ creators: [{ ...complet, mediakit: { platforms: [{ name: "Instagram" }] } }] }));
+    expect(out.map((p) => p.regle)).toEqual(["kit_incomplet"]);
+    expect(out[0].detail).toContain("bio, photos, adresse du kit");
+  });
+  it("kit complet, kit pas lu (connecteur) ou créateur inactif : rien", () => {
+    expect(regles({ creators: [{ ...complet, mediakit: { bio: "Texte", photos: ["https://x.test/1.jpg"], slug: "lea" } }] })).toEqual([]);
+    expect(regles({ creators: [complet] })).toEqual([]);
+    expect(regles({ creators: [{ ...complet, status: "inactif", mediakit: null }] })).toEqual([]);
+  });
+});
+
+describe("collab en cours (constat W1, règle partagée avec le connecteur)", () => {
+  it("gagnée avant le bilan = encore en cours", () => {
+    expect(collabEnCours({ status: "gagnee" })).toBe(true);
+    expect(collabOuverte({ status: "gagnee", step: 3 })).toBe(true);
+    expect(collabOuverte({ status: "gagnee", step: 11 })).toBe(false);
+    expect(collabOuverte({ status: "perdue", step: 3 })).toBe(false);
+    expect(collabOuverte({ status: "active", step: null })).toBe(true);
   });
 });

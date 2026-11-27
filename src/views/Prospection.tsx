@@ -33,7 +33,7 @@ import { NewMailDialog } from "@/components/mail-tools";
 import { priceRange } from "@/lib/pricingForm";
 import { formatEuro } from "@/lib/money";
 import { firstNameOf } from "@/lib/gifting";
-import { negotiationCounts } from "@/lib/collabTabs";
+import { negotiationCounts, stageEnregistre } from "@/lib/collabTabs";
 import { useLiveKey } from "@/lib/useLive";
 import { getCache, setCache } from "@/lib/viewCache";
 import { PageHeaderRow } from "@/components/ui/page-header";
@@ -59,16 +59,21 @@ type Row = {
   updated_at?: string | null;
 };
 
-// Ordre de colonnes fidèle à l'original (app.js : stages).
-const STAGE_ORDER = ["Prospection", "Contact", "Négociation", "Signé"];
+// Ordre de colonnes fidèle à l'original (app.js : stages), puis « Perdue » en dernier : une
+// piste perdue sort des chiffres et n'est jamais montrée au créateur (constats D2, W22).
+const STAGE_ORDER = ["Prospection", "Contact", "Négociation", "Signé", "Perdu"];
 // Libellés affichés (les valeurs enregistrées restent celles de STAGE_ORDER).
 const STAGE_LABEL: Record<string, string> = {
   Prospection: "Repérée",
   Contact: "Contactée",
   Négociation: "En négociation",
   Signé: "Signée",
+  Perdu: "Perdue",
 };
 const stageLabel = (s: string) => STAGE_LABEL[s] ?? s;
+// Étape d'une ligne pour les colonnes et les filtres : un libellé écrit par le connecteur
+// (« Repérée », « Perdue »…) rejoint la colonne de sa valeur, au lieu d'en ouvrir une deuxième.
+const stageKey = (s: string | null | undefined) => stageEnregistre(s) ?? s ?? "Sans étape";
 
 // Couleur de la pastille par tone (équivalents de toneHex de l'original).
 const DOT_CLASS: Record<NonNullable<Row["tone"]>, string> = {
@@ -204,7 +209,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
     setBrand(r.brand);
     setContact(r.contact ?? "");
     setValue(r.value && r.value !== "—" ? r.value : "");
-    setStage(r.stage ?? STAGE_ORDER[0]);
+    setStage(stageEnregistre(r.stage) ?? r.stage ?? STAGE_ORDER[0]);
     setFormOpen(true);
   };
   // Modification (marque, contact, valeur, étape) : optimiste avec retour arrière si échec.
@@ -337,7 +342,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
 
   // Stages présents dans les données, dans l'ordre canonique du pipeline puis
   // toute étape hors liste (pour les chips de filtre).
-  const presentStages = new Set(rows.map((row) => row.stage ?? "Sans étape"));
+  const presentStages = new Set(rows.map((row) => stageKey(row.stage)));
   const stageChips = [
     "Tous",
     ...STAGE_ORDER.filter((s) => presentStages.has(s)),
@@ -359,7 +364,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
   const filtered = rows.filter(
     (row) =>
       matchQuery(query, row.brand, row.contact, row.stage) &&
-      (effStage === "Tous" || (row.stage ?? "Sans étape") === effStage),
+      (effStage === "Tous" || stageKey(row.stage) === effStage),
   );
 
   if (query.trim() && filtered.length === 0) {
@@ -380,7 +385,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
 
   // Groupement par étape : d'abord l'ordre canonique du pipeline, puis toute
   // étape hors liste rencontrée dans les données (fallback "Sans étape").
-  const present = new Set(filtered.map((row) => row.stage ?? "Sans étape"));
+  const present = new Set(filtered.map((row) => stageKey(row.stage)));
   const stages = [
     ...STAGE_ORDER.filter((s) => present.has(s)),
     ...[...present].filter((s) => !STAGE_ORDER.includes(s)),
@@ -453,7 +458,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
         <div className="grid items-start gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
           <div className={cn(phoneDetail && "max-lg:hidden")}>
             <MasterList
-              groups={stages.map((st) => ({ key: st, label: stageLabel(st), items: filtered.filter((r) => (r.stage ?? "Sans étape") === st) }))}
+              groups={stages.map((st) => ({ key: st, label: stageLabel(st), items: filtered.filter((r) => stageKey(r.stage) === st) }))}
               selectedId={sel?.id}
               onPick={(id) => {
                 setSelId(id);
@@ -497,7 +502,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
                           <Picker
                             ariaLabel="Étape de la négociation"
                             size="sm"
-                            value={sel.stage ?? STAGE_ORDER[0]}
+                            value={stageEnregistre(sel.stage) ?? sel.stage ?? STAGE_ORDER[0]}
                             onChange={(v) => void saveEdit(sel.id, { stage: v }).then((ok) => ok && toast(`Passé en « ${stageLabel(v)} » ✓`))}
                             options={STAGE_OPTIONS}
                           />
@@ -524,7 +529,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
                           <Handshake className="h-4 w-4" /> Ouvrir la collab
                         </button>
                       ) : (
-                        <button type="button" onClick={() => startConvert(sel)} title="La marque a dit oui : crée la collab avec la proposition" className={cn("flex h-11 items-center gap-1.5 rounded-full px-4 text-[14px] font-semibold transition-opacity hover:opacity-90", sel.stage === "Négociation" || sel.stage === "Signé" ? "bg-primary text-primary-foreground" : "bg-field text-foreground")}>
+                        <button type="button" onClick={() => startConvert(sel)} title="La marque a dit oui : crée la collab avec la proposition" className={cn("flex h-11 items-center gap-1.5 rounded-full px-4 text-[14px] font-semibold transition-opacity hover:opacity-90", stageKey(sel.stage) === "Négociation" || stageKey(sel.stage) === "Signé" ? "bg-primary text-primary-foreground" : "bg-field text-foreground")}>
                           <Handshake className="h-4 w-4" /> Signer
                         </button>
                       )}
@@ -559,7 +564,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5 items-start">
         {stages.map((stage) => {
           const cards = filtered.filter(
-            (row) => (row.stage ?? "Sans étape") === stage,
+            (row) => stageKey(row.stage) === stage,
           );
           return (
             <div key={stage}>
@@ -603,7 +608,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
                             ? { key: "collab", label: "Ouvrir la collab", icon: Handshake, onClick: () => void openCollab(card.collab_id as string) }
                             : { key: "collab", label: "Signer", icon: Handshake, onClick: () => startConvert(card) },
                           // Changement d'étape direct depuis le menu de la carte.
-                          ...STAGE_ORDER.filter((s) => s !== card.stage).map((s) => ({
+                          ...STAGE_ORDER.filter((s) => s !== stageKey(card.stage)).map((s) => ({
                             key: `stage-${s}`,
                             label: `Passer en « ${stageLabel(s)} »`,
                             icon: ArrowRight,
@@ -633,7 +638,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
                         {[card.creator ? titleCase(card.creator) : "", card.deliverables ?? "", card.proposal?.at ? fmtDay(card.proposal.at) : ""].filter(Boolean).join(" · ")}
                       </p>
                     )}
-                    {!card.collab_id && (card.stage === "Négociation" || card.stage === "Signé") && (
+                    {!card.collab_id && (stageKey(card.stage) === "Négociation" || stageKey(card.stage) === "Signé") && (
                       <button
                         type="button"
                         title="La marque a dit oui : crée la collab avec la proposition"

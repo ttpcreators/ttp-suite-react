@@ -204,4 +204,23 @@ export const EN_SHARED: Record<string, string> = {
   "{label} n'a pas pu s'afficher": "{label} couldn't be displayed",
   "Le reste de l'app fonctionne. Tu peux réessayer.": "The rest of the app is working. You can try again.",
   "Chargement": "Loading",
+
+  // ── Mot de passe (oublié, ou changé dans les réglages) ──────────────────────
+  "Mot de passe": "Password",
+  "Changer": "Change",
+  "Nouveau mot de passe": "New password",
+  "Confirme le mot de passe": "Confirm the password",
+  "Afficher le mot de passe": "Show password",
+  "Masquer le mot de passe": "Hide password",
+  "6 caractères au moins.": "At least 6 characters.",
+  "Les deux mots de passe ne sont pas identiques.": "The two passwords don't match.",
+  "Le mot de passe doit être différent de l'ancien.": "The password must be different from the old one.",
+  "Pour des raisons de sécurité, reconnecte-toi puis réessaie.": "For security reasons, log in again and try again.",
+  "Mot de passe changé ✓": "Password changed ✓",
+  "Choisis ton nouveau mot de passe": "Choose your new password",
+  "Tu l'utiliseras pour te connecter à ton espace.": "You'll use it to log in to your space.",
+  "Ton nouveau mot de passe est enregistré.": "Your new password is saved.",
+  "Si tu utilises l'app installée sur ton téléphone, ouvre-la et connecte-toi avec ce mot de passe.": "If you use the app installed on your phone, open it and log in with this password.",
+  "Continuer": "Continue",
+  "Plus tard": "Later",
 };

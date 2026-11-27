@@ -1,4 +1,5 @@
 import { formatEuro, parseAmount } from "./money";
+import { factureEnRetard } from "../../supabase/functions/_shared/factureRetard.ts";
 
 /**
  * Relances de factures impayées : règles PURES partagées par la page Relances,
@@ -39,12 +40,11 @@ export function daysSinceDue(d: Date, now: Date = new Date()): number {
   return Math.round((today.getTime() - day0.getTime()) / 86400000);
 }
 
-/** Facture à relancer : « retard », ou « attente » dont l'échéance est passée. */
+/** Facture à relancer : « retard », ou « attente » dont l'échéance est passée (jour LOCAL).
+ *  La règle vit dans supabase/functions/_shared/factureRetard.ts, partagée avec le résumé du matin. */
 export function isOverdueInvoice(iv: { status: string; date: string | null }, now: Date = new Date()): boolean {
-  if (iv.status === "retard") return true;
-  if (iv.status !== "attente") return false;
-  const d = parseDueDate(iv.date);
-  return d ? daysSinceDue(d, now) > 0 : false;
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  return factureEnRetard(iv, today);
 }
 
 /** Factures en retard + jours de retard, de la plus ancienne à la plus récente. */

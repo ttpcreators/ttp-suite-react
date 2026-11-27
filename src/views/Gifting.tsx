@@ -16,7 +16,7 @@ import { getCache, setCache } from "@/lib/viewCache";
 import { notifyCreator } from "@/lib/push";
 import { toISODate, fmtDayAny } from "@/lib/dates";
 import { cn, titleCase } from "@/lib/utils";
-import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, giftStatusMeta, type Gift as GiftRow } from "@/lib/gifting";
+import { GIFT_COLS, GIFT_STATUS, DEFAULT_MENTIONS, giftObjet, giftStatusMeta, type Gift as GiftRow } from "@/lib/gifting";
 import { PeriodFilter, periodsFrom, inPeriod } from "@/components/ui/period-filter";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { Tabs } from "@/components/ui/animated-tabs";
@@ -173,9 +173,11 @@ export function Gifting({ embedded = false }: { embedded?: boolean } = {}) {
       note: note.trim() || null,
     };
     if (editId) {
+      const before = (rows ?? []).find((r) => r.id === editId);
       const ok = await dbUpdate("gifting", editId, patch);
       if (!ok) return toast("Erreur, réessaie");
       setRows((prev) => (prev ?? []).map((r) => (r.id === editId ? { ...r, ...patch } : r)));
+      if (before && (before.status ?? "recu") !== patch.status) notifyGiftUpdate({ ...before, ...patch });
       toast("Gifting modifié ✓");
     } else {
       const created = await dbInsert("gifting", { ...patch, source: "agency", sort_order: nextOrder(list) });
@@ -190,6 +192,15 @@ export function Gifting({ embedded = false }: { embedded?: boolean } = {}) {
     setFormOpen(false);
   }
 
+  // Statut d'un cadeau changé par l'agence : son créateur est prévenu (constat WC4), avec
+  // « Marque · produit » ; le serveur écrit la notification dans sa langue.
+  function notifyGiftUpdate(g: Pick<GiftRow, "id" | "creator" | "brand" | "product">) {
+    const who = (g.creator ?? "").trim();
+    if (!who) return;
+    const objet = giftObjet(g);
+    notifyCreator("gift-update", who, objet || "Du nouveau sur ton cadeau", g.id, objet || undefined);
+  }
+
   async function changeStatus(g: GiftRow, next: string) {
     const prevStatus = g.status;
     setRows((prev) => (prev ?? []).map((r) => (r.id === g.id ? { ...r, status: next } : r)));
@@ -197,7 +208,9 @@ export function Gifting({ embedded = false }: { embedded?: boolean } = {}) {
       // Échec (RLS/réseau) : on remet l'ancien statut, sinon l'UI ment jusqu'au refetch.
       setRows((prev) => (prev ?? []).map((r) => (r.id === g.id ? { ...r, status: prevStatus } : r)));
       toast("Erreur, réessaie");
+      return;
     }
+    if ((prevStatus ?? "recu") !== next) notifyGiftUpdate(g);
   }
 
   async function remove(g: GiftRow) {

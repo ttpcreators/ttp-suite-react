@@ -16,21 +16,27 @@
 
 import { foldName } from "./exclusivites.ts";
 import { estPublicite, etatDroit, lienPubsMeta, lireDroits } from "./alfredSuivi.ts";
+import { reversementRows, type Detail, type Payout } from "./reversements.ts";
+import { depotsEnAttente, joursDepuis, type Depot } from "./depots.ts";
 
 export type Gravite = "haute" | "moyenne" | "basse";
 
 export type RegleId =
   | "brouillon_echu"
   | "publiee_sans_facture"
+  | "facture_annulee_seule"
+  | "commission_a_facturer"
   | "etape_paiement"
   | "etape_reversement"
   | "paiement_avant_publication"
+  | "depot_sans_suite"
   | "createur_hors_roster"
   | "prospect_ouvert"
   | "cachet_illisible"
   | "brief_casse"
   | "tache_cochee"
   | "fiche_incomplete"
+  | "kit_incomplet"
   | "etiquettes_contacts"
   | "droits_expirent"
   | "droits_expires";
@@ -93,6 +99,8 @@ export type CtrlCreator = {
   phone?: string | null;
   photo_url?: string | null;
   platform?: string | null;
+  /** Media kit (`creators.mediakit`) : absent = pas lu (la règle du kit est sautée). */
+  mediakit?: unknown;
 };
 export type CtrlProspect = {
   id: string;
@@ -127,6 +135,18 @@ export type ControleInput = {
   contractHistory: unknown | null;
   /** Blob `usageRights` (droits d'utilisation vendus aux marques, outil noter_droits) ; null ou absent : pas lu. */
   droits?: unknown | null;
+  /** Blob `invoiceDetails` (lignes, taux et sorte de chaque facture) ; null ou absent : pas lu.
+   *  Avec `taux`, il donne le reste dû par facture (règle « Créateur payé ») et repère les
+   *  factures de commission. */
+  details?: Record<string, unknown> | null;
+  /** Taux de commission : fiche roster (`creators.commission`) et taux mémorisés (blob
+   *  `creatorCommission`), par nom ; null ou absent : pas lus. */
+  taux?: { roster: Record<string, number>; memorises: Record<string, number> } | null;
+  /** Dépôts des créateurs (`documents` : contenu, facture, stats, chemin creator-uploads/…) ;
+   *  null ou absent : pas lus (règle « dépôt sans suite » sautée). */
+  depots?: Depot[] | null;
+  /** Ids des documents dont le repère agence « document » n'est pas lu (SQL 2026-11-27). */
+  depotsNonLus?: string[] | null;
 };
 
 // ── Réglages ─────────────────────────────────────────────────────────────────
@@ -142,6 +162,8 @@ export const ETAPE_PUBLICATION = 6;
 export const ETAPE_STATS = 7;
 export const ETAPE_PAIEMENT = 9;
 export const ETAPE_REVERSEMENT = 10;
+/** Dépôt d'un créateur (contenu, facture, stats) resté sans suite plus de N jours. */
+export const JOURS_DEPOT_SANS_SUITE = 3;
 /** Clé du blob agence où vivent les problèmes masqués (« Ignorer »). */
 export const IGNORES_KEY = "controleIgnores";
 /** Étiquettes de la page Contacts (src/views/Contacts.tsx, TAG_OPTIONS). */
@@ -157,14 +179,18 @@ const ORDRE_REGLE: RegleId[] = [
   "publiee_sans_facture",
   "droits_expires",
   "droits_expirent",
+  "facture_annulee_seule",
+  "commission_a_facturer",
   "etape_reversement",
   "etape_paiement",
+  "depot_sans_suite",
   "createur_hors_roster",
   "prospect_ouvert",
   "cachet_illisible",
   "brief_casse",
   "tache_cochee",
   "fiche_incomplete",
+  "kit_incomplet",
   "paiement_avant_publication",
   "etiquettes_contacts",
 ];
@@ -323,9 +349,14 @@ export function createursSousContrat(history: unknown): Set<string> {
 
 // ── Le contrôle ──────────────────────────────────────────────────────────────
 const collabVivante = (c: CtrlCollab) => c.status !== "archivee" && c.status !== "perdue";
-const collabEnCours = (c: CtrlCollab) => c.status === "active" || c.status === "gagnee";
+/**
+ * Collab en cours : active ou gagnée. « Gagnée » avant l'étape 11 veut dire signée, il reste
+ * des étapes (constat W1, règle du 22/11) : la même règle sert au connecteur (point du jour,
+ * exclusivités, contacts à relancer, outil collabs), qui ne lit encore que « active ».
+ */
+export const collabEnCours = (c: Pick<CtrlCollab, "status">) => c.status === "active" || c.status === "gagnee";
 /** Collab encore en cours de travail : active ou gagnée, avant l'étape 11 (bilan). */
-const collabOuverte = (c: CtrlCollab) => collabEnCours(c) && (Number(c.step) || 0) < 11;
+export const collabOuverte = (c: Pick<CtrlCollab, "status" | "step">) => collabEnCours(c) && (Number(c.step) || 0) < 11;
 
 export function controler(input: ControleInput): Probleme[] {
   const out: Probleme[] = [];
@@ -390,7 +421,25 @@ export function controler(input: ControleInput): Probleme[] {
     }
   }
 
-  // 3. Facture payée mais collab pas à l'étape 9 ; versement noté mais pas à l'étape 10.
+  // 3. Facture payée mais collab pas à l'étape 9 ; part du créateur versée mais pas à l'étape 10.
+  // « Versée » = la ligne de la facture est soldée dans la page Reversements (les versements
+  // couvrent d'abord les factures les plus anciennes, _shared/reversements.ts) : un versement
+  // quelconque ne suffit pas, il peut payer une facture plus ancienne (constat D4). Sans les
+  // détails des factures ni les taux (connecteur, pour l'instant), on ne propose pas l'étape 10.
+  const soldees =
+    input.invoices && input.payouts != null && input.details != null && input.taux != null
+      ? new Set(
+          reversementRows({
+            invoices: input.invoices.map((iv) => ({ ...iv, amount: iv.amount, status: iv.status, creator: iv.creator })),
+            details: input.details as Record<string, Detail | undefined>,
+            payouts: input.payouts as Record<string, Payout[]>,
+            rosterRates: input.taux.roster,
+            savedRates: input.taux.memorises,
+            collabModes: input.cashModes ?? {},
+            contractHistory: input.contractHistory,
+          }).flatMap((r) => r.lines.filter((l) => l.state === "reverse").map((l) => l.id)),
+        )
+      : null;
   if (input.invoices) {
     for (const c of collabs) {
       const step = Number(c.step) || 0;
@@ -399,7 +448,7 @@ export function controler(input: ControleInput): Probleme[] {
       if (!payees.length) continue;
       const paidDay = payees.map((iv) => txt(iv.paid_at).slice(0, 10) || dateIso(iv.date, today)).filter(Boolean).sort()[0] ?? "";
       const createurPaie = input.cashModes?.[c.id] === "createur";
-      const verse = !createurPaie && input.payouts != null && versementDepuis(input.payouts, c.creator, paidDay || null);
+      const verse = !createurPaie && soldees != null && payees.every((iv) => soldees.has(iv.id));
       const refs = payees.map((iv) => txt(iv.ref)).filter(Boolean).join(", ");
       if (verse && step >= ETAPE_PAIEMENT) {
         add({
@@ -407,7 +456,7 @@ export function controler(input: ControleInput): Probleme[] {
           regle: "etape_reversement",
           gravite: "moyenne",
           titre: `Créateur payé, étape ${step} : ${nomCollab(c)}`,
-          detail: `La facture${refs ? ` ${refs}` : ""} est payée et un versement à ${titleCase(txt(c.creator))} est noté dans Reversements${paidDay ? ` depuis le ${jourCourt(paidDay)}` : ""}, mais la collab est encore à l'étape ${step}. La passer à l'étape 10 « Créateur payé » si ce versement est bien le sien.`,
+          detail: `La facture${refs ? ` ${refs}` : ""} est payée et la part de ${titleCase(txt(c.creator))} est entièrement versée (page Reversements), mais la collab est encore à l'étape ${step}. La passer à l'étape 10 « Créateur payé ».`,
           lien: collabLien(c),
           correction: null,
           decision: true,
@@ -637,6 +686,105 @@ export function controler(input: ControleInput): Probleme[] {
           decision: true,
         });
       }
+    }
+  }
+
+  // 12. Seule facture de la collab annulée alors que la collab est en cours : la marque a peut-être
+  // payé le créateur en direct, et la commission de l'agence n'est alors suivie nulle part
+  // (constat D6). Pas pour une collab déjà en encaissement « créateur » (règle 13).
+  if (input.invoices) {
+    for (const c of collabs) {
+      if (!collabOuverte(c) || input.cashModes?.[c.id] === "createur") continue;
+      // Déjà signalée « publiée sans facture » (règle 2) : une seule ligne par collab.
+      if (out.some((p) => p.id === `publiee_sans_facture:${c.id}`)) continue;
+      const annulees = input.invoices.filter((iv) => iv.collab_id === c.id && iv.status === "annulee");
+      if (!annulees.length || facturesDe(c).length || lectureCachet(c.cachet) === "gifting") continue;
+      const refs = annulees.map((iv) => txt(iv.ref)).filter(Boolean).join(", ");
+      const prenom = titleCase(txt(c.creator)).split(" ")[0] || "le créateur";
+      add({
+        id: `facture_annulee_seule:${c.id}`,
+        regle: "facture_annulee_seule",
+        gravite: "moyenne",
+        titre: `Facture annulée, collab en cours : ${nomCollab(c)}`,
+        detail: `La seule facture de la collab${refs ? ` (${refs})` : ""} est annulée, et la collab est encore à l'étape ${Number(c.step) || 0}. Si la marque a payé ${prenom} en direct : passer la collab en encaissement « créateur » (page Compta) et préparer la facture de commission. Sinon, refaire la facture.`,
+        lien: collabLien(c),
+        correction: null,
+        decision: true,
+      });
+    }
+  }
+
+  // 13. La marque paie le créateur en direct (encaissement « créateur ») et l'a payé (étape 9 ou
+  // plus) : la commission de l'agence est due, mais la collab n'a aucune facture (la seule
+  // facture de l'agence, dans ce mode, est celle de la commission).
+  if (input.invoices) {
+    for (const c of collabs) {
+      const step = Number(c.step) || 0;
+      if (!collabVivante(c) || input.cashModes?.[c.id] !== "createur" || step < ETAPE_PAIEMENT) continue;
+      if (lectureCachet(c.cachet) !== "ok" || facturesDe(c).length) continue;
+      const prenom = titleCase(txt(c.creator)).split(" ")[0] || "le créateur";
+      add({
+        id: `commission_a_facturer:${c.id}`,
+        regle: "commission_a_facturer",
+        gravite: "moyenne",
+        titre: `Commission à facturer : ${nomCollab(c)}`,
+        detail: `La marque paie ${prenom} en direct (encaissement « créateur ») et la collab est à l'étape ${step}, mais aucune facture de commission n'existe pour elle. La préparer depuis la page Compta.`,
+        lien: { vue: "compta" },
+        correction: null,
+        decision: true,
+      });
+    }
+  }
+
+  // 14. Dépôt d'un créateur (contenu, facture, stats) sans suite depuis plus de 3 jours : fichier
+  // pas vu, collab pas avancée (constat W5, même règle que « Les créateurs attendent »
+  // d'Aujourd'hui, _shared/depots.ts). Sauté sans les dépôts ni les repères.
+  if (input.depots && input.depotsNonLus) {
+    const QUOI: Record<string, string> = { contenu: "son contenu", facture: "sa facture", stats: "des captures de stats" };
+    const SUITE: Record<string, string> = {
+      contenu: "l'envoyer à la marque et passer la collab à « Validation marque »",
+      facture: "verser sa part dans Reversements",
+      stats: "reporter les chiffres dans son media kit ou le bilan",
+    };
+    for (const g of depotsEnAttente({ depots: input.depots, nonLus: new Set(input.depotsNonLus), collabs, steps: input.collabSteps, payouts: input.payouts })) {
+      const jours = joursDepuis(g.depuis, today);
+      if (jours < JOURS_DEPOT_SANS_SUITE) continue;
+      const prenom = titleCase(g.creator).split(" ")[0] || "Un créateur";
+      add({
+        id: `depot_sans_suite:${g.ids[0]}`,
+        regle: "depot_sans_suite",
+        gravite: g.type === "facture" ? "haute" : "moyenne",
+        titre: `Sans suite depuis ${jours} j : ${g.type} de ${prenom}`,
+        detail: `${prenom} a envoyé ${QUOI[g.type]}${g.brand ? ` pour ${g.brand}` : ""} le ${jourCourt(g.depuis.slice(0, 10))} depuis son espace (${g.ids.length} fichier${g.ids.length > 1 ? "s" : ""}), et rien n'a suivi. Le regarder, puis ${SUITE[g.type]}.`,
+        lien: g.collabId ? { vue: "collabs", item: g.collabId } : { vue: "documents", recherche: g.creator || undefined },
+        correction: null,
+        decision: false,
+      });
+    }
+  }
+
+  // 15. Media kit en ligne d'un créateur actif, mais incomplet : bio, photos ou adresse du kit
+  // (constat D5 : une marque relancée ouvre un kit sans photo ni bio). Sauté si le kit n'est pas lu.
+  if (input.creators) {
+    for (const c of input.creators) {
+      if (foldName(c.status || "actif") !== "actif" || !("mediakit" in c)) continue;
+      const mk = c.mediakit && typeof c.mediakit === "object" && !Array.isArray(c.mediakit) ? (c.mediakit as Record<string, unknown>) : {};
+      const manque = [
+        !txt(mk.bio) ? "bio" : null,
+        !(Array.isArray(mk.photos) && mk.photos.some(Boolean)) ? "photos" : null,
+        !txt(mk.slug) ? "adresse du kit" : null,
+      ].filter((x): x is string => !!x);
+      if (!manque.length) continue;
+      add({
+        id: `kit_incomplet:${foldName(c.name).replace(/[^a-z0-9]+/g, "-")}`,
+        regle: "kit_incomplet",
+        gravite: "basse",
+        titre: `Media kit incomplet : ${titleCase(c.name)}`,
+        detail: `Son media kit est en ligne mais il manque : ${manque.join(", ")}. Le compléter dans la page Media kit avant de l'envoyer à une marque.`,
+        lien: { vue: "mediakit" },
+        correction: null,
+        decision: false,
+      });
     }
   }
 

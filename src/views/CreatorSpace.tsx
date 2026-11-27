@@ -90,6 +90,7 @@ import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
 import { OfflineBanner } from "@/components/mobile/offline-banner";
 import { Delta, DashPanel, DashSectionTitle, DashWideLink } from "@/components/ui/dash";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { PasswordSettings } from "@/components/password-form";
 import { FEATURES } from "@/lib/features";
 import { onDeepLink, setCurrentPlace, takeDeepLink } from "@/lib/deepLink";
 import { requestIntent } from "@/lib/openIntent";
@@ -4360,6 +4361,9 @@ export function CreatorSpace({
                 </div>
               </IosGroup>
 
+
+              {/* Mot de passe (constat W3) : jamais dans l'aperçu agence, il changerait celui du compte agence. */}
+              {!preview && <PasswordSettings variant="ios" />}
 
               <IosGroup>
                 <IosRow icon={preview ? ArrowLeft : LogOut} label={exitTitle} destructive chevron={false} onClick={exitAction} />

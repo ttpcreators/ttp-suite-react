@@ -10,10 +10,14 @@ import type { NotificationItem } from "@/components/ui/notifications";
  *   - ce qui est NOUVEAU POUR TOI depuis ta dernière visite de la page : ce que le
  *     reste de l'équipe y a fait (ajouté, terminé, rouvert, changé de statut ou
  *     d'étape, d'après le journal agency_activity) et ce que les créateurs y ont
- *     ajouté (tâches, idées, évènements, cadeaux ; mails et avis sur leurs mails).
- *     Ouvrir la page remet ce compteur à zéro ;
+ *     ajouté sans repère « nouveau » (évènements, cadeaux ; mails et avis sur leurs
+ *     mails, écrits par la fonction creator-mail). Ouvrir la page remet ce compteur à zéro ;
  *   - ce qui reste À TRAITER (cloche) : briefs à valider, factures en retard,
  *     contrats à renouveler, bugs. Ça disparaît quand c'est réglé ou effacé.
+ * Les tâches et les idées ajoutées par un créateur ne sont PAS comptées ici : la base écrit
+ * pour elles un repère « nouveau » (activity_events), qu'App.tsx ajoute déjà à la pastille
+ * (constat W8 : « To-do 2 » pour une seule tâche). Ce repère est commun à toute l'équipe et
+ * s'efface à l'ouverture de l'objet, plus à la simple visite de la page.
  */
 const ACTIVITY_PAGE: Record<string, string> = {
   todos: "todo", todo_routines: "todo", ideas: "ideas", events: "planning", contacts: "contacts",
@@ -53,8 +57,6 @@ export function useNavBadges(uid: string | undefined, notifs: NotificationItem[]
           .filter((r) => ACTIVITY_PAGE[r.entity])
           .map((r) => ({ page: ACTIVITY_PAGE[r.entity], at: Date.parse(r.created_at) })),
       ),
-      rows("todo", supabase.from("todos").select("created_at").eq("source", "creator").gte("created_at", since).limit(200)),
-      rows("ideas", supabase.from("ideas").select("created_at").eq("source", "creator").gte("created_at", since).limit(200)),
       rows("planning", supabase.from("events").select("created_at").eq("source", "creator").or("deleted.is.null,deleted.eq.false").gte("created_at", since).limit(200)),
       rows("gifting", supabase.from("gifting").select("created_at").eq("source", "creator").gte("created_at", since).limit(200)),
       // Mails déjà ouverts dans Gmail ou Spark : pas comptés (« * » : marche avant la colonne read_at).

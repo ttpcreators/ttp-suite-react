@@ -10,6 +10,7 @@ export {
   IGNORES_KEY,
   JOURS_APRES_FIN_DROITS,
   JOURS_AVANT_FIN_DROITS,
+  JOURS_DEPOT_SANS_SUITE,
   JOURS_SANS_FACTURE,
   TITRE_MAX,
   controler,
@@ -35,10 +36,11 @@ export {
 /**
  * Pas de doublon avec la page : une collab déjà listée dans « Collabs à faire avancer »
  * (bloquée depuis 7 jours) n'est pas répétée par « publiée sans facture », qui dit la même
- * chose (elle n'avance plus après la publication).
+ * chose (elle n'avance plus après la publication). Les dépôts sans suite des créateurs sont
+ * dans « Les créateurs attendent » : jamais répétés dans « À corriger ».
  */
 export function sansDoublonAujourdhui(list: Probleme[], collabsAffichees: ReadonlySet<string>): Probleme[] {
-  return list.filter((p) => !(p.regle === "publiee_sans_facture" && p.lien.item && collabsAffichees.has(p.lien.item)));
+  return list.filter((p) => p.regle !== "depot_sans_suite" && !(p.regle === "publiee_sans_facture" && p.lien.item && collabsAffichees.has(p.lien.item)));
 }
 
 /** Teinte de la tuile d'une gravité (orange pour ce qui demande un geste, gris sinon). */
