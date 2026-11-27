@@ -5,6 +5,7 @@ import {
   useMailSignatures,
   htmlSignatureMarkup,
   defaultSigFields,
+  mySigDefaults,
   type MailSignature,
   type SigFields,
 } from "@/lib/useMailSignatures";
@@ -50,6 +51,12 @@ export function SignaturePicker({
     setEditId(sig?.id ?? null);
     setFields(sig?.fields ? { ...sig.fields } : defaultSigFields());
     setFormOpen(true);
+    // Nouvelle signature : prénom et adresse de la personne connectée, sans écraser ce qu'elle a déjà tapé.
+    if (!sig?.fields) {
+      void mySigDefaults().then((d) =>
+        setFields((x) => ({ ...x, name: x.name || d.name, email: x.email || d.email })),
+      );
+    }
   };
   const onPhoto = async (f: File) => {
     const up = await uploadPhoto(f);

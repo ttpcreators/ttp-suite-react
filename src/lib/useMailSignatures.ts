@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { safeImgSrc } from "./safeUrl";
 import { supabase } from "./supabase";
+import { myDisplayName } from "./team";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "./appState";
 import { toast } from "@/components/ui/toast";
 
@@ -94,9 +95,18 @@ export function renderSignatureHtml(sig: MailSignature | null): string {
   return "";
 }
 
-/** Champs pré-remplis (signature Marc). */
+/** Champs de départ d'une nouvelle signature. Aucune coordonnée écrite ici (dépôt public) :
+ *  le prénom et l'adresse de la personne connectée arrivent ensuite par mySigDefaults(). */
 export function defaultSigFields(): SigFields {
-  return { name: "Marc Maher B", role: "Co-founder 👋", phone: "+33 7 66 25 98 03", instagram: "ttp.creators", email: "marc@ttpcreators.pro" };
+  return { name: "", role: "", phone: "", instagram: "ttp.creators", email: "" };
+}
+
+/** Prénom (Paramètres → Ton prénom) et adresse de connexion de la personne connectée. */
+export async function mySigDefaults(): Promise<Pick<SigFields, "name" | "email">> {
+  const { data: s } = await supabase.auth.getSession();
+  const email = s.session?.user?.email ?? "";
+  const name = s.session ? await myDisplayName() : "";
+  return { name: name === "Agence" ? "" : name, email };
 }
 
 function normalize(v: unknown): SigState {
