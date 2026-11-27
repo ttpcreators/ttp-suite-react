@@ -126,9 +126,10 @@ async function envoisRecents(sb: SupabaseClient, emails: string[], jours: number
  * Raison de ne pas écrire à ces adresses, ou null. `doublon` : appliquer aussi la règle
  * « pas de nouveau premier mail à la même société depuis 30 jours » (file de prospection
  * seulement : un envoi direct de Marc, une facture ou une réponse ne sont jamais bloqués par elle).
- * Une adresse qui a renvoyé un rebond ces 90 jours (journal des mails) est bloquée comme une
- * adresse en erreur, même sans fiche contact, tant qu'elle n'a pas donné signe de vie depuis : un
- * mail reçu d'elle, ou sa fiche revérifiée (rebondsQuiComptent). Le refus dit comment en sortir.
+ * Une adresse qui a renvoyé un rebond ces 90 jours (journal des mails, si l'avis y cite l'adresse :
+ * limite dans rebondsDuJournal) est bloquée comme une adresse en erreur, même sans fiche contact,
+ * tant qu'elle n'a pas donné signe de vie depuis : un mail reçu d'elle, ou sa fiche revérifiée
+ * (rebondsQuiComptent). Le refus dit comment en sortir.
  */
 export async function bloquant(sb: SupabaseClient, destinataires: string[], reponse: boolean, doublon = false): Promise<string | null> {
   if (!destinataires.length) return null;

@@ -263,6 +263,10 @@ export type MailRecu = { contact_email?: unknown; contact_name?: unknown; subjec
  * postmaster) qui annonce un échec et cite l'adresse refusée (même règle que gmail-poll,
  * adresseEnRebond). Sert surtout aux adresses sans fiche contact, que gmail-poll ne peut pas marquer
  * « en erreur » (il note seulement le rebond sur la ligne de la file, pour le coupe-circuit).
+ * Limite : ici, la règle ne voit que ce que garde le journal, 180 caractères de l'avis, sans
+ * l'en-tête X-Failed-Recipients ; gmail-poll lit 300 caractères et cet en-tête. Un avis qui ne cite
+ * l'adresse que dans l'en-tête, ou plus loin (avis Exim « Mail delivery failed »), n'est pas vu ici :
+ * il est noté sur la ligne de la file (coupe-circuit), mais ne bloque pas une adresse sans fiche.
  */
 export function rebondsDuJournal(lignes: readonly MailRecu[], agence: string): EnvoiRecent[] {
   const out: EnvoiRecent[] = [];
