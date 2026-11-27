@@ -858,7 +858,7 @@ const aValider: Tool = {
 const ecarterProposition: Tool = {
   name: "ecarter_proposition",
   title: "Écarter une proposition d'agent",
-  description: "Retire une proposition de la file « À valider » : statut « ecarte » (périmée, remplacée, refusée) ou « envoye » (c'est parti : sur le oui de Marc, ou déjà fait ailleurs). La liste de l'app et celle de Telegram restent ainsi la même. Donner l'id (a_valider).",
+  description: "Retire une proposition de la file « À valider » : statut « ecarte » (périmée, remplacée, refusée) ou « envoye » (c'est parti : sur le oui de Marc, ou déjà fait ailleurs). Un mail validé puis mis dans la file d'envoi (programmer_envoi) se marque « envoye » : « ecarte » annule son envoi. La liste de l'app et celle de Telegram restent ainsi la même. Donner l'id (a_valider).",
   inputSchema: { type: "object", properties: { proposition: { type: "string", description: "Id de la proposition" }, statut: { type: "string", enum: ["ecarte", "envoye"], description: "ecarte (défaut) ou envoye" } }, required: ["proposition"], additionalProperties: false },
   write: true,
   founder: true,

@@ -56,7 +56,7 @@ const INSTRUCTIONS =
 // Connexion d'un agent autonome (mcp_grants.agent) : ce qui change pour lui (verrou.ts).
 const INSTRUCTIONS_AGENT =
   " CONNEXION D'AGENT : tes envois et tes actions irréversibles (envoyer un brouillon, programmer un envoi, versement, facture, suppression, réglages, invitation Google hors de l'agence) " +
-  "ne partent qu'après une validation dans la page Agents de l'app (Marc, ou Gianni pour un mail de prospection) ; un « oui » écrit ailleurs ne suffit pas. Un mail : creer_brouillon_mail puis proposer_action (type brouillon_mail, « brouillon <id> · boîte <boîte> » dans contexte). " +
+  "ne partent qu'après une validation dans la page Agents de l'app (par un fondateur, ou par le seul valideur choisi pour ta connexion : le message de refus le nomme) ; un « oui » écrit ailleurs ne suffit pas. Un mail : creer_brouillon_mail puis proposer_action (type brouillon_mail, « brouillon <id> · boîte <boîte> » dans contexte). " +
   "Une autre action : proposer_action avec `outil` (le message de refus donne l'appel exact), puis le même appel après la validation. envoyer_mail et envoyer_dm te sont fermés.";
 
 Deno.serve(async (req: Request) => {

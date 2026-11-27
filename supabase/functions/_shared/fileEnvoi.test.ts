@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { REGLES, adresses, cleSociete, coupeCircuit, dansLaFenetre, ligneFile, planifier, prochainCreneau, quandCourt, raisonDeBloquer, rebondsDuJournal, rebondsQuiComptent, texteListe } from "./fileEnvoi.ts";
+import {
+  REGLES, adresses, cleSociete, coupeCircuit, dansLaFenetre, journalDesAdresses, ligneFile, planifier, prochainCreneau, quandCourt, raisonDeBloquer, rebondsDuJournal, rebondsQuiComptent, texteListe,
+} from "./fileEnvoi.ts";
 
 // Le mercredi 25 novembre 2026, Paris est à UTC+1.
 const at = (iso: string) => new Date(iso);
@@ -88,11 +90,25 @@ describe("file d'envoi : ce qui bloque un mail", () => {
     expect(raisonDeBloquer({ ...base, r, reponse: false, destinataires: ["julie@nova.fr"], liste })).toContain("(refus)");
     expect(raisonDeBloquer({ ...base, r, doublon: false, destinataires: ["julie@nova.fr"], liste })).toContain("(refus)");
   });
-  it("un rebond du journal bloque l'adresse, réponse comprise", () => {
+  it("un rebond du journal bloque l'adresse, réponse comprise, et le refus dit comment en sortir", () => {
     const rebonds = [{ email: "Jean@Marque-Exemple.fr", at: "2026-11-24T07:35:00Z" }];
-    expect(raisonDeBloquer({ ...base, destinataires: ["jean@marque-exemple.fr"], rebonds })).toBe("jean@marque-exemple.fr a renvoyé un rebond le 24 nov. (adresse refusée par son serveur, pas revérifiée depuis)");
+    const refus = raisonDeBloquer({ ...base, destinataires: ["jean@marque-exemple.fr"], rebonds });
+    expect(refus).toContain("jean@marque-exemple.fr a renvoyé un rebond le 24 nov. (adresse refusée par son serveur, pas revérifiée depuis)");
+    expect(refus).toContain("Si l'adresse est bonne : écris depuis Gmail");
+    expect(refus).toContain("dès qu'un mail d'elle arrive");
     expect(raisonDeBloquer({ ...base, reponse: true, destinataires: ["jean@marque-exemple.fr"], rebonds })).toContain("rebond");
     expect(raisonDeBloquer({ ...base, destinataires: ["autre@marque-exemple.fr"], rebonds })).toBeNull();
+    // Date illisible : le refus tient, sans date inventée.
+    expect(raisonDeBloquer({ ...base, destinataires: ["jean@marque-exemple.fr"], rebonds: [{ email: "jean@marque-exemple.fr", at: "" }] })).toContain("a renvoyé un rebond (adresse refusée");
+  });
+  it("réponse dans un fil malgré un rebond du journal : réglage prêt, pas tranché", () => {
+    const rebonds = [{ email: "jean@marque-exemple.fr", at: "2026-11-24T07:35:00Z" }];
+    expect(REGLES.rebondBloqueReponse).toBe(true);
+    const r = { ...REGLES, rebondBloqueReponse: false };
+    expect(raisonDeBloquer({ ...base, r, reponse: true, destinataires: ["jean@marque-exemple.fr"], rebonds })).toBeNull();
+    expect(raisonDeBloquer({ ...base, r, reponse: false, destinataires: ["jean@marque-exemple.fr"], rebonds })).toContain("rebond");
+    // La fiche « adresse en erreur » bloque toujours, réponse comprise.
+    expect(raisonDeBloquer({ ...base, r, reponse: true, destinataires: ["jean@marque-exemple.fr"], enErreur: ["jean@marque-exemple.fr"] })).toContain("adresse en erreur");
   });
   it("un rebond compte tant que la fiche n'a pas été revérifiée depuis", () => {
     const rebonds = [{ email: "jean@marque-exemple.fr", at: "2026-11-26T07:35:00Z" }];
@@ -104,6 +120,13 @@ describe("file d'envoi : ce qui bloque un mail", () => {
     // Revérifiée après le rebond : la fiche fait foi.
     expect(rebondsQuiComptent(rebonds, [{ email: "jean@marque-exemple.fr", le: "2026-11-27T09:00:00Z" }])).toEqual([]);
     expect(rebondsQuiComptent(rebonds, [{ email: "jean@marque-exemple.fr", le: "hier" }])).toEqual(rebonds);
+  });
+  it("un mail reçu de l'adresse après le rebond lève le blocage (elle marche)", () => {
+    const rebonds = [{ email: "jean@marque-exemple.fr", at: "2026-11-26T07:35:00Z" }];
+    expect(rebondsQuiComptent(rebonds, [], [{ email: "Jean@Marque-Exemple.fr", at: "2026-11-26T15:00:00Z" }])).toEqual([]);
+    // Reçu avant le rebond, ou d'une autre adresse : le rebond compte encore.
+    expect(rebondsQuiComptent(rebonds, [], [{ email: "jean@marque-exemple.fr", at: "2026-11-20T09:00:00Z" }])).toEqual(rebonds);
+    expect(rebondsQuiComptent(rebonds, [], [{ email: "paul@marque-exemple.fr", at: "2026-11-26T15:00:00Z" }])).toEqual(rebonds);
   });
 });
 
@@ -119,6 +142,18 @@ describe("file d'envoi : rebonds lus dans le journal des mails reçus", () => {
   });
   it("une ligne incomplète ne casse rien", () => {
     expect(rebondsDuJournal([{}, { contact_email: null, subject: null }], "ttpcreators.pro")).toEqual([]);
+    expect(journalDesAdresses([{}, { contact_email: null }], ["jean@marque-exemple.fr"], "ttpcreators.pro")).toEqual({ rebonds: [], recus: [] });
+  });
+  it("pour les adresses visées : leurs rebonds et les mails venus d'elles", () => {
+    const lignes = [
+      { ...robot, subject: "Delivery Status Notification (Failure)", snippet: "Your message wasn't delivered to jean@marque-exemple.fr" },
+      { ...robot, subject: "Delivery Status Notification (Failure)", snippet: "Your message wasn't delivered to paul@nova.fr" },
+      { contact_email: "jean@marque-exemple.fr", contact_name: "Jean", subject: "Re: Collab", snippet: "Avec plaisir", created_at: "2026-11-26T15:00:00Z" },
+    ];
+    expect(journalDesAdresses(lignes, ["Jean@Marque-Exemple.fr"], "ttpcreators.pro")).toEqual({
+      rebonds: [{ email: "jean@marque-exemple.fr", at: "2026-11-26T07:35:00Z" }],
+      recus: [{ email: "jean@marque-exemple.fr", at: "2026-11-26T15:00:00Z" }],
+    });
   });
 });
 

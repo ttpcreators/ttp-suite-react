@@ -294,8 +294,10 @@ Plusieurs audits adversariaux menés (identité et privilège, OWASP). Détail d
     (`ne_plus_contacter`), adresse en erreur ou rebond reçu (lu aussi dans `email_activity`, pour
     les adresses sans fiche contact), domaine sans serveur mail, premier mail déjà parti à la même
     société depuis 30 jours, media kit, et pour un brouillon programmé par un agent la validation
-    toujours en place ; la file s'arrête si les rebonds montent. Règles dans
-    `_shared/fileEnvoi.ts`. Un nouvel outil qui envoie de la prospection passe par ces contrôles.
+    toujours en place (chaque ligne garde sa connexion, `envoi_file.grant_id` : cochée « agent »
+    après la programmation, une ligne sans validation ne part pas) ; la file s'arrête si les
+    rebonds montent. Règles dans `_shared/fileEnvoi.ts`. Un nouvel outil qui envoie de la
+    prospection passe par ces contrôles.
   - **Anti-doublon d'équipe** : `creer_brouillon_mail` refuse un nouveau mail à une personne à
     qui un autre membre de l'équipe a écrit par son propre Claude depuis 15 jours, ou une réponse
     dans un fil où il a répondu depuis 2 jours (lu dans `mcp_log`, `_shared/equipeClaude.ts`) ;

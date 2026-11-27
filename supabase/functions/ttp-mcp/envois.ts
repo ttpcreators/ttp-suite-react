@@ -10,11 +10,13 @@
 //      envoie au plus un mail par boîte, après les dernières vérifications ;
 //   bloquant / journaliserEnvoi : aussi utilisés par envoyer_mail, envoyer_brouillon(s) et
 //      creer_brouillon_mail (admin.ts, tools.ts).
-// Depuis le 27/11 (enquête sur la file de Gianni) : les rebonds sont aussi lus dans le journal
-// des mails reçus, pour les adresses sans fiche contact (coupe-circuit et contrôle d'avant
-// envoi), et un brouillon programmé par un agent ne part que si sa validation tient encore (verrou.ts).
+// Depuis le 27/11 (enquête du 27/11 sur la file d'envoi) : les rebonds sont aussi lus dans le
+// journal des mails reçus, pour les adresses sans fiche contact (coupe-circuit et contrôle d'avant
+// envoi), et un brouillon programmé par un agent ne part que si sa validation tient encore
+// (verrou.ts). Chaque ligne garde la connexion qui l'a programmée, relue avant l'envoi : cochée
+// « agent autonome » depuis, une ligne sans validation ne part pas.
 // Règles pures : _shared/fileEnvoi.ts. Tables : SQL 2026-11-25-file-envoi, puis
-// 2026-11-27-verrou-connexions (envoi_file.proposition).
+// 2026-11-27-verrou-connexions (envoi_file.proposition et grant_id).
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -22,14 +24,14 @@ import type { AdminTool } from "./admin.ts";
 import { lireEntetesBrouillon, parseMailBox, sendDraft, type BrouillonLu, type MailBox } from "./gmail.ts";
 import { verifierBrouillon } from "./kitGarde.ts";
 import { adressesInvalides, suiviApresEnvoi } from "./prospection.ts";
-import { validationToujoursLa } from "./verrou.ts";
+import { connexionDeLaFile, validationToujoursLa } from "./verrou.ts";
 import { instantParis } from "../_shared/rdv.ts";
-import { modifieApres } from "../_shared/verrouAgent.ts";
+import { modifieApres, raisonConnexionFile } from "../_shared/verrouAgent.ts";
 import { colonneAuteurAbsente, idDejaJournalise, lignesEnvoi, nomAuteur, sansAuteur, sansIdGmail, type Auteur } from "../_shared/auteurEnvoi.ts";
 import { couper, str, texteSur } from "../_shared/texteSur.ts";
 import {
-  MAX_PROGRAMMES, REGLES, adresses, cleSociete, coupeCircuit, dansLaFenetre, jourParis, ligneFile, planifier, quandCourt, raisonDeBloquer, rebondsDuJournal, rebondsQuiComptent, texteListe,
-  type EnvoiRecent, type FicheVerifiee, type LigneFile, type MailRecu, type NePlusContacter,
+  MAX_PROGRAMMES, REGLES, adresses, cleSociete, coupeCircuit, dansLaFenetre, journalDesAdresses, jourParis, ligneFile, planifier, quandCourt, raisonDeBloquer, rebondsDuJournal,
+  rebondsQuiComptent, texteListe, type EnvoiRecent, type FicheVerifiee, type LigneFile, type MailRecu, type NePlusContacter,
 } from "../_shared/fileEnvoi.ts";
 
 type Json = Record<string, unknown>;
@@ -70,16 +72,39 @@ async function fichesDes(sb: SupabaseClient, emails: string[]): Promise<{ enErre
 }
 
 /**
- * Les rebonds lus dans le journal des mails reçus depuis `depuis` (message d'un robot qui cite
- * l'adresse refusée), surtout utiles pour les adresses sans fiche contact, que gmail-poll ne peut
- * pas marquer. [] si la lecture échoue (le contrôle garde alors ses autres règles).
+ * Coupe-circuit : tous les rebonds lus dans le journal des mails reçus depuis `depuis` (message
+ * d'un robot qui cite l'adresse refusée), surtout utiles pour les adresses sans fiche contact, que
+ * gmail-poll ne peut pas marquer. [] si la lecture échoue, noté dans les journaux de la fonction
+ * (le coupe-circuit garde alors les fiches en erreur).
  */
 async function rebondsLus(sb: SupabaseClient, depuis: string): Promise<EnvoiRecent[]> {
   const robots = ["%mailer-daemon%", "%postmaster%"].map((m) => `contact_email.ilike.${JSON.stringify(m)}`).concat(`contact_name.ilike.${JSON.stringify("%mail delivery%")}`);
   const { data, error } = await sb.from("email_activity").select("contact_email, contact_name, subject, snippet, created_at")
     .eq("direction", "in").gte("created_at", depuis).or(robots.join(",")).order("created_at", { ascending: false }).limit(300);
-  if (error) return [];
+  if (error) {
+    console.warn("ttp-mcp coupe-circuit : rebonds du journal illisibles", error.message);
+    return [];
+  }
   return rebondsDuJournal((data as MailRecu[] | null) ?? [], AGENCE);
+}
+
+/**
+ * Contrôle d'avant envoi : ce que le journal des mails reçus dit de ces adresses depuis `depuis`,
+ * leurs rebonds (robot qui cite l'adresse) et les mails venus d'elles (elle marche). La requête ne
+ * vise que ces adresses (20 au plus) : la limite ne coupe jamais un vieux rebond. Lecture ratée :
+ * rien, noté dans les journaux de la fonction (le contrôle garde ses autres règles).
+ */
+async function journalDes(sb: SupabaseClient, emails: string[], depuis: string): Promise<{ rebonds: EnvoiRecent[]; recus: EnvoiRecent[] }> {
+  const vises = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))].slice(0, 20);
+  if (!vises.length) return { rebonds: [], recus: [] };
+  const filtres = vises.flatMap((e) => [`snippet.ilike.${JSON.stringify(`%${echappe(e)}%`)}`, `contact_email.ilike.${JSON.stringify(echappe(e))}`]);
+  const { data, error } = await sb.from("email_activity").select("contact_email, contact_name, subject, snippet, created_at")
+    .eq("direction", "in").gte("created_at", depuis).or(filtres.join(",")).order("created_at", { ascending: false }).limit(300);
+  if (error) {
+    console.warn("ttp-mcp contrôle d'envoi : journal des mails illisible, rebonds non vérifiés", error.message);
+    return { rebonds: [], recus: [] };
+  }
+  return journalDesAdresses((data as MailRecu[] | null) ?? [], vises, AGENCE);
 }
 
 /** Premiers mails partis depuis `jours` jours vers les mêmes sociétés (journal des mails et file). */
@@ -102,8 +127,8 @@ async function envoisRecents(sb: SupabaseClient, emails: string[], jours: number
  * « pas de nouveau premier mail à la même société depuis 30 jours » (file de prospection
  * seulement : un envoi direct de Marc, une facture ou une réponse ne sont jamais bloqués par elle).
  * Une adresse qui a renvoyé un rebond ces 90 jours (journal des mails) est bloquée comme une
- * adresse en erreur, même sans fiche contact, tant que sa fiche ne dit pas qu'elle a été
- * revérifiée depuis (rebondsQuiComptent).
+ * adresse en erreur, même sans fiche contact, tant qu'elle n'a pas donné signe de vie depuis : un
+ * mail reçu d'elle, ou sa fiche revérifiée (rebondsQuiComptent). Le refus dit comment en sortir.
  */
 export async function bloquant(sb: SupabaseClient, destinataires: string[], reponse: boolean, doublon = false): Promise<string | null> {
   if (!destinataires.length) return null;
@@ -112,9 +137,9 @@ export async function bloquant(sb: SupabaseClient, destinataires: string[], repo
     lireListe(sb),
     fichesDes(sb, destinataires),
     doublon && !reponse ? envoisRecents(sb, destinataires, REGLES.doublonJours) : Promise.resolve([] as EnvoiRecent[]),
-    externes.length ? rebondsLus(sb, new Date(Date.now() - REGLES.rebondJours * 86_400_000).toISOString()) : Promise.resolve([] as EnvoiRecent[]),
+    externes.length ? journalDes(sb, externes, new Date(Date.now() - REGLES.rebondJours * 86_400_000).toISOString()) : Promise.resolve({ rebonds: [], recus: [] }),
   ]);
-  const rebonds = rebondsQuiComptent(journal.filter((r) => externes.includes(r.email)), fiches.verifiees);
+  const rebonds = rebondsQuiComptent(journal.rebonds, fiches.verifiees, journal.recus);
   return raisonDeBloquer({ destinataires, reponse, doublon, liste, enErreur: fiches.enErreur, rebonds, recents, maintenant: new Date(), agence: AGENCE });
 }
 
@@ -230,16 +255,20 @@ const programmerEnvoi: AdminTool = {
       boite: String(box), brouillon: b.id, destinataires: couper(b.to, 500), objet: couper(b.subject, 300), reponse: b.reponse,
       createur: str(a.createur, 80) || null, demarrer_sequence: a.demarrer_sequence === true, lot, statut: "en_attente",
       prevu_a: heures[i].toISOString(), cree_par: ctx.userId,
+      // La connexion qui programme, relue juste avant l'envoi (cochée « agent autonome » depuis :
+      // une ligne sans validation ne part pas ; valideur choisi depuis : seule sa validation compte).
+      grant_id: ctx.grantId,
       // Programmé par un agent (verrou.ts) : la date de validation et la proposition validée,
       // relues juste avant l'envoi (validation retirée ou écartée entre-temps : rien ne part).
       ...(ctx.agent && ctx.validations?.[b.id] ? { valide_le: ctx.validations[b.id] } : {}),
       ...(ctx.agent && ctx.propositions?.[b.id] ? { proposition: ctx.propositions[b.id] } : {}),
     }));
     let { error } = await sb.from("envoi_file").insert(lignes);
-    // Avant le SQL 2026-11-27-verrou-connexions (colonne proposition absente) : sans elle, la file
-    // relira les propositions qui citent le brouillon.
-    if (error && /proposition/.test(error.message ?? "") && (error.code === "42703" || error.code === "PGRST204" || /column/i.test(error.message ?? ""))) {
-      ({ error } = await sb.from("envoi_file").insert(lignes.map((l) => Object.fromEntries(Object.entries(l).filter(([k]) => k !== "proposition")))));
+    // Avant le SQL 2026-11-27-verrou-connexions (colonnes proposition et grant_id absentes) : sans
+    // elles, la file relira les propositions qui citent le brouillon, et la connexion ne sera pas relue.
+    const NOUVELLES = ["proposition", "grant_id"];
+    if (error && NOUVELLES.some((k) => (error?.message ?? "").includes(k)) && (error.code === "42703" || error.code === "PGRST204" || /column/i.test(error.message ?? ""))) {
+      ({ error } = await sb.from("envoi_file").insert(lignes.map((l) => Object.fromEntries(Object.entries(l).filter(([k]) => !NOUVELLES.includes(k))))));
     }
     if (error) return fail(`Rien n'a été programmé : ${error.message}`);
     return ok([
@@ -248,6 +277,9 @@ const programmerEnvoi: AdminTool = {
       ...bons.map((b, i) => `- ${quandCourt(heures[i])} → ${b.to} · « ${b.subject} »`),
       refus.length ? `\nPas programmés (${refus.length}) :\n${refus.join("\n")}` : "",
       "Suivre : file_envoi. Retirer : annuler_envoi (un mail ou tout le lot).",
+      // Un agent qui écarte la proposition (statut par défaut d'ecarter_proposition) annulerait
+      // son propre envoi : la file relit la validation juste avant de l'envoyer.
+      ctx.agent ? "Marque ensuite ces propositions envoye (ecarter_proposition, statut envoye) : ecarte annule l'envoi." : "",
     ].filter(Boolean).join("\n"));
   },
 };
@@ -386,8 +418,8 @@ export const ENVOI_TOOLS: AdminTool[] = [programmerEnvoi, fileEnvoi, annulerEnvo
 /**
  * Coupe-circuit : rebonds des dernières 24 h parmi les mails partis par la file. null = tout va
  * bien. Un rebond compte qu'il soit noté sur une fiche contact (gmail-poll) ou seulement dans le
- * journal des mails reçus : 19 des 43 destinataires de la file du 25 au 27/11 n'avaient pas de
- * fiche, et leur rebond ne comptait pas (lecture seule, aucune fiche créée).
+ * journal des mails reçus : une bonne part des destinataires de la file n'avaient pas de fiche,
+ * et leur rebond ne comptait pas (lecture seule, aucune fiche créée).
  */
 async function etatCoupeCircuit(sb: SupabaseClient): Promise<string | null> {
   const depuis = new Date(Date.now() - 86_400_000).toISOString();
@@ -409,7 +441,7 @@ async function etatCoupeCircuit(sb: SupabaseClient): Promise<string | null> {
 
 type Ligne = {
   id: string; boite: string; brouillon: string; destinataires: string; objet: string; createur: string | null; demarrer_sequence: boolean; essais: number; prevu_a: string;
-  cree_par?: string | null; valide_le?: string | null; proposition?: string | null;
+  cree_par?: string | null; valide_le?: string | null; proposition?: string | null; grant_id?: string | null;
 };
 
 /** Un envoi de la file : vérifications, envoi, suivi. Renvoie ce qui s'est passé. */
@@ -425,14 +457,21 @@ async function envoyerUne(sb: SupabaseClient, row: Ligne): Promise<string> {
   if ("error" in pb) return await fin("annule", { erreur: pb.error.slice(0, 300) });
   const box = pb.box;
   try {
+    // La connexion qui a programmé la ligne, relue maintenant (SQL 2026-11-27-verrou-connexions) :
+    // cochée « agent autonome » depuis, une ligne sans validation ne part pas. Ligne sans connexion
+    // notée (programmée avant ce SQL) : comme avant. Base illisible : erreur levée, nouvel essai.
+    const cx = row.grant_id ? await connexionDeLaFile(sb, row.grant_id) : undefined;
+    const parConnexion = raisonConnexionFile(row.valide_le, cx);
+    if (parConnexion) return await fin("annule", { erreur: parConnexion });
     // Dernières vérifications : adresses du brouillon tel qu'il est maintenant (Gianni a pu le retoucher).
     const b = await lireEntetesBrouillon(sb, box, row.brouillon);
     if (!b.claude) return await fin("annule", { erreur: "le brouillon n'est plus marqué « préparé par Claude »" });
-    // Programmé par un agent : la validation doit tenir encore (pas retirée ni écartée dans la
-    // page Agents, toujours d'un compte agence), et le brouillon ne doit pas avoir changé depuis.
-    // Base illisible : erreur levée, nouvel essai dans 15 minutes (jamais d'envoi à l'aveugle).
+    // Programmé par un agent : la validation doit tenir encore (pas retirée ni écartée, toujours
+    // d'un compte agence, et du valideur choisi aujourd'hui pour la connexion), et le brouillon ne
+    // doit pas avoir changé depuis. Base illisible : erreur levée, nouvel essai dans 15 minutes
+    // (jamais d'envoi à l'aveugle).
     if (row.valide_le) {
-      const v = await validationToujoursLa(sb, { brouillon: row.brouillon, proposition: row.proposition ?? null });
+      const v = await validationToujoursLa(sb, { brouillon: row.brouillon, proposition: row.proposition ?? null }, cx?.agent ? cx.valideur : null);
       if (!v.ok) return await fin("annule", { erreur: v.raison.slice(0, 300) });
       if (modifieApres(b.date, v.valideLe)) return await fin("annule", { erreur: "brouillon modifié après sa validation dans la page Agents" });
     }

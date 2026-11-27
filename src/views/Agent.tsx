@@ -123,6 +123,7 @@ const JOURNAL_LABELS: Record<string, string> = {
   marc_valide: "Validé dans l'app",
   marc_modifie: "Texte modifié",
   marc_etape: "Étape de collab avancée",
+  connexion_reglee: "Connexion réglée",
 };
 /** Code inconnu : « mon_code » → « Mon code ». */
 function journalLabel(code: string): string {
@@ -219,6 +220,8 @@ export function AgentView() {
   const [actions, setActions] = useState<Action[]>([]);
   // Qui a déposé chaque proposition (Alfred, le Claude de Gianni, celui de Marc) : connexions de
   // l'agence (fonction réservée aux fondateurs) et prénoms des comptes. Vides avant le SQL du 27/11.
+  // Une connexion absente de cette liste (pas encore lue, ou créée depuis) : on ne sait pas si
+  // elle est « agent autonome », la validation de ses mails attend (voir valider).
   const [connexions, setConnexions] = useState<Map<string, ConnexionClaude>>(() => new Map());
   const [noms, setNoms] = useState<Map<string, string>>(() => new Map());
   const [monId, setMonId] = useState<string | null>(null);
@@ -392,6 +395,16 @@ export function AgentView() {
   // « Valider » dans la file : même statut et même circuit qu'avant (aValider.ts) ; un texte
   // modifié par Marc remplace le contenu, et l'avant / après part au journal pour l'agent.
   const valider = async (a: Action, opts: { texte?: string; silencieux?: boolean } = {}): Promise<boolean> => {
+    // Déposée par une connexion du connecteur : le statut d'un mail (« valide » si la connexion
+    // est « agent autonome », sinon « envoye ») et le valideur dépendent de la liste des
+    // connexions. Pas encore lue (page tout juste ouverte, touche V), lecture ratée, ou connexion
+    // pas encore dans la liste (créée depuis la dernière lecture) : on ne devine pas. Sinon un
+    // mail d'agent passerait « envoye », quitterait la file avec « Validé ✓ » et ne partirait
+    // jamais (le serveur exige « valide »). La liste est relue avec le reste de la page.
+    if (a.grant_id && (a.type === "brouillon_mail" || a.outil != null) && !connexions.has(a.grant_id)) {
+      toast("Connexions pas encore lues, réessaie");
+      return false;
+    }
     // Déposée par une connexion « agent autonome » : un mail passe en « valide » (l'agent
     // l'envoie), comme un mail d'Alfred ; le serveur n'accepte rien d'autre de cette connexion.
     const origine = origineDe(a);

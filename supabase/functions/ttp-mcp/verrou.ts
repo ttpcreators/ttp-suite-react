@@ -7,8 +7,9 @@
 // Agents, avec `valide_par` et `valide_le` posés par la base elle même (déclencheur, d'après la
 // session : jamais par le serveur ni par un texte). Quand un fondateur a choisi un valideur pour
 // la connexion (mcp_grants.valideur), seule sa validation compte. Règles : _shared/verrouAgent.ts.
-// SQL : 2026-11-27-securite-alfred, puis 2026-11-27-verrou-connexions (valideur, proposition
-// gardée dans la file et relue juste avant l'envoi : validationToujoursLa).
+// SQL : 2026-11-27-securite-alfred, puis 2026-11-27-verrou-connexions (valideur, proposition et
+// connexion gardées dans la file et relues juste avant l'envoi : connexionDeLaFile,
+// validationToujoursLa).
 // Les autres connexions (Marc, Gianni, leurs Claude) ne passent jamais par ici.
 // ============================================================================
 
@@ -16,8 +17,8 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4
 import type { Ctx } from "./oauth.ts";
 import { lireEntetesBrouillon, parseMailBox } from "./gmail.ts";
 import {
-  VALIDATION_JOURS, besoinValidation, modifieApres, noteValideur, refusBrouillons, refusInterdit, refusOutil, validationBrouillon, validationOutil, validationTient,
-  type PropositionRelue, type Validation,
+  VALIDATION_JOURS, besoinValidation, modifieApres, refusBrouillons, refusInterdit, refusOutil, validationBrouillon, validationOutil, validationTient,
+  type ConnexionFile, type PropositionRelue, type Validation,
 } from "../_shared/verrouAgent.ts";
 
 type Args = Record<string, unknown>;
@@ -51,7 +52,10 @@ async function lireValidations(sb: SupabaseClient): Promise<{ liste: Validation[
   }
 }
 
-/** Le nom affiché du valideur imposé à la connexion, pour le dire dans un refus (null sans valideur). */
+/**
+ * Le nom affiché du valideur imposé à la connexion, pour le dire dans un refus à la place de
+ * « un fondateur » (null sans valideur).
+ */
 async function nomValideur(sb: SupabaseClient, ctx: Ctx): Promise<string | null> {
   if (!ctx.valideur) return null;
   const { data } = await sb.from("profiles").select("display_name").eq("user_id", ctx.valideur).maybeSingle<{ display_name: string | null }>();
@@ -76,7 +80,7 @@ export async function verrouAgent(sb: SupabaseClient, ctx: Ctx, nom: string, a: 
 
   if (besoin.genre === "outil") {
     const trouve = validationOutil(v.liste, nom, a, v.comptes, maintenant, valideur);
-    if (!trouve) return { ok: false, texte: refusOutil(nom, a, noteValideur(await nomValideur(sb, ctx))) };
+    if (!trouve) return { ok: false, texte: refusOutil(nom, a, await nomValideur(sb, ctx)) };
     return {
       ok: true,
       apres: async (reussi) => {
@@ -86,7 +90,7 @@ export async function verrouAgent(sb: SupabaseClient, ctx: Ctx, nom: string, a: 
     };
   }
 
-  if (!besoin.ids.length) return { ok: false, texte: refusBrouillons(nom, [{ id: "?", pourquoi: "aucun id de brouillon valable" }]) };
+  if (!besoin.ids.length) return { ok: false, texte: refusBrouillons(nom, [{ id: "?", pourquoi: "aucun id de brouillon valable" }], await nomValideur(sb, ctx)) };
   const pb = await parseMailBox(sb, a.boite);
   if ("error" in pb) return { ok: false, texte: `${ENTETE} ${pb.error}` };
   const lus = await Promise.all(besoin.ids.map(async (id) => {
@@ -102,7 +106,7 @@ export async function verrouAgent(sb: SupabaseClient, ctx: Ctx, nom: string, a: 
     }
   }));
   const manquants = lus.filter((x): x is { id: string; pourquoi: string } => "pourquoi" in x);
-  if (manquants.length) return { ok: false, texte: refusBrouillons(nom, manquants, noteValideur(await nomValideur(sb, ctx))) };
+  if (manquants.length) return { ok: false, texte: refusBrouillons(nom, manquants, await nomValideur(sb, ctx)) };
   const bons = lus as { id: string; valideLe: string; proposition: string }[];
   return {
     ok: true,
@@ -114,16 +118,31 @@ export async function verrouAgent(sb: SupabaseClient, ctx: Ctx, nom: string, a: 
 const COLONNES = "id, type, statut, contexte, lien_spark, outil, valide_par, valide_le";
 
 /**
+ * File d'envoi, juste avant l'envoi : la connexion qui a programmé la ligne (envoi_file.grant_id),
+ * telle qu'elle est maintenant (case « agent autonome », valideur). null : connexion introuvable.
+ * « * » : la colonne valideur n'existe qu'après le SQL 2026-11-27-verrou-connexions. Lève une
+ * erreur si la base ne répond pas : la file réessaie plus tard (jamais d'envoi à l'aveugle).
+ */
+export async function connexionDeLaFile(sb: SupabaseClient, grantId: string): Promise<ConnexionFile | null> {
+  const { data, error } = await sb.from("mcp_grants").select("*").eq("id", grantId).maybeSingle<{ agent?: boolean | null; valideur?: string | null }>();
+  if (error) throw new Error(`connexion illisible : ${error.message.slice(0, 120)}`);
+  if (!data) return null;
+  return { agent: data.agent === true, valideur: typeof data.valideur === "string" && data.valideur ? data.valideur : null };
+}
+
+/**
  * File d'envoi, juste avant l'envoi d'un brouillon programmé par un agent : la validation
- * tient-elle encore (pas retirée, pas écartée, toujours d'un compte agence) ? Relit la
- * proposition gardée sur la ligne de la file ; sans elle (ligne programmée avant le SQL du
- * 27/11), les propositions de mail qui citent ce brouillon. Renvoie la date de la validation
- * qui tient (le brouillon ne doit pas avoir changé depuis), ou la raison de ne pas envoyer.
+ * tient-elle encore (pas retirée, pas écartée, toujours d'un compte agence, et du valideur
+ * d'aujourd'hui de la connexion s'il y en a un) ? Relit la proposition gardée sur la ligne de la
+ * file ; sans elle (ligne programmée avant le SQL du 27/11), les propositions de mail qui citent
+ * ce brouillon. Renvoie la date de la validation qui tient (le brouillon ne doit pas avoir changé
+ * depuis), ou la raison de ne pas envoyer.
  * Lève une erreur si la base ne répond pas : la file réessaie plus tard (jamais d'envoi à l'aveugle).
  */
 export async function validationToujoursLa(
   sb: SupabaseClient,
   row: { brouillon: string; proposition?: string | null },
+  valideur: string | null = null,
 ): Promise<{ ok: true; valideLe: string } | { ok: false; raison: string }> {
   const db = sb.schema("agent").from("actions");
   const { data, error } = row.proposition
@@ -134,7 +153,7 @@ export async function validationToujoursLa(
   if (error) throw new Error(`validation illisible : ${error.message.slice(0, 120)}`);
   const props = (data as PropositionRelue[] | null) ?? [];
   const comptes = await comptesAgence(sb, [...new Set(props.map((p) => p.valide_par).filter((x): x is string => !!x))]);
-  const tient = props.find((p) => validationTient(p, row.brouillon, comptes) === null);
+  const tient = props.find((p) => validationTient(p, row.brouillon, comptes, valideur) === null);
   if (tient?.valide_le) return { ok: true, valideLe: tient.valide_le };
-  return { ok: false, raison: validationTient(props[0] ?? null, row.brouillon, comptes) ?? "validation introuvable dans la page Agents" };
+  return { ok: false, raison: validationTient(props[0] ?? null, row.brouillon, comptes, valideur) ?? "validation introuvable dans la page Agents" };
 }

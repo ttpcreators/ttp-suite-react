@@ -4,7 +4,7 @@
 // Règles PURES, testées par connexionsClaude.test.ts.
 // ----------------------------------------------------------------------------
 // Enquête du 27/11 : un fondateur ne voyait que ses propres connexions, et les propositions
-// d'Alfred, du Claude de Gianni et du Claude de Marc étaient mélangées dans la page Agents.
+// d'Alfred et des Claude des fondateurs étaient mélangées dans la page Agents.
 // Depuis le SQL 2026-11-27-verrou-connexions :
 //   • connexions_claude() (fondateurs) liste toutes les connexions de l'agence : lue par la page
 //     Paramètres › Connexions Claude et par la page Agents (src/lib/connexionsClaudeDb.ts) ;

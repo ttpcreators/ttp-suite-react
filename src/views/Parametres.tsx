@@ -1096,8 +1096,8 @@ function ClaudePane({ fondateur }: { fondateur: boolean | null }) {
 
 /**
  * Connexions Claude (fondateurs) : toutes les connexions du connecteur de l'agence, pas
- * seulement les siennes (enquête du 27/11 : une connexion tournait seule depuis des semaines
- * sans être visible dans l'app des autres fondateurs). Pour chacune : nom, compte, dates, appels
+ * seulement les siennes (enquête du 27/11 : les connexions d'un fondateur n'étaient pas
+ * visibles dans l'app des autres). Pour chacune : nom, compte, dates, appels
  * sur 7 jours, case « agent autonome » (verrou de la page Agents) et, pour une connexion
  * d'agent, le seul compte dont la validation compte. Lecture et réglages par les fonctions SQL
  * réservées aux fondateurs (lib/connexionsClaudeDb.ts) ; chaque réglage est noté dans le
@@ -1179,11 +1179,12 @@ function ConnexionsPane() {
               <div className="mt-2 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-border pt-2 text-[12px]">
                 <span className="flex items-center gap-2 text-foreground">
                   <Toggle checked={c.agent} label={`Agent autonome : ${titreConnexion(c)}`}
-                    onChange={(v) => (v ? void regler(c, { agent: true }, "Agent autonome ✓ Ses envois attendent une validation dans la page Agents") : setRetrait(c.id))} />
+                    onChange={(v) => (v ? void regler(c, { agent: true }, "Agent autonome ✓ Ses envois attendent une validation dans la page Agents ; ses mails programmés sans validation seront annulés") : setRetrait(c.id))} />
                   Agent autonome
                   <HelpTip title="Agent autonome">
                     <span>Ses envois (brouillons, file d'envoi) et ses actions irréversibles (suppression, facture, versement, réglages) attendent une validation dans la page Agents. Un « oui » écrit ailleurs ne suffit pas.</span>
-                    <span>La case vaut pour toute la connexion, conversations comprises.</span>
+                    <span>Ses mails déjà dans la file d'envoi sans validation sont annulés au moment de partir, à faire valider puis reprogrammer (sauf ceux programmés avant la mise à jour du connecteur : file_envoi, puis annuler_envoi). Un mail validé part quand l'agent relit sa liste (a_valider).</span>
+                    <span>La case vaut pour toute la connexion, conversations comprises. Tout fondateur peut la changer, y compris sur sa propre connexion : seul le journal des agents le note.</span>
                   </HelpTip>
                   {retrait === c.id && (
                     <span className="flex items-center gap-1.5">
@@ -1212,8 +1213,9 @@ function ConnexionsPane() {
                       {c.valideur && !fondateurs.some((f) => f.id === c.valideur) && <option value={c.valideur}>Compte qui n'est plus fondateur</option>}
                     </select>
                     <HelpTip title="Validé par">
-                      <span>Le seul compte dont la validation compte, dans la page Agents, pour les envois et les actions de cette connexion.</span>
+                      <span>Le seul compte dont la validation compte, dans la page Agents, pour les envois et les actions de cette connexion, mails déjà dans la file d'envoi compris.</span>
                       <span>« Tout fondateur » : n'importe quel fondateur, y compris celui de la connexion.</span>
+                      <span>Ce choix protège contre une routine, pas entre fondateurs : tout fondateur peut le changer ou décocher « Agent autonome » en deux clics, y compris sur sa propre connexion (noté dans le journal des agents), et chacun peut recréer une connexion sans la case (elle apparaît alors dans cette liste).</span>
                     </HelpTip>
                   </span>
                 )}

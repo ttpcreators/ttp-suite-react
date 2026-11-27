@@ -7,26 +7,27 @@ const G1 = "aaaaaaaa-0000-0000-0000-000000000001";
 const G2 = "aaaaaaaa-0000-0000-0000-000000000002";
 const G3 = "aaaaaaaa-0000-0000-0000-000000000003";
 
+// Valeurs inventées (dates, nombre d'appels) : jamais celles d'une vraie connexion.
 const c = (x: Partial<ConnexionClaude>): ConnexionClaude => ({
-  id: G1, nom: "Claude", compte: MARC, compteNom: "Marc.M", creeLe: "2026-10-28T11:49:00Z", dernierUsage: null,
+  id: G1, nom: "Claude", compte: MARC, compteNom: "Marc.M", creeLe: "2026-09-02T09:00:00Z", dernierUsage: null,
   coupeeLe: null, agent: false, valideur: null, appels7j: 0, ...x,
 });
 
 describe("connexions : lecture de connexions_claude()", () => {
   it("lit une ligne complète", () => {
     expect(lireConnexion({
-      id: G2, nom: "Claude", compte: ASSOCIE, compte_nom: "Zoé.T", cree_le: "2026-10-30T22:43:00Z", dernier_usage: "2026-11-27T20:06:00Z",
-      coupee_le: null, agent: true, valideur: MARC, appels_7j: "619",
+      id: G2, nom: "Claude", compte: ASSOCIE, compte_nom: "Zoé.T", cree_le: "2026-09-15T14:00:00Z", dernier_usage: "2026-11-02T08:30:00Z",
+      coupee_le: null, agent: true, valideur: MARC, appels_7j: "42",
     })).toEqual({
-      id: G2, nom: "Claude", compte: ASSOCIE, compteNom: "Zoé.T", creeLe: "2026-10-30T22:43:00Z", dernierUsage: "2026-11-27T20:06:00Z",
-      coupeeLe: null, agent: true, valideur: MARC, appels7j: 619,
+      id: G2, nom: "Claude", compte: ASSOCIE, compteNom: "Zoé.T", creeLe: "2026-09-15T14:00:00Z", dernierUsage: "2026-11-02T08:30:00Z",
+      coupeeLe: null, agent: true, valideur: MARC, appels7j: 42,
     });
   });
   it("refuse une ligne sans id, sans compte ou sans date ; complète le reste", () => {
     expect(lireConnexion(null)).toBeNull();
-    expect(lireConnexion({ id: "x", compte: MARC, cree_le: "2026-10-28T11:49:00Z" })).toBeNull();
+    expect(lireConnexion({ id: "x", compte: MARC, cree_le: "2026-09-02T09:00:00Z" })).toBeNull();
     expect(lireConnexion({ id: G1, compte: MARC, cree_le: "hier" })).toBeNull();
-    expect(lireConnexion({ id: G1, compte: MARC, cree_le: "2026-10-28T11:49:00Z", nom: " ", agent: "true", valideur: "Marc", appels_7j: -3 }))
+    expect(lireConnexion({ id: G1, compte: MARC, cree_le: "2026-09-02T09:00:00Z", nom: " ", agent: "true", valideur: "Marc", appels_7j: -3 }))
       .toMatchObject({ nom: "Claude", compteNom: null, agent: false, valideur: null, appels7j: 0, dernierUsage: null });
   });
   it("les actives d'abord, la dernière utilisée en tête, puis les coupées", () => {
