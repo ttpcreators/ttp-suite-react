@@ -31,6 +31,7 @@ import { closeAnsweredTasks, tasksFromMails } from "./tasks.ts";
 import { suivreReponses } from "./sequences.ts";
 import { excluFromMails } from "./exclu.ts";
 import { isUnread, rowsNowRead, threadsToClose, type UnreadByBox } from "../_shared/mailLu.ts";
+import { couper, texteSur } from "../_shared/texteSur.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
@@ -126,9 +127,11 @@ async function scanBox(box: Box, token: string, cursor: number): Promise<{ fresh
       const h = (n: string) => headers.find((x) => x.name.toLowerCase() === n)?.value ?? "";
       // Plusieurs Delivered-To possibles (transferts) : tous gardés.
       const all = (n: string) => headers.filter((x) => x.name.toLowerCase() === n).map((x) => x.value).join(", ");
+      // Expéditeur, objet et extrait vont en base (journal, tâches, séquences, exclusivités) :
+      // sans caractère nul ni moitié d'emoji seule (_shared/texteSur.ts).
       return {
-        id: m.id, threadId: m.threadId, from: h("from"), subject: h("subject"),
-        snippet: String(m.snippet ?? "").slice(0, 300), ts, rfcId: h("message-id").trim(), box,
+        id: m.id, threadId: m.threadId, from: texteSur(h("from")), subject: texteSur(h("subject")),
+        snippet: couper(String(m.snippet ?? ""), 300), ts, rfcId: h("message-id").trim(), box,
         to: h("to"), cc: h("cc"), deliveredTo: all("delivered-to"), originalTo: all("x-original-to"),
         labelIds: Array.isArray(m.labelIds) ? m.labelIds : [],
         listUnsub: !!h("list-unsubscribe"),
@@ -328,7 +331,7 @@ Deno.serve(async (req: Request) => {
     // Le constructeur de requête Supabase n'a pas de .catch : on lit { error }.
     const row = {
       contact_email: email, contact_name: name, direction: "in",
-      subject: f.subject, snippet: f.snippet.slice(0, 180), source: "inbox",
+      subject: f.subject, snippet: couper(f.snippet, 180), source: "inbox",
       thread_id: f.threadId, gmail_message_id: f.id,
     };
     // Boîte + déjà lu (ouvert dans Gmail ou Spark avant ce passage). Base pas encore

@@ -13,6 +13,8 @@
 // Règles PURES, testées par sequence.test.ts.
 // ============================================================================
 
+import { couper } from "./texteSur.ts";
+
 export type SeqCanal = "email" | "linkedin" | "instagram" | "whatsapp";
 export type EtapeDef = { etape: string; jour: number; canal: SeqCanal; quoi: string };
 
@@ -163,14 +165,15 @@ export function tacheVisio(c: { brand?: unknown; person?: unknown; email?: unkno
   const marque = String(c.brand ?? "").trim() || String(c.email ?? "");
   const hist = (Array.isArray(c.touches) ? (c.touches as Record<string, unknown>[]) : [])
     .slice(0, 6)
-    .map((t) => `- ${String(t.date ?? "").slice(0, 10)} · ${t.canal ?? ""} · ${t.kind ?? ""}${t.note ? ` · ${String(t.note).slice(0, 120)}` : ""}`);
+    .map((t) => `- ${String(t.date ?? "").slice(0, 10)} · ${t.canal ?? ""} · ${t.kind ?? ""}${t.note ? ` · ${couper(String(t.note), 120)}` : ""}`);
+  // Textes coupés sans casser d'emoji (couper) : la tâche serait refusée par la base.
   return {
-    text: `Visio : ${marque.slice(0, 80)}`,
+    text: `Visio : ${couper(marque, 80)}`,
     descr: [
       `${marque} a répondu à la prospection (séquence commencée le ${s.debut}, étapes faites : ${s.faites.join(", ") || "—"}).`,
       `Contact : ${String(c.person ?? "").trim() || "—"} · ${String(c.email ?? "")}`,
       s.createur ? `Créatrice proposée : ${s.createur}` : "",
-      `Sa réponse : « ${m.subject.slice(0, 140)} » ${m.snippet.slice(0, 280)}`,
+      `Sa réponse : « ${couper(m.subject, 140)} » ${couper(m.snippet, 280)}`,
       hist.length ? `Historique :\n${hist.join("\n")}` : "",
       "Si c'est un non : noter la réponse négative (sequence_contact), puis supprimer cette tâche. Gifting ou affiliation seule : pas de visio, demander le budget par écrit.",
     ].filter(Boolean).join("\n"),

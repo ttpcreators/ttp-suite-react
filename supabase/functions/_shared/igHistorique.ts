@@ -10,6 +10,7 @@
 
 import { NO_TEXT, type DmMsg } from "./inbox.ts";
 import { emailsIn } from "./signals.ts";
+import { couper } from "./texteSur.ts";
 
 export type Personne = { id?: string; username?: string; name?: string };
 export type MessageMeta = { id?: string; created_time?: string; message?: string; from?: Personne };
@@ -89,7 +90,7 @@ export function ligneConversation(conv: ConvMeta, autre: Personne, msgs: DmMsg[]
     username,
     igsid: autre.id ?? null,
     updated_at: conv.updated_time ? new Date(conv.updated_time).toISOString() : last?.at ?? now,
-    last_text: last ? last.text.slice(0, 300) : null,
+    last_text: last ? couper(last.text, 300) : null, // même coupe que ig-inbox, sans casser d'emoji
     last_from_me: last ? last.me : null,
     emails,
     synced_at: now,

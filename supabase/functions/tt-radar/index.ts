@@ -19,6 +19,8 @@
 
 import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { saveState, tidySecret } from "../_shared/instagram.ts";
+import { texteSur } from "../_shared/texteSur.ts";
+import { ecrireParLots } from "../_shared/ecritureLot.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 const KEY = tidySecret(Deno.env.get("TT_RESEARCH_KEY"));
@@ -87,9 +89,10 @@ async function search(token: string, filters: Record<string, unknown>, country: 
     for (const c of b.data?.commercial_contents ?? []) {
       if (c.id == null) continue;
       const v = (c.videos ?? [])[0] ?? {};
+      // Label et marques recopiés de TikTok, sans caractère nul ni moitié d'emoji seule (_shared/texteSur.ts).
       rows.push({
-        id: String(c.id), created: isoDay(c.create_date), label: c.label ?? null,
-        brands: (c.brand_names ?? []).map((x) => String(x).trim()).filter(Boolean).slice(0, 10),
+        id: String(c.id), created: isoDay(c.create_date), label: typeof c.label === "string" ? texteSur(c.label) : null,
+        brands: (c.brand_names ?? []).map((x) => texteSur(String(x)).trim()).filter(Boolean).slice(0, 10),
         creator: clean(c.creator?.username) || null, video_url: v.url ?? null, cover: v.cover_image_url ?? null,
         country, fetched_at: new Date().toISOString(),
       });
@@ -158,14 +161,14 @@ Deno.serve(async (req: Request) => {
 
   // Un même contenu peut revenir deux fois (pages qui se chevauchent) : une ligne par id.
   const rows = [...new Map(out.rows.map((r) => [String(r.id), r])).values()];
-  let saved = 0;
-  for (let i = 0; i < rows.length; i += 500) {
-    const { error } = await sb.from("tt_commercial").upsert(rows.slice(i, i + 500));
-    if (!error) saved += Math.min(500, rows.length - i);
-  }
+  // Par paquets de 500 ; un paquet refusé est réécrit contenu par contenu (_shared/ecritureLot.ts) :
+  // seul le contenu fautif est perdu, et le refus est noté (journal et relevé du passage).
+  const lot = await ecrireParLots(rows, 500, (l) => sb.from("tt_commercial").upsert(l));
+  const saved = rows.length - lot.refusees.length;
+  if (lot.refusees.length) console.warn("tt-radar tt_commercial", `${lot.refusees.length}/${rows.length} contenu(s) refusé(s)`, lot.erreur);
   // Conservation : 400 jours.
   await sb.from("tt_commercial").delete().lt("created", new Date(today.getTime() - 400 * 86400000).toISOString().slice(0, 10));
-  const result = { ok: !out.why || saved > 0, saved, why: out.why, mode: body.mode ?? "scan", ms: Date.now() - t0 };
+  const result = { ok: !out.why || saved > 0, saved, refus: lot.refusees.length, why: out.why, mode: body.mode ?? "scan", ms: Date.now() - t0 };
   await saveState(sb, "tt_radar", result);
   console.log("tt-radar", JSON.stringify(result));
   return res(result);

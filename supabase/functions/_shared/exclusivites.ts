@@ -9,6 +9,8 @@
 // règles fixes, sans IA (même choix que les tâches tirées des mails).
 // ============================================================================
 
+import { couper } from "./texteSur.ts";
+
 export type Exclusivite = {
   id: string;
   /** Nom du créateur tel qu'au roster. */
@@ -266,7 +268,8 @@ export function readContract(text: string, known: { creators: readonly string[];
     const dur = findDuration(best) ?? findDuration(around);
     const endWritten = /jusqu'?(?:au|a)|until|ending/.test(foldName(best)) ? firstDate(best.split(/jusqu|until|ending/i).slice(1).join(" ")) : null;
     exclusivity = {
-      quote: best.length > 400 ? `${best.slice(0, 399)}…` : best,
+      // Citations coupées sans casser d'emoji (_shared/texteSur.ts) : elles vont en base.
+      quote: best.length > 400 ? `${couper(best, 399)}…` : best,
       scope: sectorOf(best) || sectorOf(around) || (/(meme categorie|same category)/.test(foldName(around)) ? "même catégorie de produits" : ""),
       competitors: [...new Set(excl.flatMap(listedBrands))].slice(0, 12),
       start,
@@ -281,7 +284,7 @@ export function readContract(text: string, known: { creators: readonly string[];
     const hits = sentences.filter((x) => re.test(low(x)));
     const s = hits.find((x) => x.length >= 40) ?? hits[0];
     if (!s) return null;
-    const short = s.length > 180 ? `${s.slice(0, 179)}…` : s;
+    const short = s.length > 180 ? `${couper(s, 179)}…` : s;
     return `${label} : ${short}`;
   };
   const points = [

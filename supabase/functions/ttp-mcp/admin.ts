@@ -35,6 +35,7 @@ import { PROSPECTION_TOOLS, adressesDe, adressesInvalides, suiviApresEnvoi } fro
 import { verifierKitsDuMail } from "./kitGarde.ts";
 import { bloquant, journaliserEnvoi, verifierAvantEnvoi } from "./envois.ts";
 import { nomAuteur } from "../_shared/auteurEnvoi.ts";
+import { couper, str } from "../_shared/texteSur.ts";
 
 type Json = Record<string, unknown>;
 type Args = Record<string, unknown>;
@@ -47,7 +48,6 @@ export type AdminTool = {
 
 const ok = (text: string): Result => ({ text });
 const fail = (text: string): Result => ({ text, isError: true });
-const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const obj = (v: unknown): Json | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Json) : null);
 const json = (v: unknown) => JSON.stringify(v, null, 1);
 const TABLE_ENUM = Object.keys(TABLES);
@@ -810,8 +810,11 @@ const envoyerDm: AdminTool = {
       return fail(why === "hors_fenetre" ? "Plus de 24 h depuis son dernier message : Instagram oblige à répondre depuis l'app Instagram." : `DM non envoyé (${why}).`);
     }
     const at = new Date().toISOString();
-    await sb.from("ig_messages").upsert({ id: `sent:${String(r.message_id ?? crypto.randomUUID())}`, thread_id: th.id, at, me: true, text });
-    await sb.from("ig_threads").update({ updated_at: at, last_text: text.slice(0, 300), last_from_me: true }).eq("id", th.id);
+    // Le DM est parti : une écriture refusée n'est que notée (ig-inbox relira la conversation).
+    const { error: msgErr } = await sb.from("ig_messages").upsert({ id: `sent:${String(r.message_id ?? crypto.randomUUID())}`, thread_id: th.id, at, me: true, text });
+    if (msgErr) console.warn("ttp-mcp envoyer_dm message refusé", th.id, msgErr.message);
+    const { error: thErr } = await sb.from("ig_threads").update({ updated_at: at, last_text: couper(text, 300), last_from_me: true }).eq("id", th.id);
+    if (thErr) console.warn("ttp-mcp envoyer_dm conversation refusée", th.id, thErr.message);
     return ok(`✓ DM envoyé à @${th.username ?? who}.`);
   },
 };

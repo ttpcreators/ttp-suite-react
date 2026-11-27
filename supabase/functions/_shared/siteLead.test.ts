@@ -38,4 +38,9 @@ describe("ilikeExact", () => {
     expect(ilikeExact("a\\b@c.fr")).toBe("a\\\\b@c.fr");
     expect(ilikeExact("simple@marque.fr")).toBe("simple@marque.fr");
   });
+  it("marque et message coupés sans casser d'emoji", () => {
+    const r = lireLead({ email: "a@b.fr", marque: `${"m".repeat(79)}😀`, message: `${"z".repeat(1499)}😀` });
+    expect("lead" in r && r.lead.marque).toBe("m".repeat(79));
+    expect("lead" in r && r.lead.message).toBe("z".repeat(1499));
+  });
 });

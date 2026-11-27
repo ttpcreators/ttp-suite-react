@@ -17,6 +17,7 @@ import { dbInsert } from "@/lib/db";
 import { fmtCompact } from "@/lib/timeSeries";
 import { fmtAgo, igWhyText, noteQuota } from "@/lib/instagram";
 import { useIntent } from "@/lib/openIntent";
+import { couper } from "../../supabase/functions/_shared/texteSur.ts";
 
 /**
  * DM INSTAGRAM (agence) : les messages privés du compte Instagram de TTP, lus toutes
@@ -154,7 +155,7 @@ export function Messages() {
     }
   };
   const addLabel = async (raw: string) => {
-    const name = raw.replace(/\s+/g, " ").trim().slice(0, 40);
+    const name = couper(raw.replace(/\s+/g, " ").trim(), 40); // sans casser d'emoji (_shared/texteSur.ts)
     if (!name) return false;
     if (labels.some((l) => l.toLowerCase() === name.toLowerCase())) {
       toast("Ce titre existe déjà");
@@ -872,7 +873,7 @@ function Conversation({ t, q, contact, onBack, onChange, labels, mine, onLabels,
           <div className="flex items-end gap-2 border-t border-border bg-surface px-3 py-2.5">
             <textarea
               value={draft}
-              onChange={(e) => setDraft(e.target.value.slice(0, 1000))}
+              onChange={(e) => setDraft(couper(e.target.value, 1000))}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void send();
               }}

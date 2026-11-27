@@ -11,6 +11,7 @@
 // ============================================================================
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
+import { couper, texteSur } from "../_shared/texteSur.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const RESEND_FROM = Deno.env.get("RESEND_FROM") ?? "TTP Creators <onboarding@resend.dev>";
@@ -51,7 +52,7 @@ Deno.serve(async (req: Request) => {
   // se voient pas entre elles). Dédoublonnage + validation.
   const rawList = Array.isArray(body.to) ? body.to : [body.to ?? ""];
   const recipients = [...new Set(rawList.map((e) => String(e).trim().toLowerCase()).filter((e) => emailRe.test(e)))];
-  const subject = (body.subject ?? "").trim();
+  const subject = texteSur(body.subject ?? "").trim();
   const html = body.html ?? "";
   if (recipients.length === 0) return jsonRes({ error: "destinataire_invalide" }, 400);
   if (recipients.length > 100) return jsonRes({ error: "trop_de_destinataires" }, 400);
@@ -81,11 +82,13 @@ Deno.serve(async (req: Request) => {
         sent++;
         // Journal unifié (best-effort) : l'envoi Resend apparaît dans l'historique.
         // (Le constructeur de requête Supabase n'a pas de .catch : on lit { error }.)
+        // Objet et extrait sans caractère nul ni moitié d'emoji seule (_shared/texteSur.ts) :
+        // sinon la ligne est refusée et le mail parti manque à l'historique.
         const { error: logError } = await sb.from("email_activity").insert({
           contact_email: to,
           direction: "out",
           subject,
-          snippet: html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 180),
+          snippet: couper(html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(), 180),
           source: typeof body.source === "string" ? body.source : "manual",
         });
         if (logError) console.error("send-email journal", logError.message);

@@ -16,6 +16,7 @@
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 import { discover, engagementRate, igUser, metaReady, postsPerWeek, saveUsage, storePicture } from "../_shared/instagram.ts";
+import { texteSur } from "../_shared/texteSur.ts";
 
 type Stats = { er: number | null; perWeek: number | null; posts: number; bio: string; website: string; name: string; captions: string };
 
@@ -73,7 +74,8 @@ Deno.serve(async (req: Request) => {
     followers[h] = p.followers;
     // Légendes des derniers posts (sert à deviner la niche dans l'app, rien n'est stocké).
     const captions = p.media.map((m) => m.caption).join(" \n ").slice(0, 2000);
-    stats[h] = { er: engagementRate(p.media, p.followers), perWeek: postsPerWeek(p.media), posts: p.posts, bio: p.bio, website: p.website, name: p.name, captions };
+    // Textes nettoyés (_shared/texteSur.ts) : l'app garde la bio et le site dans le suivi du Scouting (jsonb).
+    stats[h] = { er: engagementRate(p.media, p.followers), perWeek: postsPerWeek(p.media), posts: p.posts, bio: texteSur(p.bio), website: texteSur(p.website), name: texteSur(p.name), captions };
     const pic = await storePicture(sb, igUser(h), p.picture);
     photos[h] = pic.url;
     if (pic.why) why[h] = pic.why;

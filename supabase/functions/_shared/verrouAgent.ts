@@ -14,6 +14,8 @@
 // Les connexions de Marc et de l'équipe ne passent jamais par ici.
 // ============================================================================
 
+import { str } from "./texteSur.ts";
+
 type Args = Record<string, unknown>;
 
 export type Besoin =
@@ -28,8 +30,8 @@ export const VALIDATION_JOURS = 7;
 /** Outils qu'un agent ne lance qu'avec un appel validé (proposer_action avec `outil`). */
 export const OUTILS_A_VALIDER = ["noter_reversement", "modifier_element", "supprimer_element", "reglages_app", "preparer_facture", "creer_meet", "inviter_rdv"] as const;
 
-// Même lecture que les outils (tools.ts, admin.ts, envois.ts) : un écart ouvrirait une porte.
-const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+// Les textes reçus sont lus par str (_shared/texteSur.ts), la même lecture que les outils
+// (tools.ts, admin.ts, envois.ts) : un écart ouvrirait une porte.
 const ID_BROUILLON = /^[A-Za-z0-9_-]+$/;
 
 function idsBrouillons(v: unknown): string[] {

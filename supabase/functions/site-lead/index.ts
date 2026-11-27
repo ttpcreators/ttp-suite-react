@@ -52,7 +52,9 @@ Deno.serve(async (req: Request) => {
       return json({ error: "indisponible" }, 503);
     }
   }
-  await sb.from("todos").insert({ text: tacheLead(lead), descr: `${lead.email}${lead.message ? `\n${lead.message}` : ""}`, priority: "haute", due: now.toISOString().slice(0, 10), done: false }).then(() => {}, () => {});
+  await sb.from("todos").insert({ text: tacheLead(lead), descr: `${lead.email}${lead.message ? `\n${lead.message}` : ""}`, priority: "haute", due: now.toISOString().slice(0, 10), done: false }).then(({ error }) => {
+    if (error) console.warn("site-lead tâche refusée", error.message);
+  }, () => {});
   if (pushReady()) {
     await sendTo(sb, { agency: true }, makePayload({ kind: "team", title: "Demande de roster sur le site", body: "Une marque veut recevoir le roster. Détail dans la to-do.", url: "/?open=view&view=todo", tag: "ttp-site-lead" })).catch(() => {});
   }

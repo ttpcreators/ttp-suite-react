@@ -68,4 +68,10 @@ describe("tâches et notes", () => {
     expect(reponseSequence("interesse")).toBe("positive");
     expect(reponseSequence("a_lire")).toBe("a_repondu");
   });
+  it("note et tâche coupées sans casser d'emoji", () => {
+    // « Refus : » fait 8 caractères : l'emoji tombe pile sur la coupe à 140.
+    expect(noteReponse("refus", `${"x".repeat(131)}😀`)).toBe(`Refus : ${"x".repeat(131)}`);
+    const t = tacheReponse("refus", { marque: `${"M".repeat(79)}😀`, email: "a@b.fr", objet: "Re: non", extrait: "", jour: "2026-11-27" });
+    expect(t.text).toBe(`Refus : ${"M".repeat(79)}`);
+  });
 });

@@ -5,7 +5,10 @@
 // datée, et une tâche de tri pour Gianni (demandes entrantes : question du budget).
 // Règles PURES, testées par siteLead.test.ts. Endpoint public : rien de ce que tape le
 // visiteur ne part dans une notification (même règle que report-error).
+// Textes coupés sans casser d'emoji (couper, _shared/texteSur.ts) : ils vont en base.
 // ============================================================================
+
+import { couper } from "./texteSur.ts";
 
 export const LEAD_TAG = "Lead site";
 export const ROSTER_URL = "https://ttpcreators.pro/mediakit/agence/";
@@ -18,7 +21,7 @@ export type Lead = { email: string; marque: string; nom: string; message: string
 const EMAIL_RE = /^[^@\s<>"',;:]{1,64}@[^@\s<>"',;:]{1,190}\.[a-z]{2,24}$/i;
 /** Texte d'une ligne, sans caractères de contrôle ni balises. */
 const propre = (v: unknown, max: number) =>
-  String(v ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+  couper(String(v ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim(), max);
 
 /** Demande lue et nettoyée, ou la raison du refus. `piege` rempli = robot. */
 export function lireLead(body: unknown): { lead: Lead } | { robot: true } | { erreur: string } {
@@ -28,7 +31,7 @@ export function lireLead(body: unknown): { lead: Lead } | { robot: true } | { er
   if (!EMAIL_RE.test(email)) return { erreur: "email" };
   const marque = propre(b.marque, 80);
   if (!marque) return { erreur: "marque" };
-  return { lead: { email, marque, nom: propre(b.nom, 80), message: String(b.message ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, " ").trim().slice(0, 1500) } };
+  return { lead: { email, marque, nom: propre(b.nom, 80), message: couper(String(b.message ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, " ").trim(), 1500) } };
 }
 
 /** Valeur d'un filtre ilike qui ne trouve QUE ce texte : « % » et « _ » perdent leur rôle de joker. */
@@ -43,11 +46,11 @@ export function toucheLead(lead: Lead, now: Date) {
     date: now.toISOString(),
     canal: "email",
     kind: "reponse",
-    note: `Demande du roster via le site${lead.message ? ` : ${lead.message.slice(0, 300)}` : ""}`,
+    note: `Demande du roster via le site${lead.message ? ` : ${couper(lead.message, 300)}` : ""}`,
   };
 }
 
 /** La tâche de tri : format fixe, la marque seule vient du visiteur (nettoyée, courte). */
 export function tacheLead(lead: Lead): string {
-  return `Lead site : ${lead.marque.slice(0, 60)} demande le roster (tri : question du budget)`;
+  return `Lead site : ${couper(lead.marque, 60)} demande le roster (tri : question du budget)`;
 }

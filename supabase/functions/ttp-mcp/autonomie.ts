@@ -28,11 +28,11 @@ import { MAX_OCTETS, adresseSite, domaineDuSite, emailsDuSite, ligneEmailSite, p
 import { cleCompte, decompte, ligneSansReponse, sansReponse, type FilDm, type ProfilDm, type TypeDemande } from "../_shared/dmSansReponse.ts";
 import { LIBELLES, etatRecrut, lireSuivi, noterMessage, texteSuivi, type Canal, type EtatRecrut } from "../_shared/recrutementSuivi.ts";
 import { readAppState } from "../_shared/appState.ts";
+import { str } from "../_shared/texteSur.ts";
 
 type Json = Record<string, unknown>;
 const ok = (text: string) => ({ text });
 const fail = (text: string) => ({ text, isError: true });
-const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const int = (v: unknown, def: number, min: number, max: number) => {
   const n = Number(v);
   return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : def;

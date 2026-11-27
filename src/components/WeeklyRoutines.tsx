@@ -15,6 +15,7 @@ import { doneThisWeek, nextDoneLog, weekStart, type Routine } from "@/lib/routin
 import { TONE_SOFT, TONE_TEXT } from "@/lib/statusTone";
 import { useStickyState } from "@/lib/useStickyState";
 import { EMPTY, fmtDay as fmtDayShared, fmtDayTime } from "@/lib/dates";
+import { couper } from "../../supabase/functions/_shared/texteSur.ts";
 
 /*
  * To-do « Routines de la semaine » : les tâches qui reviennent toutes les semaines.
@@ -187,7 +188,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                     <input
                       autoFocus
                       value={text}
-                      onChange={(e) => setText(e.target.value.slice(0, 300))}
+                      onChange={(e) => setText(couper(e.target.value, 300))}
                       onKeyDown={(e) => e.key === "Enter" && void add()}
                       placeholder="Ex. Mettre à jour les stats des créateurs"
                       className="h-9 min-w-0 flex-1 rounded-full border border-border bg-surface px-3.5 text-[13px] text-foreground outline-none placeholder:text-faint focus:border-primary"
@@ -222,7 +223,7 @@ export function WeeklyRoutines({ addSignal = 0 }: { addSignal?: number }) {
                           <li key={r.id} className="flex flex-col gap-2 rounded-[14px] bg-panel p-3 sm:flex-row sm:items-center md:col-span-2">
                             <input
                               value={editText}
-                              onChange={(e) => setEditText(e.target.value.slice(0, 300))}
+                              onChange={(e) => setEditText(couper(e.target.value, 300))}
                               onKeyDown={(e) => e.key === "Enter" && void saveEdit(r)}
                               className="h-9 min-w-0 flex-1 rounded-full border border-border bg-surface px-3.5 text-[13px] text-foreground outline-none focus:border-primary"
                             />
