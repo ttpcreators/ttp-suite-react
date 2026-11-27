@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { REGLES, adresses, cleSociete, coupeCircuit, dansLaFenetre, ligneFile, planifier, prochainCreneau, quandCourt, raisonDeBloquer } from "./fileEnvoi.ts";
+import { REGLES, adresses, cleSociete, dansLaFenetre, etatPalier, ligneFile, planifier, prochainCreneau, quandCourt, raisonDeBloquer } from "./fileEnvoi.ts";
 
 // Le mercredi 25 novembre 2026, Paris est à UTC+1.
 const at = (iso: string) => new Date(iso);
@@ -75,11 +75,28 @@ describe("file d'envoi : ce qui bloque un mail", () => {
 });
 
 describe("file d'envoi : coupe-circuit et affichage", () => {
-  it("s'arrête au-delà de 3 rebonds et 5 % des envois", () => {
-    expect(coupeCircuit(40, 2)).toBeNull();
-    expect(coupeCircuit(100, 3)).toBeNull();
-    expect(coupeCircuit(40, 3)).toContain("la file est en pause");
-    expect(coupeCircuit(0, 3)).toContain("3 rebond(s) sur 0");
+  it("avant le 30e mail du jour : pas de contrôle, mais jamais au-delà du palier", () => {
+    expect(etatPalier(0, 0, 999)).toEqual({ etat: "libre", restant: 30, prochain: 30, message: null });
+    expect(etatPalier(29, 5, 1)).toEqual({ etat: "libre", restant: 1, prochain: 30, message: null });
+  });
+  it("au 30e mail : au-delà de 5 % de rebonds, pause pour la journée", () => {
+    const e = etatPalier(30, 2, 0); // 6,7 %
+    expect(e.etat).toBe("pause");
+    expect(e.restant).toBe(0);
+    expect(e.message).toContain("2 rebond(s) sur les 30 mails partis aujourd'hui (6,7 %");
+  });
+  it("au 30e mail : 5 % ou moins, un quart d'heure d'observation puis 10 mails de plus", () => {
+    expect(etatPalier(30, 1, 5).etat).toBe("observation"); // 3,3 %, trop tôt
+    expect(etatPalier(30, 1, 5).message).toContain("dans 10 min");
+    expect(etatPalier(30, 1, 15)).toEqual({ etat: "libre", restant: 10, prochain: 40, message: null });
+    expect(etatPalier(40, 2, 20)).toEqual({ etat: "libre", restant: 10, prochain: 50, message: null }); // 5 % pile : on continue
+  });
+  it("entre deux paliers : la file va jusqu'au palier suivant sans contrôle", () => {
+    expect(etatPalier(33, 3, 0)).toEqual({ etat: "libre", restant: 7, prochain: 40, message: null });
+  });
+  it("au palier suivant, le taux porte sur tous les mails du jour", () => {
+    expect(etatPalier(40, 3, 30).etat).toBe("pause"); // 7,5 %
+    expect(etatPalier(50, 2, 30).etat).toBe("libre"); // 4 %
   });
   it("écrit une ligne lisible", () => {
     expect(quandCourt("2026-11-25T08:42:00Z")).toBe("mer. 25 nov. à 9 h 42");
