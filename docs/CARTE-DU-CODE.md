@@ -337,7 +337,8 @@ commandes en base contiennent le secret des crons : ne jamais les recopier dans 
 | `tt-radar-quotidien` | `0 7 * * *` | `tt-radar` |
 | `yt-radar-quotidien` | `30 7 * * *` | `yt-radar` |
 | `ig-inbox-horaire` | `25 */5 * * *` (toutes les 5 h, malgré son nom) | `ig-inbox` |
-| `ig-historique-import` | `*/3 * * * *` | `ig-inbox` (`backfill`), seulement tant que l'import n'est pas fini : sans effet depuis le 25/11 ; arrêt proposé dans le tableau d'état |
+| `ig-historique-import` | `*/3 * * * *` | `ig-inbox` (`backfill`), seulement tant que l'import n'est pas fini : sans effet depuis le 25/11 ; arrêt proposé dans le tableau d'état(SQL 6/6 de la vague 1 : mis en pause) |
+| `purge-historique-cron` | `30 3 * * *` | SQL seul (pas de fonction) : efface l'historique de pg_cron de plus de 7 jours (SQL 6/6 de la vague 1) |
 | `ig-publish-minute` | `* * * * *` | `ig-publish` |
 | `envoi-file-minute` | `* * * * *` | `ttp-mcp/file-envoi` (file d'envoi de la prospection) |
 | `agent-watchdog` | `*/5 * * * *` | `agent-watchdog` |
