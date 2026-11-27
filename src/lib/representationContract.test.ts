@@ -56,3 +56,13 @@ describe("conditions particulières dans le PDF", () => {
     expect(html).toContain(CONDITIONS_MENTION);
   });
 });
+
+describe("mention « Contrat test » : le PDF suit le réglage", () => {
+  it("formule exclusive : la mention tant que le réglage est là ; sans le réglage, aucune", async () => {
+    const { representationHTML, rcDefaultConfig } = await import("./representationContract");
+    const cfg = { ...rcDefaultConfig("exclusif"), talentNom: "Nora Fictive" };
+    expect(representationHTML(cfg)).toContain("Contrat test");
+    expect(representationHTML({ ...cfg, contratTest: "false" })).not.toContain("Contrat test");
+    expect(representationHTML({ ...cfg, contratTest: "false" })).toContain("Nora Fictive");
+  });
+});

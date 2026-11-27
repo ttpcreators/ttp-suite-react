@@ -1,7 +1,7 @@
 // ============================================================================
 // _shared/conformite.ts : conformité automatique des posts Instagram des créateurs.
 // ----------------------------------------------------------------------------
-// Remplace la « vigie de 6 h » faite à la main par Alfred. Deux incidents :
+// Remplace la « vigie de 6 h » faite à la main par Alfred. Trois incidents :
 //
 //   1. MENTION MANQUANTE. Loi n° 2023-451 du 9 juin 2023 (art. 5) : un contenu qui promeut
 //      une marque contre une contrepartie porte « Publicité » ou « Collaboration
@@ -23,17 +23,27 @@
 //
 //   2. CONFLIT D'EXCLUSIVITÉ. Un post publié pendant une exclusivité en cours (confirmée)
 //      qui cite une marque concurrente : liste des concurrents du contrat (même règle que
-//      `verifier_exclusivite`, `hitsBrand`), ou une marque du carnet dont le secteur
-//      (étiquette de la fiche) est un MOT ENTIER du secteur interdit. Plus strict que
-//      `hitsBrand` pour les secteurs : « sport » ne tombe pas sous « nutrition sportive ».
+//      `verifier_exclusivite`, `hitsBrand`), ou une marque du carnet dont le nom dit la
+//      catégorie interdite par un MOT ENTIER (« Maison Parfums » pendant une exclusivité
+//      « parfum », jamais « Parfumerie » ni « Modern » pour « mode » : `secteurDansNom` avec
+//      `motEntier`) ou dont le secteur est un MOT ENTIER de la catégorie. Plus strict que
+//      `hitsBrand` : « sport » ne tombe pas sous « nutrition sportive ». Une catégorie de fiche
+//      contact (Marque, Agence…) n'est jamais un secteur.
 //      Les marques des collabs du créateur ne comptent jamais : l'agence les a signées.
+//      Une exclusivité écrite au prénom seul compte pour le créateur (`memeCreateur`).
+//
+//   3. EXCLUSIVITÉ À VÉRIFIER. Même règle pendant une exclusivité « à confirmer » (lue toute
+//      seule dans un contrat reçu par mail, souvent une erreur de lecture) : incident à part,
+//      pour vérifier la ligne dans la page Exclusivités. Jamais compté comme un vrai incident
+//      (tableau du lundi), jamais passé sous silence.
 //
 // Reconnaissance des marques : brandMatcher (collabPosts.ts), comme les posts des collabs.
 // Règle PURE (ni Supabase ni Deno), testée par conformite.test.ts. Appelée par ig-sync.
 // ============================================================================
 
 import { brandMatcher } from "./collabPosts.ts";
-import { excluState, foldName, hitsBrand, type Exclusivite } from "./exclusivites.ts";
+import { tagConnu } from "./contactTags.ts";
+import { excluState, foldName, hitsBrand, memeCreateur, secteurDansNom, type Exclusivite } from "./exclusivites.ts";
 
 export type ConformitePost = { id: string; url: string; at: string; caption: string; product?: string };
 /** Collab du créateur : marque et date de création (ISO). */
@@ -41,7 +51,7 @@ export type ConformiteCollab = { brand: string; since?: string | null };
 /** Marque du carnet de contacts : nom, comptes Instagram connus, secteurs (étiquette). */
 export type MarqueConnue = { brand: string; handles?: readonly string[]; tags?: readonly string[] };
 
-export type IncidentType = "mention" | "exclusivite";
+export type IncidentType = "mention" | "exclusivite" | "exclusivite_a_verifier";
 export type Incident = {
   /** `<id du post>:<type>` : une fois par post et par type. */
   id: string;
@@ -75,7 +85,9 @@ export const DEBUT_POST = 125;
 export const MAX_AGE_DAYS = 14;
 const DAY = 86400000;
 
-export const TYPE_LABEL: Record<IncidentType, string> = { mention: "mention manquante", exclusivite: "conflit d'exclusivité" };
+export const TYPE_LABEL: Record<IncidentType, string> = { mention: "mention manquante", exclusivite: "conflit d'exclusivité", exclusivite_a_verifier: "exclusivité à vérifier" };
+/** Un vrai incident (compté par le tableau du lundi) : pas une exclusivité encore à confirmer. */
+export const incidentCompte = (type: unknown) => type === "mention" || type === "exclusivite";
 
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
@@ -165,11 +177,12 @@ function sameBrand(a: string, b: string): boolean {
   return !!x && !!y && (x === y || (Math.min(x.length, y.length) >= 4 && (x.startsWith(y) || y.startsWith(x))));
 }
 
-/** Le secteur d'une marque (étiquette) est-il un mot entier du secteur interdit ? */
+/** Le secteur d'une marque (étiquette, jamais une catégorie de fiche contact) est-il un mot entier du secteur interdit ? */
 function sectorHit(scope: string, tags: readonly string[]): boolean {
   const words = new Set(foldName(scope).split(" ").filter(Boolean));
   if (!words.size) return false;
   return tags.some((t) => {
+    if (tagConnu(t)) return false; // « Marque », « Agence » : un type de contact, pas un secteur
     const w = foldName(t).split(" ").filter((x) => x.length >= 4);
     return w.length > 0 && w.every((x) => words.has(x));
   });
@@ -192,7 +205,9 @@ export function incidentsConformite(input: ConformiteIn): Incident[] {
   const handlesOf = (brand: string) => (input.marques ?? []).filter((m) => foldName(m.brand) === foldName(brand)).flatMap((m) => m.handles ?? []);
   const collabs = input.collabs.filter((c) => c.brand?.trim());
   const ownBrands = new Set(collabs.map((c) => foldName(c.brand).replace(/ /g, "")));
-  const exclus = input.exclusivites.filter((e) => !e.pending && foldName(e.creator) === foldName(creator) && e.brand.trim());
+  const siennes = input.exclusivites.filter((e) => memeCreateur(e.creator, creator) && e.brand.trim());
+  const exclus = siennes.filter((e) => !e.pending);
+  const possibles = siennes.filter((e) => e.pending);
   const out: Incident[] = [];
 
   for (const p of input.posts) {
@@ -225,30 +240,44 @@ export function incidentsConformite(input: ConformiteIn): Incident[] {
       }
     }
 
-    // ── 2. Conflit d'exclusivité ──
-    const hits = new Map<string, Exclusivite>();
-    for (const e of exclus) {
-      if (excluState(e, today) !== "en_cours" || (e.start && day < e.start) || (e.end && day > e.end)) continue;
-      for (const c of e.competitors) {
-        if (!hitsBrand(e, c) || ownBrands.has(foldName(c).replace(/ /g, ""))) continue;
-        if (matcherOf(c, handlesOf(c))(caption)) hits.set(foldName(c), e);
+    // ── 2. Conflit d'exclusivité (confirmée), 3. exclusivité à vérifier (à confirmer) ──
+    const conflits = (lignes: readonly Exclusivite[], deja: ReadonlySet<string>) => {
+      const hits = new Map<string, Exclusivite>();
+      for (const e of lignes) {
+        if (excluState(e, today) !== "en_cours" || (e.start && day < e.start) || (e.end && day > e.end)) continue;
+        for (const c of e.competitors) {
+          if (!hitsBrand(e, c) || ownBrands.has(foldName(c).replace(/ /g, "")) || deja.has(foldName(c))) continue;
+          if (matcherOf(c, handlesOf(c))(caption)) hits.set(foldName(c), e);
+        }
+        for (const m of known) {
+          const f = foldName(m.brand).replace(/ /g, "");
+          if (ownBrands.has(f) || hits.has(foldName(m.brand)) || deja.has(foldName(m.brand)) || sameBrand(e.brand, m.brand)) continue;
+          if (!sectorHit(e.scope, m.tags) && !secteurDansNom(e.scope, m.brand, { motEntier: true })) continue;
+          hits.set(foldName(m.brand), e);
+        }
       }
-      for (const m of known) {
-        const f = foldName(m.brand).replace(/ /g, "");
-        if (ownBrands.has(f) || hits.has(foldName(m.brand)) || sameBrand(e.brand, m.brand) || !sectorHit(e.scope, m.tags)) continue;
-        hits.set(foldName(m.brand), e);
-      }
-    }
-    if (hits.size) {
       const names = [...hits.keys()].map((k) => {
         const e = hits.get(k) as Exclusivite;
         return e.competitors.find((c) => foldName(c) === k) ?? known.find((m) => foldName(m.brand) === k)?.brand ?? k;
       });
-      const e = [...hits.values()][0];
+      return { hits, names, e: [...hits.values()][0] as Exclusivite | undefined };
+    };
+    const sur = conflits(exclus, new Set());
+    if (sur.e) {
+      const { names, e } = sur;
       out.push({
         id: `${p.id}:exclusivite`, type: "exclusivite", creator, brand: names.join(", "), postId: p.id, url: p.url, at: p.at,
         detail: `Cite ${names.join(", ")} pendant l'exclusivité ${e.brand}${e.end ? ` (jusqu'au ${frDate(e.end)})` : ""}.`,
         correction: `Demander à ${who} de retirer ${names.join(", ")} de la légende et du visuel (ou d'archiver le post), puis vérifier le contrat ${e.brand} : prévenir la marque si le post a déjà été vu.`,
+      });
+    }
+    const aVerifier = conflits(possibles, new Set(sur.hits.keys()));
+    if (aVerifier.e) {
+      const { names, e } = aVerifier;
+      out.push({
+        id: `${p.id}:exclusivite_a_verifier`, type: "exclusivite_a_verifier", creator, brand: names.join(", "), postId: p.id, url: p.url, at: p.at,
+        detail: `Cite ${names.join(", ")} pendant une exclusivité ${e.brand} lue toute seule dans un contrat reçu par mail, pas encore confirmée.`,
+        correction: `Vérifier dans la page Exclusivités si l'exclusivité ${e.brand} existe vraiment (ouvrir le contrat). Si oui : la confirmer, puis demander à ${who} de retirer ${names.join(", ")} de la légende et du visuel. Sinon : l'écarter.`,
       });
     }
   }
@@ -284,7 +313,7 @@ export function readJournal(raw: unknown): Record<string, JournalEntry> {
   const out: Record<string, JournalEntry> = {};
   for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
     const e = v as Partial<JournalEntry> | null;
-    if (e && typeof e === "object" && (e.type === "mention" || e.type === "exclusivite") && typeof e.at === "string") out[k] = e as JournalEntry;
+    if (e && typeof e === "object" && (e.type === "mention" || e.type === "exclusivite" || e.type === "exclusivite_a_verifier") && typeof e.at === "string") out[k] = e as JournalEntry;
   }
   return out;
 }

@@ -11,7 +11,14 @@
 //   - le mapping DST-aware events <-> Google (eventToGoogle / googleToEvent) ;
 //   - le watch (gcalWatch / gcalStopChannel) ;
 //   - le CYCLE DE SYNC complet (runSyncCycle) réutilisé par google-sync,
-//     google-webhook et google-watch-renew — plus AUCUNE réimplémentation ;
+//     google-webhook, google-watch-renew et google-oauth-callback, plus AUCUNE
+//     réimplémentation. Le passage lui-même (quoi envoyer, quoi marquer, que faire
+//     d'une réponse de Google, d'un 412, d'un 404) est dans _shared/synchroAgenda.ts,
+//     testé avec une base et un Google simulés ; ce fichier fournit la vraie base et
+//     le vrai Google. Depuis le 27/11/2026, un envoi réussi passe la ligne en
+//     sync_source 'google' (sinon le déclencheur touch_updated_at la laissait « à
+//     envoyer » : boucle avec le webhook), et toute écriture qui marque une ligne se
+//     fait sous condition que updated_at n'ait pas bougé depuis la lecture ;
 //   - un lease-lock à expiration (acquireLock/releaseLock) anti-verrou-collé ;
 //   - helpers CORS (whitelist stricte, pas de wildcard), CRON secret, waitUntil.
 //
@@ -22,6 +29,15 @@
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { guessEventKind } from "./eventKind.ts";
 import { texteSur } from "./texteSur.ts";
+import {
+  appliquerLecture,
+  type BaseAgenda,
+  type BilanSync,
+  bilanVide,
+  envoyerVersGoogle,
+  type GoogleAgenda,
+  type Journal,
+} from "./synchroAgenda.ts";
 
 // ----------------------------------------------------------------------------
 // Constantes & environnement
@@ -406,6 +422,9 @@ export async function getSyncState(sb: SupabaseClient): Promise<SyncStateRow | n
  * Déclenche google-sync via HTTP interne (CRON_SECRET). Utilise waitUntil pour
  * survivre à la réponse. À réserver aux cas où on NE veut pas exécuter la sync
  * inline. Le webhook/renew préfèrent runSyncCycle inline (fiable).
+ * `trigger` n'est qu'une étiquette pour le journal de google-sync (correspondance
+ * dans son en-tête). Si un passage tourne déjà, celui-ci est sauté sans nouvel
+ * essai : le passage suivant (avis de Google ou cron horaire) prend le relais.
  */
 export function triggerSync(trigger: "webhook" | "cron" | "renew"): void {
   waitUntil(
@@ -503,7 +522,8 @@ function isoDateTimeToLocalParts(
  *   passe par l'instant absolu -> gère correctement le passage de minuit (end sur
  *   le jour suivant si nécessaire).
  * - type/who/sort_order -> extendedProperties.private.
- * - marqueurs anti-boucle : ttp_source='ttp', ttp_updated=<updated_at ISO>.
+ * - repères : ttp_source='ttp', ttp_updated=<updated_at ISO> (version de l'app envoyée ;
+ *   la lecture de Google reconnaît notre propre envoi à son etag, pas à ce repère).
  */
 export function eventToGoogle(row: EventRow): Record<string, unknown> {
   const priv: Record<string, string> = {
@@ -619,182 +639,90 @@ export async function releaseLock(sb: SupabaseClient, token: string): Promise<vo
 
 // ============================================================================
 // CYCLE DE SYNC : PUSH (agence -> Google) puis PULL (Google -> events)
-// Réutilisé par google-sync (handler), google-webhook, google-watch-renew.
+// Réutilisé par google-sync (handler), google-webhook, google-watch-renew et
+// google-oauth-callback : ces 4 fonctions sont à redéployer quand il change.
+// Le passage lui-même (décisions, écritures, 412, 404) est dans _shared/synchroAgenda.ts,
+// testé avec une base et un Google simulés ; ici, seulement la vraie base et le vrai Google.
 // ============================================================================
 
-export interface SyncCounters {
-  pulled: number;
-  pushed: number;
-  deleted: number;
-  resynced: boolean;
-}
+/** Bilan d'un passage : reçus, envoyés, supprimés, conflits, absents de Google, refus. */
+export type SyncCounters = BilanSync;
 
 interface Ctx {
   sb: SupabaseClient;
+  base: BaseAgenda<EventRow>;
+  google: GoogleAgenda<EventRow>;
 }
 
-// --- PUSH -------------------------------------------------------------------
+/** Une ligne de journal de la synchro (refus, absence, conflit, écriture refusée…), `synchro-agenda {…}`. */
+const journalSynchro: Journal = (quoi) => console.warn("synchro-agenda", JSON.stringify(quoi));
 
-async function pushLocalChanges(ctx: Ctx): Promise<{ pushed: number; deleted: number }> {
-  const { sb } = ctx;
-  let pushed = 0;
-  let deleted = 0;
+/** La table `events` pour la synchro (clé service : le déclencheur touch_updated_at s'applique). */
+function baseAgenda(sb: SupabaseClient): BaseAgenda<EventRow> {
+  return {
+    async lignesAgence() {
+      const { data, error } = await sb
+        .from("events").select("*").eq("sync_source", "agence").returns<EventRow[]>();
+      if (error) throw error;
+      return data ?? [];
+    },
+    async parIdGoogle(idGoogle) {
+      const { data, error } = await sb
+        .from("events").select("*").eq("google_event_id", idGoogle).maybeSingle<EventRow>();
+      if (error) throw new Error(`events_read_failed:${error.message}`);
+      return data ?? null;
+    },
+    async ecrireSiInchangee(ligne, champs) {
+      const { data, error } = await sb.from("events").update(champs)
+        .eq("id", ligne.id).eq("updated_at", ligne.updated_at).select("id");
+      if (error) return { ecrite: false, erreur: error.message };
+      return { ecrite: (data?.length ?? 0) > 0, erreur: null };
+    },
+    async ecrire(id, champs) {
+      const { error } = await sb.from("events").update(champs).eq("id", id);
+      return error ? error.message : null;
+    },
+    async ajouter(champs) {
+      // upsert sur google_event_id : pas de doublon si deux lectures se croisent.
+      const { error } = await sb.from("events").upsert(champs, { onConflict: "google_event_id" });
+      return error ? error.message : null;
+    },
+  };
+}
 
-  const { data: candidates, error } = await sb
-    .from("events").select("*").eq("sync_source", "agence").returns<EventRow[]>();
-  if (error) throw error;
-
-  const toPush = (candidates ?? []).filter((r) => {
-    if (!r.last_synced_at) return true;
-    return new Date(r.updated_at).getTime() > new Date(r.last_synced_at).getTime();
-  });
-
-  for (const row of toPush) {
-    // Suppression (tombstone) -> DELETE Google.
-    if (row.deleted) {
-      if (row.google_event_id) {
-        const res = await gcalFetch(
-          sb,
-          `/calendars/${CALENDAR_ID}/events/${encodeURIComponent(row.google_event_id)}`,
-          { method: "DELETE" },
-        );
-        if (res.ok || res.status === 404 || res.status === 410) {
-          deleted++;
-        } else {
-          continue; // retenté au prochain cycle
-        }
+/** L'agenda Google de l'agence pour la synchro. */
+function googleAgenda(sb: SupabaseClient): GoogleAgenda<EventRow> {
+  const base = `/calendars/${CALENDAR_ID}/events`;
+  return {
+    async envoyer(action, ligne) {
+      const chemin = ligne.google_event_id ? `${base}/${encodeURIComponent(ligne.google_event_id)}` : base;
+      const init: RequestInit = action === "supprimer"
+        ? { method: "DELETE" }
+        : { method: action === "creer" ? "POST" : "PATCH", body: JSON.stringify(eventToGoogle(ligne)) };
+      // Mise à jour : If-Match etag ; un 412 dit que Google a changé depuis (le rendez-vous est alors relu).
+      if (action === "modifier" && ligne.google_etag) {
+        init.headers = { "Content-Type": "application/json", "If-Match": ligne.google_etag };
       }
-      await sb.from("events")
-        .update({ last_synced_at: new Date().toISOString(), sync_source: "google" })
-        .eq("id", row.id);
-      continue;
-    }
-
-    // Création -> INSERT Google.
-    if (!row.google_event_id) {
-      const res = await gcalFetch(
-        sb, `/calendars/${CALENDAR_ID}/events`,
-        { method: "POST", body: JSON.stringify(eventToGoogle(row)) },
-      );
-      if (!res.ok) continue;
-      const g = (await res.json()) as GoogleEvent;
-      const now = new Date().toISOString();
-      // updated_at aligné sur last_synced_at => plus re-sélectionné (anti-boucle).
-      await sb.from("events").update({
-        google_event_id: g.id,
-        google_etag: g.etag ?? null,
-        last_synced_at: now,
-        updated_at: now,
-      }).eq("id", row.id);
-      pushed++;
-      continue;
-    }
-
-    // Mise à jour -> PATCH Google (If-Match: etag).
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (row.google_etag) headers["If-Match"] = row.google_etag;
-    const res = await gcalFetch(
-      sb, `/calendars/${CALENDAR_ID}/events/${encodeURIComponent(row.google_event_id)}`,
-      { method: "PATCH", headers, body: JSON.stringify(eventToGoogle(row)) },
-    );
-
-    if (res.status === 412) continue; // conflit -> le PULL tranche
-    if (res.status === 404 || res.status === 410) {
-      await sb.from("events")
-        .update({ google_event_id: null, google_etag: null }).eq("id", row.id);
-      continue;
-    }
-    if (!res.ok) continue;
-
-    const g = (await res.json()) as GoogleEvent;
-    const now = new Date().toISOString();
-    await sb.from("events").update({
-      google_etag: g.etag ?? row.google_etag,
-      last_synced_at: now,
-      updated_at: now,
-    }).eq("id", row.id);
-    pushed++;
-  }
-
-  return { pushed, deleted };
+      const res = await gcalFetch(sb, chemin, init);
+      if (res.ok && action !== "supprimer") {
+        return { statut: res.status, g: (await res.json().catch(() => ({}))) as GoogleEvent };
+      }
+      await res.body?.cancel().catch(() => {});
+      return { statut: res.status, g: {} };
+    },
+    async lire(idGoogle) {
+      const res = await gcalFetch(sb, `${base}/${encodeURIComponent(idGoogle)}`, { method: "GET" });
+      if (!res.ok) {
+        await res.body?.cancel().catch(() => {});
+        return { statut: res.status, g: null };
+      }
+      return { statut: res.status, g: (await res.json().catch(() => null)) as GoogleEvent | null };
+    },
+    champs: (g) => googleToEvent(g),
+  };
 }
 
 // --- PULL -------------------------------------------------------------------
-
-/** Compare deux ISO à la seconde près (robuste aux normalisations Z/+00:00/µs). */
-function sameInstant(a: string | undefined | null, b: string | undefined | null): boolean {
-  if (!a || !b) return false;
-  return Math.abs(new Date(a).getTime() - new Date(b).getTime()) < 1000;
-}
-
-async function applyGoogleItem(sb: SupabaseClient, g: GoogleEvent): Promise<"pulled" | "deleted" | null> {
-  const { data: existing } = await sb
-    .from("events").select("*").eq("google_event_id", g.id).maybeSingle<EventRow>();
-
-  // Suppression côté Google.
-  if (g.status === "cancelled") {
-    if (!existing || existing.deleted) return null;
-    await sb.from("events").update({
-      deleted: true,
-      deleted_at: new Date().toISOString(),
-      sync_source: "google",
-      last_synced_at: new Date().toISOString(),
-      updated_at: g.updated ?? new Date().toISOString(),
-    }).eq("id", existing.id);
-    return "deleted";
-  }
-
-  const gUpdated = g.updated ?? new Date().toISOString();
-  const fields = googleToEvent(g);
-  const now = new Date().toISOString();
-
-  if (existing) {
-    // Anti-boucle (défense en profondeur) : si l'event revient avec NOTRE dernière
-    // updated_at (notre propre push), on ne réécrit pas les champs.
-    const ourMarker = g.extendedProperties?.private?.ttp_updated;
-    if (existing.sync_source === "agence" && sameInstant(ourMarker, existing.updated_at)) {
-      await sb.from("events")
-        .update({ google_etag: g.etag ?? existing.google_etag, last_synced_at: now })
-        .eq("id", existing.id);
-      return null;
-    }
-
-    // Dernier modifié gagne.
-    if (new Date(gUpdated).getTime() > new Date(existing.updated_at).getTime()) {
-      const { error } = await sb.from("events").update({
-        ...fields,
-        google_etag: g.etag ?? existing.google_etag,
-        sync_source: "google",
-        updated_at: gUpdated,
-        last_synced_at: now,
-        deleted: false,
-        deleted_at: null,
-      }).eq("id", existing.id);
-      if (error) {
-        console.warn("google-sync rendez-vous refusé", g.id, error.message);
-        return null;
-      }
-      return "pulled";
-    }
-    return null; // agence plus récent
-  }
-
-  // Nouvel event Google. upsert onConflict pour éviter un throw si course.
-  const { error } = await sb.from("events").upsert({
-    ...fields,
-    google_event_id: g.id,
-    google_etag: g.etag ?? null,
-    sync_source: "google",
-    updated_at: gUpdated,
-    last_synced_at: now,
-    deleted: false,
-  }, { onConflict: "google_event_id" });
-  if (error) {
-    console.warn("google-sync nouveau rendez-vous refusé", g.id, error.message);
-    return null;
-  }
-  return "pulled";
-}
 
 async function pullFromGoogle(
   ctx: Ctx,
@@ -840,7 +768,9 @@ async function pullFromGoogle(
         items?: GoogleEvent[]; nextPageToken?: string; nextSyncToken?: string;
       };
       for (const item of data.items ?? []) {
-        const applied = await applyGoogleItem(sb, item);
+        // Une lecture ou une écriture ratée en base (etag, suppression) lève une erreur : le passage
+        // s'arrête avant d'enregistrer le nouveau syncToken, et le suivant relit ce changement.
+        const applied = await appliquerLecture(ctx.base, ctx.google, item, new Date().toISOString(), journalSynchro);
         if (applied === "pulled") pulled++;
         else if (applied === "deleted") deleted++;
       }
@@ -855,7 +785,9 @@ async function pullFromGoogle(
 /**
  * Exécute un cycle de sync complet SOUS VERROU (lease). PUSH puis PULL.
  * `mode='full'` force un full pull et réinitialise le syncToken.
- * Renvoie les compteurs, ou { skipped:'locked' } si un sync tourne déjà.
+ * Renvoie le bilan (reçus, envoyés, supprimés, conflits, absents, refus, verrou perdu), ou
+ * { skipped:'locked' } si un sync tourne déjà. Les appelants en écrivent une ligne de
+ * journal par passage (ligneJournal de _shared/synchroAgenda.ts).
  */
 export async function runSyncCycle(
   sb: SupabaseClient,
@@ -877,12 +809,17 @@ export async function runSyncCycle(
       .maybeSingle<{ sync_token: string | null }>();
     const currentSyncToken = mode === "full" ? null : (state?.sync_token ?? null);
 
-    const ctx: Ctx = { sb };
-    const push = await pushLocalChanges(ctx);
+    const ctx: Ctx = { sb, base: baseAgenda(sb), google: googleAgenda(sb) };
+    const bilan = bilanVide();
+    await envoyerVersGoogle(ctx.base, ctx.google, bilan, journalSynchro);
     // Prolonge le lease avant le PULL ; verrou perdu (passage trop long, repris par un
-    // autre) = on s'arrête là plutôt que de synchroniser deux fois en parallèle.
+    // autre) = on s'arrête là plutôt que de synchroniser deux fois en parallèle. Le bilan
+    // dit ce qui est déjà parti (verrouPerdu), au lieu d'un « saute: verrou » trompeur.
     const renewed = await renewLock(sb, lock);
-    if (!renewed) return { skipped: "locked" };
+    if (!renewed) {
+      bilan.verrouPerdu = true;
+      return bilan;
+    }
     lock = renewed;
     const pull = await pullFromGoogle(ctx, currentSyncToken, mode !== "full");
 
@@ -890,12 +827,11 @@ export async function runSyncCycle(
     if (pull.nextSyncToken) stateUpdate.sync_token = pull.nextSyncToken;
     await sb.from("sync_state").update(stateUpdate).eq("id", 1);
 
-    return {
-      pulled: pull.pulled,
-      pushed: push.pushed,
-      deleted: push.deleted + pull.deleted,
-      resynced: pull.resynced,
-    };
+    // L'envoi a déjà compté les rendez-vous relus après un 412.
+    bilan.pulled += pull.pulled;
+    bilan.deleted += pull.deleted;
+    bilan.resynced = pull.resynced;
+    return bilan;
   } finally {
     await releaseLock(sb, lock).catch(() => {});
   }

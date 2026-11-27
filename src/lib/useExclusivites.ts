@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { getAppState, invalidateAppState, listAppStateKey, useAppState, type AppState } from "./appState";
 import { fmtDay } from "./dates";
-import { blockedCreators, readExclusivites, type Exclusivite } from "../../supabase/functions/_shared/exclusivites.ts";
+import { aVerifierCreators, blockedCreators, readExclusivites, type Exclusivite } from "../../supabase/functions/_shared/exclusivites.ts";
 
 /*
  * Exclusivités des créateurs (blob agence, clé `exclusivites`) : lecture partagée par la
@@ -19,10 +19,18 @@ export function useExclusivites(): { list: Exclusivite[]; loading: boolean } {
   return { list: data ?? [], loading };
 }
 
-/** Créateurs bloqués pour cette marque : nom en minuscules → « Exclu Nike · 12 déc. ». */
+/**
+ * Créateurs signalés pour cette marque, pour les listes de choix : nom en minuscules →
+ * « Exclu Nike · 12 déc. » (bloqué : mis en dernier) ou « À vérifier : exclu Nike non
+ * confirmée » (ligne à confirmer, ou exclusivité sans concurrents : signalé, laissé à sa place).
+ */
 export function useBlockedCreators(brand: string | null | undefined): Map<string, string> {
   const { list } = useExclusivites();
-  return useMemo(() => (brand?.trim() ? blockedCreators(list, brand, todayParis(), [], (d) => fmtDay(d)) : new Map<string, string>()), [list, brand]);
+  return useMemo(() => {
+    if (!brand?.trim()) return new Map<string, string>();
+    const today = todayParis();
+    return new Map([...blockedCreators(list, brand, today, [], (d) => fmtDay(d)), ...aVerifierCreators(list, brand, today)]);
+  }, [list, brand]);
 }
 
 /** Ajoute ou remplace des entrées, retire des ids (relecture fraîche, seules ces entrées bougent). */

@@ -3,6 +3,7 @@ import { FileText, Mail, Pencil, Search, ShieldAlert } from "@/components/icons"
 import { Spin } from "@/components/ui/loader";
 import { AddButton, InlineForm, TextField, TextAreaField, DeleteButton } from "@/components/ui/form";
 import { ConfirmDialog } from "@/components/ui/action-menu";
+import { HelpTip } from "@/components/ui/help-tip";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { PhoneMenu } from "@/components/ui/phone-bar";
@@ -18,7 +19,7 @@ import { pdfText } from "@/lib/pdfText";
 import { fileContractDoc } from "@/lib/exclusiviteDoc";
 import { freshExclusivites, saveExclusivites, todayParis, useExclusivites } from "@/lib/useExclusivites";
 import {
-  blockedCreators, daysLeft, excluState, fromAppContract, readContract, type Exclusivite, type ExcluState,
+  alertesExclu, daysLeft, excluState, fromAppContract, phraseDouteuse, readContract, type Exclusivite, type ExcluState,
 } from "../../supabase/functions/_shared/exclusivites.ts";
 import { durationToMonths } from "@/lib/contractDuration";
 
@@ -29,6 +30,8 @@ import { durationToMonths } from "@/lib/contractDuration";
  * une alerte s'affiche au-dessus d'une réponse à une marque concurrente ; Claude le voit
  * aussi (connecteur). Sources : saisie, contrats faits dans l'app (Contrats → Marque ×
  * Créateur), ou contrat PDF lu par l'app (texte extrait dans le navigateur, règles fixes).
+ * Les lignes lues toutes seules dans un contrat reçu par mail sont « à vérifier » (signalées
+ * partout, jamais sûres) jusqu'à ce qu'on les confirme ou les écarte ici.
  * Stockage : blob agence `exclusivites` (src/lib/useExclusivites.ts).
  */
 
@@ -51,6 +54,9 @@ export function Exclusivites() {
   const [formOpen, setFormOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
   const [confirmDel, setConfirmDel] = useState<Exclusivite | null>(null);
+  // Confirmation d'une ligne dont la phrase lue ne dit pas une exclusivité (« non exclusive »…) :
+  // la phrase, puis ce qu'on fait si on confirme quand même.
+  const [doute, setDoute] = useState<{ quote: string; suite: () => void } | null>(null);
   const [reading, setReading] = useState(false);
   const [check, setCheck] = useState("");
   const [showEnded, setShowEnded] = useState(false);
@@ -90,19 +96,32 @@ export function Exclusivites() {
 
   // Exclusivités lues toutes seules dans un contrat reçu par mail : à confirmer.
   const toConfirm = useMemo(() => list.filter((e) => e.pending).sort((a, b) => b.createdAt - a.createdAt), [list]);
-  const confirm = async (e: Exclusivite) => {
+  const confirm = async (e: Exclusivite, sur = false) => {
     if (!e.creator.trim() || !e.brand.trim()) {
-      toast("Précise la créatrice et la marque, puis enregistre");
+      toast("Précise le créateur et la marque, puis enregistre");
       return openEdit(e);
     }
-    if (await persist([{ ...e, pending: false }])) toast(`Exclusivité ${e.brand} confirmée ✓`);
+    // La phrase lue dit le contraire (« licence non exclusive », « exclusivement ») : on le dit avant.
+    if (!sur && e.quote?.trim() && phraseDouteuse(e.quote, e.brand)) return setDoute({ quote: e.quote, suite: () => void confirm(e, true) });
+    if (await persist([{ ...e, pending: false }])) {
+      toast(e.competitors.length ? `Exclusivité ${e.brand} confirmée ✓` : `Exclusivité ${e.brand} confirmée ✓ · sans concurrents, elle sera « à vérifier » pour les autres marques`);
+    }
   };
   const openMail = (m: NonNullable<Exclusivite["mail"]>) => {
     requestIntent("mail:open", JSON.stringify({ thread: m.threadId, box: m.box }));
     window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "mails" }));
   };
 
-  const checkResult = useMemo(() => (check.trim() ? blockedCreators(list, check, today, [], (d) => fmtDay(d)) : null), [check, list, today]);
+  // « Vérifier une marque » : les bloqués, puis ceux à vérifier (ligne pas confirmée, exclusivité sans concurrents).
+  const checkResult = useMemo(() => {
+    if (!check.trim()) return null;
+    const alertes = alertesExclu(list, check.trim(), today);
+    const nom = (e: Exclusivite) => (e.creator.trim() ? titleCase(e.creator) : "Créateur non reconnu");
+    return {
+      bloques: [...new Set(alertes.filter((a) => a.niveau === "bloque").map((a) => `${nom(a.e)} (exclu ${a.e.brand}${a.e.end ? ` · ${fmtDay(a.e.end)}` : ""})`))],
+      aVerifier: [...new Set(alertes.filter((a) => a.niveau === "a_verifier").map((a) => `${nom(a.e)} (exclu ${a.e.brand.trim() || "marque non lue"}${a.pourquoi === "a_confirmer" ? " non confirmée" : ", sans concurrents"})`))],
+    };
+  }, [check, list, today]);
 
   const persist = async (upsert: Exclusivite[], remove: string[] = []) => {
     const ok = await saveExclusivites(upsert, remove);
@@ -127,18 +146,23 @@ export function Exclusivites() {
     setFormOpen(true);
   };
 
-  const submit = async () => {
+  const submit = async (sur = false) => {
     if (!draft.creator.trim() || !draft.brand.trim()) return toast("Renseigne le créateur et la marque");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.start)) return toast("Date de début manquante");
     if (draft.end && draft.end < draft.start) return toast("La fin est avant le début");
     const prev = list.find((e) => e.id === draft.id);
+    // Enregistrer une ligne « à confirmer » la confirme : même garde que le bouton Confirmer.
+    if (!sur && prev?.pending && prev.quote?.trim() && phraseDouteuse(prev.quote, draft.brand)) return setDoute({ quote: prev.quote, suite: () => void submit(true) });
     const row: Exclusivite = {
       id: draft.id ?? uid(), creator: draft.creator.trim(), brand: draft.brand.trim(), scope: draft.scope.trim(),
       competitors: splitList(draft.competitors), start: draft.start, end: draft.end || null, points: draft.points.split("\n").map((p) => p.trim()).filter(Boolean),
       source: draft.source, contractRef: draft.contractRef, docPath: draft.docPath, collabId: prev?.collabId ?? null, createdAt: prev?.createdAt ?? Date.now(),
+      // D'où vient la ligne (phrase lue, mail) : gardé quand on la confirme.
+      ...(prev?.quote ? { quote: prev.quote } : {}),
+      ...(prev?.mail ? { mail: prev.mail } : {}),
     };
     if (await persist([row])) {
-      toast(prev ? "Exclusivité enregistrée ✓" : "Exclusivité suivie ✓");
+      toast(`${prev?.pending ? "Exclusivité confirmée ✓" : prev ? "Exclusivité enregistrée ✓" : "Exclusivité suivie ✓"}${row.competitors.length ? "" : " · sans concurrents, elle sera « à vérifier » pour les autres marques"}`);
       setFormOpen(false);
       // Le contrat PDF rejoint Documents (agence + espace de la créatrice).
       if (!(await fileContractDoc(row))) toast("Le contrat n'a pas pu être rangé dans Documents, réessaie");
@@ -281,14 +305,14 @@ export function Exclusivites() {
         />
       </label>
       {checkResult && (
-        <div className={cn("rounded-[16px] px-4 py-3 text-[13px]", checkResult.size ? "bg-wait-soft text-wait" : "bg-panel text-muted-foreground")}>
-          {checkResult.size
-            ? [...checkResult].map(([n, why]) => `${titleCase(n)} (${why})`).join(", ")
-            : `Aucun créateur en exclusivité contre ${check.trim()}.`}
+        <div className={cn("flex flex-col gap-1 rounded-[16px] px-4 py-3 text-[13px]", checkResult.bloques.length || checkResult.aVerifier.length ? "bg-wait-soft text-wait" : "bg-panel text-muted-foreground")}>
+          {checkResult.bloques.length > 0 && <span>Ne pas proposer : {checkResult.bloques.join(", ")}</span>}
+          {checkResult.aVerifier.length > 0 && <span>À vérifier avant : {checkResult.aVerifier.join(", ")}</span>}
+          {!checkResult.bloques.length && !checkResult.aVerifier.length && <span>Aucun créateur en exclusivité contre {check.trim()}.</span>}
         </div>
       )}
 
-      <InlineForm open={formOpen} title={draft.id ? "Modifier l'exclusivité" : "Nouvelle exclusivité"} onClose={() => setFormOpen(false)} onSubmit={submit} submitLabel={draft.id ? "Enregistrer" : "Suivre"}>
+      <InlineForm open={formOpen} title={draft.id ? "Modifier l'exclusivité" : "Nouvelle exclusivité"} onClose={() => setFormOpen(false)} onSubmit={() => submit()} submitLabel={draft.id ? "Enregistrer" : "Suivre"}>
         {draft.quote && (
           <p className="rounded-[14px] bg-panel px-3.5 py-2.5 text-[12.5px] leading-snug text-muted-foreground sm:basis-full">
             Lu dans le contrat : « {draft.quote} »
@@ -305,13 +329,18 @@ export function Exclusivites() {
 
       {toConfirm.length > 0 && (
         <section className="flex flex-col gap-2.5">
-          <h3 className="px-1 text-[13px] font-semibold text-muted-foreground">À confirmer · {toConfirm.length}</h3>
-          <p className="-mt-1 px-1 text-[12.5px] text-muted-foreground">Lues toutes seules dans des contrats reçus par mail. Elles ne bloquent personne tant que tu ne les confirmes pas.</p>
+          <h3 className="flex items-center gap-1.5 px-1 text-[13px] font-semibold text-muted-foreground">
+            À vérifier · {toConfirm.length}
+            <HelpTip title="À vérifier">
+              <p>Lues toutes seules dans des contrats reçus par mail, jamais confirmées : souvent une erreur de lecture (licence non exclusive, « exclusivement »…).</p>
+              <p>En attendant, l'app et Claude les signalent « à vérifier » avant de proposer le créateur, sans le bloquer. Ouvre le contrat, puis confirme ou écarte.</p>
+            </HelpTip>
+          </h3>
           {toConfirm.map((e) => (
             <div key={e.id} className="flex flex-col gap-3 rounded-2xl border border-dashed border-border bg-surface p-4 sm:p-5">
               <div className="min-w-0">
                 <div className="truncate text-[15px] font-semibold text-foreground">
-                  {e.creator ? titleCase(e.creator) : "Créatrice à préciser"} × {e.brand || "marque à préciser"}
+                  {e.creator ? titleCase(e.creator) : "Créateur à préciser"} × {e.brand || "marque à préciser"}
                 </div>
                 <div className="mt-1 text-[12.5px] text-muted-foreground">
                   {fmtDay(e.start)} → {e.end ? fmtDay(e.end) : "sans fin lue"}{e.scope ? ` · ${e.scope}` : ""}
@@ -383,11 +412,24 @@ export function Exclusivites() {
       {confirmDel && (
         <ConfirmDialog
           title="Retirer cette exclusivité ?"
-          message={`${titleCase(confirmDel.creator)} × ${confirmDel.brand} ne sera plus vérifiée.`}
+          message={`${confirmDel.creator.trim() ? titleCase(confirmDel.creator) : "Créateur à préciser"} × ${confirmDel.brand.trim() || "marque à préciser"} ne sera plus vérifiée.`}
           confirmLabel="Retirer"
           danger
           onConfirm={() => void del(confirmDel)}
           onCancel={() => setConfirmDel(null)}
+        />
+      )}
+      {doute && (
+        <ConfirmDialog
+          title="La phrase lue ne prouve pas l'exclusivité"
+          message={`« ${doute.quote} » : cette phrase ne parle pas d'une exclusivité du créateur (licence non exclusive, « exclusivement » au sens de « seulement »…). Confirme seulement si le contrat en prévoit vraiment une ailleurs.`}
+          confirmLabel="Confirmer"
+          onConfirm={() => {
+            const { suite } = doute;
+            setDoute(null);
+            suite();
+          }}
+          onCancel={() => setDoute(null)}
         />
       )}
     </div>

@@ -251,7 +251,9 @@ Plusieurs audits adversariaux menés (identité et privilège, OWASP). Détail d
     fondateurs : lue et écrite automatiquement par les mêmes fonctions (voir
     `docs/ARCHITECTURE.md`). Côté serveur, lire le blob avec `_shared/appState.ts`.
 - **Événements Agenda** : toute modification depuis l'app repasse par `src/lib/db.ts` (qui
-  pose `sync_source = 'agence'` pour la synchro Google).
+  pose `sync_source = 'agence'` pour la synchro Google, puis la relance quelques secondes
+  après : `synchroAgendaApresEcriture` de `src/lib/googleCalendar.ts`). Une écriture faite
+  ailleurs appelle aussi cette relance, sinon elle attend le passage horaire.
 - **Mises en ligne sans écran d'erreur** :
   - chaque build écrit `version.json` (`vite.config.ts`) ;
   - `src/lib/appUpdate.ts` le surveille ;
@@ -267,7 +269,9 @@ Plusieurs audits adversariaux menés (identité et privilège, OWASP). Détail d
 - **Connecteur Claude** (`supabase/functions/ttp-mcp`) : serveur MCP + OAuth 2.1 (PKCE).
   - Page d'accord : `/connecteur/` (`src/connecteur/main.tsx`).
   - Jetons hachés, révocables dans Paramètres › Assistants IA ; chaque appel est journalisé
-    (`mcp_log`, avec la raison d'un échec dans `error`).
+    (`mcp_log`, avec la raison d'un échec dans `error`). Toutes les connexions de l'agence,
+    leur case « agent » et leur valideur : Paramètres › Connexions Claude (fondateurs, fonctions
+    SQL `connexions_claude` et `connexion_claude_regler`, jamais d'accès direct aux jetons).
   - Outils dans `tools.ts` (pour tous), `admin.ts` (fondateurs), `autonomie.ts` (prospection
     autonome), `envois.ts` (file d'envoi) et `prospection.ts` (séquences), réunis dans le tableau
     `TOOLS` de `tools.ts`. Un outil qui écrit porte `write: true`, ce qui fait demander l'accord
@@ -275,9 +279,11 @@ Plusieurs audits adversariaux menés (identité et privilège, OWASP). Détail d
     (voir **Alfred** ci-dessous).
   - Connexion marquée « agent autonome » (case de la page d'accord, `mcp_grants.agent`, pour
     Alfred) : ses envois et ses actions irréversibles exigent une validation faite dans la
-    page Agents (`ttp-mcp/verrou.ts`, règles `_shared/verrouAgent.ts`). Un nouvel outil qui
-    envoie ou agit sans retour possible s'ajoute à `besoinValidation`. Pas encore activé pour
-    Alfred : l'étape sur l'iMac reste à faire par Marc (`agents/alfred/LISEZ-MOI.md`).
+    page Agents (`ttp-mcp/verrou.ts`, règles `_shared/verrouAgent.ts`), par le valideur de la
+    connexion s'il y en a un (`mcp_grants.valideur`). Chaque proposition garde son compte et sa
+    connexion (`agent.actions.cree_par`, `grant_id`), affichés dans la page Agents. Un nouvel
+    outil qui envoie ou agit sans retour possible s'ajoute à `besoinValidation`. Pas encore
+    activé pour Alfred : l'étape sur l'iMac reste à faire par Marc (`agents/alfred/LISEZ-MOI.md`).
   - Pour un membre, un mail n'est jamais envoyé : brouillon seulement. Les fondateurs ont
     en plus des outils qui envoient vraiment (`envoyer_mail`, `envoyer_brouillon`,
     `envoyer_dm` depuis le 2026-10-28, puis `envoyer_brouillons_valides` et `programmer_envoi` ;
@@ -287,10 +293,13 @@ Plusieurs audits adversariaux menés (identité et privilège, OWASP). Détail d
     `envoyer_brouillons_valides`. La tâche `envoi-file-minute` appelle `ttp-mcp/file-envoi`
     chaque minute : un mail par boîte au plus, en semaine aux heures de bureau, avec un écart et
     un plafond par jour. Juste avant chaque envoi : liste « ne plus contacter »
-    (`ne_plus_contacter`), adresse en erreur, domaine sans serveur mail, premier mail déjà parti
-    à la même société depuis 30 jours, media kit ; la file s'arrête si les rebonds montent. Règles
-    dans `_shared/fileEnvoi.ts`. Un nouvel outil qui envoie de la prospection passe par ces
-    contrôles.
+    (`ne_plus_contacter`), adresse en erreur ou rebond reçu (lu aussi dans `email_activity`, pour
+    les adresses sans fiche contact), domaine sans serveur mail, premier mail déjà parti à la même
+    société depuis 30 jours, media kit, et pour un brouillon programmé par un agent la validation
+    toujours en place (chaque ligne garde sa connexion, `envoi_file.grant_id` : cochée « agent »
+    après la programmation, une ligne sans validation ne part pas) ; la file s'arrête si les
+    rebonds montent. Règles dans `_shared/fileEnvoi.ts`. Un nouvel outil qui envoie de la
+    prospection passe par ces contrôles.
   - **Anti-doublon d'équipe** : `creer_brouillon_mail` refuse un nouveau mail à une personne à
     qui un autre membre de l'équipe a écrit par son propre Claude depuis 15 jours, ou une réponse
     dans un fil où il a répondu depuis 2 jours (lu dans `mcp_log`, `_shared/equipeClaude.ts`) ;

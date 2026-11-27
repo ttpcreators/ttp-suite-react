@@ -19,7 +19,7 @@ import { APP_TIMEZONE, CALENDAR_ID, gcalFetch, triggerSync } from "../_shared/go
 import { fusionInvites, meetEventBody, meetLinkOf, parseMeetRequest } from "../_shared/meetEvent.ts";
 import { doublonPlanning, type Candidat, type PlanEvent } from "../_shared/planningDoublon.ts";
 import { readAppState } from "../_shared/appState.ts";
-import { activeByCreator, conflictsFor, excluLine, excluState, foldName, readExclusivites } from "../_shared/exclusivites.ts";
+import { aVerifierLine, alertesExclu, excluLine, excluState, foldName, memeCreateur, readExclusivites, texteAlerte, trouverCreateur, type Exclusivite } from "../_shared/exclusivites.ts";
 import { CONTACT_TAGS } from "../_shared/contactTags.ts";
 import type { Ctx } from "./oauth.ts";
 import { boxAddress, boxesFor, createDraft, parseMailBox, deleteClaudeDraft, draftRefs, listClaudeDrafts, listSendAs, PARTOUT, attachmentFromThread, markThreadRead, readThread, resolveSender, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
@@ -29,6 +29,7 @@ import { AUTONOMIE_TOOLS } from "./autonomie.ts";
 import { ENVOI_TOOLS, bloquant } from "./envois.ts";
 import { verrouAgent } from "./verrou.ts";
 import { canonique, lireOutil, memeAppel, problemeOutilPropose, texteOutil, type OutilPropose } from "../_shared/verrouAgent.ts";
+import { lireConnexion, origineProposition, type ConnexionClaude } from "../_shared/connexionsClaude.ts";
 import { adressesDe, adressesInvalides } from "./prospection.ts";
 import { addressList, mailHtml, sparkLink } from "../_shared/mcpAdmin.ts";
 import { guessEventKind } from "../_shared/eventKind.ts";
@@ -288,7 +289,7 @@ const rechercher: Tool = {
 const roster: Tool = {
   name: "lister_createurs",
   title: "Roster",
-  description: "Liste les créateurs représentés par l'agence (roster) : niche, plateforme, abonnés, engagement, statut, et ⚠ leurs exclusivités en cours. Filtre facultatif par statut (actif, inactif) ou niche.",
+  description: "Liste les créateurs représentés par l'agence (roster) : niche, plateforme, abonnés, engagement, statut, et ⚠ leurs exclusivités en cours (et celles « à vérifier » : lues toutes seules dans un contrat, jamais confirmées). Filtre facultatif par statut (actif, inactif) ou niche.",
   inputSchema: { type: "object", properties: { statut: { type: "string", enum: ["actif", "inactif", "tous"] }, niche: { type: "string" } }, additionalProperties: false },
   run: async (sb, _c, a) => {
     let q = sb.from("creators").select("name, niche, platform, followers, er, status, ville, handle, instagram, tiktok, ig, tt, yt").order("sort_order");
@@ -299,9 +300,18 @@ const roster: Tool = {
     if (error) return fail("Lecture du roster impossible.");
     const rows = (data as Json[]) ?? [];
     // Exclusivités en cours (page Exclusivités) : à ne jamais oublier avant de proposer quelqu'un.
+    // Lignes « à confirmer » : signalées « à vérifier », jamais comme une exclusivité sûre. Une ligne
+    // écrite au prénom seul compte aussi pour le créateur (memeCreateur).
     const state = await appState(sb).catch(() => ({} as Json));
-    const exclu = activeByCreator(readExclusivites(state.exclusivites), isoDay());
-    const ex = (n: unknown) => (exclu.get(String(n).trim().toLowerCase()) ?? []).map((e) => ` · ⚠ ${excluLine(e)}`).join("");
+    const registre = readExclusivites(state.exclusivites);
+    const jour = isoDay();
+    const ex = (n: unknown) => {
+      const siennes = registre.filter((e) => memeCreateur(e.creator, String(n ?? "")));
+      return [
+        ...siennes.filter((e) => !e.pending && excluState(e, jour) === "en_cours").map((e) => ` · ⚠ ${excluLine(e)}`),
+        ...siennes.filter((e) => e.pending && excluState(e, jour) !== "terminee").map((e) => ` · ⚠ ${aVerifierLine(e)}`),
+      ].join("");
+    };
     const hist = engHistory(state);
     // Anciens créateurs (factures sans fiche roster) : listés pour « inactif » et « tous ».
     let former: string[] = [];
@@ -395,9 +405,17 @@ const ficheCreateur: Tool = {
       `\n## Tâches ouvertes`,
       lines(((td.data as Json[] | null) ?? []).map((t) => `- ${t.text}${t.due ? ` · échéance ${t.due}` : ""}`), "Aucune."),
     ];
-    const exclus = readExclusivites(st.exclusivites)
-      .filter((e) => e.creator.trim().toLowerCase() === name.trim().toLowerCase() && excluState(e, today) !== "terminee");
-    out.push(`\n## Exclusivités (ne pas proposer de concurrent)`, lines(exclus.map((e) => `- ${excluLine(e)}${e.pending ? " · à confirmer (lue dans un contrat reçu par mail)" : ""}${e.points.length ? `\n  Points clés : ${e.points.join(" | ")}` : ""}`), "Aucune."));
+    // Ligne écrite au prénom seul comprise (memeCreateur).
+    const exclus = readExclusivites(st.exclusivites).filter((e) => memeCreateur(e.creator, name) && excluState(e, today) !== "terminee");
+    out.push(`\n## Exclusivités (ne pas proposer de concurrent)`, lines(exclus.filter((e) => !e.pending).map((e) => `- ${excluLine(e)}${e.points.length ? `\n  Points clés : ${e.points.join(" | ")}` : ""}`), "Aucune."));
+    // Lignes « à confirmer » : ni un feu vert ni un refus, à vérifier avant de proposer.
+    const aVerif = exclus.filter((e) => e.pending);
+    if (aVerif.length)
+      out.push(
+        `\n## Exclusivités à vérifier (lues toutes seules dans un contrat, jamais confirmées)`,
+        ...aVerif.map((e) => `- ${aVerifierLine(e)}${e.quote ? `\n  Phrase lue : « ${str(e.quote, 300)} »` : ""}`),
+        `Avant de proposer ${titleCase(name)} à une marque de ce secteur : demander à Marc de confirmer ou d'écarter la ligne (page Exclusivités). Ne pas écarter non plus le créateur sur la seule foi de cette ligne.`,
+      );
     if (ctx.founder) out.push(`\n## Factures`, lines(((inv.data as Json[] | null) ?? []).map((f) => `- ${f.ref} · ${f.party} · ${money(f.amount)} · ${INVOICE_STATUS[invoiceStatus(f, today)] ?? f.status} · échéance ${dueText(f.date)}`), "Aucune."));
     return ok(out.filter(Boolean).join("\n"));
   },
@@ -772,6 +790,33 @@ const contrats: Tool = {
 /** Proposition qu'un agent a lui même déclarée périmée (« PÉRIMÉ … à écarter »). */
 const isStale = (r: Json) => /^\s*p[ée]rim[ée]/i.test(String(r.contexte ?? ""));
 
+/**
+ * Qui a déposé chaque proposition (id → « l'agent autonome de Marc », « Claude de Gianni »…),
+ * d'après son compte et sa connexion (SQL 2026-11-27-verrou-connexions). Rien pour les plus
+ * anciennes ; jamais bloquant : une lecture ratée laisse la liste sans origine.
+ */
+async function originesDe(sb: SupabaseClient, rows: Json[]): Promise<Map<string, string>> {
+  const ids = (k: string) => [...new Set(rows.map((r) => r[k]).filter((x): x is string => typeof x === "string" && estUuid(x)))];
+  const grants = ids("grant_id");
+  if (!grants.length && !ids("cree_par").length) return new Map();
+  const { data: gs } = grants.length ? await sb.from("mcp_grants").select("*").in("id", grants) : { data: [] as Json[] };
+  const lignes = (gs as Json[] | null) ?? [];
+  const comptes = [...new Set([...ids("cree_par"), ...lignes.map((g) => String(g.user_id ?? ""))].filter(estUuid))];
+  const { data: profs } = comptes.length ? await sb.from("profiles").select("user_id, display_name").in("user_id", comptes) : { data: [] as Json[] };
+  const noms = new Map(((profs as Json[] | null) ?? []).map((p) => [String(p.user_id), String(p.display_name ?? "")]));
+  const connexions = new Map<string, ConnexionClaude>();
+  for (const g of lignes) {
+    const c = lireConnexion({ id: g.id, nom: g.client_name, compte: g.user_id, compte_nom: noms.get(String(g.user_id)), cree_le: g.created_at, dernier_usage: g.last_used_at, coupee_le: g.revoked_at, agent: g.agent, valideur: g.valideur });
+    if (c) connexions.set(c.id, c);
+  }
+  const out = new Map<string, string>();
+  for (const r of rows) {
+    const o = origineProposition({ cree_par: r.cree_par as string | null, grant_id: r.grant_id as string | null }, connexions, noms);
+    if (o) out.set(String(r.id), o.texte);
+  }
+  return out;
+}
+
 const aValider: Tool = {
   name: "a_valider",
   title: "File « À valider » des agents",
@@ -799,7 +844,10 @@ const aValider: Tool = {
       const p = lireOutil(r.outil);
       return p ? `\n  Outil à appeler${r.statut === "valide" ? " maintenant" : " après validation"}, exactement : ${p.nom} ${canonique(p.arguments)}` : "";
     };
-    const line = (r: Json) => `- [${r.type}] ${r.cible ?? ""} · ${nameOf(r)} · ${frDay(String(r.cree_le))} [proposition ${r.id}]${r.contexte ? `\n  Contexte : ${String(r.contexte).slice(0, 300)}` : ""}${r.contenu ? `\n  Message : ${String(r.contenu).slice(0, 500)}` : ""}${outilDe(r)}`;
+    // Qui l'a déposée (connexion) : Alfred, le Claude de Gianni et celui de Marc ne se confondent plus.
+    const origines = await originesDe(sb, rows).catch(() => new Map<string, string>());
+    const origineDe = (r: Json) => (origines.get(String(r.id)) ? ` (${origines.get(String(r.id))})` : "");
+    const line = (r: Json) => `- [${r.type}] ${r.cible ?? ""} · ${nameOf(r)}${origineDe(r)} · ${frDay(String(r.cree_le))} [proposition ${r.id}]${r.contexte ? `\n  Contexte : ${String(r.contexte).slice(0, 300)}` : ""}${r.contenu ? `\n  Message : ${String(r.contenu).slice(0, 500)}` : ""}${outilDe(r)}`;
     // Les corrections de Marc (journal `marc_modifie`, écrit par la page Agents quand il modifie
     // un texte avant de le valider) : l'agent les relit pour apprendre.
     let modifs = "";
@@ -827,7 +875,7 @@ const aValider: Tool = {
 const ecarterProposition: Tool = {
   name: "ecarter_proposition",
   title: "Écarter une proposition d'agent",
-  description: "Retire une proposition de la file « À valider » : statut « ecarte » (périmée, remplacée, refusée) ou « envoye » (c'est parti : sur le oui de Marc, ou déjà fait ailleurs). La liste de l'app et celle de Telegram restent ainsi la même. Donner l'id (a_valider).",
+  description: "Retire une proposition de la file « À valider » : statut « ecarte » (périmée, remplacée, refusée) ou « envoye » (c'est parti : sur le oui de Marc, ou déjà fait ailleurs). Un mail validé puis mis dans la file d'envoi (programmer_envoi) se marque « envoye » : « ecarte » annule son envoi. La liste de l'app et celle de Telegram restent ainsi la même. Donner l'id (a_valider).",
   inputSchema: { type: "object", properties: { proposition: { type: "string", description: "Id de la proposition" }, statut: { type: "string", enum: ["ecarte", "envoye"], description: "ecarte (défaut) ou envoye" } }, required: ["proposition"], additionalProperties: false },
   write: true,
   founder: true,
@@ -853,20 +901,36 @@ const ecarterProposition: Tool = {
 const verifierExclusivite: Tool = {
   name: "verifier_exclusivite",
   title: "Vérifier une exclusivité",
-  description: "À appeler AVANT de proposer un créateur à une marque (prospection, réponse à un mail ou à un DM) : liste les créateurs du roster en exclusivité avec un concurrent de cette marque (en cours ou à venir), qu'il ne faut pas proposer. Avec « createur », dit si CE créateur peut travailler avec la marque.",
-  inputSchema: { type: "object", properties: { marque: { type: "string", description: "Marque à qui on veut proposer quelqu'un" }, createur: { type: "string", description: "Créateur envisagé (facultatif)" } }, required: ["marque"], additionalProperties: false },
+  description:
+    "À appeler AVANT de proposer un créateur à une marque (prospection, réponse à un mail ou à un DM). Parties : « À ne pas proposer » (exclusivité confirmée, en cours ou à venir, qui cite la marque parmi les concurrents ou dont la catégorie se lit dans son nom) ; « À vérifier » (exclusivité lue toute seule dans un contrat et jamais confirmée, ou confirmée sans liste de concurrents : ni un feu vert ni un refus, demander à Marc avant de proposer) ; « Catégories à comparer » (exclusivités confirmées dont la liste de concurrents n'est pas forcément complète : si la marque est de la même catégorie, c'est un conflit) ; puis les engagements en cours (collabs, briefs, contrats en PDF). Avec « createur » (nom complet, prénom seul ou sans accents, comme dans le roster), dit si CE créateur peut travailler avec la marque.",
+  inputSchema: { type: "object", properties: { marque: { type: "string", description: "Marque à qui on veut proposer quelqu'un" }, createur: { type: "string", description: "Créateur envisagé (facultatif) : nom du roster, prénom seul accepté s'il est unique" } }, required: ["marque"], additionalProperties: false },
   run: async (sb, _c, a) => {
     const brand = str(a.marque, 80);
     if (!brand) return fail("Donne la marque.");
     const list = readExclusivites((await appState(sb)).exclusivites);
     const today = isoDay();
-    const who = str(a.createur, 80);
-    // Secteurs de la marque (étiquette de sa fiche contact) : une exclusivité « même catégorie »
-    // la bloque aussi, même si elle n'est pas citée parmi les concurrents.
+    // Créateur demandé → sa fiche du roster (prénom seul, autre casse, sans accents), comme creer_tache.
+    // Avant : « Zoé » ou « Zoe » ne retrouvait pas l'exclusivité de « ZOÉ X » (réponse « aucune »).
+    const saisie = str(a.createur, 80);
+    let who = "";
+    if (saisie) {
+      const { data: cr, error: eR } = await sb.from("creators").select("name");
+      if (eR) return fail(`Lecture du roster impossible : ${eR.message}`);
+      const noms = ((cr as Json[] | null) ?? []).map((c) => String(c.name ?? "")).filter(Boolean);
+      let t = trouverCreateur(noms, saisie);
+      if ("aucun" in t) t = trouverCreateur(list.map((e) => e.creator), saisie); // ancien créateur encore au registre
+      if ("plusieurs" in t) return fail(`Plusieurs créateurs correspondent à « ${saisie} » : ${t.plusieurs.map((n) => titleCase(n)).join(", ")}. Donne le nom complet : rien n'est vérifié.`);
+      if ("aucun" in t) return fail(`Aucun créateur du roster ne correspond à « ${saisie} ». Donne son nom complet (lister_createurs) : rien n'est vérifié.`);
+      who = t.nom;
+    }
+    // Secteurs de la marque (fiche contact). Aujourd'hui l'étiquette dit un type (Marque, Agence…),
+    // jamais un secteur : alertesExclu l'ignore alors, et la catégorie se compare au nom de la marque.
     const { data: tags } = await sb.from("contacts").select("tag").ilike("brand", exact(brand)).not("tag", "is", null).limit(20);
     const brandTags = [...new Set(((tags as Json[] | null) ?? []).map((r) => String(r.tag ?? "").trim()).filter(Boolean))];
-    const names = who ? [who] : [...new Set(list.map((e) => e.creator))];
-    const hits = names.flatMap((n) => conflictsFor(list, n, brand, today, brandTags));
+    const alertes = alertesExclu(list, brand, today, { creator: who || null, brandTags, categories: true });
+    const bloque = alertes.filter((x) => x.niveau === "bloque");
+    const aVerif = alertes.filter((x) => x.niveau === "a_verifier" && x.pourquoi !== "categorie");
+    const aComparer = alertes.filter((x) => x.pourquoi === "categorie");
     // Engagements en cours (collabs, briefs) : un contrat signé n'est pas toujours saisi en
     // exclusivité. On les montre pour juger soi-même si la marque en est concurrente.
     const [{ data: col }, { data: br }, { data: docs }] = await Promise.all([
@@ -882,10 +946,27 @@ const verifierExclusivite: Tool = {
       ...((br as Json[] | null) ?? []).filter((r) => r.creator).map((r) => `- ${titleCase(String(r.creator))} · brief ${r.brand}${r.due ? ` (échéance ${r.due})` : ""}`),
       ...((docs as Json[] | null) ?? []).filter((r) => r.creator).map((r) => `- ${titleCase(String(r.creator))} · ${r.type} en PDF « ${r.name} » (déposé le ${String(r.created_at).slice(0, 10)}, à lire avec lire_brief : il peut lister des concurrents interdits)`),
     ];
+    const qui = (e: Exclusivite) => (e.creator.trim() ? titleCase(e.creator) : "Créateur non reconnu");
     const out: string[] = [];
+    if (who && foldName(who) !== foldName(saisie)) out.push(`Créateur vérifié : ${titleCase(who)}.`);
     if (!list.length) out.push("⚠ Aucune exclusivité n'est enregistrée dans TTP Suite (page Exclusivités) : ce contrôle ne garantit rien. Vérifie les contrats et briefs en cours ci-dessous avant de proposer quelqu'un, et demande à l'équipe en cas de doute.");
-    if (hits.length) out.push(`# À ne pas proposer à ${brand}`, ...hits.map((e) => `- ${titleCase(e.creator)} : ${excluLine(e)}`));
-    else if (list.length) out.push(who ? `${titleCase(who)} n'a aucune exclusivité enregistrée qui bloque ${brand}.` : `Aucun créateur n'a d'exclusivité enregistrée contre ${brand}.`);
+    if (bloque.length) out.push(`# À ne pas proposer à ${brand}`, ...bloque.map((x) => `- ${qui(x.e)} : ${texteAlerte(x, brand)}`));
+    if (aVerif.length)
+      out.push(
+        `${bloque.length ? "\n" : ""}# À vérifier avant de proposer quelqu'un à ${brand}`,
+        "Ni un feu vert ni un refus : demande à Marc (ou regarde la page Exclusivités) avant de préparer quoi que ce soit pour ce créateur.",
+        ...aVerif.map((x) => `- ${qui(x.e)} : ${texteAlerte(x, brand)} [exclu ${x.e.id}]`),
+      );
+    if (aComparer.length)
+      out.push(
+        `${out.length ? "\n" : ""}## Catégories à comparer avec ${brand}`,
+        `Exclusivités confirmées dont la liste de concurrents n'est pas forcément complète : si ${brand} est de la même catégorie, c'est un conflit (en cas de doute, demande à Marc).`,
+        ...aComparer.map((x) => `- ${qui(x.e)} : ${texteAlerte(x, brand)}`),
+      );
+    if (!bloque.length && list.length) {
+      if (aVerif.length) out.push(`\nAucune exclusivité confirmée ne cite ${brand}, mais la partie « À vérifier » passe avant toute proposition.`);
+      else out.push(`${out.length ? "\n" : ""}${who ? `${titleCase(who)} n'a aucune exclusivité enregistrée qui bloque ${brand}` : `Aucun créateur n'a d'exclusivité enregistrée contre ${brand}`}${aComparer.length ? " (compare quand même les catégories ci-dessus)" : ""}.`);
+    }
     if (engaged.length) out.push(`\n## Engagements en cours (vérifie que ${brand} n'est pas concurrent de ces marques)`, ...engaged);
     return ok(out.join("\n"));
   },
@@ -1867,10 +1948,11 @@ const brouillonMail: Tool = {
     const cci = addressList(str(a.cci, 500));
     if (!cci) return fail("Adresse en copie cachée (cci) invalide.");
     const fil = str(a.fil, 40);
-    // Liste « ne plus contacter » (refus, demande d'arrêt, rebond) : pas de nouveau mail. Une
-    // réponse dans un fil existant reste possible.
+    // Liste « ne plus contacter » (refus, demande d'arrêt, rebond), adresse en erreur ou rebond :
+    // pas de nouveau mail. Une réponse dans un fil existant passe seulement pour les raisons de
+    // REGLES.reponseMalgreListe (_shared/fileEnvoi.ts : aucune tant que Marc n'a pas choisi).
     const npc = await bloquant(sb, adressesDe(to), !!fil);
-    if (npc) return fail(`Brouillon non créé : ${npc}. Si c'est une erreur : ne_plus_contacter (action retirer).`);
+    if (npc) return fail(`Brouillon non créé : ${npc}.${/ne plus contacter/.test(npc) ? " Si c'est une erreur : ne_plus_contacter (action retirer)." : ""}`);
     // Pas de doublon dans l'équipe (demande de Marc, 25 novembre 2026) : un autre membre (Gianni par
     // son Claude, ou Marc) a déjà écrit à ce destinataire depuis 15 jours, ou répondu dans ce fil
     // depuis 2 jours. Refus, sauf `forcer` sur la demande de Marc.
@@ -2381,6 +2463,9 @@ const lireAgent: Tool = {
 /** Lien d'une proposition « avancer la collab » : la collab et l'étape, lus par l'app (src/lib/aValider.ts). */
 const lienAvance = (collab: string, etape: number) => `https://app.ttpcreators.pro/?open=view&view=collabs&item=${collab}&avancer=1&etape=${etape}`;
 const ACTION_TYPES = ["whatsapp", "instagram", "linkedin", "brouillon_mail", "alerte", "avancer_collab"];
+/** Colonnes agent.actions.cree_par et grant_id absentes (SQL 2026-11-27-verrou-connexions pas encore lancé). */
+const origineAbsente = (e: { code?: string; message?: string }) =>
+  /cree_par|grant_id/.test(e.message ?? "") && (e.code === "42703" || e.code === "PGRST204" || /column/i.test(e.message ?? ""));
 
 const proposerAction: Tool = {
   name: "proposer_action",
@@ -2410,7 +2495,7 @@ const proposerAction: Tool = {
     required: ["agent", "type", "contenu"],
     additionalProperties: false,
   },
-  run: async (sb, _c, a) => {
+  run: async (sb, ctx, a) => {
     const ag = await findAgent(sb, str(a.agent, 80));
     let type = ACTION_TYPES.includes(str(a.type)) ? str(a.type) : "alerte";
     let lien = /^https?:\/\//i.test(str(a.lien, 500)) ? str(a.lien, 500) : null;
@@ -2452,8 +2537,16 @@ const proposerAction: Tool = {
       lien = null; // jamais lu comme une autre action (avancer une collab) par la page Agents
       contenu = texteOutil(p, vise.title, str(a.contenu, 2000));
     }
-    const row = { type, cible, contexte, contenu, lien_spark: lien, statut: "a_valider", agent_id: ag?.id ?? null, ...(outil ? { outil } : {}) };
+    // Qui propose : le compte et la connexion du jeton (SQL 2026-11-27-verrou-connexions), pour
+    // distinguer dans la page Agents Alfred, le Claude de Gianni et celui de Marc. Avant ce SQL,
+    // la proposition est déposée sans eux.
+    const origine = { cree_par: ctx.userId, grant_id: ctx.grantId };
+    let row: Record<string, unknown> = { type, cible, contexte, contenu, lien_spark: lien, statut: "a_valider", agent_id: ag?.id ?? null, ...(outil ? { outil } : {}), ...origine };
     let { data, error } = await sb.schema("agent").from("actions").insert(row).select("id").single();
+    if (error && origineAbsente(error)) {
+      row = Object.fromEntries(Object.entries(row).filter(([k]) => !(k in origine)));
+      ({ data, error } = await sb.schema("agent").from("actions").insert(row).select("id").single());
+    }
     if (error && outil && (error.code === "42703" || error.code === "PGRST204" || /outil/i.test(error.message))) {
       return fail("Proposition non déposée : l'appel d'outil à valider demande le SQL 2026-11-27-securite-alfred, pas encore lancé. Dépose une alerte simple pour que Marc le fasse lui même.");
     }
@@ -3405,7 +3498,7 @@ export async function callTool(sb: SupabaseClient, ctx: Ctx, name: string, args:
     if (!v.ok) res = fail(v.texte);
     else {
       apres = v.apres;
-      res = await t.run(sb, v.validations ? { ...ctx, validations: v.validations } : ctx, args ?? {});
+      res = await t.run(sb, v.validations ? { ...ctx, validations: v.validations, propositions: v.propositions } : ctx, args ?? {});
     }
   } catch (e) {
     res = fail(`Erreur : ${(e as Error).message}`);

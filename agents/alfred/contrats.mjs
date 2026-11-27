@@ -1449,6 +1449,12 @@ function includeOk(token, c) {
 		default: return is(c, token);
 	}
 }
+/**
+* Le contrat est-il réglé « Contrat test » (mention dans le titre) ? Réglage par défaut de la
+* formule exclusive (contrat d'essai). Un contrat signé se réimprime tel que réglé, mention
+* comprise : la page Contrats prévient seulement avant de le marquer signé.
+*/
+const estContratTest = (config) => !!config && is(config, "contratTest");
 /** Assemble le contrat de représentation pour une configuration donnée. */
 function buildRepresentation(config) {
 	const variante = config.variante === "nonexclusif" ? "nonexclusif" : "exclusif";
@@ -1468,7 +1474,7 @@ function buildRepresentation(config) {
 		};
 	});
 	const titleBits = [v.title];
-	if (is(config, "contratTest")) titleBits.push("CONTRAT TEST");
+	if (estContratTest(config)) titleBits.push("CONTRAT TEST");
 	return {
 		title: titleBits.join(" — "),
 		subtitle: (config.titrePersonnalise || "").trim(),

@@ -2,12 +2,17 @@
 // gmail-poll/exclu.ts : contrats PDF reçus par mail → exclusivités à confirmer.
 // ----------------------------------------------------------------------------
 // Pour chaque nouveau mail venu de l'extérieur : les pièces jointes PDF qui ressemblent
-// à un contrat (nom du fichier ou objet du mail, _shared/exclusivites.ts) sont lues
-// (texte du PDF, puis règles fixes `readContract`, sans IA). Si le contrat a une clause
-// d'exclusivité : le PDF est rangé dans Documents (contrats/), une exclusivité « à
-// confirmer » est ajoutée à la page Exclusivités (elle ne bloque personne tant que
-// l'agence ne l'a pas confirmée) et une tâche « Vérifier l'exclu » est créée.
-// Dédoublonnage : clé mail + fichier dans le blob (`excluMailKeys`, 180 jours).
+// à un contrat (nom du fichier ou objet du mail, _shared/exclusivites.ts ; jamais un modèle
+// vierge) sont lues (texte du PDF, puis règles fixes `readContract`, sans IA, qui écartent
+// les phrases qui disent le contraire : « non exclusive », « exclusivement »…). Si le contrat
+// a une clause d'exclusivité : le PDF est rangé dans Documents (contrats/), une exclusivité
+// « à confirmer » est ajoutée à la page Exclusivités (signalée « à vérifier » partout, elle ne
+// bloque personne tant que l'agence ne l'a pas confirmée) et une tâche « Vérifier l'exclu ».
+// Dédoublonnage : clé mail + fichier dans le blob (`excluMailKeys`, 180 jours), et un nouveau
+// message du même fil met à jour la ligne « à confirmer » de la même affaire (`memeAffaire`,
+// `ligneDeProposition`) au lieu d'en ajouter une (et une tâche) de plus. Le registre est relu
+// juste avant chaque écriture : une ligne confirmée ou modifiée dans la page pendant le passage
+// (téléchargement et lecture des PDF compris) n'est jamais remise « à confirmer ».
 // Réglage : `notifPrefs.mailExclu === false` coupe tout.
 // ============================================================================
 
@@ -15,7 +20,8 @@ import type { getServiceClient } from "../_shared/google.ts";
 import { gfetch } from "../_shared/gfetch.ts";
 import { creatorsForMail, type CreatorMailSetting } from "../_shared/mailNotif.ts";
 import { brandFromEmail } from "../_shared/mailTasks.ts";
-import { looksLikeContract, proposalFromMail, readContract } from "../_shared/exclusivites.ts";
+import { readAppState } from "../_shared/appState.ts";
+import { ligneDeProposition, looksLikeContract, proposalFromMail, readContract, readExclusivites } from "../_shared/exclusivites.ts";
 import type { TaskMail } from "./tasks.ts";
 import { couper, texteSur } from "../_shared/texteSur.ts";
 
@@ -81,6 +87,8 @@ export async function excluFromMails(
     if (read >= MAX_PDFS) break;
     const token = tokens[m.box];
     if (!token) continue;
+    // Lignes écrites pour ce message : deux PDF d'un même message sont deux contrats, jamais fusionnés.
+    const ceMessage = new Set<string>();
     const r = await gfetch(`${GMAIL}/messages/${encodeURIComponent(m.id)}?format=full&fields=payload(filename,mimeType,body(attachmentId,size),parts(filename,mimeType,body(attachmentId,size),parts(filename,mimeType,body(attachmentId,size))))`, {
       headers: { Authorization: `Bearer ${token}` },
     }).catch(() => null);
@@ -134,13 +142,19 @@ export async function excluFromMails(
         mail: { threadId: m.threadId, box: m.box, subject: m.subject },
       });
       if (!proposal) continue;
-      const row = { ...proposal, id: crypto.randomUUID(), createdAt: Date.now() };
+      // Même fil, même affaire : la ligne « à confirmer » (et sa tâche) existe déjà, on la met à jour.
+      // Registre relu ici, pas celui du début du passage : une ligne confirmée ou modifiée entre-temps
+      // n'est plus « à confirmer », elle reste telle quelle (nouvelle ligne). Lecture ratée : nouvelle ligne.
+      const frais = await readAppState(sb).then((b) => readExclusivites(b.exclusivites)).catch(() => null);
+      const { row, nouvelle } = ligneDeProposition(frais, proposal, { id: () => crypto.randomUUID(), now: Date.now(), exclus: ceMessage });
       const { error } = await sb.rpc("app_state_list", { p_key: "exclusivites", p_upsert: [row], p_remove: [] });
       if (error) {
         console.error("gmail-poll exclu", error.message);
         continue;
       }
+      ceMessage.add(row.id);
       made++;
+      if (!nouvelle) continue;
 
       const who = [firstName(proposal.creator), proposal.brand].filter(Boolean).join(" × ") || name;
       await sb.from("todos").insert({

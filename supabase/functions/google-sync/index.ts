@@ -10,7 +10,24 @@
 //   rejetés par la plateforme avant d'atteindre ce code.
 //
 // La logique de sync vit dans _shared/google.ts (runSyncCycle) — source unique.
-// Sortie : { ok, pulled, pushed, deleted, resynced } ou { ok:true, skipped:'locked' }.
+// Sortie : { ok, pulled, pushed, deleted, resynced, conflits, absents, refus,
+// statutsRefus, verrouPerdu? } ou { ok:true, skipped:'locked' }.
+//
+// JOURNAL : une ligne par passage, `google-sync {…}` : déclencheur, accès (« secret »
+// des crons ou « compte » agence), mode, envoyés, reçus, supprimés, durée, ou l'erreur.
+// Le déclencheur est une ÉTIQUETTE choisie par l'appelant, pas une preuve de l'origine :
+//   - « cron » : la tâche horaire de la minute 17 (google-sync-hourly), mais aussi le
+//     connecteur (ttp-mcp : creer_evenement, cocher_tache, creer_element,
+//     modifier_element, supprimer_element) ;
+//   - « webhook » : rdv, meet-invite et le connecteur (creer_meet, inviter_rdv). Jamais
+//     un avis de Google : ceux-là sont dans le journal de google-webhook ;
+//   - « manual » : le bouton « Synchroniser » de l'app ; « app » : la relance
+//     automatique de l'app après un enregistrement de rendez-vous (googleCalendar.ts) ;
+//   - « renew » n'arrive pas ici : google-watch-renew et google-oauth-callback lancent
+//     leur passage elles-mêmes et l'écrivent dans leur propre journal.
+// Des étiquettes distinctes (rdv, meet, connecteur) demanderaient de redéployer rdv,
+// meet-invite et ttp-mcp : à faire plus tard. Le cron horaire reste indispensable :
+// Google n'envoie pas toujours d'avis.
 // ============================================================================
 
 import {
@@ -20,6 +37,7 @@ import {
   runSyncCycle,
   timingSafeEqualStr,
 } from "../_shared/google.ts";
+import { declencheurSync, ligneErreur, ligneJournal } from "../_shared/synchroAgenda.ts";
 
 /** Vérifie que l'appelant est l'agence (JWT valide + rôle 'agency') OU le cron. */
 async function authorize(req: Request): Promise<{ ok: boolean; via?: "cron" | "agency" }> {
@@ -74,10 +92,17 @@ Deno.serve(async (req: Request) => {
     body = {};
   }
   const mode = body.mode === "full" ? "full" : "incremental";
+  const contexte = {
+    declencheur: declencheurSync(body.trigger, auth.via),
+    acces: auth.via === "cron" ? "secret" : "compte",
+    mode,
+  };
+  const t0 = Date.now();
 
   const sb = getServiceClient();
   try {
     const result = await runSyncCycle(sb, mode);
+    console.log("google-sync", JSON.stringify(ligneJournal(contexte, result, Date.now() - t0)));
     if ("skipped" in result) {
       return new Response(JSON.stringify({ ok: true, skipped: result.skipped }), {
         status: 200, headers: { ...cors, "Content-Type": "application/json" },
@@ -87,6 +112,7 @@ Deno.serve(async (req: Request) => {
       status: 200, headers: { ...cors, "Content-Type": "application/json" },
     });
   } catch (e) {
+    console.error("google-sync", JSON.stringify(ligneErreur(contexte, e, Date.now() - t0)));
     const msg = String((e as Error).message ?? e);
     // not_connected / invalid_grant : reconnexion requise -> 409.
     const status = msg === "not_connected" || msg === "invalid_grant" ? 409 : 500;
