@@ -436,7 +436,7 @@ create policy ig_radar_agency_read on public.ig_radar for select to authenticate
 drop policy if exists ig_radar_agency_update on public.ig_radar;
 create policy ig_radar_agency_update on public.ig_radar for update to authenticated
   using (public.is_agency()) with check (public.is_agency());
--- Marques chaudes du radar (sql/2026-11-25-radar-marques-chaudes.sql) : lues par le connecteur.
+-- Marques chaudes du radar (sql/2026-11-25-radar-marques-chaudes.sql, rendue rapide par sql/2026-11-27-marques-chaudes-rapide.sql) : lues par le connecteur.
 create or replace function public.radar_marques_chaudes(p_jours int default 30, p_limite int default 50)
 returns table (marque text, payes int, createurs text[], roster text[], dernier timestamptz)
 language sql
@@ -444,13 +444,25 @@ stable
 security invoker
 set search_path = public
 as $$
-  with p as (
-    select r.brand, e
+  -- Rapide (2026-11-27) : le carnet est normalisé une seule fois (cles), et les marques
+  -- confirmées, hors carnet, sont choisies AVANT de déplier leurs posts.
+  with cles as materialized (
+    select regexp_replace(regexp_replace(lower(coalesce(c.instagram, '')), '^(https?://(www\.)?instagram\.com/|@)', ''), '[/?#].*$', '') as k
+    from public.contacts c
+    union
+    select lower(replace(coalesce(c.brand, ''), ' ', '')) from public.contacts c
+  ), marques as (
+    select r.brand, r.posts
     from public.ig_radar r
-    cross join lateral jsonb_array_elements(coalesce(r.posts, '[]'::jsonb)) e
+    join public.ig_profiles ip on ip.username = r.brand and (ip.data->>'isBrand') = 'true'
     where r.status = 'nouveau'
       and r.last_seen > now() - make_interval(days => greatest(least(p_jours, 90), 1))
-      and jsonb_typeof(e) = 'object'
+      and not exists (select 1 from cles where cles.k = r.brand)
+  ), p as (
+    select m.brand, e
+    from marques m
+    cross join lateral jsonb_array_elements(coalesce(m.posts, '[]'::jsonb)) e
+    where jsonb_typeof(e) = 'object'
       and (e->>'paid') = 'true'
       -- CASE : la conversion n'est tentée que sur une date bien formée (ordre garanti).
       and (case when (e->>'at') ~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}' then (e->>'at')::timestamptz end)
@@ -466,12 +478,6 @@ as $$
   )
   select a.brand, a.payes, coalesce(a.createurs, '{}'), coalesce(a.roster, '{}'), a.dernier
   from agg a
-  join public.ig_profiles ip on ip.username = a.brand and (ip.data->>'isBrand') = 'true'
-  where not exists (
-    select 1 from public.contacts c
-    where regexp_replace(regexp_replace(lower(coalesce(c.instagram, '')), '^(https?://(www\.)?instagram\.com/|@)', ''), '[/?#].*$', '') = a.brand
-       or lower(replace(coalesce(c.brand, ''), ' ', '')) = a.brand
-  )
   order by cardinality(coalesce(a.createurs, '{}')) desc, a.payes desc, a.dernier desc
   limit greatest(least(p_limite, 200), 1);
 $$;
