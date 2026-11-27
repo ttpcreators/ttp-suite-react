@@ -5,17 +5,18 @@
 // (CORS : ttpcreators.pro seulement) → contact « Lead site » du carnet (ou touche ajoutée
 // au contact existant), tâche de tri pour Gianni, push générique à l'agence.
 // Renvoie { ok, roster } : le site affiche tout de suite le lien du deck agence.
-// « Rejoindre l'agence » : POST { type: "createur", nom, email, compte, niche?, message?, site? }
-// → profil au scouting créateurs (creator_pool, ou note ajoutée au profil du même compte),
-// tâche de tri, push générique. Renvoie { ok }. Une ancienne version déployée répond 400
-// (« marque » manquante) : le site ouvre alors un e-mail pré-rempli à la place.
+// « Rejoindre l'agence » : POST { type: "createur", nom, email, compte, reseau?, niche?, message?, site? }
+// → tâche de tri (écrite d'abord : c'est elle que compte le plafond), puis profil au scouting
+// créateurs (creator_pool, ou une ligne ajoutée à la note du profil du même compte, sans jamais
+// couper la note de l'agence), push générique. Renvoie { ok }. Une ancienne version déployée
+// répond 400 (« marque » manquante) : le site propose alors un e-mail pré-rempli.
 // AUTH : verify_jwt = false (site public). Garde-fous : piège à robots, 30 demandes par
 // heure au plus, aucun texte du visiteur dans la notification. Règles : _shared/siteLead.ts.
 // ============================================================================
 
 import { getServiceClient } from "../_shared/google.ts";
 import { makePayload, pushReady, sendTo } from "../_shared/push.ts";
-import { CANDIDATURE_TACHE, LEADS_PAR_HEURE, LEAD_ORIGINS, LEAD_TAG, ROSTER_URL, ilikeExact, ligneScouting, lireCandidature, lireLead, noteCandidature, tacheCandidature, tacheLead, toucheLead } from "../_shared/siteLead.ts";
+import { CANDIDATURE_TACHE, LEADS_PAR_HEURE, LEAD_ORIGINS, LEAD_TAG, ROSTER_URL, compteNettoye, ilikeExact, jourParis, ligneCandidature, ligneScouting, lireCandidature, lireLead, noteFusionnee, tacheCandidature, tacheLead, toucheLead } from "../_shared/siteLead.ts";
 
 type Json = (b: unknown, status?: number) => Response;
 
@@ -28,32 +29,40 @@ async function candidature(body: unknown, json: Json): Promise<Response> {
 
   const sb = getServiceClient();
   const now = new Date();
-  // Plafond compté sur les tâches « Candidature site : … », créées à CHAQUE candidature.
+  // La tâche d'abord, puis le plafond compté en l'incluant : des demandes simultanées ne passent pas
+  // toutes (une tâche en trop est retirée aussitôt).
+  const reseau = cand.reseau === "tiktok" ? "TikTok" : "Instagram";
+  const descr = `${cand.email}\n${cand.compte} (${reseau})${cand.niche ? ` · ${cand.niche}` : ""}${cand.message ? `\n${cand.message}` : ""}`;
+  const { data: tache, error: eT } = await sb.from("todos").insert({ text: tacheCandidature(cand), descr, priority: "moyenne", due: jourParis(now), done: false }).select("id").single<{ id: string }>();
+  if (eT || !tache) return json({ error: "indisponible" }, 503);
+  const retirer = () => sb.from("todos").delete().eq("id", tache.id).then(() => {}, () => {});
   const { count } = await sb.from("todos").select("id", { count: "exact", head: true }).like("text", `${CANDIDATURE_TACHE}%`).gte("created_at", new Date(now.getTime() - 3600_000).toISOString());
-  if ((count ?? 0) >= LEADS_PAR_HEURE) return json({ error: "trop" }, 429);
-
-  // Même compte déjà au scouting (enregistré avec ou sans @) : on complète sa note.
-  const h = cand.compte.slice(1);
-  let ex: { id: string; note: string | null } | undefined;
-  for (const v of [h, `@${h}`]) {
-    const { data } = await sb.from("creator_pool").select("id, note").ilike("handle", ilikeExact(v)).limit(1);
-    ex = (data as { id: string; note: string | null }[] | null)?.[0];
-    if (ex) break;
+  if ((count ?? 0) > LEADS_PAR_HEURE) {
+    await retirer();
+    return json({ error: "trop" }, 429);
   }
+
+  // Même compte déjà au scouting (@compte, compte ou lien Instagram / TikTok, quelle que soit la casse) :
+  // une ligne courte est ajoutée à sa note, sans jamais couper ce que l'agence y a écrit.
+  const h = cand.compte.slice(1).toLowerCase();
+  const { data: proches } = await sb.from("creator_pool").select("id, note, handle").ilike("handle", `*${ilikeExact(h)}*`).limit(20);
+  const ex = ((proches as { id: string; note: string | null; handle: string | null }[] | null) ?? []).find((r) => compteNettoye(r.handle) === h);
   if (ex) {
-    const { error } = await sb.from("creator_pool").update({ note: [ex.note, noteCandidature(cand, now)].filter(Boolean).join("\n").slice(-2000) }).eq("id", ex.id);
-    if (error) return json({ error: "indisponible" }, 503);
+    const { error } = await sb.from("creator_pool").update({ note: noteFusionnee(ex.note, ligneCandidature(cand, now)) }).eq("id", ex.id);
+    if (error) {
+      await retirer();
+      return json({ error: "indisponible" }, 503);
+    }
   } else {
     const { data: top } = await sb.from("creator_pool").select("sort_order").order("sort_order", { ascending: false }).limit(1);
     const rang = ((top as { sort_order: number | null }[] | null)?.[0]?.sort_order ?? 0) + 1;
     const { error } = await sb.from("creator_pool").insert({ ...ligneScouting(cand, now), sort_order: rang });
     if (error) {
       console.error("site-lead candidature", error.message);
+      await retirer();
       return json({ error: "indisponible" }, 503);
     }
   }
-  const descr = `${cand.email}\n${cand.compte}${cand.niche ? ` · ${cand.niche}` : ""}${cand.message ? `\n${cand.message}` : ""}`;
-  await sb.from("todos").insert({ text: tacheCandidature(cand), descr, priority: "moyenne", due: now.toISOString().slice(0, 10), done: false }).then(() => {}, () => {});
   if (pushReady()) {
     await sendTo(sb, { agency: true }, makePayload({ kind: "team", title: "Candidature sur le site", body: "Un créateur veut rejoindre l'agence. Détail dans la to-do.", url: "/?open=view&view=todo", tag: "ttp-site-candidature" })).catch(() => {});
   }
@@ -88,8 +97,8 @@ Deno.serve(async (req: Request) => {
   if ((count ?? 0) >= LEADS_PAR_HEURE) return json({ error: "trop" }, 429);
 
   const touche = toucheLead(lead, now);
-  const { data: existants } = await sb.from("contacts").select("id, touches").ilike("email", ilikeExact(lead.email)).limit(1);
-  const ex = (existants as { id: string; touches: unknown }[] | null)?.[0];
+  const { data: existants } = await sb.from("contacts").select("id, touches, email").ilike("email", ilikeExact(lead.email)).limit(5);
+  const ex = ((existants as { id: string; touches: unknown; email: string | null }[] | null) ?? []).find((c) => String(c.email ?? "").toLowerCase() === lead.email);
   if (ex) {
     const touches = Array.isArray(ex.touches) ? ex.touches : [];
     const { error } = await sb.from("contacts").update({ touches: [...touches, touche] }).eq("id", ex.id);
@@ -101,7 +110,7 @@ Deno.serve(async (req: Request) => {
       return json({ error: "indisponible" }, 503);
     }
   }
-  await sb.from("todos").insert({ text: tacheLead(lead), descr: `${lead.email}${lead.message ? `\n${lead.message}` : ""}`, priority: "haute", due: now.toISOString().slice(0, 10), done: false }).then(() => {}, () => {});
+  await sb.from("todos").insert({ text: tacheLead(lead), descr: `${lead.email}${lead.message ? `\n${lead.message}` : ""}`, priority: "haute", due: jourParis(now), done: false }).then(() => {}, () => {});
   if (pushReady()) {
     await sendTo(sb, { agency: true }, makePayload({ kind: "team", title: "Demande de roster sur le site", body: "Une marque veut recevoir le roster. Détail dans la to-do.", url: "/?open=view&view=todo", tag: "ttp-site-lead" })).catch(() => {});
   }
