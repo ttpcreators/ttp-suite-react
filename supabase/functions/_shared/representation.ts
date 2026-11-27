@@ -317,8 +317,17 @@ export type BuiltContract = {
   preambule: string;
 };
 
-/** Assemble le contrat de représentation pour une configuration donnée. */
-export function buildRepresentation(config: Record<string, string>): BuiltContract {
+/** Le contrat est-il réglé « Contrat test » (mention dans le titre) ? */
+export const estContratTest = (config: Record<string, string> | null | undefined) => !!config && is(config, "contratTest");
+
+/** Options d'impression : `signe` = contrat marqué signé (page Contrats). */
+export type RcOptions = { signe?: boolean };
+
+/**
+ * Assemble le contrat de représentation pour une configuration donnée. Un contrat marqué
+ * signé ne porte jamais la mention « CONTRAT TEST », même réglé ainsi.
+ */
+export function buildRepresentation(config: Record<string, string>, opts: RcOptions = {}): BuiltContract {
   const variante = config.variante === "nonexclusif" ? "nonexclusif" : "exclusif";
   const v = RC_VARIANTS.find((x) => x.key === variante) ?? RC_VARIANTS[0];
 
@@ -331,7 +340,7 @@ export function buildRepresentation(config: Record<string, string>): BuiltContra
   });
 
   const titleBits = [v.title];
-  if (is(config, "contratTest")) titleBits.push("CONTRAT TEST");
+  if (estContratTest(config) && !opts.signe) titleBits.push("CONTRAT TEST");
   return {
     title: titleBits.join(" — "),
     subtitle: (config.titrePersonnalise || "").trim(),
@@ -342,8 +351,8 @@ export function buildRepresentation(config: Record<string, string>): BuiltContra
 }
 
 /** Texte brut (copie / .txt). */
-export function representationText(config: Record<string, string>): string {
-  const c = buildRepresentation(config);
+export function representationText(config: Record<string, string>, opts: RcOptions = {}): string {
+  const c = buildRepresentation(config, opts);
   const lines = [RC_META.brandTitle, RC_META.brandSubtitle, "", c.title];
   if (c.subtitle) lines.push(c.subtitle);
   lines.push("", "PRÉAMBULE", c.preambule, "");

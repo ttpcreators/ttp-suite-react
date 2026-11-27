@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { texteContrat, trouverContrats } from "./contractLecture.ts";
 import { normaliserBrouillon } from "./contractDraft.ts";
-import { buildRepresentation, CONDITIONS_MENTION, rcDefaultConfig, representationText } from "./representation.ts";
+import { buildRepresentation, CONDITIONS_MENTION, estContratTest, rcDefaultConfig, representationText } from "./representation.ts";
 
 const brouillon = (repr: Record<string, unknown>, extra: Record<string, unknown> = {}) => {
   const r = normaliserBrouillon({ type: "representation", representation: repr, ...extra }, { id: "cd1", ts: Date.UTC(2026, 10, 18), ctName: "Adelina", by: "Alfred" });
@@ -89,5 +89,23 @@ describe("contrat non exclusif sans boîte mail ni clause pénale", () => {
   });
   it("exclusif avec clause pénale : 4.3 inchangé", () => {
     expect(representationText(rcDefaultConfig("exclusif"))).toContain("violation de l'exclusivité et entraîne l'application de la clause pénale");
+  });
+});
+
+describe("mention « CONTRAT TEST » : jamais sur un contrat signé", () => {
+  const cfg = { ...rcDefaultConfig("exclusif"), talentNom: "Nora Fictive" };
+  it("réglage par défaut de la formule exclusive : la mention tant que le contrat n'est pas signé", () => {
+    expect(estContratTest(cfg)).toBe(true);
+    expect(estContratTest(rcDefaultConfig("nonexclusif"))).toBe(false);
+    expect(buildRepresentation(cfg).title).toContain("CONTRAT TEST");
+    expect(buildRepresentation(cfg, { signe: true }).title).not.toContain("CONTRAT TEST");
+    expect(representationText(cfg, { signe: true })).not.toContain("CONTRAT TEST");
+  });
+  it("lire_contrat : le contrat enregistré signé se lit sans la mention, en attente avec", () => {
+    const contrat = { id: "rc1", creator: "Nora Fictive", title: "Contrat de représentation · Nora Fictive", variante: "exclusif", config: cfg, createdAt: "2026-11-02T10:00:00Z" };
+    const lu = (status?: string) => texteContrat({ kind: "enregistre", id: "rc1", qui: "Nora Fictive", date: "2026-11-02", contrat: { ...contrat, status } });
+    expect(lu("signed")).not.toContain("CONTRAT TEST");
+    expect(lu("pending")).toContain("CONTRAT TEST");
+    expect(lu(undefined)).toContain("CONTRAT TEST");
   });
 });

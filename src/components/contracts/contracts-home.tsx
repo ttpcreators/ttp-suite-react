@@ -9,10 +9,10 @@ import { CONTRACT_DRAFTS_KEY, lireBrouillons, type ContractDraft } from "../../.
 import { useCreators } from "@/lib/useCreators";
 import { printHtml } from "@/lib/printPdf";
 import { myDisplayName } from "@/lib/team";
-import { representationHTML } from "@/lib/representationContract";
+import { estContratTest, representationHTML } from "@/lib/representationContract";
 import { toast } from "@/components/ui/toast";
 import { AddMenuButton, Picker } from "@/components/ui/form";
-import { ActionMenu } from "@/components/ui/action-menu";
+import { ActionMenu, ConfirmDialog } from "@/components/ui/action-menu";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
 import { MotionTabs, MotionTabsList, MotionTabsTrigger } from "@/components/ui/motion-tabs";
@@ -132,6 +132,8 @@ export function ContractsHome({
   const [filterOpen, setFilterOpen] = useState(false);
   const [preview, setPreview] = useState<{ title: string; html: string } | null>(null);
   const [relance, setRelance] = useState<ContractRow | null>(null);
+  // Contrat réglé « Contrat test » qu'on marque signé : jamais sans le dire.
+  const [testASigner, setTestASigner] = useState<ContractRow | null>(null);
   const [myName, setMyName] = useState("");
   useEffect(() => {
     let alive = true;
@@ -159,7 +161,8 @@ export function ContractsHome({
     const raw = rawById.get(rowKey(r));
     if (!raw) return null;
     if (r.key === "brandContractHistory") return typeof raw.html === "string" ? raw.html : null;
-    return raw.config && typeof raw.config === "object" ? representationHTML(raw.config as Record<string, string>) : null;
+    // Contrat signé : jamais la mention « CONTRAT TEST » dans le titre.
+    return raw.config && typeof raw.config === "object" ? representationHTML(raw.config as Record<string, string>, { signe: r.status === "signed" }) : null;
   };
   const view = (r: ContractRow) => {
     const html = htmlOf(r);
@@ -174,8 +177,13 @@ export function ContractsHome({
     const raw = rawById.get(rowKey(r));
     if (raw) onEdit(r, raw);
   };
-  const changeStatus = async (r: ContractRow, status: ContractStatus) => {
+  const changeStatus = async (r: ContractRow, status: ContractStatus, sur = false) => {
     if (status === r.status) return;
+    const cfg = rawById.get(rowKey(r))?.config;
+    if (!sur && status === "signed" && r.key === "contractHistory" && cfg && typeof cfg === "object" && estContratTest(cfg as Record<string, string>)) {
+      setTestASigner(r);
+      return;
+    }
     const k = rowKey(r);
     setStatusOver((o) => ({ ...o, [k]: status }));
     if (await setContractStatus(r.key, r.id, status)) return toast(`${rowName(r)} : ${STATUS_META[status].label.toLowerCase()} ✓`);
@@ -442,6 +450,19 @@ export function ContractsHome({
         </Overlay>
       )}
       {relance && <ContractRelanceDialog row={relance} onClose={() => setRelance(null)} />}
+      {testASigner && (
+        <ConfirmDialog
+          title="Contrat réglé en « Contrat test »"
+          message={`${rowName(testASigner)} porte la mention « CONTRAT TEST » dans son titre. Marqué signé, il sera réimprimé sans elle (le fichier déjà rangé dans Documents la garde). Vérifie que la version signée est bien le vrai contrat, et dépose le scan signé dans Documents.`}
+          confirmLabel="Marquer signé"
+          onConfirm={() => {
+            const r = testASigner;
+            setTestASigner(null);
+            void changeStatus(r, "signed", true);
+          }}
+          onCancel={() => setTestASigner(null)}
+        />
+      )}
     </>
   );
 }

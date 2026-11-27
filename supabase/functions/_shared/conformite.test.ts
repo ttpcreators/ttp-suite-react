@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  accountTokens, disclosureAt, hasPromoCode, incidentsConformite, journalEntry, journalStale, readJournal, tacheBloc, tacheTitre,
+  accountTokens, disclosureAt, hasPromoCode, incidentCompte, incidentsConformite, journalEntry, journalStale, readJournal, tacheBloc, tacheTitre,
   type ConformiteIn, type ConformitePost,
 } from "./conformite.ts";
 import type { Exclusivite } from "./exclusivites.ts";
@@ -110,11 +110,33 @@ describe("conflit d'exclusivité", () => {
     const r = incidentsConformite(base([post("Collaboration commerciale · ma gourde airup")], { exclusivites: [exclu({})], collabs: [{ brand: "Airup", since: "2026-11-01" }] }));
     expect(r).toEqual([]);
   });
-  it("exclusivité à confirmer, finie, ou d'un autre créateur : rien", () => {
+  it("exclusivité finie, ou d'un autre créateur : rien", () => {
     const p = [post("Mes snacks prozis")];
-    expect(incidentsConformite(base(p, { exclusivites: [exclu({ pending: true })] }))).toEqual([]);
     expect(incidentsConformite(base(p, { exclusivites: [exclu({ end: "2026-11-01" })] }))).toEqual([]);
     expect(incidentsConformite(base(p, { exclusivites: [exclu({ creator: "Autre" })] }))).toEqual([]);
+  });
+  it("exclusivité à confirmer : incident « à vérifier », jamais un vrai conflit", () => {
+    // Marques fictives.
+    const lue = exclu({ brand: "Orbe", scope: "snacks protéinés", competitors: ["Kolibri"], pending: true });
+    const r = incidentsConformite(base([post("Mes snacks kolibri du matin")], { exclusivites: [lue] }));
+    expect(r.map((i) => [i.type, i.brand])).toEqual([["exclusivite_a_verifier", "Kolibri"]]);
+    expect(r[0].id).toMatch(/:exclusivite_a_verifier$/);
+    expect(r[0].detail).toMatch(/pas encore confirmée/);
+    expect(r[0].correction).toMatch(/page Exclusivités/);
+    expect(tacheTitre(r[0])).toBe("Conformité : Zoé Test · Kolibri · exclusivité à vérifier");
+    expect(incidentCompte(r[0].type)).toBe(false);
+    // Même marque déjà en conflit avec une exclusivité confirmée : un seul incident, le vrai.
+    const sure = exclu({ id: "ex2", brand: "Atelier Brume", competitors: ["Kolibri"] });
+    const deux = incidentsConformite(base([post("Mes snacks kolibri du matin")], { exclusivites: [sure, { ...lue, id: "ex3" }] }));
+    expect(deux.map((i) => i.type)).toEqual(["exclusivite"]);
+  });
+  it("catégorie lue dans le nom d'une marque du carnet ; une catégorie de fiche contact n'est pas un secteur", () => {
+    const parfum = exclu({ brand: "Atelier Brume", scope: "parfum", competitors: [] });
+    const marques = [{ brand: "Maison Lumen Parfums", tags: ["Marque"] }, { brand: "Kora", tags: ["Marque"] }];
+    const r = incidentsConformite(base([post("Ma routine avec maison lumen parfums"), post("Ma tenue kora du jour")], { exclusivites: [parfum], marques }));
+    expect(r.map((i) => [i.type, i.brand])).toEqual([["exclusivite", "Maison Lumen Parfums"]]);
+    const large = exclu({ brand: "Atelier Brume", scope: "toute marque concurrente", competitors: [] });
+    expect(incidentsConformite(base([post("Ma tenue kora du jour")], { exclusivites: [large], marques }))).toEqual([]);
   });
   it("un post peut avoir les deux incidents", () => {
     const r = incidentsConformite(base([post("Mes snacks prozis -10% code ZOE10")], { exclusivites: [exclu({})] }));
@@ -132,8 +154,9 @@ describe("tâche et journal", () => {
     expect(i.id).toBe("123:mention");
   });
   it("journal : lecture et ménage", () => {
-    const j = readJournal({ a: journalEntry(i, NOW), b: { type: "mention", at: "2025-01-01", seen: "2025-01-01T00:00:00Z" }, c: "bizarre", d: null });
-    expect(Object.keys(j)).toEqual(["a", "b"]);
+    const j = readJournal({ a: journalEntry(i, NOW), b: { type: "mention", at: "2025-01-01", seen: "2025-01-01T00:00:00Z" }, c: "bizarre", d: null, e: { type: "exclusivite_a_verifier", at: "2026-11-20", seen: "2026-11-21T00:00:00Z" } });
+    expect(Object.keys(j)).toEqual(["a", "b", "e"]); // l'incident « à vérifier » est gardé : sinon une tâche par passage
+    expect(Object.values(j).filter((x) => incidentCompte(x.type))).toHaveLength(2);
     expect(journalStale(j, NOW)).toEqual(["b"]);
     expect(readJournal(undefined)).toEqual({});
   });

@@ -1449,8 +1449,13 @@ function includeOk(token, c) {
 		default: return is(c, token);
 	}
 }
-/** Assemble le contrat de représentation pour une configuration donnée. */
-function buildRepresentation(config) {
+/** Le contrat est-il réglé « Contrat test » (mention dans le titre) ? */
+const estContratTest = (config) => !!config && is(config, "contratTest");
+/**
+* Assemble le contrat de représentation pour une configuration donnée. Un contrat marqué
+* signé ne porte jamais la mention « CONTRAT TEST », même réglé ainsi.
+*/
+function buildRepresentation(config, opts = {}) {
 	const variante = config.variante === "nonexclusif" ? "nonexclusif" : "exclusif";
 	const v = RC_VARIANTS.find((x) => x.key === variante) ?? RC_VARIANTS[0];
 	const articles = RC_ARTICLES.filter((a) => (a.variant === "both" || a.variant === variante) && includeOk(a.includeIf, config)).map((a) => {
@@ -1468,7 +1473,7 @@ function buildRepresentation(config) {
 		};
 	});
 	const titleBits = [v.title];
-	if (is(config, "contratTest")) titleBits.push("CONTRAT TEST");
+	if (estContratTest(config) && !opts.signe) titleBits.push("CONTRAT TEST");
 	return {
 		title: titleBits.join(" — "),
 		subtitle: (config.titrePersonnalise || "").trim(),
@@ -1529,9 +1534,9 @@ function signaturesHTML(text) {
 	};
 	return `<div class="ct-sign">${place.map((p) => `<p class="place">${esc$1(p)}</p>`).join("")}<div class="cols">${col(parties[0], false)}${col(parties[1], true)}</div></div>`;
 }
-/** Contrat HTML imprimable (PDF) : mise en page « contrat » commune (CONTRACT_CSS, pdfDoc.ts). */
-function representationHTML(config) {
-	const c = buildRepresentation(config);
+/** Contrat HTML imprimable (PDF) : mise en page « contrat » commune (CONTRACT_CSS, pdfDoc.ts). `signe` : jamais « CONTRAT TEST ». */
+function representationHTML(config, opts = {}) {
+	const c = buildRepresentation(config, opts);
 	const indexed = c.articles.map((a, idx) => ({
 		...a,
 		idx,

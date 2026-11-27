@@ -22,8 +22,10 @@
 //  - exclusivités : seulement la catégorie et les dates, JAMAIS la marque ni ses concurrents
 //    (choix le plus prudent : une exclusivité n'est pas forcément publique). Une catégorie
 //    vague (« même catégorie de produits ») devient « une catégorie de produits (nous
-//    consulter) ». Une exclusivité « à confirmer » (lue dans un mail) n'est pas affichée : elle
-//    est signalée à l'agence pour vérification avant l'envoi.
+//    consulter) ». Une exclusivité « à confirmer » (lue toute seule dans un contrat reçu par
+//    mail, souvent une erreur de lecture) n'est jamais publiée comme une exclusivité sûre : pas
+//    affichée, elle devient une note « à vérifier » pour l'agence (avec ou sans créateur
+//    reconnu), que la fonction du 1er du mois range aussi dans une tâche (`tacheDispos`).
 // ============================================================================
 
 import { creatorFloor, readTarifGrid, type TarifGrid } from "./tarif.ts";
@@ -284,6 +286,11 @@ export function indisposDe(list: readonly Exclusivite[], creator: string, mois: 
   return out;
 }
 
+/** Note d'une ligne « à confirmer » : « exclusivité « parfum » (Marque) lue toute seule… à vérifier… ». */
+function noteAVerifier(e: Exclusivite): string {
+  return `exclusivité « ${e.scope.trim() || "sans catégorie"} »${e.brand.trim() ? ` (${e.brand.trim()})` : ""} lue toute seule dans un contrat reçu par mail, jamais confirmée : à vérifier dans la page Exclusivités avant l'envoi (confirmer ou écarter), pas affichée sur la page.`;
+}
+
 const frDate = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 /** « nutrition sportive jusqu'au 31/12 » (année ajoutée si elle diffère du mois). */
 export function indispoTexte(x: DisposIndispo, mois: string): string {
@@ -314,6 +321,10 @@ export function disposDuMois(input: DisposInput): DisposResultat {
   const usernames: string[] = [];
   const creators: DisposCreateur[] = [];
   const rows = [...input.creators].filter((r) => (r.name ?? "").trim()).sort((a, b) => (a.sort_order ?? 1e9) - (b.sort_order ?? 1e9));
+  // Lignes « à confirmer » qui touchent le mois : une note chacune, jamais publiées.
+  const { first, last } = bornesMois(input.mois);
+  const aVerifier = exclus.filter((e) => e.pending && !(e.start && e.start > last) && !(e.end && e.end < first));
+  const notees = new Set<string>();
 
   for (const row of rows) {
     const name = nomPropre(row.name);
@@ -348,12 +359,16 @@ export function disposDuMois(input: DisposInput): DisposResultat {
     for (const p of kitViews) {
       notes.push(`${name} : vues ${String(p.key ?? "")} du media kit (${String(p.avgViews)}, saisies à la main) non utilisées pour le prix.`);
     }
-    for (const e of exclus) {
-      if (!e.pending || foldName(e.creator) !== foldName(row.name ?? "")) continue;
-      const { first, last } = bornesMois(input.mois);
-      if ((e.start && e.start > last) || (e.end && e.end < first)) continue;
-      notes.push(`${name} : exclusivité « ${e.scope || "sans catégorie"} » à confirmer (page Exclusivités), pas affichée.`);
+    for (const e of aVerifier) {
+      if (foldName(e.creator) !== foldName(row.name ?? "")) continue;
+      notees.add(e.id);
+      notes.push(`${name} : ${noteAVerifier(e)}`);
     }
+  }
+  // Lignes « à confirmer » sans créateur reconnu (ou d'un nom hors des dispos) : jamais passées sous silence.
+  for (const e of aVerifier) {
+    if (notees.has(e.id)) continue;
+    notes.push(`${e.creator.trim() ? `${nomPropre(e.creator)} (hors des dispos)` : "Créateur non reconnu"} : ${noteAVerifier(e)}`);
   }
   if (!exclus.length) notes.push("Aucune exclusivité enregistrée : vérifier la page Exclusivités avant l'envoi.");
 
@@ -369,6 +384,19 @@ export function disposDuMois(input: DisposInput): DisposResultat {
     },
     usernames,
     notes,
+  };
+}
+
+// ── Tâche de la fonction du 1er du mois ─────────────────────────────────────
+/**
+ * La tâche qui garde les points à vérifier de la liste faite par la fonction du 1er du mois
+ * (sinon ils restent dans sa réponse, que personne ne lit). null sans point à vérifier.
+ */
+export function tacheDispos(r: DisposResultat, url: string): { titre: string; details: string } | null {
+  if (!r.notes.length) return null;
+  return {
+    titre: `${titreDispos(r.selection.mois)} : à relire avant l'envoi`,
+    details: [`Lien de la liste : ${url}`, "", "À vérifier avant d'envoyer le lien aux agences (jamais dans un message) :", ...r.notes.map((n) => `- ${n}`)].join("\n"),
   };
 }
 

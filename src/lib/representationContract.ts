@@ -1,6 +1,6 @@
 import { CONTRACT_CSS, contractHead, contractTitle, docHead, docToday, pdfFileTitle } from "./pdfDoc";
 import { sigImgHtml } from "./agencySignature";
-import { RC_META, buildRepresentation, CONDITIONS_TITLE } from "../../supabase/functions/_shared/representation.ts";
+import { RC_META, buildRepresentation, CONDITIONS_TITLE, type RcOptions } from "../../supabase/functions/_shared/representation.ts";
 
 // Le contrat lui même (réglages, articles, texte) vit dans _shared/representation.ts : le
 // connecteur (preparer_contrat, lire_contrat) relit ainsi exactement le même texte que l'app.
@@ -48,9 +48,9 @@ function signaturesHTML(text: string): string {
   return `<div class="ct-sign">${place.map((p) => `<p class="place">${esc(p)}</p>`).join("")}<div class="cols">${col(parties[0], false)}${col(parties[1], true)}</div></div>`;
 }
 
-/** Contrat HTML imprimable (PDF) : mise en page « contrat » commune (CONTRACT_CSS, pdfDoc.ts). */
-export function representationHTML(config: Record<string, string>): string {
-  const c = buildRepresentation(config);
+/** Contrat HTML imprimable (PDF) : mise en page « contrat » commune (CONTRACT_CSS, pdfDoc.ts). `signe` : jamais « CONTRAT TEST ». */
+export function representationHTML(config: Record<string, string>, opts: RcOptions = {}): string {
+  const c = buildRepresentation(config, opts);
   // Articles remis dans l'ordre des numéros (« 7 bis » après le 7), et ceux qui partagent
   // un numéro (« Fin et résiliation », « … faute grave », « … clause pénale ») regroupés
   // sous un seul titre, la précision devenant un sous-titre. Le texte ne change pas.

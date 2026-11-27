@@ -7,6 +7,7 @@ import { mentionSuggestions } from "@/lib/todoQuickAdd";
 import { useT } from "@/lib/i18n";
 import { Field } from "@/components/ui/form";
 import { toast } from "@/components/ui/toast";
+import { estAVerifier } from "../../../supabase/functions/_shared/exclusivites.ts";
 
 export type PickCreator = { name: string; photo_url?: string | null };
 
@@ -16,6 +17,8 @@ export type PickCreator = { name: string; photo_url?: string | null };
  * `extraNames` : noms déjà utilisés qui ne sont plus dans le roster (gardés pour ne rien perdre).
  * `blocked` : créateurs en exclusivité avec un concurrent de la marque (nom en minuscules →
  * « Exclu Nike · 12 déc. ») : jamais suggérés en premier, signalés, et prévenus si on les choisit.
+ * Une raison « À vérifier : … » (exclusivité pas confirmée) est signalée et prévenue, sans
+ * déplacer le créateur.
  */
 export function CreatorPicker({
   value,
@@ -50,8 +53,9 @@ export function CreatorPicker({
   ];
   const found = mentionSuggestions(q, all, all.length);
   const why = (n: string) => blocked?.get(key(n));
-  // Créateurs en exclusivité avec un concurrent : à la fin de la liste.
-  const list = blocked?.size ? [...found.filter((c) => !why(c.name)), ...found.filter((c) => why(c.name))] : found;
+  const bloque = (n: string) => !!why(n) && !estAVerifier(why(n));
+  // Créateurs en exclusivité avec un concurrent : à la fin de la liste (pas ceux « à vérifier »).
+  const list = blocked?.size ? [...found.filter((c) => !bloque(c.name)), ...found.filter((c) => bloque(c.name))] : found;
   // « Aucun » en dernier choix (seulement sans recherche).
   const options: (PickCreator | null)[] = q.trim() ? list : [...list, null];
   const current = value ? all.find((c) => key(c.name) === key(value)) ?? { name: value, photo_url: null } : null;
@@ -143,8 +147,10 @@ export function CreatorPicker({
                 ) : (
                   <span aria-hidden className="h-7 w-7 shrink-0" />
                 )}
-                <span className={cn("min-w-0 flex-1 truncate", c ? (why(c.name) ? "text-muted-foreground" : "text-foreground") : "text-muted-foreground")}>{c ? titleCase(c.name) : t(emptyLabel)}</span>
-                {c && why(c.name) && <span className="shrink-0 rounded-full bg-wait-soft px-2 py-0.5 text-[11px] font-medium text-wait">{why(c.name)}</span>}
+                <span className={cn("min-w-0 flex-1 truncate", c ? (bloque(c.name) ? "text-muted-foreground" : "text-foreground") : "text-muted-foreground")}>{c ? titleCase(c.name) : t(emptyLabel)}</span>
+                {c && why(c.name) && (
+                  <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", bloque(c.name) ? "bg-wait-soft text-wait" : "bg-field text-muted-foreground")}>{why(c.name)}</span>
+                )}
                 {on && <Check className="h-4 w-4 shrink-0 text-primary" />}
               </button>
             );

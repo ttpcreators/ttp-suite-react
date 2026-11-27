@@ -56,7 +56,8 @@ export function ligneContrat(c: ContratTrouve): string {
 
 /** Texte complet d'un contrat (représentation), ou le résumé d'un brouillon Marque / UGC. */
 export function texteContrat(c: ContratTrouve): string {
-  if (c.kind === "enregistre") return representationText(configComplete(c.contrat.config));
+  // Contrat marqué signé : le texte tel qu'imprimé, sans la mention « CONTRAT TEST ».
+  if (c.kind === "enregistre") return representationText(configComplete(c.contrat.config), { signe: c.contrat.status === "signed" });
   const d = c.brouillon;
   if (d.ctType === "repr") return representationText(configComplete(d.config ?? {}));
   const f = d.form;

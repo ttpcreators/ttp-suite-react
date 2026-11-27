@@ -7,8 +7,17 @@
 // Données : blob agence, clé `exclusivites` (liste d'objets à id). Testé par
 // exclusivites.test.ts. Lecture des contrats (PDF ou contrats faits dans l'app) :
 // règles fixes, sans IA (même choix que les tâches tirées des mails).
+//
+// Deux niveaux (alertesExclu), les mêmes partout où le registre est lu :
+//  - « bloque » : exclusivité CONFIRMÉE, en cours ou à venir, qui cite la marque parmi les
+//    concurrents, ou dont la catégorie se lit dans le nom (ou le secteur) de la marque ;
+//  - « à vérifier » : ligne « à confirmer » (lue toute seule dans un contrat reçu par mail,
+//    souvent une erreur de lecture) ou exclusivité confirmée sans aucun concurrent saisi. Ni
+//    un feu vert ni un refus : on vérifie avant de proposer le créateur. Jamais présentée
+//    comme une exclusivité sûre, jamais passée sous silence.
 // ============================================================================
 
+import { tagConnu } from "./contactTags.ts";
 import { couper } from "./texteSur.ts";
 
 export type Exclusivite = {
@@ -83,25 +92,201 @@ export function daysLeft(e: Pick<Exclusivite, "end">, today: string): number | n
   return Math.round((Date.parse(`${e.end}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000);
 }
 
+// ── La catégorie interdite ───────────────────────────────────────────────────
+/** Mots trop généraux pour dire un secteur (« même catégorie de produits », « autres marques »). */
+const MOTS_VAGUES = new Set([
+  "meme", "toute", "toutes", "tout", "tous", "categorie", "categories", "secteur", "secteurs", "produit", "produits",
+  "marque", "marques", "autre", "autres", "concurrent", "concurrente", "concurrents", "concurrentes", "concurrence",
+  "activite", "activites", "domaine", "domaines", "univers", "segment", "segments", "gamme", "gammes", "article",
+  "articles", "service", "services", "notamment", "type", "types", "nature", "famille", "familles", "ligne", "lignes",
+  "entreprise", "entreprises", "societe", "societes", "generale", "general", "grand", "grande", "public", "france",
+  "monde", "industrie", "dans", "pour", "avec", "sans", "leur", "leurs", "chez", "entre", "vers", "plus", "cette",
+  "industry", "sector", "category", "categories", "product", "products", "brand", "brands", "same", "other", "with",
+]);
+
 /**
- * Une marque `brand` tombe-t-elle sous cette exclusivité ? Oui si elle est citée parmi les
- * concurrents, ou si l'un de ses secteurs (`brandTags` : étiquette de la fiche contact,
- * niche…) correspond au secteur interdit. Jamais pour la marque de l'exclusivité elle-même.
+ * Le mot qui dit chaque secteur interdit : le premier mot parlant de chaque partie
+ * (« nutrition sportive et compléments alimentaires » → nutrition, complement ;
+ * « produits de beauté » → beaute). Vide pour une catégorie vague (« même catégorie de produits »).
  */
-export function hitsBrand(e: Exclusivite, brand: string, brandTags: readonly string[] = []): boolean {
-  if (!brand.trim() || sameBrand(e.brand, brand)) return false;
-  if (e.competitors.some((c) => sameBrand(c, brand))) return true;
-  const scope = foldName(e.scope);
-  if (!scope) return false;
-  return brandTags.some((t) => {
-    const f = foldName(t);
-    return f.length >= 4 && (scope.includes(f) || f.includes(scope));
-  });
+export function termesSecteur(scope: string): string[] {
+  const out: string[] = [];
+  for (const part of foldName(scope).split(/\b(?:et|ou|and|or)\b/)) {
+    const mot = part.split(" ").map((w) => w.replace(/^(?:d|l|qu)'/, "")).find((w) => w.length >= 4 && !MOTS_VAGUES.has(w) && !/\d/.test(w));
+    const t = mot ? mot.replace(/(?<=.{4})[sx]$/, "") : "";
+    if (t.length >= 4 && !out.includes(t)) out.push(t);
+  }
+  return out;
 }
 
-/** Exclusivités en cours ou à venir d'un créateur qui bloquent cette marque. */
+/** La catégorie interdite se lit-elle dans le nom de la marque (« Maison des Parfums » pour « parfum ») ? Le mot, sinon null. */
+export function secteurDansNom(scope: string, brand: string): string | null {
+  const nom = foldName(brand);
+  if (!nom) return null;
+  const mots = nom.split(" ");
+  const colle = nom.replace(/ /g, "");
+  return termesSecteur(scope).find((t) => mots.some((w) => w.startsWith(t)) || (t.length >= 6 && colle.includes(t))) ?? null;
+}
+
+/** Secteur d'une marque : jamais une catégorie de fiche contact (Marque, Agence, Média…), qui dit un type, pas un secteur. */
+const estSecteur = (t: unknown): t is string => typeof t === "string" && foldName(t).length >= 4 && !tagConnu(t);
+
+export type RaisonBloque = "concurrent" | "nom" | "secteur";
+
+/**
+ * Pourquoi la marque `brand` tombe sous cette exclusivité : citée parmi les concurrents, ou
+ * catégorie interdite lue dans son nom, ou l'un de ses secteurs (`brandTags`) dans la catégorie.
+ * null sinon, et toujours pour la marque de l'exclusivité elle-même.
+ */
+export function pourquoiBloque(e: Exclusivite, brand: string, brandTags: readonly string[] = []): RaisonBloque | null {
+  if (!brand.trim() || sameBrand(e.brand, brand)) return null;
+  if (e.competitors.some((c) => sameBrand(c, brand))) return "concurrent";
+  const scope = foldName(e.scope);
+  if (!scope) return null;
+  if (secteurDansNom(e.scope, brand)) return "nom";
+  return brandTags.filter(estSecteur).some((t) => {
+    const f = foldName(t);
+    return scope.includes(f) || f.includes(scope);
+  }) ? "secteur" : null;
+}
+
+/**
+ * Une marque `brand` tombe-t-elle sous cette exclusivité ? Oui si elle est citée parmi les
+ * concurrents, si la catégorie interdite se lit dans son nom, ou si l'un de ses secteurs
+ * (`brandTags`) correspond à la catégorie. Jamais pour la marque de l'exclusivité elle-même.
+ */
+export function hitsBrand(e: Exclusivite, brand: string, brandTags: readonly string[] = []): boolean {
+  return pourquoiBloque(e, brand, brandTags) !== null;
+}
+
+/** Exclusivités CONFIRMÉES en cours ou à venir d'un créateur qui bloquent cette marque. */
 export function conflictsFor(list: readonly Exclusivite[], creator: string, brand: string, today: string, brandTags: readonly string[] = []): Exclusivite[] {
   return list.filter((e) => !e.pending && foldName(e.creator) === foldName(creator) && excluState(e, today) !== "terminee" && hitsBrand(e, brand, brandTags));
+}
+
+/** Même créateur : même nom replié, ou un prénom seul égal au prénom de l'autre (« Zoé » et « ZOÉ X »). */
+export function memeCreateur(a: string, b: string): boolean {
+  const x = foldName(a);
+  const y = foldName(b);
+  if (!x || !y) return false;
+  return x === y || (!x.includes(" ") && y.split(" ")[0] === x) || (!y.includes(" ") && x.split(" ")[0] === y);
+}
+
+export type NiveauExclu = "bloque" | "a_verifier";
+export type PourquoiExclu = RaisonBloque | "a_confirmer" | "sans_concurrents" | "categorie";
+export type AlerteExclu = { e: Exclusivite; niveau: NiveauExclu; pourquoi: PourquoiExclu };
+
+/**
+ * Ce que le registre dit avant de proposer `creator` (ou n'importe quel créateur, sans
+ * `creator`) à la marque `brand`. Lignes en cours ou à venir, jamais pour la marque de
+ * l'exclusivité elle-même :
+ *  - confirmée qui touche la marque (pourquoiBloque) : « bloque » ;
+ *  - confirmée sans aucun concurrent saisi : « à vérifier » (sans_concurrents), la catégorie ne
+ *    se compare pas toute seule ;
+ *  - confirmée avec des concurrents, avec `categories` : « à vérifier » (categorie), la liste
+ *    n'est pas forcément complète (pour un contrôle fait exprès, verifier_exclusivite) ;
+ *  - « à confirmer » qui touche la marque ou n'a aucun concurrent : « à vérifier » (a_confirmer),
+ *    y compris une ligne sans créateur reconnu quand on demande pour un créateur précis.
+ * Le créateur se compare avec memeCreateur (une ligne écrite au prénom seul compte aussi).
+ */
+export function alertesExclu(
+  list: readonly Exclusivite[],
+  brand: string,
+  today: string,
+  o: { creator?: string | null; brandTags?: readonly string[]; categories?: boolean } = {},
+): AlerteExclu[] {
+  if (!brand.trim()) return [];
+  const qui = o.creator?.trim() ? o.creator : null;
+  const out: AlerteExclu[] = [];
+  for (const e of list) {
+    if (excluState(e, today) === "terminee" || sameBrand(e.brand, brand)) continue;
+    const sien = foldName(e.creator);
+    if (qui && !memeCreateur(e.creator, qui) && !(e.pending && !sien)) continue;
+    const p = pourquoiBloque(e, brand, o.brandTags ?? []);
+    if (e.pending) {
+      if (p || !e.competitors.length) out.push({ e, niveau: "a_verifier", pourquoi: "a_confirmer" });
+    } else if (!sien) {
+      continue; // confirmée sans créateur : la page ne le permet pas
+    } else if (p) out.push({ e, niveau: "bloque", pourquoi: p });
+    else if (!e.competitors.length) out.push({ e, niveau: "a_verifier", pourquoi: "sans_concurrents" });
+    else if (o.categories && e.scope.trim()) out.push({ e, niveau: "a_verifier", pourquoi: "categorie" });
+  }
+  return out;
+}
+
+/** Début des raisons « à vérifier » des listes de créateurs (le choix d'un créateur ne les met pas en dernier). */
+export const A_VERIFIER = "À vérifier";
+export const estAVerifier = (raison: string | null | undefined) => !!raison && raison.startsWith(A_VERIFIER);
+
+/**
+ * Créateurs à vérifier pour une marque (lignes « à confirmer », exclusivités confirmées sans
+ * concurrents) : nom (minuscules) → « À vérifier : exclu Nike non confirmée ». Ceux que
+ * blockedCreators bloque déjà n'y sont pas ; une ligne sans créateur ne s'attache à personne.
+ */
+export function aVerifierCreators(list: readonly Exclusivite[], brand: string, today: string, brandTags: readonly string[] = []): Map<string, string> {
+  const bloques = blockedCreators(list, brand, today, brandTags);
+  const out = new Map<string, string>();
+  for (const a of alertesExclu(list, brand, today, { brandTags })) {
+    const k = a.e.creator.trim().toLowerCase();
+    if (a.niveau !== "a_verifier" || !k || bloques.has(k) || out.has(k)) continue;
+    out.set(k, `${A_VERIFIER} : exclu ${a.e.brand.trim() || "?"}${a.pourquoi === "a_confirmer" ? " non confirmée" : ""}`);
+  }
+  return out;
+}
+
+const finTexte = (e: Exclusivite) => (e.end ? ` jusqu'au ${e.end}` : "");
+
+/** Une alerte en une phrase (Claude, page Exclusivités). */
+export function texteAlerte(a: AlerteExclu, brand: string): string {
+  const e = a.e;
+  const marque = e.brand.trim() || "marque non lue";
+  switch (a.pourquoi) {
+    case "concurrent":
+      return excluLine(e);
+    case "nom":
+      return `${excluLine(e)} : « ${secteurDansNom(e.scope, brand) ?? e.scope} » se lit dans le nom de ${brand}`;
+    case "secteur":
+      return `${excluLine(e)} : le secteur de ${brand} est dans la catégorie interdite`;
+    case "a_confirmer": {
+      const quote = e.quote?.trim() ? ` Phrase lue : « ${e.quote.length > 220 ? `${couper(e.quote, 219)}…` : e.quote} »` : "";
+      return `exclusivité ${marque}${e.scope.trim() ? ` (catégorie « ${e.scope} »)` : ""}${e.start ? ` du ${e.start}` : ""}${e.end ? ` au ${e.end}` : ""} lue toute seule dans un contrat reçu par mail, jamais confirmée : peut-être une erreur de lecture.${quote}`;
+    }
+    case "sans_concurrents":
+      return `exclusivité ${marque}${finTexte(e)} dans la catégorie « ${e.scope.trim() || "non précisée"} », sans liste de concurrents : vérifier que ${brand} n'en fait pas partie`;
+    case "categorie":
+      return `exclusivité ${marque}${finTexte(e)}, catégorie « ${e.scope} » : ses concurrents listés ne sont pas forcément tous, vérifier que ${brand} n'est pas de cette catégorie`;
+  }
+}
+
+/** Ligne « à confirmer » pour Claude : « à vérifier : exclu Nike (lue dans un contrat, jamais confirmée) ». */
+export function aVerifierLine(e: Exclusivite): string {
+  return `à vérifier : ${excluLine({ ...e, brand: e.brand.trim() || "marque non lue" })}, lue toute seule dans un contrat reçu par mail et jamais confirmée (peut-être une erreur de lecture)`;
+}
+
+/**
+ * Créateur demandé (prénom seul, autre casse, sans accents) → sa fiche parmi `noms` : nom
+ * exact replié, puis prénom (ou début du nom), puis début d'un mot, puis morceau du nom.
+ * Plusieurs fiches à la même étape : `plusieurs` (il faut le nom complet).
+ */
+export function trouverCreateur(noms: readonly string[], saisie: string): { nom: string } | { plusieurs: string[] } | { aucun: true } {
+  const s = foldName(saisie);
+  if (!s) return { aucun: true };
+  const tous = [...new Set(noms.map((n) => String(n ?? "").trim()).filter(Boolean))];
+  const etapes: ((f: string) => boolean)[] = [
+    (f) => f === s,
+    (f) => f.split(" ")[0] === s || f.startsWith(`${s} `),
+    (f) => f.startsWith(s) || f.split(" ").some((w) => w.startsWith(s)),
+    (f) => (s.length >= 3 && f.includes(s)) || (f.length >= 3 && s.includes(f)),
+  ];
+  for (const test of etapes) {
+    // Deux écritures du même nom (« ZOÉ X », « Zoé X ») comptent pour une seule fiche : la première.
+    const parNom = new Map<string, string>();
+    for (const n of tous) if (test(foldName(n)) && !parNom.has(foldName(n))) parNom.set(foldName(n), n);
+    const ok = [...parNom.values()];
+    if (ok.length === 1) return { nom: ok[0] };
+    if (ok.length > 1) return { plusieurs: ok };
+  }
+  return { aucun: true };
 }
 
 /** Créateurs bloqués pour une marque : nom (minuscules) → raison courte (« Exclu Nike · 12 déc. »). */
@@ -217,7 +402,76 @@ export function findDuration(text: string): { n: number; unit: "jours" | "mois" 
   return { n, unit: /^(mois|month)/.test(u) ? "mois" : "jours" };
 }
 
-const EXCLU_RE = /(exclusivit|exclusive|exclusivity|non[- ]?concurren|non[- ]?compet|s'interdit|s'engage a ne pas|shall not|must not|competing|concurrent)/;
+// ── Clause d'exclusivité : ce qui en est une, et ce qui dit le contraire ─────
+// Tout se lit sur le texte replié (foldName : minuscules, sans accents, apostrophes gardées).
+// Avant (lignes « à confirmer » de novembre 2026) : « non exclusive », « sans aucune
+// exclusivité » ou « exclusivement » suffisaient à proposer une exclusivité.
+
+/** Tournures qui disent qu'il n'y a PAS d'exclusivité : retirées avant de chercher la clause. */
+const NEGATIONS: RegExp[] = [
+  // « Exclusivité : non », « Exclusivité : aucune », « Exclusivité : non exclusif » (pas « aucune marque concurrente »).
+  /\b(?:l'|d')?exclusivit\w*(?: \S+){0,2}? (?:aucune?|neant|none|non(?: ?exclusi\w*)?)\b(?!(?: \S+){0,3}? (?:marques?|concurren\w*|compet\w*|autres?|other)\b)/g,
+  // « exclusivement » veut dire « seulement » (« payée exclusivement en produits »).
+  /\bexclusivement\b/g,
+  // « non exclusive », « non-exclusif », « nonexclusive », « non exclusivité ».
+  /\bnon ?exclusi\w*/g,
+  // « sans (aucune) exclusivité », « aucune clause d'exclusivité », « pas d'exclusivité », « n'est pas
+  // consentie à titre exclusif », « absence d'exclusivité », « no exclusivity », « not an exclusive »,
+  // « aucune clause de non-concurrence ». Pas « sans préjudice de l'exclusivité » ni « ne pourra pas
+  // rompre l'exclusivité », qui la confirment.
+  /\b(?:sans(?! prejudice\b)|aucune?|d'aucune?|absence|pas(?! (?:rompre|violer|enfreindre|porter|contrevenir|remettre|deroger|meconnaitre|nuire)\b)|ni|nulle|nullement|jamais|no|without(?! prejudice\b)|not|never)(?: \S+){0,3}? (?:d'|l')?(?:exclusi\w*|non ?concurren\w*|non ?compet\w*)/g,
+  // « libre de toute exclusivité », « exempt de toute exclusivité ».
+  /\b(?:libres?|exempte?s?|degagee?s?) de toute (?:clause d'|obligation d')?exclusi\w*/g,
+];
+
+/** Le mot dans un autre sens : licence ou cession sur les contenus, tribunal compétent, propriété, responsabilité. */
+const AUTRES_SENS: RegExp[] = [
+  /\b(?:licence|license|cession|exploitation|droits? d'(?:exploitation|utilisation|usage|auteur|diffusion|reproduction)|competence|juridiction|jurisdiction|tribunaux?|responsabilite|responsibility|propriete|property|proprietaire|owner|titulaire|charge|frais)(?: \S+){0,4}? (?:d'|l')?exclusi\w*/g,
+  /\bexclusi\w*(?: \S+)? (?:licence|license|cession|competence|juridiction|jurisdiction|responsabilite|responsibility|propriete|property|proprietaire|owner|titulaire)\b/g,
+];
+
+/** Mots qui disent à eux seuls une exclusivité. */
+const FORTE = /\b(?:l'|d')?exclusi(?:f|fs|ve|ves|vite|vites|vity|vities)\b|\bnon ?concurren|\bnon ?compet/;
+/** Une interdiction… */
+const INTERDIT =
+  /\bs'interdi|\binterdi(?:t|te|ts|tes|ction)\b|\bs'engage\w* a ne\b|\bs'abst|\bne (?:pourra|pourront|peut|peuvent|doit|devra|devront|saurait|fera|signera|acceptera|collaborera|travaillera)\b|\bn'(?:accepte|acceptera|accepteront|engagera|aura)\b|\baucune? (?:\S+ ){0,2}?(?:collaboration|partenariat|contrat|campagne|prestation|promotion|publication|concurren\w*)|\bpas de (?:\S+ ){0,2}?concurren\w*|\bshall not\b|\bmust not\b|\bmay not\b|\bwill not\b|\bagrees? not to\b|\bundertakes? not to\b|\bnot to (?:promote|work|endorse|collaborate|partner|advertise)\b|\brefrain/;
+/** … qui vise des concurrents : avec INTERDIT, une clause d'exclusivité sans le mot. */
+const RIVAL =
+  /\bconcurren|\bcompeting\b|\bcompetitors?\b|\bcompetitive\b|\brival|\b(?:autres?|other) (?:marques?|brands?|annonceurs?|entreprises?|societes?|partenaires?)\b|\bmeme (?:categorie|secteur|segment|domaine|univers)\b|\bsame (?:category|sector|industry|segment)\b|\btiers? (?:du|de la) meme\b/;
+/** « reste libre de collaborer avec des marques concurrentes » : le contraire d'une exclusivité. */
+const LIBRE = /\b(?:libre|librement|liberte|free|freely)(?: \S+){0,3}? (?:collabor|travaill|contract|partenari|s'associer|promouv|conclure|work|partner|promot|engag)\w*/;
+
+/** La phrase dit-elle qu'il n'y a pas d'exclusivité (« non exclusive », « aucune exclusivité »…) ? */
+export function nieExclusivite(phrase: string): boolean {
+  const t = ` ${foldName(phrase)} `;
+  return NEGATIONS.some((re) => t.replace(re, " ") !== t);
+}
+
+/**
+ * Clause d'exclusivité dans cette phrase ? « forte » : le mot (exclusivité, exclusif,
+ * non-concurrence) employé pour le créateur ; « faible » : une interdiction qui vise des
+ * concurrents (« s'interdit toute collaboration avec une marque concurrente »). null sinon,
+ * et quand la phrase dit le contraire.
+ */
+export function clauseExclusivite(phrase: string): "forte" | "faible" | null {
+  let t = ` ${foldName(phrase)} `;
+  for (const re of [...NEGATIONS, ...AUTRES_SENS]) t = t.replace(re, " ");
+  if (FORTE.test(t)) return "forte";
+  if (INTERDIT.test(t) && RIVAL.test(t) && !LIBRE.test(t)) return "faible";
+  return null;
+}
+
+/**
+ * Phrase lue qui ne prouve pas une exclusivité : elle dit le contraire, ou ne parle ni
+ * d'exclusivité ni d'interdiction. À confirmer seulement après avoir relu le contrat.
+ */
+export function phraseDouteuse(phrase: string): boolean {
+  if (nieExclusivite(phrase)) return true;
+  return !clauseExclusivite(phrase) && !INTERDIT.test(` ${foldName(phrase)} `);
+}
+
+/** Titre d'article (« Article 6 – Exclusivité », « 6. Exclusivité ») : ouvre un article, n'est pas une clause. */
+const estEntete = (s: string) => s.length <= 80 && /^(?:art(?:icle|\.)\s*\d+|\d{1,2}(?:\.\d{1,2})?\s*[.)–-]\s)/i.test(s.trim());
 
 /** Marques citées après « notamment », « tels que », « such as », « à savoir »… */
 function listedBrands(sentence: string): string[] {
@@ -257,12 +511,32 @@ export function readContract(text: string, known: { creators: readonly string[];
   const creator = findKnown(known.creators);
   const brand = findKnown(known.brands);
 
-  // Exclusivité : la première phrase qui en parle (la plus précise : avec une durée si possible).
-  const excl = sentences.filter((s) => EXCLU_RE.test(foldName(s)));
+  // Exclusivité : les phrases qui en sont une (jamais celles qui disent le contraire). Dans un
+  // article titré « Exclusivité », une phrase qui interdit ou donne une durée en fait partie.
+  // Un article dont une phrase dit « aucune exclusivité » ne compte que par ses vraies clauses.
+  type Lue = { s: string; k: "forte" | "faible"; entete: boolean; contexte: boolean; article: number };
+  const lues: Lue[] = [];
+  const articlesNies = new Set<number>();
+  let article = -1;
+  let articleExclu = false;
+  sentences.forEach((s, i) => {
+    const entete = estEntete(s);
+    const k = clauseExclusivite(s);
+    if (entete) {
+      article = i;
+      articleExclu = k === "forte";
+    }
+    if (nieExclusivite(s) && article >= 0) articlesNies.add(article);
+    if (k) lues.push({ s, k, entete, contexte: false, article });
+    else if (articleExclu && !entete && !nieExclusivite(s) && (INTERDIT.test(` ${foldName(s)} `) || findDuration(s))) lues.push({ s, k: "faible", entete, contexte: true, article });
+  });
+  const excl = lues.filter((x) => !((x.entete || x.contexte) && articlesNies.has(x.article)));
   let exclusivity: ContractReading["exclusivity"] = null;
   if (excl.length) {
-    const best = excl.find((s) => findDuration(s)) ?? excl[0];
-    const around = excl.join(" ");
+    // La phrase citée : une vraie phrase (pas un titre), avec une durée si possible, le mot « exclusivité » d'abord.
+    const rang = (x: Lue) => (x.entete ? 4 : 0) + (findDuration(x.s) ? 0 : 2) + (x.k === "forte" ? 0 : 1);
+    const best = [...excl].sort((a, b) => rang(a) - rang(b))[0].s;
+    const around = excl.map((x) => x.s).join(" ");
     const signedAt = firstDate(clean);
     const start = firstDate(best) ?? signedAt ?? today;
     const dur = findDuration(best) ?? findDuration(around);
@@ -271,7 +545,7 @@ export function readContract(text: string, known: { creators: readonly string[];
       // Citations coupées sans casser d'emoji (_shared/texteSur.ts) : elles vont en base.
       quote: best.length > 400 ? `${couper(best, 399)}…` : best,
       scope: sectorOf(best) || sectorOf(around) || (/(meme categorie|same category)/.test(foldName(around)) ? "même catégorie de produits" : ""),
-      competitors: [...new Set(excl.flatMap(listedBrands))].slice(0, 12),
+      competitors: [...new Set(excl.flatMap((x) => listedBrands(x.s)))].slice(0, 12),
       start,
       end: endWritten ?? (dur ? addToIso(start, dur.n, dur.unit) : null),
     };
@@ -303,10 +577,44 @@ export function readContract(text: string, known: { creators: readonly string[];
 
 const CONTRACT_RE = /\b(contrats?|contracts?|agreements?|avenants?|accords? de (partenariat|collaboration)|conventions?|docusign|yousign|terms of collaboration|bon de commande signe)\b/;
 
-/** Pièce jointe qui ressemble à un contrat : un PDF dont le nom ou l'objet du mail parle de contrat. */
+/** Modèle vierge (« …_Template.pdf », « … Vierge.pdf ») : pas le contrat de quelqu'un, rien à suivre. */
+const MODELE_RE = /\b(?:template|vierge|blank|exemple|example|specimen|sample)\b/;
+
+/** Pièce jointe qui ressemble à un contrat : un PDF dont le nom ou l'objet du mail parle de contrat, sauf un modèle vierge. */
 export function looksLikeContract(fileName: string, subject: string): boolean {
   if (!/\.pdf$/i.test(fileName.trim())) return false;
-  return CONTRACT_RE.test(foldName(fileName.replace(/[_\-.]+/g, " "))) || CONTRACT_RE.test(foldName(subject));
+  const nom = foldName(fileName.replace(/[_\-.]+/g, " "));
+  if (MODELE_RE.test(nom)) return false;
+  return CONTRACT_RE.test(nom) || CONTRACT_RE.test(foldName(subject));
+}
+
+/**
+ * Ligne « à confirmer » déjà tirée du même fil de mails pour la même affaire : même marque et
+ * même créateur, ou l'un des deux pas lu. Un nouveau message du fil qui rejoint le contrat
+ * met cette ligne à jour au lieu d'en créer une autre (avant : une ligne par message).
+ */
+export function memeAffaire(e: Exclusivite, p: Pick<Exclusivite, "brand" | "creator" | "mail">): boolean {
+  if (!e.pending || !e.mail?.threadId || e.mail.threadId !== p.mail?.threadId) return false;
+  const marque = !e.brand.trim() || !p.brand.trim() || sameBrand(e.brand, p.brand);
+  const createur = !e.creator.trim() || !p.creator.trim() || foldName(e.creator) === foldName(p.creator);
+  return marque && createur;
+}
+
+/** La ligne « à confirmer » mise à jour par le contrat plus récent du même fil (id et date d'ajout gardés, rien de lu perdu). */
+export function fusionnerProposition(e: Exclusivite, p: Omit<Exclusivite, "id" | "createdAt">): Exclusivite {
+  return {
+    ...e,
+    ...p,
+    id: e.id,
+    createdAt: e.createdAt,
+    creator: p.creator.trim() || e.creator,
+    brand: p.brand.trim() || e.brand,
+    scope: p.scope.trim() || e.scope,
+    competitors: p.competitors.length ? p.competitors : e.competitors,
+    points: p.points.length ? p.points : e.points,
+    end: p.end ?? e.end,
+    docPath: p.docPath ?? e.docPath ?? null,
+  };
 }
 
 /**

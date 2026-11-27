@@ -614,7 +614,7 @@ export function RepresentationContract({ initial = null, draftId }: { initial?: 
                 </div>
               </div>
               <div className="flex items-center gap-1">
-                <button type="button" onClick={() => setPreview(representationHTML(e.config))} title="Ouvrir" aria-label="Ouvrir" className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"><Eye className="h-4 w-4" /></button>
+                <button type="button" onClick={() => setPreview(representationHTML(e.config, { signe: e.status === "signed" }))} title="Ouvrir" aria-label="Ouvrir" className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"><Eye className="h-4 w-4" /></button>
                 <button type="button" onClick={() => loadContract(e)} title="Modifier" aria-label="Modifier" className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"><PenLine className="h-4 w-4" /></button>
                 <button type="button" onClick={() => shareContract(e)} title="Copier un lien de partage (7 jours)" aria-label="Partager" className="grid h-8 w-8 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground"><Link2 className="h-4 w-4" /></button>
                 <button
