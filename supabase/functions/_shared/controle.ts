@@ -691,22 +691,26 @@ export function controler(input: ControleInput): Probleme[] {
 
   // 12. Seule facture de la collab annulée alors que la collab est en cours : la marque a peut-être
   // payé le créateur en direct, et la commission de l'agence n'est alors suivie nulle part
-  // (constat D6). Pas pour une collab déjà en encaissement « créateur » (règle 13).
-  if (input.invoices) {
+  // (constat D6). Pas pour une collab déjà en encaissement « créateur » (règle 13). Sautée si les
+  // modes d'encaissement ne sont pas lus (blob illisible) : jamais de fausse alerte.
+  if (input.invoices && input.cashModes) {
+    const modes = input.cashModes;
     for (const c of collabs) {
-      if (!collabOuverte(c) || input.cashModes?.[c.id] === "createur") continue;
+      if (!collabOuverte(c) || modes[c.id] === "createur") continue;
       // Déjà signalée « publiée sans facture » (règle 2) : une seule ligne par collab.
       if (out.some((p) => p.id === `publiee_sans_facture:${c.id}`)) continue;
       const annulees = input.invoices.filter((iv) => iv.collab_id === c.id && iv.status === "annulee");
       if (!annulees.length || facturesDe(c).length || lectureCachet(c.cachet) === "gifting") continue;
       const refs = annulees.map((iv) => txt(iv.ref)).filter(Boolean).join(", ");
+      const entre = refs ? ` (${refs})` : "";
+      const plusieurs = annulees.length > 1;
       const prenom = titleCase(txt(c.creator)).split(" ")[0] || "le créateur";
       add({
         id: `facture_annulee_seule:${c.id}`,
         regle: "facture_annulee_seule",
         gravite: "moyenne",
-        titre: `Facture annulée, collab en cours : ${nomCollab(c)}`,
-        detail: `La seule facture de la collab${refs ? ` (${refs})` : ""} est annulée, et la collab est encore à l'étape ${Number(c.step) || 0}. Si la marque a payé ${prenom} en direct : passer la collab en encaissement « créateur » (page Compta) et préparer la facture de commission. Sinon, refaire la facture.`,
+        titre: `${plusieurs ? "Factures annulées" : "Facture annulée"}, collab en cours : ${nomCollab(c)}`,
+        detail: `${plusieurs ? `Les factures de la collab${entre} sont toutes annulées` : `La seule facture de la collab${entre} est annulée`}, et la collab est encore à l'étape ${Number(c.step) || 0}. Si la marque a payé ${prenom} en direct : passer la collab en encaissement « créateur » (page Compta), puis préparer la facture de commission avec « Créer la facture » dans la collab (dès l'étape 7). Sinon, refaire la facture.`,
         lien: collabLien(c),
         correction: null,
         decision: true,
@@ -716,7 +720,9 @@ export function controler(input: ControleInput): Probleme[] {
 
   // 13. La marque paie le créateur en direct (encaissement « créateur ») et l'a payé (étape 9 ou
   // plus) : la commission de l'agence est due, mais la collab n'a aucune facture (la seule
-  // facture de l'agence, dans ce mode, est celle de la commission).
+  // facture de l'agence, dans ce mode, est celle de la commission). Elle se prépare avec
+  // « Créer la facture » dans la collab (Collabs, à partir de l'étape 7) : la page Compta dit
+  // seulement qui encaisse.
   if (input.invoices) {
     for (const c of collabs) {
       const step = Number(c.step) || 0;
@@ -728,8 +734,8 @@ export function controler(input: ControleInput): Probleme[] {
         regle: "commission_a_facturer",
         gravite: "moyenne",
         titre: `Commission à facturer : ${nomCollab(c)}`,
-        detail: `La marque paie ${prenom} en direct (encaissement « créateur ») et la collab est à l'étape ${step}, mais aucune facture de commission n'existe pour elle. La préparer depuis la page Compta.`,
-        lien: { vue: "compta" },
+        detail: `La marque paie ${prenom} en direct (encaissement « créateur ») et la collab est à l'étape ${step}, mais aucune facture de commission n'existe pour elle. La préparer avec « Créer la facture » dans la collab.`,
+        lien: collabLien(c),
         correction: null,
         decision: true,
       });
@@ -763,16 +769,19 @@ export function controler(input: ControleInput): Probleme[] {
     }
   }
 
-  // 15. Media kit en ligne d'un créateur actif, mais incomplet : bio, photos ou adresse du kit
-  // (constat D5 : une marque relancée ouvre un kit sans photo ni bio). Sauté si le kit n'est pas lu.
+  // 15. Media kit en ligne d'un créateur actif, mais sans bio ou sans photo (constat D5 : une
+  // marque relancée ouvre un kit vide). Les photos sont rangées dans un objet (hero, contact, une
+  // capture par réseau : page Media kit), lues comme kitEtat (src/lib/mediakitRoster.ts) ; un
+  // tableau est accepté aussi. Le « Lien » (slug) n'est pas exigé : sans lui, le site publie le
+  // kit sous le prénom (src/lib/mediakitSlug.ts). Sauté si le kit n'est pas lu (connecteur).
   if (input.creators) {
     for (const c of input.creators) {
       if (foldName(c.status || "actif") !== "actif" || !("mediakit" in c)) continue;
       const mk = c.mediakit && typeof c.mediakit === "object" && !Array.isArray(c.mediakit) ? (c.mediakit as Record<string, unknown>) : {};
+      const photos = mk.photos && typeof mk.photos === "object" ? Object.values(mk.photos as Record<string, unknown>) : [];
       const manque = [
         !txt(mk.bio) ? "bio" : null,
-        !(Array.isArray(mk.photos) && mk.photos.some(Boolean)) ? "photos" : null,
-        !txt(mk.slug) ? "adresse du kit" : null,
+        !photos.some((u) => typeof u === "string" && u.trim() !== "") ? "photos" : null,
       ].filter((x): x is string => !!x);
       if (!manque.length) continue;
       add({

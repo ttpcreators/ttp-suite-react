@@ -157,8 +157,10 @@ export function Reversements() {
         toast("Paiement enregistré ✓");
         // Le créateur est prévenu que sa part est versée (constat W15) : la marque des factures que
         // ce versement couvre, jamais le montant. Après l'écriture réussie ; jamais sur un retrait.
+        // Aucune marque couverte : pas de texte en français, le serveur met son texte de secours
+        // dans la langue du créateur, sous le titre « Versement envoyé ».
         const objet = objetMarques(marquesDuVersement(r.lines, r.reverse, n));
-        notifyCreator("payout", r.creator, objet ? `Ta part pour ${objet} est versée` : "Ton agence t'a fait un versement", undefined, objet || undefined);
+        notifyCreator("payout", r.creator, objet ? `Ta part pour ${objet} est versée` : "", undefined, objet || undefined);
         // Factures que ce versement solde : leur collab atteint « Créateur payé » (jamais bloquant).
         void autoVersement({
           createur: r.creator,

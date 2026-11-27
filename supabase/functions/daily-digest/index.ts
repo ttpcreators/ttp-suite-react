@@ -240,11 +240,15 @@ Deno.serve(async (req: Request) => {
     };
     // Page qui s'ouvre au toucher, sur l'objet quand il est connu (tâche supprimée : sans objet,
     // l'app n'envoie pas d'item puisque la tâche n'existe plus).
-    // Dépôts du créateur (contenu, facture, stats) : la page Documents, où le fichier est marqué
-    // « nouveau » (constat W5).
-    const VIEW: Record<string, string> = { tache: "todo", "tache-maj": "todo", "tache-faite": "todo", "tache-supprimee": "todo", idee: "ideas", "idee-maj": "ideas", "brief-maj": "briefs", evenement: "planning", contenu: "documents", facture: "documents", stats: "documents" };
+    // Dépôts du créateur : la page Documents, où le fichier est marqué « nouveau » (constat W5).
+    // Une facture n'arrive que par un dépôt. « contenu » et « stats » servent aussi au post publié,
+    // aux stats à 7 jours et à la cadence, où rien n'est nouveau dans Documents : Documents
+    // seulement avec l'id du document déposé (`item`), sinon l'accueil comme avant.
+    const VIEW: Record<string, string> = { tache: "todo", "tache-maj": "todo", "tache-faite": "todo", "tache-supprimee": "todo", idee: "ideas", "idee-maj": "ideas", "brief-maj": "briefs", evenement: "planning", facture: "documents" };
+    const DEPOT_SI_ITEM = new Set(["contenu", "stats"]);
     const item = String(body.item ?? "");
     const aKind = String(body.kind ?? "tache");
+    const vue = VIEW[aKind] ?? (DEPOT_SI_ITEM.has(aKind) && item ? "documents" : "");
     const activityTitle = customText(texts, KEYA[aKind] ?? "a_task", DEFA[aKind] ?? "{createur} · nouvelle activité")
       .replace(/\{createur\}/g, who)
       .slice(0, 120);
@@ -258,7 +262,7 @@ Deno.serve(async (req: Request) => {
       title: activityTitle,
       body: what,
       tag: DEPOTS.has(aKind) ? `ttp-creator-${who}-${aKind}` : `ttp-creator-${who}`,
-      ...(VIEW[aKind] ? { url: deepLinkUrl({ open: "view", view: VIEW[aKind], ...(item ? { item } : {}) }) } : {}),
+      ...(vue ? { url: deepLinkUrl({ open: "view", view: vue, ...(item ? { item } : {}) }) } : {}),
     }, "all", "creator-activity");
     return jsonRes({ ok: true, creatorActivity: true, ...r });
   }

@@ -343,16 +343,26 @@ describe("commission due quand la marque paie le créateur en direct (constat D6
     expect(out[0].detail).toContain("encaissement « créateur »");
     expect(out[0].decision).toBe(true);
   });
-  it("une autre facture vivante, une collab bouclée, ou déjà en encaissement « créateur » : rien", () => {
+  it("plusieurs factures annulées : texte au pluriel", () => {
+    const autre = { ...annulee, id: "i12", ref: "2026-102" };
+    const out = controler(base({ collabs: [collab({ step: 5 })], invoices: [annulee, autre] }));
+    expect(out.map((p) => p.regle)).toEqual(["facture_annulee_seule"]);
+    expect(out[0].titre.startsWith("Factures annulées")).toBe(true);
+    expect(out[0].detail).toContain("Les factures de la collab (2026-99, 2026-102) sont toutes annulées");
+  });
+  it("une autre facture vivante, une collab bouclée, déjà en encaissement « créateur », ou modes illisibles : rien", () => {
     const vivante = { id: "i10", ref: "2026-100", status: "attente", amount: "900 €", collab_id: "c1", creator: "LEA TEST" };
     expect(regles({ collabs: [collab({ step: 5 })], invoices: [annulee, vivante] })).toEqual([]);
     expect(regles({ collabs: [collab({ step: 11, status: "gagnee" })], invoices: [annulee] })).toEqual([]);
     expect(regles({ collabs: [collab({ step: 5 })], invoices: [annulee], cashModes: { c1: "createur" } })).toEqual([]);
+    // Blob illisible (controleDb envoie null) : on ne sait pas qui encaisse, la règle est sautée.
+    expect(regles({ collabs: [collab({ step: 5 })], invoices: [annulee], cashModes: null })).toEqual([]);
   });
-  it("encaissement « créateur », marque payée (étape 9), aucune facture de commission : à facturer", () => {
+  it("encaissement « créateur », marque payée (étape 9), aucune facture de commission : à facturer depuis la collab", () => {
     const out = controler(base({ collabs: [collab({ step: 9 })], cashModes: { c1: "createur" } }));
     expect(out.map((p) => p.regle)).toEqual(["commission_a_facturer"]);
-    expect(out[0].lien).toEqual({ vue: "compta" });
+    expect(out[0].lien).toEqual({ vue: "collabs", item: "c1" });
+    expect(out[0].detail).toContain("« Créer la facture » dans la collab");
   });
   it("facture de commission déjà faite, avant l'étape 9, ou factures pas lues (membre) : rien", () => {
     const com = { id: "i11", ref: "2026-101", status: "attente", amount: "180 €", collab_id: "c1", creator: "LEA TEST" };
@@ -383,10 +393,21 @@ describe("media kit incomplet (constat D5)", () => {
   it("créateur actif dont le kit en ligne n'a ni bio ni photos : signalé", () => {
     const out = controler(base({ creators: [{ ...complet, mediakit: { platforms: [{ name: "Instagram" }] } }] }));
     expect(out.map((p) => p.regle)).toEqual(["kit_incomplet"]);
-    expect(out[0].detail).toContain("bio, photos, adresse du kit");
+    expect(out[0].detail).toContain("il manque : bio, photos.");
   });
-  it("kit complet, kit pas lu (connecteur) ou créateur inactif : rien", () => {
-    expect(regles({ creators: [{ ...complet, mediakit: { bio: "Texte", photos: ["https://x.test/1.jpg"], slug: "lea" } }] })).toEqual([]);
+  it("photos rangées comme dans la page Media kit (objet hero, contact…) mais toutes vides : « photos » manque", () => {
+    const vide = { bio: "Texte", photos: { hero: null, contact: "", instagram: "  " } };
+    const out = controler(base({ creators: [{ ...complet, mediakit: vide }] }));
+    expect(out.map((p) => p.regle)).toEqual(["kit_incomplet"]);
+    expect(out[0].detail).toContain("il manque : photos.");
+    expect(regles({ creators: [{ ...complet, mediakit: { bio: "Texte", photos: {} } }] })).toEqual(["kit_incomplet"]);
+  });
+  it("kit complet avec ses photos en objet (forme réelle), sans « Lien » : aucune alerte", () => {
+    expect(regles({ creators: [{ ...complet, mediakit: { bio: "Texte", photos: { hero: "https://exemple.test/photo.jpg", contact: null } } }] })).toEqual([]);
+    // Ancienne forme en tableau : acceptée aussi.
+    expect(regles({ creators: [{ ...complet, mediakit: { bio: "Texte", photos: ["https://exemple.test/photo.jpg"] } }] })).toEqual([]);
+  });
+  it("kit pas lu (connecteur) ou créateur inactif : rien", () => {
     expect(regles({ creators: [complet] })).toEqual([]);
     expect(regles({ creators: [{ ...complet, status: "inactif", mediakit: null }] })).toEqual([]);
   });

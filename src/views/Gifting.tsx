@@ -193,12 +193,14 @@ export function Gifting({ embedded = false }: { embedded?: boolean } = {}) {
   }
 
   // Statut d'un cadeau changé par l'agence : son créateur est prévenu (constat WC4), avec
-  // « Marque · produit » ; le serveur écrit la notification dans sa langue.
+  // « Marque · produit » ; le serveur écrit la notification dans sa langue. Ni marque ni produit
+  // (ancienne fiche) : pas de texte en français, le serveur met son texte de secours dans la
+  // langue du créateur.
   function notifyGiftUpdate(g: Pick<GiftRow, "id" | "creator" | "brand" | "product">) {
     const who = (g.creator ?? "").trim();
     if (!who) return;
     const objet = giftObjet(g);
-    notifyCreator("gift-update", who, objet || "Du nouveau sur ton cadeau", g.id, objet || undefined);
+    notifyCreator("gift-update", who, objet, g.id, objet || undefined);
   }
 
   async function changeStatus(g: GiftRow, next: string) {

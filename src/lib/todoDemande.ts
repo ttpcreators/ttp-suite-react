@@ -67,6 +67,25 @@ export function aPrevenirApresConfier(t: TacheVue, apres: readonly string[], pat
 }
 
 /**
+ * Toast de « Confier à » et de « Modifier » : une tâche qui reste interne (rappel automatique de
+ * collab, tâche rendue interne avec la case « Côté créateur ») n'est pas vue par les créateurs
+ * qu'on lui donne. Renvoie la mention à ajouter, sinon "" : « Tâche confiée à X ✓ » seul
+ * laisserait croire que X la voit (constat W4).
+ */
+export function mentionCachee(t: TacheVue, apres: readonly string[], patch: PatchVisibilite): string {
+  const qui = normalizeCreators(apres);
+  if (t.source !== "agency" || !qui.length || vue({ ...t, ...patch })) return "";
+  return qui.length > 1 ? "interne, cachée aux créateurs" : "interne, cachée au créateur";
+}
+
+/** Même liste de créateurs, sans tenir compte de l'ordre, de la casse ni des doublons. */
+export function memesCreateurs(a: readonly string[], b: readonly string[]): boolean {
+  const x = new Set(normalizeCreators(a).map(cle));
+  const y = new Set(normalizeCreators(b).map(cle));
+  return x.size === y.size && [...x].every((n) => y.has(n));
+}
+
+/**
  * Push au créateur quand l'agence termine une tâche (constat W16) : « Ta demande est faite »
  * (task-done) seulement pour une tâche que le créateur a écrite lui-même ; « Tâche terminée »
  * (task-closed) pour une tâche que l'agence lui demandait ; rien pour une tâche interne ou

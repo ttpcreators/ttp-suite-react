@@ -67,6 +67,21 @@ describe("fiche collab : reliés et suggérés", () => {
     expect(g.invoices.linked[0].late).toBe(true);
     expect(g.gifting.suggested).toEqual([]);
   });
+  it("facture en retard : même règle que Facturation et la cloche, échéance « jj/mm » sans année comprise (constat W23)", () => {
+    const inv = (date: string, status = "attente") => ({
+      briefs: [],
+      todos: [],
+      events: [],
+      invoices: [{ id: "i1", ref: "TTP-1", party: "Marque X × Léna", creator: "Léna Test", status, date, collab_id: "c1" }],
+      gifting: [],
+    });
+    const late = (date: string, status?: string) => linkGroups(nutri, inv(date, status), (v) => String(v ?? ""), new Date(2026, 9, 23)).invoices.linked[0].late;
+    expect(late("01/10")).toBe(true);
+    expect(late("2026-10-22")).toBe(true);
+    expect(late("2026-10-23")).toBe(false); // le jour même ne compte pas
+    expect(late("30/10")).toBe(false);
+    expect(late("2026-01-01", "payee")).toBe(false);
+  });
 });
 
 describe("collab d'une ancienne facture (sans lien enregistré)", () => {

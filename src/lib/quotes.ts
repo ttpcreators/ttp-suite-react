@@ -4,7 +4,7 @@
  * blob agence (clé `quotes`, liste écrite entrée par entrée) et se transforme en facture
  * une fois accepté.
  */
-import { formatEuro } from "./money";
+import { CACHET_DEVISES, ecrireCachet, type CachetDevise } from "../../supabase/functions/_shared/cachet.ts";
 
 export type QuoteStatus = "brouillon" | "envoye" | "accepte" | "refuse";
 /** Statut AFFICHÉ : un devis brouillon ou envoyé dont la date de validité est passée est « expiré ». */
@@ -73,14 +73,26 @@ export function collabAProposer(q: { status: string; brand: string; creator?: st
 
 export type CollabPrefill = { brand: string; creator: string; deliverables: string; cachet: string };
 
-/** Formulaire de collab prérempli depuis un devis : marque, créateur, livrables (lignes du devis), cachet HT. */
-export function collabDepuisDevis(q: { brand: string; creator?: string | null; items?: { label?: string | null }[] | null }, ht: number): CollabPrefill {
+/** Devise du devis que le champ Cachet sait écrire (EUR, USD, GBP, CHF) ; sans devise : EUR ; autre : null. */
+function deviseDuDevis(currency: string | null | undefined): CachetDevise | null {
+  const d = String(currency || "EUR").trim().toUpperCase();
+  return (CACHET_DEVISES as readonly string[]).includes(d) ? (d as CachetDevise) : null;
+}
+
+/**
+ * Formulaire de collab prérempli depuis un devis : marque, créateur, livrables (lignes du devis),
+ * cachet HT dans la devise du devis (« 1 500 $ HT » pour un devis en dollars : jamais des euros,
+ * la facture reprend ensuite le cachet). Devise inconnue : cachet laissé vide.
+ */
+export function collabDepuisDevis(q: { brand: string; creator?: string | null; currency?: string | null; items?: { label?: string | null }[] | null }, ht: number): CollabPrefill {
   const lignes = (q.items ?? []).map((it) => String(it?.label ?? "").trim()).filter(Boolean);
+  const devise = deviseDuDevis(q.currency);
+  const cachet = ht > 0 && devise ? ecrireCachet({ montant: ht, devise, affiliation: false }) : null;
   return {
     brand: q.brand.trim(),
     creator: String(q.creator ?? "").trim(),
     deliverables: lignes.join(", "),
-    cachet: ht > 0 ? `${formatEuro(ht)} HT` : "",
+    cachet: cachet ? `${cachet} HT` : "",
   };
 }
 

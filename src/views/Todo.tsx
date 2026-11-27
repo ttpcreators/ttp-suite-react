@@ -41,7 +41,7 @@ import { insertMention, mentionAt, mentionSuggestions, parseQuickAdd } from "@/l
 import { creatorsLabel, creatorsPatch, hasCreator, joinNames, todoCreators } from "@/lib/todoCreators";
 import { CollabField, ObjectCollabLink, linkNewToCollab } from "@/components/collab-links";
 import { noteCreatorsColumn, todosHaveCreators } from "@/lib/todoCreatorsDb";
-import { aPrevenirApresConfier, creatorsANotifier, patchConfier, pushFinTache, visibiliteCreation } from "@/lib/todoDemande";
+import { aPrevenirApresConfier, creatorsANotifier, memesCreateurs, mentionCachee, patchConfier, pushFinTache, visibiliteCreation } from "@/lib/todoDemande";
 import { notePourCreateurColumn, todosHavePourCreateur } from "@/lib/todoDemandeDb";
 import { Checkbox } from "@/components/ui/checkbox";
 import { appendPoint, latestPoint, parsePoints, progressColumnMissing } from "@/lib/todoProgress";
@@ -613,7 +613,17 @@ export function Todo() {
     if (changed && dejaLa.length) notifyCreatorsChange("todo", dejaLa, changed, patch.text, row.id);
     setEditingId(null);
     const label = creatorsLabel(editCreators);
-    toast(!noteOk ? "Tâche modifiée, avancement non enregistré : réessaie" : confier.visible_createur ? `Tâche confiée à ${label} ✓ · visible par ${label}` : "Tâche modifiée ✓");
+    // Créateurs changés sur une tâche qui reste interne (rappel de collab…) : le dire (constat W4).
+    const cachee = memesCreateurs(todoCreators(row), editCreators) ? "" : mentionCachee(row, editCreators, confier);
+    toast(
+      !noteOk
+        ? "Tâche modifiée, avancement non enregistré : réessaie"
+        : confier.visible_createur
+          ? `Tâche confiée à ${label} ✓ · visible par ${label}`
+          : cachee
+            ? `Tâche modifiée ✓ · ${cachee}`
+            : "Tâche modifiée ✓",
+    );
   };
 
   // « Reporter » : déplace l'échéance (champ `due` existant).
@@ -632,7 +642,18 @@ export function Todo() {
     if (!ok) return;
     for (const name of aPrevenirApresConfier(row, list, confier)) notifyCreator("task", name, row.text, row.id);
     const label = creatorsLabel(list);
-    toast(!patch.creator ? "Tâche rendue à l'agence ✓" : confier.visible_createur ? `Tâche confiée à ${label} ✓ · visible par ${label}` : `Tâche confiée à ${label} ✓`);
+    // Tâche qui reste interne (rappel de collab, case « Côté créateur » décochée) : le créateur
+    // ne la voit pas, le toast le dit (constat W4).
+    const cachee = mentionCachee(row, list, confier);
+    toast(
+      !patch.creator
+        ? "Tâche rendue à l'agence ✓"
+        : confier.visible_createur
+          ? `Tâche confiée à ${label} ✓ · visible par ${label}`
+          : cachee
+            ? `Tâche confiée à ${label} ✓ · ${cachee}`
+            : `Tâche confiée à ${label} ✓`,
+    );
   };
 
   useEffect(() => {
@@ -807,7 +828,9 @@ export function Todo() {
   // Vue liste : on applique en plus le filtre En cours / En retard / Terminées / Toutes.
   // Une tâche terminée par le créateur (repère « nouveau » pas encore lu) reste dans « Pas
   // terminées » jusqu'à son ouverture : sinon la pastille To-do resterait allumée sans rien à voir.
-  const filtered = filteredBase.filter((row) => matchTodoFilter(todoFilter, row) || (todoFilter === "encours" && row.done && activity.keys.has(`todo:${row.id}`)));
+  // La même règle sert à la liste et au compteur du filtre (sinon « Pas terminées 4 » sur 5 lignes).
+  const dansFiltre = (f: TodoFilter, row: Row) => matchTodoFilter(f, row) || (f === "encours" && row.done && activity.keys.has(`todo:${row.id}`));
+  const filtered = filteredBase.filter((row) => dansFiltre(todoFilter, row));
   // Liste groupée par priorité (ordre d'origine dans chaque groupe).
   const groups = PRIO_GROUPS.map((g) => ({
     ...g,
@@ -1583,7 +1606,7 @@ export function Todo() {
                   options: TODO_FILTERS.map((f) => ({
                     value: f.id,
                     label: f.label,
-                    count: filteredBase.filter((r) => matchTodoFilter(f.id, r)).length,
+                    count: filteredBase.filter((r) => dansFiltre(f.id, r)).length,
                   })),
                 }]
               : []),

@@ -561,7 +561,8 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
       {convertForm}
       {bento}
       {toolbar}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3.5 items-start">
+      {/* Cinq colonnes quand « Perdue » est là : sinon elle passe seule sur une deuxième ligne. */}
+      <div className={cn("grid grid-cols-1 md:grid-cols-2 gap-3.5 items-start", stages.length > 4 ? "lg:grid-cols-5" : "lg:grid-cols-4")}>
         {stages.map((stage) => {
           const cards = filtered.filter(
             (row) => stageKey(row.stage) === stage,

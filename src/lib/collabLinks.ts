@@ -7,6 +7,7 @@
  *   • à chaque étape franchie, une tâche de l'étape est proposée (`autoTaskFor`).
  */
 import { firstAmount, parseAmountStrict } from "./money";
+import { isOverdueInvoice } from "./relance";
 
 export type CollabLite = { id: string; brand: string; creator: string | null; step: number; status: string; cachet?: string | null };
 
@@ -135,18 +136,11 @@ export type LinkGroups = Record<LinkTable, { linked: LinkItem[]; suggested: Link
 
 const str = (v: unknown) => (typeof v === "string" ? v : v == null ? "" : String(v));
 
-/** Échéance d'une facture « JJ/MM/AAAA » ou ISO → dépassée ? (statut « retard » ou « attente » échue). */
+/** Facture en retard (statut « retard », ou « attente » échue) : la règle unique de Facturation,
+ *  de la cloche et du résumé du matin (src/lib/relance.ts, _shared/factureRetard.ts ; constat W23),
+ *  qui lit aussi une échéance « jj/mm » sans année. */
 function invoiceLate(r: Raw, now: Date): boolean {
-  const status = str(r.status);
-  if (status === "retard") return true;
-  if (status !== "attente") return false;
-  const t = str(r.date).trim();
-  const fr = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(t);
-  const isoM = /^(\d{4})-(\d{2})-(\d{2})/.exec(t);
-  const d = fr ? new Date(Number(fr[3]), Number(fr[2]) - 1, Number(fr[1])) : isoM ? new Date(Number(isoM[1]), Number(isoM[2]) - 1, Number(isoM[3])) : null;
-  if (!d) return false;
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  return d.getTime() < today.getTime();
+  return isOverdueInvoice({ status: str(r.status), date: str(r.date) || null }, now);
 }
 
 const BRIEF_STATUS: Record<string, string> = { attente: "En attente", valider: "À valider", cours: "En cours", "terminé": "Terminé", termine: "Terminé" };

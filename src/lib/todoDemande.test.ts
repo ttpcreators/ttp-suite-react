@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aPrevenirApresConfier, creatorsANotifier, patchConfier, pourCreateurColumnMissing, pushFinTache, visibiliteCreation } from "./todoDemande";
+import { aPrevenirApresConfier, creatorsANotifier, memesCreateurs, mentionCachee, patchConfier, pourCreateurColumnMissing, pushFinTache, visibiliteCreation } from "./todoDemande";
 
 const agence = (o: Record<string, unknown> = {}) => ({ source: "agency", creator: null, creators: [], visible_createur: false, ...o });
 
@@ -47,6 +47,27 @@ describe("Confier à / Modifier", () => {
     const t = { source: "creator", creator: "Créatrice A", creators: ["Créatrice A"] };
     expect(patchConfier(t, ["Créatrice B"], true)).toEqual({});
     expect(aPrevenirApresConfier(t, ["Créatrice B"], {})).toEqual([]);
+  });
+});
+
+describe("toast de « Confier à » : dire quand la tâche reste cachée (constat W4)", () => {
+  it("tâche interne (rappel de collab) confiée à un autre créateur : « interne, cachée au créateur »", () => {
+    const rappel = agence({ creator: "Créatrice A", creators: ["Créatrice A"], visible_createur: false, pour_createur: false });
+    expect(mentionCachee(rappel, ["Créatrice B"], patchConfier(rappel, ["Créatrice B"], true))).toBe("interne, cachée au créateur");
+    expect(mentionCachee(rappel, ["Créatrice A", "Créatrice B"], {})).toBe("interne, cachée aux créateurs");
+  });
+  it("tâche visible, tâche qui devient visible, rendue à l'agence ou tâche du créateur : rien à ajouter", () => {
+    const visible = agence({ creator: "Créatrice A", creators: ["Créatrice A"], visible_createur: true });
+    expect(mentionCachee(visible, ["Créatrice B"], {})).toBe("");
+    const sans = agence();
+    expect(mentionCachee(sans, ["Créatrice A"], patchConfier(sans, ["Créatrice A"], true))).toBe("");
+    expect(mentionCachee(visible, [], patchConfier(visible, [], true))).toBe("");
+    expect(mentionCachee({ source: "creator", creator: "Créatrice A" }, ["Créatrice B"], {})).toBe("");
+  });
+  it("même liste de créateurs : sans ordre, casse ni doublon", () => {
+    expect(memesCreateurs(["Créatrice A", "créatrice b"], ["Créatrice B", "CRÉATRICE A", " "])).toBe(true);
+    expect(memesCreateurs(["Créatrice A"], ["Créatrice A", "Créatrice B"])).toBe(false);
+    expect(memesCreateurs([], [])).toBe(true);
   });
 });
 

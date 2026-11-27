@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addDaysISO, collabAProposer, collabDepuisDevis, lireCollabPrefill, nextQuoteRef, quoteShownStatus } from "./quotes";
+import { lireCachet } from "../../supabase/functions/_shared/cachet.ts";
 
 describe("nextQuoteRef", () => {
   it("démarre à 001 et suit les devis de l'année", () => {
@@ -56,5 +57,15 @@ describe("devis accepté → « Créer la collab » (constat WC1)", () => {
     expect(lireCollabPrefill(undefined)).toBe(null);
     expect(lireCollabPrefill("pas du json")).toBe(null);
     expect(lireCollabPrefill(JSON.stringify({ brand: "" }))).toBe(null);
+  });
+  it("devis dans une autre devise : cachet dans cette devise, relu comme tel par le champ Cachet", () => {
+    const usd = collabDepuisDevis({ ...devis, currency: "USD" }, 550);
+    expect(usd.cachet).toBe("550 $ HT");
+    const lu = lireCachet(usd.cachet);
+    expect(lu).toMatchObject({ montant: 550, devise: "USD", lisible: true });
+    expect(collabDepuisDevis({ ...devis, currency: "chf" }, 800).cachet).toBe("800 CHF HT");
+    // Devise que le champ Cachet ne sait pas écrire, ou montant nul : cachet laissé vide.
+    expect(collabDepuisDevis({ ...devis, currency: "JPY" }, 550).cachet).toBe("");
+    expect(collabDepuisDevis({ ...devis, currency: "EUR" }, 0).cachet).toBe("");
   });
 });
