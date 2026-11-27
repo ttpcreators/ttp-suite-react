@@ -10,7 +10,12 @@
 //   rejetés par la plateforme avant d'atteindre ce code.
 //
 // La logique de sync vit dans _shared/google.ts (runSyncCycle) — source unique.
-// Sortie : { ok, pulled, pushed, deleted, resynced } ou { ok:true, skipped:'locked' }.
+// Sortie : { ok, pulled, pushed, deleted, resynced, conflits, absents, refus,
+// statutsRefus } ou { ok:true, skipped:'locked' }.
+//
+// JOURNAL : une ligne par passage, `google-sync {…}` : déclencheur (cron, manual,
+// webhook, renew, app), mode, envoyés, reçus, supprimés, durée, ou l'erreur. Le cron
+// horaire (17 * * * *) reste indispensable : Google n'envoie pas toujours d'avis.
 // ============================================================================
 
 import {
@@ -20,6 +25,7 @@ import {
   runSyncCycle,
   timingSafeEqualStr,
 } from "../_shared/google.ts";
+import { declencheurSync, ligneErreur, ligneJournal } from "../_shared/synchroAgenda.ts";
 
 /** Vérifie que l'appelant est l'agence (JWT valide + rôle 'agency') OU le cron. */
 async function authorize(req: Request): Promise<{ ok: boolean; via?: "cron" | "agency" }> {
@@ -74,10 +80,13 @@ Deno.serve(async (req: Request) => {
     body = {};
   }
   const mode = body.mode === "full" ? "full" : "incremental";
+  const contexte = { declencheur: declencheurSync(body.trigger, auth.via), mode };
+  const t0 = Date.now();
 
   const sb = getServiceClient();
   try {
     const result = await runSyncCycle(sb, mode);
+    console.log("google-sync", JSON.stringify(ligneJournal(contexte, result, Date.now() - t0)));
     if ("skipped" in result) {
       return new Response(JSON.stringify({ ok: true, skipped: result.skipped }), {
         status: 200, headers: { ...cors, "Content-Type": "application/json" },
@@ -87,6 +96,7 @@ Deno.serve(async (req: Request) => {
       status: 200, headers: { ...cors, "Content-Type": "application/json" },
     });
   } catch (e) {
+    console.error("google-sync", JSON.stringify(ligneErreur(contexte, e, Date.now() - t0)));
     const msg = String((e as Error).message ?? e);
     // not_connected / invalid_grant : reconnexion requise -> 409.
     const status = msg === "not_connected" || msg === "invalid_grant" ? 409 : 500;
