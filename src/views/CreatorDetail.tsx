@@ -22,6 +22,9 @@ import { SEUIL_FICHE, contratsSignes, ficheCompletude, type ChampFiche } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TONE_SOFT } from "@/lib/statusTone";
 import { useAppState, mergeAppStateKey, listAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
+import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
+import { champsModifies, infosEvents, type ActivityEvent } from "@/lib/activityEvents";
+import { NewDot } from "@/components/ui/new-dot";
 
 const CreatorMailsAgency = lazy(lazyImport(() => import("./CreatorMails").then((m) => ({ default: m.CreatorMailsAgency }))));
 import { parseAmount, formatEuro } from "@/lib/money";
@@ -239,6 +242,19 @@ export function CreatorDetail({
   const [ctStart, setCtStart] = useState("");
   const [ctMonths, setCtMonths] = useState("12");
   const [ctType, setCtType] = useState("représentation");
+  // Infos modifiées par le créateur lui-même (repère écrit par la base, vague 1 : noms des
+  // champs, jamais les valeurs). Le repère est effacé dès l'ouverture de la fiche ; les champs
+  // restent affichés pendant la visite.
+  const activity = useActivityEvents("agency");
+  const infosNow = infosEvents(activity.events, name, c?.id);
+  const [infosVues, setInfosVues] = useState<ActivityEvent[]>([]);
+  // Copie gardée pendant le rendu, avant que l'effet ci-dessous n'efface les repères.
+  const infosNouvelles = infosNow.filter((e) => !infosVues.some((x) => x.id === e.id));
+  if (infosNouvelles.length > 0) setInfosVues([...infosVues, ...infosNouvelles]);
+  useEffect(() => {
+    for (const id of new Set(infosEvents(activity.events, name, c?.id).map((e) => e.object_id))) void markActivityRead("creator", id);
+  }, [activity.events, name, c?.id]);
+  const champsVus = champsModifies(infosVues.map((e) => e.excerpt));
 
   const live = useLiveKey();
   // Chiffres du media kit comparés aux chiffres réels (« Chiffres à mettre à jour »).
@@ -626,6 +642,18 @@ export function CreatorDetail({
         </div>
       </PopoverContent>
     </Popover>
+  ) : null;
+  // Infos qu'il vient de modifier lui-même (le détail est dans la section Infos).
+  const infosChip = champsVus.length > 0 ? (
+    <button
+      type="button"
+      onClick={() => setPhoneSeg("infos")}
+      title="Infos modifiées par le créateur"
+      className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-medium text-foreground transition-opacity hover:opacity-80"
+    >
+      <NewDot label="Nouveau" />
+      <span className="truncate">Infos modifiées · {champsVus.join(", ")}</span>
+    </button>
   ) : null;
 
   const sections = (
@@ -1093,6 +1121,7 @@ export function CreatorDetail({
               </AnimatedBadge>
               {exclusive && <span className="rounded-full border border-foreground/20 px-2.5 py-0.5 text-[11px] font-medium text-foreground">Exclusif</span>}
               {completudeChip}
+              {infosChip}
             </div>
             <div className="mt-4 flex w-full gap-2">
               {actions.map((a) =>
@@ -1134,6 +1163,7 @@ export function CreatorDetail({
                 </span>
               )}
               {completudeChip}
+              {infosChip}
             </div>
             <div className="mt-1 text-[13px] text-muted-foreground">
               {[c?.handle, c?.niche, c?.platform].filter(Boolean).join(" · ") || "—"}

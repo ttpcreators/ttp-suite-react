@@ -24,6 +24,9 @@ import { getCache, setCache } from "@/lib/viewCache";
 import { useIsFounder } from "@/lib/useFounder";
 import { PageHeaderRow } from "@/components/ui/page-header";
 import { useRosterAudience } from "@/lib/rosterAudience";
+import { useActivityEvents } from "@/lib/useActivityEvents";
+import { infosEvents } from "@/lib/activityEvents";
+import { NewDot } from "@/components/ui/new-dot";
 
 type CreatorRow = {
   id: string;
@@ -109,6 +112,9 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
   const [pageQ, setPageQ] = useState("");
   const live = useLiveKey();
   const { NOW_MONTH, MONTH_LABEL, MONTH_PREP } = currentMonthInfo();
+  // Point « nouveau » : le créateur a modifié ses infos (repère écrit par la base, vague 1),
+  // effacé à l'ouverture de sa fiche.
+  const activity = useActivityEvents("agency");
 
   const [formOpen, setFormOpen] = useState(false);
   const [name, setName] = useState("");
@@ -418,6 +424,7 @@ export function Roster({ onOpen, onShow }: { onOpen?: (name: string) => void; on
                   />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[13px] font-semibold text-foreground">
+                      {infosEvents(activity.events, c.name, c.id).length > 0 && <NewDot label="Infos modifiées par le créateur" className="mr-1.5 align-middle" />}
                       {titleCase(c.name)}
                     </div>
                     <div className="truncate text-xs text-faint">

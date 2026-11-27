@@ -1,4 +1,5 @@
 import { daysBetween, eventISO, localISO } from "./aujourdhui";
+import { pourToi } from "./todoVisibility";
 import { toISODate } from "./dates";
 import { briefKey } from "./creatorMissions";
 import { isDone } from "./collabs";
@@ -129,9 +130,10 @@ export function creatorSteps(input: NextStepInput): NextStep[] {
     });
   }
 
-  // ── Tâches ouvertes.
+  // ── Tâches ouvertes « Pour toi » : une tâche suivie par l'agence n'est pas une action
+  // du créateur (ni ici, ni dans Aujourd'hui qui reprend ces étapes).
   for (const td of input.todos) {
-    if (td.done || td.status === "Fait") continue;
+    if (td.done || td.status === "Fait" || !pourToi(td)) continue;
     const due = toISODate(td.due) || null;
     const days = due ? daysTo(due) : null;
     const urgent = days != null && days <= 1;
