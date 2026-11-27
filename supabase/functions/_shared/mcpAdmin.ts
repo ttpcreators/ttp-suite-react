@@ -19,29 +19,33 @@ export type TableRule = {
   noCreate?: boolean;
   /** Colonnes modifiables seulement (sinon : toutes sauf les interdites). */
   only?: string[];
+  /** Colonnes JSON qui contiennent toujours un objet ou une liste : du texte y est relu en JSON, ou refusé. */
+  json?: string[];
 };
 
+// `json` : relevé sur la base le 27/11/2026. La proposition d'un prospect (`prospects.proposal`) est du
+// texte rangé dans une colonne JSON : elle n'est pas dans la liste.
 export const TABLES: Record<string, TableRule> = {
-  contacts: { label: "Contact", search: ["brand", "person", "email", "instagram"], remove: "corbeille" },
-  creators: { label: "Créateur", search: ["name", "handle", "email", "email_pro"], remove: "corbeille" },
-  collabs: { label: "Collab", search: ["brand", "creator", "title"], remove: "corbeille" },
+  contacts: { label: "Contact", search: ["brand", "person", "email", "instagram"], remove: "corbeille", json: ["email_check", "ig", "sequence", "touches"] },
+  creators: { label: "Créateur", search: ["name", "handle", "email", "email_pro"], remove: "corbeille", json: ["mediakit", "stats", "stats_history", "followers_history", "ig", "tt", "yt"] },
+  collabs: { label: "Collab", search: ["brand", "creator", "title"], remove: "corbeille", json: ["ig", "tt", "yt"] },
   collab_steps: { label: "Étape de collab", search: ["step", "note"] },
-  briefs: { label: "Brief", search: ["brand", "creator", "consignes"], remove: "corbeille" },
+  briefs: { label: "Brief", search: ["brand", "creator", "consignes"], remove: "corbeille", json: ["pdf", "resume"] },
   invoices: { label: "Facture", search: ["ref", "party", "creator"], remove: "corbeille", noCreate: true, only: ["status", "date", "creator", "collab_id"] },
-  todos: { label: "À faire", search: ["text", "descr", "creator", "tag"], remove: "corbeille" },
-  todo_routines: { label: "Routine", search: ["text"] },
+  todos: { label: "À faire", search: ["text", "descr", "creator", "tag"], remove: "corbeille", json: ["subtasks", "attachments"] },
+  todo_routines: { label: "Routine", search: ["text"], json: ["done_log"] },
   events: { label: "Rendez-vous", search: ["title", "who", "description"], remove: "tombstone" },
   gifting: { label: "Gifting", search: ["brand", "creator", "product"], remove: "corbeille" },
   documents: { label: "Document", search: ["name", "creator"], noCreate: true, only: ["name", "type", "creator"] },
-  ideas: { label: "Idée", search: ["text", "creator"], remove: "corbeille" },
+  ideas: { label: "Idée", search: ["text", "creator"], remove: "corbeille", json: ["subtasks"] },
   prospects: { label: "Prospect", search: ["brand", "contact", "creator"], remove: "corbeille" },
   creator_pool: { label: "Scouting créateur", search: ["name", "handle", "email", "note"], remove: "corbeille" },
   athlete_pool: { label: "Scouting sportif", search: ["name", "handle", "email", "club"], remove: "corbeille" },
-  creator_roadmap: { label: "Feuille de route", search: ["creator"], key: "creator" },
+  creator_roadmap: { label: "Feuille de route", search: ["creator"], key: "creator", json: ["roadmap", "self_cadence"] },
   creator_mail_settings: { label: "Réglage Mails du créateur", search: ["creator", "alias"], key: "creator" },
   ig_threads: { label: "Conversation Instagram", search: ["username", "name", "last_text"], noCreate: true, only: ["hidden", "contact_id"] },
-  email_sequences: { label: "Séquence d'emails", search: ["name"] },
-  agency_mediakit: { label: "Media kit agence", search: [] },
+  email_sequences: { label: "Séquence d'emails", search: ["name"], json: ["steps"] },
+  agency_mediakit: { label: "Media kit agence", search: [], json: ["data"] },
 };
 
 /** Jamais écrites par Claude : clés, horodatages techniques, synchro Google / Meta. */
@@ -56,9 +60,25 @@ export function writableFields(table: string, fields: Record<string, unknown>): 
   for (const [k, v] of Object.entries(fields ?? {})) {
     const bad = !/^[a-z_][a-z0-9_]{0,40}$/.test(k) || SYSTEM.has(k) || SECRET.test(k) || (rule?.only && !rule.only.includes(k));
     if (bad) refused.push(k);
-    else ok[k] = v;
+    else if (typeof v === "string" && rule?.json?.includes(k)) {
+      // Un objet envoyé en texte (media kit créé le 20/11/2026) : relu en JSON. Jamais rangé en texte,
+      // car le site et l'app ne savent lire qu'un objet.
+      const lu = objetJson(v);
+      if (lu === undefined) refused.push(`${k} (objet JSON attendu)`);
+      else ok[k] = lu;
+    } else ok[k] = v;
   }
   return { ok, refused };
+}
+
+/** Texte qui contient un objet ou une liste JSON : cet objet. Sinon undefined. */
+function objetJson(s: string): unknown {
+  try {
+    const v: unknown = JSON.parse(s);
+    return v !== null && typeof v === "object" ? v : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Ligne lisible par Claude : sans colonnes sensibles, valeurs très longues raccourcies. */
@@ -67,7 +87,9 @@ export function readableRow(row: Record<string, unknown>, max = 1500): Record<st
   for (const [k, v] of Object.entries(row)) {
     if (SECRET.test(k)) continue;
     const s = typeof v === "string" ? v : v == null ? v : JSON.stringify(v);
-    out[k] = typeof s === "string" && s.length > max ? `${s.slice(0, max)}… (${s.length} caractères)` : v;
+    if (typeof s !== "string" || s.length <= max) out[k] = v;
+    // Un objet raccourci le dit : sinon Claude le prend pour du texte et le réécrit en texte.
+    else out[k] = typeof v === "string" ? `${s.slice(0, max)}… (${s.length} caractères)` : `${s.slice(0, max)}… (objet JSON de ${s.length} caractères, raccourci)`;
   }
   return out;
 }

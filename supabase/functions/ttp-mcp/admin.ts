@@ -120,7 +120,7 @@ const creerElement: AdminTool = {
   name: "creer_element",
   title: "Créer un élément",
   description:
-    "Crée une ligne dans une table de l'app (fondateurs) : contact, créateur, collab, brief, tâche, rendez-vous, gifting, idée, prospect, scouting… `champs` = colonnes de la table (lis d'abord une ligne existante avec lire_donnees pour connaître les colonnes et leur format). Pour une facture, utilise preparer_facture. Demande l'accord de l'utilisateur avant.",
+    "Crée une ligne dans une table de l'app (fondateurs) : contact, créateur, collab, brief, tâche, rendez-vous, gifting, idée, prospect, scouting… `champs` = colonnes de la table (lis d'abord une ligne existante avec lire_donnees pour connaître les colonnes et leur format ; une colonne JSON, comme un media kit, s'envoie en objet, pas en texte). Pour une facture, utilise preparer_facture. Demande l'accord de l'utilisateur avant.",
   inputSchema: {
     type: "object",
     properties: { table: { type: "string", enum: TABLE_ENUM }, champs: { type: "object" } },
@@ -159,7 +159,7 @@ const modifierElement: AdminTool = {
   name: "modifier_element",
   title: "Modifier un élément",
   description:
-    "Modifie une ligne de l'app (fondateurs) : n'importe quel champ d'un contact, créateur, collab, brief, tâche, rendez-vous, gifting, prospect, scouting, statut d'une facture… Lis d'abord la ligne (lire_donnees) pour avoir son id et le format des champs. Renvoie l'avant / l'après de chaque champ (pour revenir en arrière si besoin). Demande l'accord de l'utilisateur avant.",
+    "Modifie une ligne de l'app (fondateurs) : n'importe quel champ d'un contact, créateur, collab, brief, tâche, rendez-vous, gifting, prospect, scouting, statut d'une facture… Lis d'abord la ligne (lire_donnees) pour avoir son id et le format des champs ; une colonne JSON, comme un media kit, s'envoie en objet, pas en texte. Renvoie l'avant / l'après de chaque champ (pour revenir en arrière si besoin). Demande l'accord de l'utilisateur avant.",
   inputSchema: {
     type: "object",
     properties: { table: { type: "string", enum: TABLE_ENUM }, id: { type: "string" }, champs: { type: "object" } },

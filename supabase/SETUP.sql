@@ -52,6 +52,9 @@ alter table public.creators add column if not exists instagram text;
 alter table public.creators add column if not exists tiktok text;
 alter table public.creators add column if not exists stats_month text;   -- sql/11 : mois de dernière MAJ des datas
 alter table public.creators add column if not exists mediakit jsonb;     -- sql/14 : contenu du media kit (bio, audience, stats par plateforme, marques, photos)
+-- sql/2026-11-27-mediakit-objet : un media kit est un objet (ou vide), jamais du texte (le site ne lit qu'un objet).
+alter table public.creators drop constraint if exists creators_mediakit_objet;
+alter table public.creators add constraint creators_mediakit_objet check (mediakit is null or jsonb_typeof(mediakit) in ('object', 'null'));
 alter table public.creators add column if not exists ig jsonb;           -- chiffres Instagram (Meta), écrits par ig-sync (sql/2026-10-13-instagram-api)
 
 create table if not exists public.invoices (

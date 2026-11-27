@@ -8,10 +8,27 @@ describe("accès complet de Claude", () => {
     // Factures : seulement statut, échéance, créateur, collab (le reste passe par preparer_facture).
     expect(writableFields("invoices", { status: "payee", amount: "1 €" })).toEqual({ ok: { status: "payee" }, refused: ["amount"] });
   });
+  it("colonnes JSON : un objet envoyé en texte est enregistré en objet", () => {
+    // Bug du 20/11/2026 : un media kit créé par Claude (creer_element) avait été envoyé en texte. La
+    // colonne jsonb gardait une chaîne, que le générateur des media kits du site ne savait pas lire.
+    const kit = { slug: "zoe", bio: "Bio fictive", platforms: [{ key: "instagram", followers: "1000" }] };
+    expect(writableFields("creators", { name: "Zoé Test", mediakit: JSON.stringify(kit) })).toEqual({ ok: { name: "Zoé Test", mediakit: kit }, refused: [] });
+    expect(writableFields("todos", { subtasks: ' [{"text":"Appeler"}]' }).ok.subtasks).toEqual([{ text: "Appeler" }]);
+    // Déjà un objet : inchangé. Une colonne texte garde son texte, même entre accolades.
+    expect(writableFields("creators", { mediakit: kit }).ok.mediakit).toBe(kit);
+    expect(writableFields("todos", { text: "{à trier}" }).ok.text).toBe("{à trier}");
+    // La proposition d'un prospect est du texte rangé dans une colonne JSON : elle reste du texte.
+    expect(writableFields("prospects", { proposal: "Deux Reels en janvier" }).ok.proposal).toBe("Deux Reels en janvier");
+    // Du texte qui n'est pas un objet JSON (ex. recopié d'une lecture raccourcie) : refusé, jamais enregistré.
+    expect(writableFields("creators", { mediakit: '{"bio":"Coach… (1588 caractères)' })).toEqual({ ok: {}, refused: ["mediakit (objet JSON attendu)"] });
+    expect(writableFields("creators", { stats: "12 000 abonnés" }).refused).toEqual(["stats (objet JSON attendu)"]);
+  });
   it("lecture sans secret, valeurs longues raccourcies", () => {
     const r = readableRow({ name: "Léa", access_token: "t", stats_history: "x".repeat(2000) }, 10);
     expect(r.access_token).toBeUndefined();
     expect(String(r.stats_history)).toMatch(/^x{10}… \(2000 caractères\)$/);
+    // Un objet raccourci le dit, pour que Claude ne le prenne pas pour du texte à recopier tel quel.
+    expect(readableRow({ mediakit: { bio: "x".repeat(50) } }, 10).mediakit).toBe('{"bio":"xx… (objet JSON de 60 caractères, raccourci)');
   });
   it("réglages interdits", () => {
     expect(blockedSetting("credVault")).toBe(true);
