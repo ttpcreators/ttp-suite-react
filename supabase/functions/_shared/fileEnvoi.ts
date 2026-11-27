@@ -15,10 +15,17 @@
 //     jour ; au 30e, puis à chaque palier de 10 (40, 50…), la file attend un quart d'heure
 //     que les rebonds arrivent, puis calcule le taux de rebonds sur tous les mails du jour.
 //     Au-delà de 5 %, plus rien ne part de la journée ; sinon la file repart pour 10 mails.
+// Depuis le 27/11 (enquête du 27/11 sur la file d'envoi) : un rebond compte aussi quand l'adresse
+// n'a pas de fiche contact (une bonne part des destinataires de la file). Il est lu dans le journal
+// des mails reçus (email_activity : message d'un robot qui cite l'adresse), sans rien écrire nulle
+// part, et bloque l'adresse tant qu'elle n'a pas donné signe de vie depuis : un mail reçu d'elle,
+// ou sa fiche revérifiée. Le coupe-circuit par paliers le compte aussi, avec les rebonds que
+// gmail-poll note sur la ligne de la file et les fiches marquées en erreur du jour.
 // Règles PURES (heure de Paris), testées par fileEnvoi.test.ts.
 // ============================================================================
 
 import { instantParis, paris } from "./rdv.ts";
+import { adresseEnRebond } from "./sequence.ts";
 
 export type Regles = {
   /** Mails au plus par jour et par boîte. */
@@ -39,6 +46,21 @@ export type Regles = {
   rebondsPart: number;
   /** À chaque palier, minutes d'attente après le dernier envoi pour laisser arriver les rebonds. */
   observationMin: number;
+  /** Jours pendant lesquels un rebond lu dans le journal des mails bloque l'adresse (sauf signe de vie depuis). */
+  rebondJours: number;
+  /**
+   * Un rebond lu dans le journal des mails bloque aussi une réponse dans un fil existant (true :
+   * comportement du 27/11). Décision de Marc en attente : false laisserait partir les réponses (la
+   * fiche « adresse en erreur » les bloquerait toujours).
+   */
+  rebondBloqueReponse: boolean;
+  /**
+   * Raisons de la liste « ne plus contacter » qui laissent passer une réponse dans un fil
+   * existant. Vide : la liste bloque tout, réponses comprises (comportement du 25/11). La règle
+   * est une décision de Marc (enquête du 27/11) : par exemple ["refus", "autre"] pour que seules
+   * les raisons « arret » et « rebond » bloquent aussi les réponses.
+   */
+  reponseMalgreListe: readonly string[];
 };
 
 export const REGLES: Regles = {
@@ -53,6 +75,9 @@ export const REGLES: Regles = {
   pasPalier: 10,
   rebondsPart: 0.05,
   observationMin: 15,
+  rebondJours: 90,
+  rebondBloqueReponse: true,
+  reponseMalgreListe: [],
 };
 
 /** Brouillons au plus dans un appel de programmer_envoi. */
@@ -134,15 +159,21 @@ export type NePlusContacter = { email: string | null; domaine: string | null; ra
 export type EnvoiRecent = { email: string; at: string };
 
 /**
- * Raison de ne pas envoyer, ou null. `reponse` = le mail répond à un fil : seule la liste
- * « ne plus contacter » et l'adresse en erreur comptent alors (on ne bloque jamais une réponse
- * à quelqu'un qui nous a écrit). `agence` = adresses de l'agence, jamais bloquées.
+ * Raison de ne pas envoyer, ou null. `reponse` = le mail répond à un fil existant : la règle
+ * des 30 jours ne compte pas, et la liste « ne plus contacter » le laisse passer seulement pour
+ * les raisons de `reponseMalgreListe` (aucune par défaut). L'adresse en erreur (fiche) bloque
+ * toujours ; un rebond du journal (`rebonds`, déjà passés par rebondsQuiComptent) aussi, réponse
+ * comprise tant que `rebondBloqueReponse` le dit.
+ * `doublon` = false : pas de règle des 30 jours non plus (envoi direct, brouillon). `agence` =
+ * adresses de l'agence, jamais bloquées.
  */
 export function raisonDeBloquer(p: {
   destinataires: readonly string[];
   reponse: boolean;
+  doublon?: boolean;
   liste: readonly NePlusContacter[];
   enErreur: readonly string[];
+  rebonds?: readonly EnvoiRecent[];
   recents: readonly EnvoiRecent[];
   maintenant: Date;
   agence?: string;
@@ -156,9 +187,16 @@ export function raisonDeBloquer(p: {
     const domaine = email.split("@")[1] ?? "";
     if (domaine === agence) continue;
     const npc = p.liste.find((x) => (x.email && x.email.toLowerCase() === email) || (x.domaine && x.domaine.toLowerCase().replace(/^@/, "") === domaine));
-    if (npc) return `${email} est dans la liste « ne plus contacter » (${npc.raison})`;
+    if (npc && !(p.reponse && r.reponseMalgreListe.includes(npc.raison))) return `${email} est dans la liste « ne plus contacter » (${npc.raison})`;
     if (erreurs.has(email)) return `${email} est marquée « adresse en erreur » sur sa fiche`;
-    if (p.reponse) continue;
+    const rebond = (p.rebonds ?? []).filter((x) => x.email.toLowerCase() === email).sort((a, b) => b.at.localeCompare(a.at))[0];
+    if (rebond && !(p.reponse && !r.rebondBloqueReponse)) {
+      const t = Date.parse(rebond.at);
+      const quand = Number.isFinite(t) ? ` le ${new Date(t).toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "Europe/Paris" })}` : "";
+      // La sortie est dite : sans elle, l'adresse reste bloquée 90 jours sans que personne sache pourquoi.
+      return `${email} a renvoyé un rebond${quand} (adresse refusée par son serveur, pas revérifiée depuis). Si l'adresse est bonne : écris depuis Gmail ; le blocage tombe dès qu'un mail d'elle arrive ou que sa fiche contact est revérifiée (email_check)`;
+    }
+    if (p.reponse || p.doublon === false) continue;
     const cle = cleSociete(email);
     const deja = p.recents
       .filter((x) => cleSociete(x.email) === cle && Date.parse(x.at) >= limite && Date.parse(x.at) <= p.maintenant.getTime())
@@ -215,6 +253,68 @@ export function etatPalier(envoyes: number, rebonds: number, minutesDepuisDernie
     };
   }
   return { etat: "libre", restant: r.pasPalier, prochain, message: null };
+}
+
+/** Une ligne du journal des mails reçus (email_activity), telle que la base la rend. */
+export type MailRecu = { contact_email?: unknown; contact_name?: unknown; subject?: unknown; snippet?: unknown; created_at?: unknown };
+
+/**
+ * Les rebonds lus dans le journal des mails reçus : un message d'un robot (mailer-daemon,
+ * postmaster) qui annonce un échec et cite l'adresse refusée (même règle que gmail-poll,
+ * adresseEnRebond). Sert surtout aux adresses sans fiche contact, que gmail-poll ne peut pas marquer
+ * « en erreur » (il note seulement le rebond sur la ligne de la file, pour le coupe-circuit).
+ */
+export function rebondsDuJournal(lignes: readonly MailRecu[], agence: string): EnvoiRecent[] {
+  const out: EnvoiRecent[] = [];
+  for (const l of lignes) {
+    const from = `${String(l.contact_name ?? "").trim()} <${String(l.contact_email ?? "").trim()}>`;
+    const email = adresseEnRebond({ from, subject: String(l.subject ?? ""), snippet: String(l.snippet ?? "") }, agence);
+    if (email) out.push({ email, at: String(l.created_at ?? "") });
+  }
+  return out;
+}
+
+/**
+ * Ce que le journal des mails reçus dit de ces adresses (`vises`) : leurs rebonds (message d'un
+ * robot qui cite l'adresse) et les mails venus d'elles (`recus` : l'adresse marche).
+ */
+export function journalDesAdresses(lignes: readonly MailRecu[], vises: readonly string[], agence: string): { rebonds: EnvoiRecent[]; recus: EnvoiRecent[] } {
+  const v = new Set(vises.map((e) => e.trim().toLowerCase()));
+  const recus: EnvoiRecent[] = [];
+  for (const l of lignes) {
+    const de = String(l.contact_email ?? "").trim().toLowerCase();
+    if (v.has(de)) recus.push({ email: de, at: String(l.created_at ?? "") });
+  }
+  return { rebonds: rebondsDuJournal(lignes, agence).filter((r) => v.has(r.email)), recus };
+}
+
+/** La date de la dernière vérification de l'adresse notée sur sa fiche contact (email_check.le), si elle existe. */
+export type FicheVerifiee = { email: string; le: string | null };
+
+/**
+ * Les rebonds du journal qui comptent encore pour bloquer un envoi : ceux d'une adresse sans
+ * fiche contact, ou dont la fiche n'a pas été revérifiée depuis le rebond (email_check plus
+ * récent : la fiche fait foi). Une fiche créée après le rebond, sans vérification, ne l'efface pas.
+ * Un mail reçu de l'adresse après le rebond (`recus`) l'efface : elle marche (boîte pleine
+ * vidée, filtre anti-spam passé, la personne nous a écrit).
+ */
+export function rebondsQuiComptent(rebonds: readonly EnvoiRecent[], fiches: readonly FicheVerifiee[], recus: readonly EnvoiRecent[] = []): EnvoiRecent[] {
+  const verif = new Map(fiches.map((f) => [f.email.trim().toLowerCase(), f.le]));
+  return rebonds.filter((r) => {
+    const email = r.email.toLowerCase();
+    const quand = Date.parse(r.at);
+    const le = verif.get(email);
+    const t = le ? Date.parse(le) : Number.NaN;
+    if (Number.isFinite(t) && t >= quand) return false;
+    return !recus.some((m) => m.email.trim().toLowerCase() === email && Date.parse(m.at) > quand);
+  });
+}
+
+/** Ce que bloque la liste « ne plus contacter » (description de l'outil, toujours d'accord avec raisonDeBloquer). */
+export function texteListe(r: Regles = REGLES): string {
+  return r.reponseMalgreListe.length
+    ? `Une adresse ou un domaine de la liste bloque les brouillons et les envois ; une réponse dans un fil existant passe seulement pour la raison ${r.reponseMalgreListe.join(" ou ")}.`
+    : "Une adresse ou un domaine de la liste bloque les brouillons et les envois, réponses dans un fil existant comprises.";
 }
 
 /** « mer. 25 nov. à 9 h 42 » à Paris. */

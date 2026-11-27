@@ -71,6 +71,17 @@ describe("mails reçus", () => {
     expect(adresseEnRebond({ from: "jean@marque.fr", subject: "Delivery Status Notification", snippet: "x@y.fr" }, "ttpcreators.pro")).toBeNull();
     expect(adresseEnRebond({ from: "mailer-daemon@googlemail.com", subject: "Delivery Status Notification (Failure)", snippet: "partnerships@ttpcreators.pro" }, "ttpcreators.pro")).toBeNull();
   });
+  it("un simple retard n'est pas un rebond (le serveur réessaie)", () => {
+    const snippet = "Delivery incomplete There was a temporary problem delivering your message to jean@marque-exemple.fr";
+    expect(adresseEnRebond({ from: "Mail Delivery Subsystem <mailer-daemon@googlemail.com>", subject: "Delivery Status Notification (Delay)", snippet }, "ttpcreators.pro")).toBeNull();
+    expect(adresseEnRebond({ from: "MAILER-DAEMON@mx.exemple.fr", subject: "Undelivered Mail Returned to Sender", snippet }, "ttpcreators.pro")).toBe("jean@marque-exemple.fr");
+    expect(adresseEnRebond({ from: "postmaster@mx.exemple.fr", subject: "Delivery delayed: Collab de janvier", snippet }, "ttpcreators.pro")).toBeNull();
+  });
+  it("un vrai rebond dont l'objet d'origine parle de retard (Outlook, Exchange recopient l'objet)", () => {
+    const snippet = "Votre message à jean@marque-exemple.fr n'a pas pu être remis.";
+    expect(adresseEnRebond({ from: "postmaster@outlook.com", subject: "Non remis : Retard de livraison du colis", snippet }, "ttpcreators.pro")).toBe("jean@marque-exemple.fr");
+    expect(adresseEnRebond({ from: "Mail Delivery Subsystem <mailer-daemon@googlemail.com>", subject: "Undeliverable: Re: Sorry for the delay", snippet }, "ttpcreators.pro")).toBe("jean@marque-exemple.fr");
+  });
   it("tâche Visio avec la fiche", () => {
     const s = demarrerSequence({}, "2026-11-10", NOW, "Ana");
     const t = tacheVisio({ brand: "Nakd", person: "Julie", email: "julie@nakd.com", touches: [{ date: "2026-11-10", canal: "email", kind: "contact" }] }, s, { subject: "Re: Ana x Nakd", snippet: "Avec plaisir, quel budget ?" });

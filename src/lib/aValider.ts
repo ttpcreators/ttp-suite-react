@@ -6,7 +6,10 @@
  *   passe en « envoye » (Marc l'a copié et envoyé lui même). Nouveau type « avancer_collab » :
  *   l'app fait avancer la collab, puis la proposition passe en « envoye ». Un appel d'outil
  *   proposé par un agent (colonne `outil`, verrou des agents du connecteur) passe en « valide » :
- *   l'agent le fait ensuite, et le serveur le marque « envoye ».
+ *   l'agent le fait ensuite, et le serveur le marque « envoye ». Depuis le 27/11, un mail
+ *   déposé par une connexion cochée « agent autonome » (Paramètres › Connexions Claude) passe
+ *   aussi en « valide », comme un mail d'Alfred : sans cela, le serveur ne trouverait jamais la
+ *   validation qu'il exige de cette connexion.
  * - Ce que « Modifier » permet : le texte en ligne pour un message à copier (WhatsApp,
  *   Instagram, LinkedIn) ; un brouillon Gmail ou Spark s'ouvre là où il vit (son circuit
  *   d'envoi ne change pas) ; le reste ne se modifie pas.
@@ -26,6 +29,11 @@ export type PropositionLite = {
   agent_id?: string | null;
   /** Appel d'outil exact proposé par un agent (SQL 2026-11-27-securite-alfred). */
   outil?: unknown;
+  /**
+   * Déposée par une connexion du connecteur cochée « agent autonome » (calculé par la page
+   * Agents d'après grant_id et connexions_claude(), SQL 2026-11-27-verrou-connexions).
+   */
+  connexion_agent?: boolean;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -61,7 +69,7 @@ export function typeAffiche(a: Pick<PropositionLite, "type" | "lien_spark">): st
 }
 
 export type GesteValider =
-  /** Mail d'Alfred : statut « valide », Alfred l'envoie dans la minute. */
+  /** Mail d'Alfred ou d'une connexion « agent autonome » : statut « valide », l'agent l'envoie. */
   | "alfred_envoie"
   /** Appel d'outil proposé par un agent : statut « valide », l'agent le fait. */
   | "alfred_fait"
@@ -77,7 +85,7 @@ const A_COPIER = ["whatsapp", "instagram", "linkedin"];
 export function gesteValider(a: PropositionLite, alfredId: string | null): GesteValider {
   if (avanceCollabOf(a)) return "avancer_collab";
   if (a.outil != null) return "alfred_fait";
-  if (a.type === "brouillon_mail" && !!alfredId && a.agent_id === alfredId) return "alfred_envoie";
+  if (a.type === "brouillon_mail" && ((!!alfredId && a.agent_id === alfredId) || a.connexion_agent === true)) return "alfred_envoie";
   if (A_COPIER.includes(a.type) && !!a.contenu?.trim()) return "copier_envoye";
   return "marquer_envoye";
 }

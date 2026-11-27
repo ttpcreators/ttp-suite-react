@@ -12,6 +12,13 @@
 //     (proposer_action avec `outil`), utilisée une seule fois ;
 //   • envoyer_mail et envoyer_dm : jamais pour un agent (brouillon validé, ou Marc envoie lui même).
 // Les connexions de Marc et de l'équipe ne passent jamais par ici.
+// Depuis le 27/11 (SQL 2026-11-27-verrou-connexions) :
+//   • valideur de la connexion (mcp_grants.valideur, réglé par un fondateur dans Paramètres ›
+//     Connexions Claude) : seule sa validation compte ; sans valideur, tout compte agence (avant) ;
+//   • juste avant un envoi de la file, la validation doit tenir encore (validationTient) : pas
+//     retirée, pas écartée, toujours d'un compte agence, et du valideur d'aujourd'hui ;
+//   • la connexion qui a programmé l'envoi est relue (raisonConnexionFile) : cochée « agent
+//     autonome » après la programmation, une ligne sans validation ne part pas.
 // ============================================================================
 
 import { str } from "./texteSur.ts";
@@ -64,7 +71,7 @@ export function besoinValidation(nom: string, a: Args, agence: string): Besoin {
     case "programmer_envoi":
       return { genre: "brouillon", ids: idsBrouillons(a.brouillons) };
     case "envoyer_mail":
-      return { genre: "interdit", raison: "un agent n'envoie un mail que depuis un brouillon validé : creer_brouillon_mail, puis proposer_action (type brouillon_mail, « brouillon <id> · boîte <boîte> » dans contexte) ; Marc le valide dans la page Agents, puis envoyer_brouillon" };
+      return { genre: "interdit", raison: "un agent n'envoie un mail que depuis un brouillon validé : creer_brouillon_mail, puis proposer_action (type brouillon_mail, « brouillon <id> · boîte <boîte> » dans contexte) ; une fois validé dans la page Agents, envoyer_brouillon" };
     case "envoyer_dm":
       return { genre: "interdit", raison: "un agent n'envoie pas de DM : proposer_action (type instagram) avec le texte exact, Marc l'envoie depuis la page Agents" };
     case "noter_reversement":
@@ -127,24 +134,73 @@ export type Validation = {
   valide_le: string | null;
 };
 
-/** Validation encore valable : faite par un compte agence connu, il y a moins de 7 jours. */
-export function validationValable(v: Validation, comptesAgence: Set<string>, maintenant: number): boolean {
+/**
+ * Validation encore valable : faite par un compte agence connu, il y a moins de 7 jours, et par
+ * le valideur de la connexion quand un fondateur en a choisi un (mcp_grants.valideur ; null =
+ * tout compte agence, comme avant le 27/11).
+ */
+export function validationValable(v: Validation, comptesAgence: Set<string>, maintenant: number, valideur: string | null = null): boolean {
   if (!v.valide_par || !comptesAgence.has(v.valide_par) || !v.valide_le) return false;
+  if (valideur && v.valide_par !== valideur) return false;
   const t = Date.parse(v.valide_le);
   return Number.isFinite(t) && t <= maintenant + 60_000 && maintenant - t <= VALIDATION_JOURS * 86_400_000;
 }
 
 /** La validation d'un brouillon : une proposition « brouillon_mail » qui cite son id. */
-export function validationBrouillon(vs: Validation[], id: string, comptesAgence: Set<string>, maintenant: number): Validation | null {
-  return vs.find((v) => v.type === "brouillon_mail" && (citeBrouillon(v.contexte, id) || citeBrouillon(v.lien_spark, id)) && validationValable(v, comptesAgence, maintenant)) ?? null;
+export function validationBrouillon(vs: Validation[], id: string, comptesAgence: Set<string>, maintenant: number, valideur: string | null = null): Validation | null {
+  return vs.find((v) => v.type === "brouillon_mail" && (citeBrouillon(v.contexte, id) || citeBrouillon(v.lien_spark, id)) && validationValable(v, comptesAgence, maintenant, valideur)) ?? null;
 }
 
 /** La validation d'un appel d'outil : une proposition qui porte exactement cet appel. */
-export function validationOutil(vs: Validation[], nom: string, a: Args, comptesAgence: Set<string>, maintenant: number): Validation | null {
+export function validationOutil(vs: Validation[], nom: string, a: Args, comptesAgence: Set<string>, maintenant: number, valideur: string | null = null): Validation | null {
   return vs.find((v) => {
     const p = lireOutil(v.outil);
-    return !!p && memeAppel(p, nom, a) && validationValable(v, comptesAgence, maintenant);
+    return !!p && memeAppel(p, nom, a) && validationValable(v, comptesAgence, maintenant, valideur);
   }) ?? null;
+}
+
+/** Une proposition relue juste avant un envoi de la file (son statut compte en plus). */
+export type PropositionRelue = Validation & { statut: string };
+
+/**
+ * Juste avant l'envoi d'un brouillon programmé par un agent : la validation tient-elle encore ?
+ * null = oui ; sinon la raison. Statuts acceptés : « valide » (l'agent n'a encore rien dit) et
+ * « envoye » (l'agent l'a marquée envoyée après l'avoir programmée). Remise « à valider »,
+ * écartée (dans la page Agents, ou par l'agent lui même avec ecarter_proposition), envoyée à la
+ * main après modification, supprimée, validée par un compte qui n'est plus de l'agence ou par un
+ * autre que le valideur choisi aujourd'hui pour la connexion (`valideur`), ou qui ne cite plus ce
+ * brouillon : le mail ne part pas. L'âge n'est pas revérifié ici : la file étale ses envois sur
+ * plusieurs jours.
+ */
+export function validationTient(p: PropositionRelue | null, brouillon: string, comptesAgence: Set<string>, valideur: string | null = null): string | null {
+  if (!p) return "validation introuvable dans la page Agents (proposition supprimée ?)";
+  if (p.type !== "brouillon_mail" || !(citeBrouillon(p.contexte, brouillon) || citeBrouillon(p.lien_spark, brouillon))) return "la proposition validée ne cite plus ce brouillon";
+  if (p.statut === "ecarte") return "proposition écartée après sa validation (page Agents ou ecarter_proposition)";
+  if (p.statut === "a_valider") return "validation retirée : la proposition attend de nouveau dans la page Agents";
+  if (p.statut === "modifie_envoye") return "proposition déjà envoyée à la main après modification";
+  if (p.statut !== "valide" && p.statut !== "envoye") return `proposition au statut « ${p.statut} »`;
+  if (!p.valide_par || !p.valide_le) return "validation retirée dans la page Agents";
+  if (!comptesAgence.has(p.valide_par)) return "validée par un compte qui n'est plus de l'agence";
+  if (valideur && p.valide_par !== valideur) return "validée par un autre compte que le valideur choisi pour cette connexion (Paramètres › Connexions Claude)";
+  return null;
+}
+
+/** La connexion qui a programmé un envoi de la file, telle qu'elle est maintenant. */
+export type ConnexionFile = { agent: boolean; valideur: string | null };
+
+/**
+ * Juste avant l'envoi d'une ligne de la file : ce que dit la connexion qui l'a programmée
+ * (envoi_file.grant_id), relue maintenant. `connexion` : undefined = ligne sans connexion notée
+ * (programmée avant le SQL du 27/11, comme avant), null = connexion introuvable. Cochée « agent
+ * autonome » après la programmation : une ligne sans validation ne part pas (la case vaut aussi
+ * pour ce qui était déjà dans la file). Le valideur se vérifie avec la validation (validationTient).
+ * Renvoie la raison de ne pas envoyer, ou null.
+ */
+export function raisonConnexionFile(valideLe: string | null | undefined, connexion: ConnexionFile | null | undefined): string | null {
+  if (connexion === undefined) return null;
+  if (connexion === null) return "connexion du connecteur introuvable (compte supprimé ?) : rien n'est parti";
+  if (!valideLe && connexion.agent) return "connexion passée en agent autonome après la programmation : à faire valider dans la page Agents, puis à programmer de nouveau";
+  return null;
 }
 
 /** Le brouillon a changé après la validation (date du message Gmail plus récente). */
@@ -160,19 +216,37 @@ export function refusInterdit(nom: string, raison: string): string {
   return `${ENTETE} ${nom} : ${raison}.`;
 }
 
-export function refusBrouillons(nom: string, manquants: { id: string; pourquoi: string }[]): string {
+/** Ligne ajoutée aux refus quand la connexion a un valideur (seule sa validation compte). */
+export function noteValideur(nom: string | null | undefined): string | null {
+  return nom ? `Pour cette connexion, seule une validation de ${nom} compte.` : null;
+}
+
+/**
+ * Les refus nomment qui valide : le valideur choisi pour la connexion (`valideur`, son nom
+ * affiché), sinon « un fondateur ». Jamais « Marc » en dur : l'agent demanderait la validation
+ * à quelqu'un dont elle ne compterait pas.
+ */
+export function refusBrouillons(nom: string, manquants: { id: string; pourquoi: string }[], valideur: string | null = null): string {
+  const choisi = valideur?.trim() || null;
+  const qui = choisi ?? "un fondateur";
+  const note = noteValideur(choisi);
   return [
-    `${ENTETE} ${nom} demande que chaque brouillon soit validé par Marc dans l'app.`,
+    `${ENTETE} ${nom} demande que chaque brouillon soit validé dans l'app, par ${qui}.`,
     ...manquants.map((m) => `- ${m.id} : ${m.pourquoi}`),
-    "Pour chacun : proposer_action (type brouillon_mail, « brouillon <id> · boîte <boîte> » dans contexte), Marc le valide dans la page Agents, puis tu l'envoies. Un « oui » sur Telegram ne suffit pas pour ce connecteur.",
+    `Pour chacun : proposer_action (type brouillon_mail, « brouillon <id> · boîte <boîte> » dans contexte), ${qui} le valide dans la page Agents, puis tu l'envoies. Un « oui » sur Telegram ne suffit pas pour ce connecteur.`,
+    ...(note ? [note] : []),
   ].join("\n");
 }
 
-export function refusOutil(nom: string, a: Args): string {
+export function refusOutil(nom: string, a: Args, valideur: string | null = null): string {
+  const choisi = valideur?.trim() || null;
+  const qui = choisi ?? "un fondateur";
+  const note = noteValideur(choisi);
   return [
-    `${ENTETE} ${nom} demande une validation de Marc dans l'app pour cet appel précis.`,
+    `${ENTETE} ${nom} demande une validation dans l'app pour cet appel précis, par ${qui}.`,
     `Dépose-le avec proposer_action : type « alerte », outil = { "nom": "${nom}", "arguments": ${canonique(a)} }, et en contenu pourquoi (avec la preuve).`,
-    "Marc le valide dans la page Agents, puis tu rappelles l'outil avec exactement les mêmes arguments (une seule fois). Un « oui » sur Telegram ne suffit pas pour ce connecteur.",
+    `Quand ${qui} l'a validé dans la page Agents, tu rappelles l'outil avec exactement les mêmes arguments (une seule fois). Un « oui » sur Telegram ne suffit pas pour ce connecteur.`,
+    ...(note ? [note] : []),
   ].join("\n");
 }
 
