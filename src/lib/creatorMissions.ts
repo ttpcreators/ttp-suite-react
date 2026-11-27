@@ -72,6 +72,13 @@ const norm = (s: string | null | undefined) => String(s ?? "").trim().toLowerCas
 const visibleCollab = (c: Pick<MissionCollab, "status">) => c.status !== "perdue" && c.status !== "archivee";
 
 /**
+ * Dernière étape où l'échéance du brief d'une collab concerne encore le créateur : le
+ * tournage (4). Dès la validation par la marque (5), son contenu est rendu : ni retard,
+ * ni « Prochaine échéance ». Même règle pour « Ta prochaine étape » (openBriefs).
+ */
+export const BRIEF_DUE_LAST_STEP = 4;
+
+/**
  * Brief de chaque collab visible (clé : id de la collab) : celui que la collab désigne
  * (`brief_id`), sinon le premier brief libre de la même marque. Un brief ne sert qu'une
  * fois. Même rapprochement pour les missions et pour « Ta prochaine étape ».
@@ -106,7 +113,9 @@ export function buildMissions(collabs: MissionCollab[], briefs: MissionBrief[]):
       step: c.step,
       collab: c,
       brief,
-      due: toISODate(brief?.due),
+      // Échéance du brief jusqu'au tournage seulement (sinon « Échéance passée » sur une
+      // collab publiée ou payée).
+      due: c.step <= BRIEF_DUE_LAST_STEP ? toISODate(brief?.due) : "",
       // Terminée à la dernière étape seulement, qu'elle soit en cours ou gagnée : une collab
       // gagnée tôt a encore des étapes devant elle (même règle que isInProgress, collabs.ts).
       done: isDone(c.step),
@@ -191,14 +200,17 @@ export type MissionActionKey = "brief" | "content" | "invoice" | "open";
  * À la signature, le brief créé avec la collab est souvent vide : « Lire le brief »
  * seulement s'il a un résumé ou un PDF. À l'étape « Contenu envoyé », aucun retour de la
  * marque n'est affiché dans l'app : le bouton ouvre simplement la fiche.
+ * `briefRead` : « J'ai lu » déjà touché (colonne read_at). Plus de « Lire le brief » ; à
+ * l'étape 2, la suite (script, concept) se fait dans la fiche, comme « Ta prochaine étape ».
  */
-export function missionAction(m: Pick<Mission, "step" | "brief" | "collab" | "done">): { key: MissionActionKey; label: string } | null {
+export function missionAction(m: Pick<Mission, "step" | "brief" | "collab" | "done">, briefRead = false): { key: MissionActionKey; label: string } | null {
   const stage = creatorStage(m);
   if (stage >= 4) return null;
   if (stage <= 0) {
     const fresh = m.collab ? (m.step ?? 1) <= 2 : briefKey(m.brief?.status ?? "attente") === "attente";
-    if (m.brief && (stage < 0 ? briefHasContent(m.brief) : fresh)) return { key: "brief", label: "Lire le brief" };
-    return stage < 0 ? { key: "open", label: "Ouvrir" } : { key: "content", label: "Envoyer mon contenu" };
+    if (m.brief && !briefRead && (stage < 0 ? briefHasContent(m.brief) : fresh)) return { key: "brief", label: "Lire le brief" };
+    if (stage < 0 || (briefRead && m.collab && m.step === 2)) return { key: "open", label: "Ouvrir" };
+    return { key: "content", label: "Envoyer mon contenu" };
   }
   if (m.collab && (m.step ?? 0) >= 8) return { key: "invoice", label: "Déposer ma facture" };
   return { key: "open", label: "Ouvrir" };

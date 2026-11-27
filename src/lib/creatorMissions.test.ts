@@ -104,4 +104,29 @@ describe("étapes vues par le créateur", () => {
     expect(briefHasContent(brief({ pdf: {} }))).toBe(false);
     expect(briefHasContent(null)).toBe(false);
   });
+  it("« Lire le brief » tant que « J'ai lu » n'est pas touché, comme « Ta prochaine étape »", () => {
+    expect(missionAction(withStep(2), false)?.label).toBe("Lire le brief");
+    // Étape 2, brief lu : le script et le concept se font dans la fiche.
+    expect(missionAction(withStep(2), true)).toEqual({ key: "open", label: "Ouvrir" });
+    expect(missionAction(withStep(3), true)?.label).toBe("Envoyer mon contenu");
+    const resume = { faire: ["Montrer le produit"], eviter: [], livrables: [], mentions: [] };
+    expect(missionAction(withStep(1, "active", true, { resume }), true)?.label).toBe("Ouvrir");
+    // Brief seul « En attente » déjà lu : il ne reste qu'à envoyer son contenu.
+    const [seul] = buildMissions([], [brief({ status: "attente" })]);
+    expect(missionAction(seul)?.label).toBe("Lire le brief");
+    expect(missionAction(seul, true)?.label).toBe("Envoyer mon contenu");
+  });
+  it("l'échéance du brief compte jusqu'au tournage : plus de retard une fois le contenu validé", () => {
+    const today = "2026-10-20";
+    expect(withStep(4, "active", true, { due: "2026-09-01" }).due).toBe("2026-09-01");
+    expect(missionState(withStep(4, "active", true, { due: "2026-09-01" }), today).label).toBe("Échéance passée");
+    // Étape 5 et après (validée, publiée, payée) : ni « Échéance passée » ni date.
+    for (const [step, status] of [[5, "active"], [6, "active"], [9, "gagnee"], [10, "gagnee"]] as const) {
+      const m = withStep(step, status, true, { due: "2026-09-01" });
+      expect(m.due).toBe("");
+      expect(missionState(m, today)).toEqual({ tone: "progress", label: "En cours" });
+    }
+    // Signature : la date du brief reste affichée.
+    expect(withStep(1, "active", true, { due: "2026-11-05" }).due).toBe("2026-11-05");
+  });
 });

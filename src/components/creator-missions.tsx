@@ -48,7 +48,7 @@ export function MissionStages({ stage, compact = false }: { stage: number; compa
 }
 
 /** Carte d'une mission : un clic ouvre la fiche, le bouton fait l'action du moment. */
-export function MissionCard({ m, dateText, whenText, late, onOpen, onAction, isNew }: {
+export function MissionCard({ m, dateText, whenText, late, briefRead = false, onOpen, onAction, isNew }: {
   m: Mission;
   /** Le brief a du nouveau de l'agence (repère « nouveau »). */
   isNew?: boolean;
@@ -57,12 +57,14 @@ export function MissionCard({ m, dateText, whenText, late, onOpen, onAction, isN
   /** « dans 3 j », « aujourd'hui »…, ou null. */
   whenText: string | null;
   late: boolean;
+  /** « J'ai lu » déjà touché pour son brief : plus de « Lire le brief » (missionAction). */
+  briefRead?: boolean;
   onOpen: () => void;
   onAction: (key: NonNullable<ReturnType<typeof missionAction>>["key"]) => void;
 }) {
   const t = useT();
   const stage = creatorStage(m);
-  const action = m.done ? null : missionAction(m);
+  const action = m.done ? null : missionAction(m, briefRead);
   const what = m.deliverables || m.title;
   return (
     <div className="flex min-w-0 flex-col gap-4 rounded-[20px] bg-surface p-4 shadow-sm">

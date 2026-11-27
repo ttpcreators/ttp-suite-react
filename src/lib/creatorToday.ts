@@ -1,4 +1,4 @@
-import { creatorSteps, type NextStep, type NextStepInput } from "./creatorNextStep";
+import { creatorSteps, openBriefs, type NextStep, type NextStepInput } from "./creatorNextStep";
 import { addDaysISO, daysBetween, eventISO, isHandled, isSnoozed, localISO, LATER_TO, WEEK_FROM, WEEK_TO, type HandledMap, type SnoozeMap } from "./aujourdhui";
 import { briefKey } from "./creatorMissions";
 import { toISODate } from "./dates";
@@ -6,7 +6,7 @@ import { toISODate } from "./dates";
 /**
  * Page « Aujourd'hui » de l'espace créateur (logique PURE, testable sous Node), dans
  * l'esprit de la page agence : les actions du créateur rangées par moment.
- *   • En retard, Aujourd'hui (et ce qui n'a pas de date : brief à valider, stats…),
+ *   • En retard, Aujourd'hui (et ce qui n'a pas de date : brief à lire, stats…),
  *     Demain, Cette semaine (J+2 à J+7), À anticiper (J+8 à J+30).
  * Les actions viennent de « Ta prochaine étape » (creatorNextStep.ts : briefs, collabs à
  * facturer, tâches, planning, stats du mois), complétées des contenus et rendez-vous des
@@ -39,9 +39,11 @@ export function creatorTodayItems(input: CreatorTodayInput): CtItem[] {
   const today = localISO(input.now);
   const base = creatorSteps(input);
   const extra: NextStep[] = [];
-  // Contenus à rendre au-delà de 14 jours (jusqu'à 30) : « À anticiper ».
+  // Contenus à rendre au-delà de 14 jours (jusqu'à 30) : « À anticiper ». Mêmes briefs que
+  // « Ta prochaine étape » (openBriefs) : jamais un brief « À valider », ni celui d'une
+  // collab à la signature ou dont le contenu est déjà validé.
   const briefsSeen = new Set(base.map((s) => (s.target.tab === "missions" ? s.target.briefId : undefined)).filter(Boolean));
-  for (const b of input.briefs) {
+  for (const { brief: b } of openBriefs(input)) {
     if (briefsSeen.has(b.id) || briefKey(b.status ?? "attente") === "terminé") continue;
     const due = toISODate(b.due) || null;
     if (!due) continue;

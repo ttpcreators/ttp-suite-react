@@ -743,7 +743,8 @@ export function CreatorSpace({
   // Collabs du créateur (lecture seule : RLS `collabs_scoped`, écriture réservée à l'agence).
   const [collabs, setCollabs] = useState<MissionCollab[]>([]);
   // Premier chargement terminé (squelettes en attendant, jamais d'écran vide trompeur).
-  const [ready, setReady] = useState({ collabs: false, briefs: false, invoices: false });
+  // `docs` : ses dépôts décident des cartes « stats du mois » et « facture » de l'Accueil.
+  const [ready, setReady] = useState({ collabs: false, briefs: false, invoices: false, docs: false });
   const markReady = (k: keyof typeof ready) => setReady((r) => (r[k] ? r : { ...r, [k]: true }));
 
 
@@ -882,9 +883,12 @@ export function CreatorSpace({
     const docsQ = (cols: string) => supabase.from("documents").select(cols).eq("creator", name).order("created_at", { ascending: false });
     void docsQ(`${DOC_COLS},collab_id`)
       .then((r) => (r.error && collabIdMissing(r.error) ? docsQ(DOC_COLS) : r))
-      .then(({ data, error }) => apply(error) && setDocs((data as unknown as Doc[]) ?? []));
+      .then(({ data, error }) => {
+        if (alive) markReady("docs");
+        if (apply(error)) setDocs((data as unknown as Doc[]) ?? []);
+      });
     // Plus récente d'abord (« Dernière facture » = invoices[0]) ; `date` est un texte, on trie sur created_at.
-    // Nom sans tenir compte des majuscules ni des accents (« LÉNA PASQUALE » = « Léna Pasquale »).
+    // Nom sans tenir compte des majuscules ni des accents (« CRÉATRICE A » = « Créatrice A »).
     // `collab_id` : la facture d'une collab se reconnaît d'abord par son lien (« Ta facture … n'apparaît pas »).
     const INV_COLS = "ref,party,amount,date,status,creator";
     const invoicesQ = (cols: string) => supabase.from("invoices").select(cols).ilike("creator", namePattern(name)).order("created_at", { ascending: false });
@@ -2238,15 +2242,18 @@ export function CreatorSpace({
   // (creators.stats_month), coché par l'agence ou tout seul par les synchros TikTok /
   // Instagram quand le réseau principal est couvert. Repli : dernière mesure de plus de 35 j.
   // Captures du mois déjà envoyées depuis l'espace : elles attendent l'agence, on ne les
-  // redemande pas (seule l'agence coche stats_month, jamais l'espace créateur).
+  // redemande pas (seule l'agence coche stats_month, jamais l'espace créateur). Rien tant
+  // que ses dépôts ne sont pas lus (sinon la demande s'affiche puis disparaît).
   const nowD = new Date();
   const thisMonth = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, "0")}`;
   const lastMeasure = Math.max(0, ...(mySuivi ?? []).map((e) => frTime(e.date) || 0));
-  const statsStale = (creator
+  const statsStale = ready.docs && (creator
     ? (creator.stats_month ?? "") !== thisMonth
     : mySuivi !== null && (!lastMeasure || Date.now() - lastMeasure > 35 * 86400000)) && !monthlyStatsSent(docs, nowD);
   const todayIso = todayISO();
   const missions = useMemo(() => buildMissions(collabs, briefs), [collabs, briefs]);
+  // « J'ai lu » déjà touché pour le brief de la mission (colonnes absentes : non).
+  const briefRead = (m: Mission) => !!(m.brief && concepts?.[m.brief.id]?.read_at);
   const openMission = missionId ? missions.find((m) => m.id === missionId) ?? null : null;
   // Ouvrir une mission efface le repère « nouveau » de son brief.
   const openBriefId = openMission?.brief?.id;
@@ -2621,7 +2628,7 @@ export function CreatorSpace({
             />
           )}
           <NavActionSlotContext.Provider value={iosPhone ? navSlot : null}>
-          {/* En-tête de l'accueil (maquette « Bonjour Léna ») : date du jour, salutation
+          {/* En-tête de l'accueil (maquette « Bonjour {prénom} ») : date du jour, salutation
               selon l'heure + photo. Les autres onglets affichent leur propre titre (TabFrame). */}
           {tab === "accueil" && (
             <div className="mb-5 flex items-center justify-between gap-3">
@@ -2750,7 +2757,8 @@ export function CreatorSpace({
               { label: t("CA encaissé HT"), value: formatEuro(caEncaisse), foot: t("sur {amount} facturés", { amount: formatEuro(totalFacture) }) },
               { label: t("To-do"), value: String(openTodos.length), foot: `${plural(briefs.length, "{n} brief", "{n} briefs")} · ${plural(ideas.length, "{n} idée", "{n} idées")}` },
             ];
-            if (!(ready.collabs && ready.briefs && ready.invoices)) {
+            // Ses dépôts aussi : sinon « Envoyer tes stats du mois » s'affiche un instant puis disparaît.
+            if (!(ready.collabs && ready.briefs && ready.invoices && ready.docs)) {
               return (
                 <div role="status" aria-label={t("Chargement de ton accueil")} className="flex flex-col gap-4">
                   <SkeletonCard action className="min-h-[200px]" />
@@ -2837,8 +2845,9 @@ export function CreatorSpace({
                   const waits: Wait[] = [];
                   for (const m of missions) {
                     if (m.done) continue;
-                    const a = missionAction(m);
-                    // « Lire le brief » : seulement quand le brief a quelque chose à lire (missionAction).
+                    const a = missionAction(m, briefRead(m));
+                    // « Lire le brief » : seulement quand le brief a quelque chose à lire et tant
+                    // que « J'ai lu » n'est pas touché (missionAction).
                     if (a?.key === "brief") waits.push({ id: `b-${m.id}`, icon: FileText, text: t("Brief {brand} à lire", { brand: m.brand }), run: () => goMission(m) });
                   }
                   for (const td of todos) {
@@ -3608,6 +3617,7 @@ export function CreatorSpace({
                           dateText={m.due ? shortDay(m.due) : ""}
                           whenText={m.due && !m.done ? whenText(daysBetweenIso(todayIso, m.due)) : null}
                           late={!m.done && !!m.due && m.due < todayIso}
+                          briefRead={briefRead(m)}
                           onOpen={() => goMission(m)}
                           onAction={(key) => {
                             // Facture et contenu : le sélecteur de fichier s'ouvre dans le clic (sinon bloqué).

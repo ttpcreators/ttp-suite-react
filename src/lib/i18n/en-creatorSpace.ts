@@ -667,7 +667,7 @@ export const EN_CREATORSPACE: Record<string, string> = {
   "**Partager**, puis **Ajouter à l'écran d'accueil**. Ouvre-la depuis l'icône.": "**Share**, then **Add to Home Screen**. Open it from the icon.",
   "Menu **trois points**, puis **Installer l'application**.": "**Three-dot** menu, then **Install app**.",
   "Va sur **app.ttpcreators.pro** et mets-la en favori.": "Go to **app.ttpcreators.pro** and bookmark it.",
-  "Sur l'Accueil, touche **Activer**. Tu es prévenu quand ton agence te confie une tâche, ajoute un rendez-vous ou un document.": "On Home, tap **Turn on**. You'll be notified when your agency gives you a task or adds a meeting or a document.",
+  "Sur l'Accueil, touche **Activer**. Tu reçois une alerte quand ton agence te confie une tâche, ajoute un rendez-vous ou un document.": "On Home, tap **Turn on**. You'll get an alert when your agency gives you a task or adds a meeting or a document.",
   "À dire": "To say",
   "À éviter": "To avoid",
   "Aucun": "None",

@@ -1,6 +1,6 @@
 import { daysBetween, eventISO, localISO } from "./aujourdhui";
 import { toISODate } from "./dates";
-import { briefKey, pairCollabBriefs } from "./creatorMissions";
+import { BRIEF_DUE_LAST_STEP, briefKey, pairCollabBriefs } from "./creatorMissions";
 import { isDone } from "./collabs";
 import { conceptState } from "./briefConcept";
 import { partyBrand, sameBrand } from "./brandRecord";
@@ -98,7 +98,7 @@ export function openBriefs(input: Pick<NextStepInput, "briefs" | "collabs">): { 
     const k = briefKey(b.status ?? "attente");
     if (k === "terminé" || k === "valider") continue;
     const collab = collabOf.get(b.id) ?? null;
-    if (collab && (collab.step < 2 || collab.step > 4)) continue;
+    if (collab && (collab.step < 2 || collab.step > BRIEF_DUE_LAST_STEP)) continue;
     out.push({ brief: b, collab });
   }
   return out;
@@ -112,6 +112,16 @@ export function invoiceForCollab(i: NsInvoice, c: Pick<NsCollab, "id" | "brand">
 
 /** Un dépôt sans lien vers sa collab compte au plus 30 jours (jamais de masquage sans limite). */
 const DEPOSIT_DAYS = 30;
+
+/**
+ * Marque d'un dépôt de facture, lue dans son nom « Facture {marque} · {nom} · {date} »
+ * (nom posé par l'espace créateur, sendInvoiceFile) : seulement entre « Facture » et le
+ * premier « · », jamais dans le nom du créateur ni dans la date (« 12 mars »). "" : aucune.
+ */
+export function depositBrand(name: string | null | undefined): string {
+  const m = /^Facture\b(.*?)(?:\s+·\s|$)/.exec(String(name ?? "").trim());
+  return m ? m[1].trim() : "";
+}
 
 const parisMonth = (d: Date) => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit" }).format(d);
 
@@ -163,17 +173,19 @@ export function creatorSteps(input: NextStepInput): NextStep[] {
   // ── Collabs à l'étape facturation (8 à 10) dont la facture n'apparaît pas : on propose
   // le dépôt (même filet que « Déposer ma facture »). Une facture qu'il a déjà déposée
   // pour cette collab suffit : reliée à la collab, sinon un dépôt récent qui cite la marque,
-  // ou qui n'en cite aucune quand une seule collab attend sa facture.
+  // ou qui n'en cite aucune quand une seule collab attend sa facture. Seulement SES dépôts
+  // (chemin `creator-uploads/…`, comme monthlyStatsSent), jamais un fichier de l'agence.
   const waiting = input.collabs.filter(
     (c) => c.status !== "perdue" && c.status !== "archivee" && !isDone(c.step) && c.step >= 8 && c.step <= 10 && !input.invoices.some((i) => invoiceForCollab(i, c)),
   );
-  const deposits = (input.docs ?? []).filter((d) => d.type === "facture");
+  const deposits = (input.docs ?? []).filter((d) => d.type === "facture" && String(d.path ?? "").startsWith("creator-uploads/"));
   const depositFor = (d: NsDoc, c: NsCollab) => {
     if (d.collab_id) return d.collab_id === c.id;
     const at = Date.parse(d.created_at ?? "");
     if (!Number.isFinite(at) || input.now.getTime() - at > DEPOSIT_DAYS * 86_400_000) return false;
-    if (mentionsBrand(d.name, c.brand)) return true;
-    return waiting.length === 1 && !input.collabs.some((x) => mentionsBrand(d.name, x.brand));
+    const brand = depositBrand(d.name);
+    if (mentionsBrand(brand, c.brand)) return true;
+    return waiting.length === 1 && !input.collabs.some((x) => mentionsBrand(brand, x.brand));
   };
   for (const c of waiting) {
     if (deposits.some((d) => depositFor(d, c))) continue;

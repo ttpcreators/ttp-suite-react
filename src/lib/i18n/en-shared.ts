@@ -156,11 +156,11 @@ export const EN_SHARED: Record<string, string> = {
   "Activer": "Turn on",
   "Désactiver": "Turn off",
   "Reste au courant en temps réel": "Stay up to date in real time",
-  "Reçois une alerte sur ton téléphone dès que ton agence t'ajoute une tâche, un brief, un gifting ou un document.":
-    "Get an alert on your phone as soon as your agency adds a task, a brief, a gift or a document for you.",
-  "Nouveaux briefs & deals": "New briefs & deals",
+  "Tu reçois une alerte quand ton agence te confie une tâche, ajoute un rendez-vous ou un document.":
+    "You'll get an alert when your agency gives you a task or adds a meeting or a document.",
   "Cadeaux / gifting reçus": "Gifts received",
   "Tâches et documents ajoutés": "New tasks and documents",
+  "Rendez-vous ajoutés": "New meetings",
   "Nouveaux mails des marques": "New emails from brands",
   "Activées sur ce téléphone": "On for this phone",
   "Sur iPhone :": "On iPhone:",

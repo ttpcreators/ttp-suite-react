@@ -170,7 +170,7 @@ export function CreatorGuide({
           <DashPanel className="p-5">
             <DashSectionTitle icon={Bell}>{t("Active les notifications")}</DashSectionTitle>
             <p className="-mt-1 text-[12px] leading-relaxed text-muted-foreground">
-              <Rich text={t("Sur l'Accueil, touche **Activer**. Tu es prévenu quand ton agence te confie une tâche, ajoute un rendez-vous ou un document.")} />
+              <Rich text={t("Sur l'Accueil, touche **Activer**. Tu reçois une alerte quand ton agence te confie une tâche, ajoute un rendez-vous ou un document.")} />
             </p>
           </DashPanel>
 

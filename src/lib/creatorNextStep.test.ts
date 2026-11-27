@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { creatorSteps, invoiceForCollab, monthlyStatsSent, openBriefs, pickNextStep, whenLabel, type NextStepInput, type NsCollab, type NsDoc } from "./creatorNextStep";
+import { creatorSteps, depositBrand, invoiceForCollab, monthlyStatsSent, openBriefs, pickNextStep, whenLabel, type NextStepInput, type NsCollab, type NsDoc } from "./creatorNextStep";
 
 // Mardi 20 octobre 2026, 9 h 30 (heure locale).
 const NOW = new Date(2026, 9, 20, 9, 30);
 
 const base: NextStepInput = { briefs: [], collabs: [], todos: [], events: [], invoices: [], statsStale: false, now: NOW };
 const brief = (over: Partial<NextStepInput["briefs"][number]>) => ({
-  id: "b1", brand: "Fitaya", deliverables: "1 reel", due: null, status: "cours", consignes: "Mon script", ...over,
+  id: "b1", brand: "Marque X", deliverables: "1 reel", due: null, status: "cours", consignes: "Mon script", ...over,
 });
 
 describe("prochaine étape du créateur", () => {
@@ -19,10 +19,10 @@ describe("prochaine étape du créateur", () => {
     const s = pickNextStep({
       ...base,
       statsStale: true,
-      briefs: [brief({ id: "a", status: "valider", due: "2026-10-30" }), brief({ id: "b", brand: "Seoni", due: "2026-10-18" })],
+      briefs: [brief({ id: "a", status: "valider", due: "2026-10-30" }), brief({ id: "b", brand: "Marque Y", due: "2026-10-18" })],
     });
     expect(s?.kind).toBe("deliverable");
-    expect(s?.vars.brand).toBe("Seoni");
+    expect(s?.vars.brand).toBe("Marque Y");
     expect(s?.days).toBe(-2);
     expect(s?.target).toEqual({ tab: "missions", briefId: "b" });
   });
@@ -50,7 +50,7 @@ describe("prochaine étape du créateur", () => {
   it("rendez-vous de demain avant une tâche prioritaire sans date", () => {
     const steps = creatorSteps({
       ...base,
-      events: [{ id: "e1", date: "2026-10-21", day: null, time: "14:00", title: "Tournage Fitaya", type: "shoot" }],
+      events: [{ id: "e1", date: "2026-10-21", day: null, time: "14:00", title: "Tournage Marque X", type: "shoot" }],
       todos: [{ id: "t1", text: "Monter la vidéo", due: null, priority: "haute", done: false }],
     });
     expect(steps.map((x) => x.id)).toEqual(["event:e1", "todo:t1"]);
@@ -158,6 +158,23 @@ describe("prochaine étape du créateur", () => {
       expect(ids({ collabs: [waiting()], docs: [doc({ created_at: "2026-09-01T10:00:00Z" })] })).toEqual(["invoice:c1"]);
       // Un autre type de dépôt ne compte pas.
       expect(ids({ collabs: [waiting()], docs: [doc({ type: "contenu" })] })).toEqual(["invoice:c1"]);
+      // Fichier facture de l'agence (page Documents, hors creator-uploads/) : la carte reste.
+      expect(ids({ collabs: [waiting()], docs: [doc({ name: "facture-scan.pdf", path: "1730000000000-facture-scan.pdf" })] })).toEqual(["invoice:c1"]);
+    });
+
+    it("la marque d'un dépôt se lit après « Facture », jamais dans le nom du créateur ni dans la date", () => {
+      expect(depositBrand("Facture Marque B · Créatrice A · 12 mai")).toBe("Marque B");
+      expect(depositBrand("Facture · Créatrice A · 12 mai")).toBe("");
+      expect(depositBrand("facture-scan.pdf")).toBe("");
+      expect(depositBrand(null)).toBe("");
+      const doc = (name: string, created_at: string): NsDoc => ({ type: "facture", name, path: "creator-uploads/u1/facture-1.pdf", created_at });
+      // Dépôt sans marque fait en mai : la collab « Mai » n'est pas cachée pour autant.
+      const may = { now: new Date(2026, 4, 20, 9, 30), collabs: [waiting({ brand: "Mai" }), waiting({ id: "c2", brand: "Marque B" })] };
+      expect(ids({ ...may, docs: [doc("Facture · Créatrice A · 12 mai", "2026-05-12T10:00:00Z")] })).toEqual(["invoice:c1", "invoice:c2"]);
+      expect(ids({ ...may, docs: [doc("Facture Mai · Créatrice A · 12 mai", "2026-05-12T10:00:00Z")] })).toEqual(["invoice:c2"]);
+      // Marque qui porte le nom du créateur : même règle.
+      const two = [waiting({ brand: "Créatrice" }), waiting({ id: "c2", brand: "Marque B" })];
+      expect(ids({ collabs: two, docs: [doc("Facture · Créatrice A · 10 oct.", "2026-10-10T10:00:00Z")] })).toEqual(["invoice:c1", "invoice:c2"]);
     });
   });
 
