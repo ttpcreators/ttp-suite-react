@@ -73,7 +73,10 @@ import { creatorSteps, whenLabel, type NextStep } from "@/lib/creatorNextStep";
 import { CreatorToday } from "@/components/CreatorToday";
 import { sharedWithText } from "@/lib/todoCreators";
 import { selectTodosFor } from "@/lib/todoCreatorsDb";
-import { evenementInterne, visibiliteColumnMissing, visiblePourCreateur } from "@/lib/todoVisibility";
+import { evenementInterne, pourCreateurColumnMissing, pourToi, visibiliteColumnMissing, visiblePourCreateur } from "@/lib/todoVisibility";
+import { ctDroits, ctPeutRetirer } from "@/lib/creatorTodos";
+import { infosPatch } from "@/lib/creatorInfos";
+import { countsByPage, keepOpen, sameOpenObjects, throttlePush, unreadKeys, type OpenObjects } from "@/lib/activityEvents";
 import { agencyAwaits, progressColumnMissing } from "@/lib/todoProgress";
 import { CreatorTodos } from "@/components/CreatorTodos";
 import { invoiceHT } from "@/lib/invoice";
@@ -492,13 +495,23 @@ export function CreatorSpace({
   const [confirmDoneTodo, setConfirmDoneTodo] = useState<Todo | null>(null); // anti-missclick « fait »
   const [taskView, setTaskView] = useState<Todo | null>(null); // fiche tâche (texte complet)
   const [progressOn, setProgressOn] = useState(false); // colonne todos.progress présente (SQL 2026-10-22)
+  const pourCreateurOn = useRef(false); // colonne todos.pour_createur présente (SQL 2026-11-27)
+  const pourCreateurAbsent = useRef(false); // colonne vue absente : plus redemandée pendant la visite
   const [subInput, setSubInput] = useState(""); // saisie nouvelle sous-tâche
   const attFileRef = useRef<HTMLInputElement>(null);
   const [attUploading, setAttUploading] = useState(false);
   const live = useLiveKey();
   // Repères « nouveau » : ce que l'agence a écrit (tâches, idées, briefs, mails), avec
   // un compteur par onglet. Pas dans la vue agence de l'espace (preview).
-  const activity = useActivityEvents("creator", !preview);
+  // Seuls comptent les objets encore ouverts (tâche pas faite, brief pas terminé, idée qui
+  // existe) : sinon une pastille annonce ce que la liste ne montre pas. Les listes sont lues
+  // plus bas, `openObjects` les suit (voir « Pastilles » près de openTodos).
+  const activityAll = useActivityEvents("creator", !preview);
+  const [openObjects, setOpenObjects] = useState<OpenObjects | null>(null);
+  const activity = useMemo(() => {
+    const events = keepOpen(activityAll.events, openObjects);
+    return { events, keys: unreadKeys(events), counts: countsByPage(events, "creator") };
+  }, [activityAll, openObjects]);
   // Section « Mails » : affichée seulement si l'agence l'a activée et liée à un alias/libellé.
   const [mailsOn, setMailsOn] = useState(false);
   const [mailAlias, setMailAlias] = useState<string | null>(null);
@@ -822,9 +835,17 @@ export function CreatorSpace({
     // Points d'avancement (`progress`, SQL 2026-10-22) : sans la colonne, on recharge sans elle.
     // Tâches internes de l'agence (pas cochées « Visible par le créateur ») : jamais ici,
     // même dans l'aperçu agence (lib/todoVisibility). Sans la colonne : toutes cachées.
+    // « Pour toi » ou « Ton agence s'en occupe » (`pour_createur`, SQL 2026-11-27) : sans la
+    // colonne, on relit sans elle et tout reste « Pour toi ». Vue absente une fois, elle n'est
+    // plus demandée pendant la visite (sinon une lecture refusée à chaque rafraîchissement).
     const TODO_COLS = "id,text,descr,due,priority,done,status,sort_order,subtasks,attachments,created_at,source";
     const loadTodos = async (cols: string) => {
-      let r = await selectTodosFor<Todo>(name, `${cols},visible_createur`);
+      const avecPour = !pourCreateurAbsent.current;
+      let r = await selectTodosFor<Todo>(name, `${cols},visible_createur${avecPour ? ",pour_createur" : ""}`);
+      if (avecPour && r.error && pourCreateurColumnMissing(r.error)) {
+        pourCreateurAbsent.current = true;
+        r = await selectTodosFor<Todo>(name, `${cols},visible_createur`);
+      } else if (avecPour && !r.error) pourCreateurOn.current = true;
       if (r.error && visibiliteColumnMissing(r.error)) r = await selectTodosFor<Todo>(name, cols);
       return { data: r.data ? r.data.filter(visiblePourCreateur) : r.data, error: r.error };
     };
@@ -1474,8 +1495,9 @@ export function CreatorSpace({
       creator: name,
       priority: tdPrio,
       source: src,
-      // Ajoutée par l'agence DEPUIS l'espace du créateur : c'est pour lui, donc visible.
-      ...(preview ? { visible_createur: true } : {}),
+      // Ajoutée par l'agence DEPUIS l'espace du créateur : c'est pour lui, donc visible et
+      // demandée (« Pour toi ») ; `pour_createur` n'est envoyé que si la colonne existe.
+      ...(preview ? { visible_createur: true, ...(pourCreateurOn.current ? { pour_createur: true } : {}) } : {}),
       done: false,
       sort_order: nextOrder(todos),
     };
@@ -1716,26 +1738,13 @@ export function CreatorSpace({
 
   const saveInfos = async () => {
     if (!creator) return;
-    const patch: Partial<Creator> = {
-      ville: (form.ville ?? "").trim(),
-      phone: (form.phone ?? "").trim(),
-      email: (form.email ?? "").trim(),
-      email_pro: (form.email_pro ?? "").trim(),
-      instagram: (form.instagram ?? "").trim(),
-      tiktok: (form.tiktok ?? "").trim(),
-      address: (form.address ?? "").trim(),
-      siren: (form.siren ?? "").trim(),
-      birth: (form.birth ?? "").trim(),
-      followers: (form.followers ?? "").trim(),
-      er: (form.er ?? "").trim(),
-      reach: (form.reach ?? "").trim(),
-      // ca/commission/status/exclu NON envoyés : colonnes agence (CA calculé depuis
-      // les factures). Verrouillées aussi côté base par le trigger creators_guard.
-    };
-    // Date de naissance legacy en texte libre illisible (« 12 mars 1998 ») : le champ
-    // date arrive vide (toISODate a renvoyé "") → on la PRÉSERVE au lieu de l'effacer.
-    if (!patch.birth && creator.birth && !toISODate(creator.birth)) delete patch.birth;
-    if (!(await dbUpdate("creators", creator.id, patch))) {
+    // Seuls les champs vraiment changés partent (lib/creatorInfos) : la base prévient l'agence
+    // en citant les champs modifiés (vague 1, SQL 2026-11-27), sans push. Une date de naissance
+    // ancienne en texte libre illisible reste telle quelle. ca/commission/status/exclu NON
+    // envoyés : colonnes agence (CA calculé depuis les factures), verrouillées aussi côté base
+    // par le trigger creators_guard.
+    const patch: Partial<Creator> = infosPatch(creator, form);
+    if (Object.keys(patch).length > 0 && !(await dbUpdate("creators", creator.id, patch))) {
       toast(t("Ça n'a pas marché. Réessaie dans un instant."));
       return;
     }
@@ -1746,7 +1755,35 @@ export function CreatorSpace({
 
   const setField = (k: keyof Creator, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
-  const openTodos = todos.filter((t) => !t.done);
+  // « Il te reste N à faire », carte To-do et « Mes tâches » de l'accueil : seulement les
+  // tâches « Pour toi » (pas celles dont l'agence s'occupe).
+  const openTodos = todos.filter((t) => !t.done && pourToi(t));
+  // Pastilles : objets encore ouverts, suivis ici parce que les repères sont calculés plus
+  // haut, avant ces listes. Rien ne change (pas de nouveau rendu) tant qu'aucun ne s'ouvre ni
+  // ne se ferme.
+  useLayoutEffect(() => {
+    const next: OpenObjects = {
+      todo: new Set(todos.filter((x) => !x.done).map((x) => x.id)),
+      brief: new Set(briefs.filter((b) => briefKey(b.status ?? "attente") !== "terminé").map((b) => b.id)),
+      idea: new Set(ideas.map((i) => i.id)),
+    };
+    setOpenObjects((prev) => (sameOpenObjects(prev, next) ? prev : next));
+  }, [todos, briefs, ideas]);
+  // Son dossier de fichiers (« creator-uploads/<son id>/ ») : sur une tâche demandée par
+  // l'agence, il ne retire que ses propres pièces jointes. Aperçu agence : tout dépôt d'un créateur.
+  // Vide (aucune à retirer) tant que son id n'est pas lu, jamais les fichiers d'un autre créateur.
+  const [mesFichiers, setMesFichiers] = useState(preview ? "creator-uploads/" : "");
+  useEffect(() => {
+    if (preview) return;
+    let alive = true;
+    void supabase.auth.getSession().then(({ data }) => {
+      const id = data.session?.user.id;
+      if (alive && id) setMesFichiers(`creator-uploads/${id}/`);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [preview]);
   // Chiffre d'affaires en HORS TAXES, comme côté agence (choix de Marc, 2026-10-25) : lignes de
   // chaque facture envoyées par `creator-report`, sinon le montant enregistré (supposé HT).
   const htInvoices = money
@@ -1823,7 +1860,30 @@ export function CreatorSpace({
   // le KPI « CA facturé » côté agence).
   const totalFacture = htInvoices.filter((i) => i.status !== "brouillon" && i.status !== "annulee").reduce((a, i) => a + i.ht, 0);
 
+  /** Tâche que le créateur vient de terminer : son repère « nouveau » n'a plus lieu d'être, et
+   *  l'agence est prévenue quand c'est une tâche qu'elle lui avait demandée (push « tâche
+   *  terminée », coupé par le réglage « Aussi quand il écrit sur une tâche »), une fois par
+   *  tâche toutes les 10 min au plus (Fait, Rouvrir puis Fait : un seul push).
+   *  Les push « tâche terminée » et « tâche supprimée » partent seulement une fois le SQL du
+   *  27/11 lancé (colonne pour_createur lue) : daily-digest est redéployé avec lui, et
+   *  l'ancienne version les annoncerait comme une nouvelle tâche. */
+  const doneSent = useRef<Record<string, number>>({});
+  const afterTodoDone = (td: Todo) => {
+    if (preview) return;
+    void markActivityRead("todo", td.id);
+    if (!pourCreateurOn.current || td.source !== "agency" || !pourToi(td)) return;
+    const next = throttlePush(doneSent.current, `a:${name}:todo:${td.id}:done`, Date.now());
+    if (!next) return;
+    doneSent.current = next;
+    notifyAgency("tache-faite", name, td.text, td.id);
+  };
+
   const markTodo = async (td: Todo, next: boolean): Promise<boolean> => {
+    // Tâche suivie par l'agence : il la lit et y répond, il ne la coche pas (la base refuse aussi).
+    if (!ctDroits(td).terminer) {
+      toast(t("Ton agence s'en occupe"));
+      return false;
+    }
     // On écrit done ET status ensemble (comme l'agence) → l'affichage statut/kanban
     // reste cohérent des deux côtés (audit : ne pas laisser status désynchronisé).
     // writeTodoStatus : trace du « Fait » (date, auteur) comme côté agence.
@@ -1831,6 +1891,7 @@ export function CreatorSpace({
     if (await writeTodoStatus(td.id, status)) {
       setTodos((prev) => prev.map((x) => (x.id === td.id ? { ...x, done: next, status } : x)));
       toast(next ? t("Fait ✓") : t("À refaire"));
+      if (next && !td.done) afterTodoDone(td);
       return true;
     }
     toast(t("Ça n'a pas marché. Réessaie dans un instant."));
@@ -1839,13 +1900,15 @@ export function CreatorSpace({
 
   // Change le statut d'une tâche depuis la vue colonnes (done dérivé de « Fait »).
   // Supprimer une tâche (menu ⋯, ou glisser la ligne en mode iPhone).
-  /** Retire une ligne d'une liste puis la remet à sa place (bandeau « Annuler »). */
+  /** Retire une ligne d'une liste puis la remet à sa place (bandeau « Annuler »).
+   *  `onDeleted` : appelé une fois la ligne vraiment supprimée en base (après le délai). */
   function removeUndoable<T extends { id: string }>(
     set: (fn: (prev: T[]) => T[]) => void,
     list: T[],
     row: T,
     table: string,
     label: string,
+    onDeleted?: () => void,
   ) {
     const at = Math.max(0, list.findIndex((y) => y.id === row.id));
     undoable(label, {
@@ -1857,31 +1920,50 @@ export function CreatorSpace({
           next.splice(Math.min(at, next.length), 0, row);
           return next;
         }),
-      commit: () => dbDelete(table, row.id),
+      commit: async () => {
+        const ok = await dbDelete(table, row.id);
+        if (ok) onDeleted?.();
+        return ok;
+      },
       failText: t("Suppression impossible. Réessaie dans un instant."),
     });
   }
   const deleteTodo = async (td: Todo) => {
+    // Tâche de l'agence (demandée ou suivie) : le créateur ne la supprime plus (vague 1).
+    if (!ctDroits(td).supprimer) {
+      toast(t("Ton agence s'en occupe"));
+      return;
+    }
     // Tâche partagée dont il n'est pas le premier créateur : seule l'agence (ou le premier) la retire.
     if (!preview && td.creator && td.creator !== name) {
       toast(t("Tâche partagée : demande à l'agence de la retirer"));
       return;
     }
-    removeUndoable(setTodos, todos, td, "todos", t("Tâche supprimée"));
+    // Une fois supprimée pour de bon (après le délai « Annuler »), l'agence est prévenue
+    // (après le SQL du 27/11, comme « tâche terminée » : voir afterTodoDone).
+    removeUndoable(setTodos, todos, td, "todos", t("Tâche supprimée"), () => {
+      if (!preview && pourCreateurOn.current) notifyAgency("tache-supprimee", name, td.text);
+    });
   };
   const setTodoStatus = async (td: Todo, status: string) => {
+    if (!ctDroits(td).terminer) {
+      toast(t("Ton agence s'en occupe"));
+      return;
+    }
     const done = status === "Fait";
     const prev = { status: td.status ?? null, done: td.done };
     setTodos((list) => list.map((x) => (x.id === td.id ? { ...x, status, done } : x)));
     if (!(await writeTodoStatus(td.id, status))) {
       setTodos((list) => list.map((x) => (x.id === td.id ? { ...x, ...prev } : x)));
       toast(t("Ça n'a pas marché. Réessaie dans un instant."));
-    }
+    } else if (done && !prev.done) afterTodoDone(td);
   };
 
   const cStatus = (t: Todo): string => t.status ?? (t.done ? "Fait" : "À faire");
 
   const startEditTodo = (t: Todo) => {
+    // Titre, détails et priorité : seulement sur sa tâche, jamais sur une tâche de l'agence.
+    if (!ctDroits(t).modifier) return;
     setTdEditId(t.id);
     setTeText(t.text);
     setTeDesc(t.descr ?? "");
@@ -3293,6 +3375,7 @@ export function CreatorSpace({
               progressOn={progressOn}
               me={name}
               preview={!!preview}
+              mesFichiers={mesFichiers}
               sharedWith={(td) => sharedWithText(td, name, t) || null}
               form={
                 <>
@@ -4818,10 +4901,12 @@ export function CreatorSpace({
             )}
             {sharedWithText(taskView, name, t) && <div className="mt-2 text-xs text-faint">{sharedWithText(taskView, name, t)}</div>}
 
-            {/* Sous-tâches (checklist) */}
+            {/* Sous-tâches (checklist) ; tâche de l'agence : ni Modifier, et seulement ses propres
+                pièces jointes à retirer (ctDroits, ctPeutRetirer) */}
             {(() => {
               const subs = taskView.subtasks ?? [];
               const done = subs.filter((s) => s.done).length;
+              const canSubs = ctDroits(taskView).sousTaches;
               return (
                 <div className="mt-5 flex flex-col gap-1.5 border-t border-border pt-4">
                   <span className="text-[11px] font-medium text-muted-foreground">
@@ -4835,18 +4920,20 @@ export function CreatorSpace({
                   <div className="flex flex-col gap-1.5">
                     {subs.map((s) => (
                       <div key={s.id} className="group flex items-center gap-2 rounded-lg border border-border bg-panel/40 px-2.5 py-1.5">
-                        <button type="button" onClick={() => toggleSubtask(taskView, s.id)} className={cn("grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors", s.done ? "border-primary bg-primary text-primary-foreground" : "border-faint")}>
+                        <button type="button" disabled={!canSubs} onClick={() => toggleSubtask(taskView, s.id)} className={cn("grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors", s.done ? "border-primary bg-primary text-primary-foreground" : "border-faint")}>
                           {s.done && <Check className="h-3 w-3" />}
                         </button>
                         <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
-                        <button type="button" onClick={() => delSubtask(taskView, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label={t("Supprimer la sous-tâche")}><Trash2 className="h-3.5 w-3.5" /></button>
+                        {canSubs && <button type="button" onClick={() => delSubtask(taskView, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label={t("Supprimer la sous-tâche")}><Trash2 className="h-3.5 w-3.5" /></button>}
                       </div>
                     ))}
                   </div>
-                  <form onSubmit={(e) => { e.preventDefault(); addSubtask(taskView); }} className="mt-1.5 flex items-center gap-2">
-                    <input value={subInput} onChange={(e) => setSubInput(e.target.value)} placeholder={t("Ajouter une sous-tâche…")} className="w-full rounded-md border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary" />
-                    <button type="submit" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"><Plus className="h-4 w-4" /></button>
-                  </form>
+                  {canSubs && (
+                    <form onSubmit={(e) => { e.preventDefault(); addSubtask(taskView); }} className="mt-1.5 flex items-center gap-2">
+                      <input value={subInput} onChange={(e) => setSubInput(e.target.value)} placeholder={t("Ajouter une sous-tâche…")} className="w-full rounded-md border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary" />
+                      <button type="submit" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"><Plus className="h-4 w-4" /></button>
+                    </form>
+                  )}
                 </div>
               );
             })()}
@@ -4864,30 +4951,38 @@ export function CreatorSpace({
                       <div className="truncate text-[13px] font-medium text-foreground hover:underline">{a.name}</div>
                       <div className="text-[11px] text-faint">{a.size}</div>
                     </button>
-                    <button type="button" onClick={() => removeAttachment(taskView, a.path)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title={t("Retirer")}><Trash2 className="h-4 w-4" /></button>
+                    {ctPeutRetirer(taskView, a.path, mesFichiers) && (
+                      <button type="button" onClick={() => removeAttachment(taskView, a.path)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title={t("Retirer")}><Trash2 className="h-4 w-4" /></button>
+                    )}
                   </div>
                 ))}
-                <input ref={attFileRef} type="file" multiple className="hidden" onChange={(e) => uploadAttachments(taskView, e.target.files)} />
-                <button type="button" onClick={() => attFileRef.current?.click()} disabled={attUploading} className="flex items-center justify-center gap-2 rounded-full border-2 border-dashed border-border px-3 py-2.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50">
-                  <Upload className="h-4 w-4" /> {attUploading ? t("Envoi…") : t("Ajouter un fichier")}
-                </button>
+                {ctDroits(taskView).deposer && (
+                  <>
+                    <input ref={attFileRef} type="file" multiple className="hidden" onChange={(e) => uploadAttachments(taskView, e.target.files)} />
+                    <button type="button" onClick={() => attFileRef.current?.click()} disabled={attUploading} className="flex items-center justify-center gap-2 rounded-full border-2 border-dashed border-border px-3 py-2.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50">
+                      <Upload className="h-4 w-4" /> {attUploading ? t("Envoi…") : t("Ajouter un fichier")}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const t = taskView;
-                  setTaskView(null);
-                  setTab("todo"); // le formulaire de modification est dans « À faire »
-                  startEditTodo(t);
-                }}
-                className="flex items-center gap-1.5 rounded-full bg-panel px-3 py-2 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
-              >
-                <Pencil className="h-3.5 w-3.5" /> {t("Modifier")}
-              </button>
-            </div>
+            {ctDroits(taskView).modifier && (
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = taskView;
+                    setTaskView(null);
+                    setTab("todo"); // le formulaire de modification est dans « À faire »
+                    startEditTodo(t);
+                  }}
+                  className="flex items-center gap-1.5 rounded-full bg-panel px-3 py-2 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
+                >
+                  <Pencil className="h-3.5 w-3.5" /> {t("Modifier")}
+                </button>
+              </div>
+            )}
           </div>
         </Overlay>
       )}

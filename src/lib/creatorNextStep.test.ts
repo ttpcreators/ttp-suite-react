@@ -70,6 +70,18 @@ describe("prochaine étape du créateur", () => {
     expect(steps).toEqual([]);
   });
 
+  it("vague 1 : une tâche suivie par l'agence n'est pas sa prochaine étape, une tâche demandée oui", () => {
+    const steps = creatorSteps({
+      ...base,
+      todos: [
+        { id: "suivie", text: "Relancer Marque X", due: "2026-10-17", priority: "haute", done: false, source: "agency", pour_createur: false },
+        { id: "demandee", text: "Envoyer ta preview à Marque X", due: "2026-10-21", priority: null, done: false, source: "agency", pour_createur: true },
+        { id: "avant-sql", text: "Signer le contrat", due: null, priority: null, done: false, source: "agency" },
+      ],
+    });
+    expect(steps.map((x) => x.id)).toEqual(["todo:demandee", "todo:avant-sql"]);
+  });
+
   it("collab à l'étape facturation sans facture à ce nom : dépôt proposé", () => {
     const steps = creatorSteps({
       ...base,

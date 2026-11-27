@@ -10,6 +10,17 @@ describe("Aujourd'hui du créateur", () => {
     expect([null, -2, 0, 1, 2, 7, 8, 30, 31].map(sectionFor)).toEqual(["today", "late", "today", "tomorrow", "week", "week", "later", "later", null]);
   });
 
+  it("vague 1 : pas de « Terminer » ni de retard pour une tâche suivie par l'agence", () => {
+    const items = creatorTodayItems({
+      ...base,
+      todos: [
+        { id: "suivie", text: "Relancer Marque X", due: "2026-10-19", priority: null, done: false, source: "agency", pour_createur: false },
+        { id: "demandee", text: "Envoyer tes stats à Marque X", due: "2026-10-21", priority: null, done: false, source: "agency", pour_createur: true },
+      ],
+    });
+    expect(items.map((i) => [i.id, i.section])).toEqual([["todo:demandee", "late"]]);
+  });
+
   it("tâches, rendez-vous et contenus jusqu'à 30 jours", () => {
     const items = creatorTodayItems({
       ...base,

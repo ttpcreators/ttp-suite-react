@@ -577,6 +577,13 @@ export const EN_CREATORSPACE: Record<string, string> = {
   "Créée le": "Created",
   "Demandée par": "Asked by",
   "Demandée par l'agence": "Asked by your agency",
+  // Vague 1 : « Pour toi » et « Ton agence s'en occupe » (« Ton agence », « Écris à ton agence… » : en-creatorPages)
+  "Pour toi": "For you",
+  "Ton agence s'en occupe": "Your agency is on it",
+  "Suivie par ton agence": "Handled by your agency",
+  "Suivie par": "Handled by",
+  "Ce que ton agence fait pour toi. Tu peux lire et répondre, elle s'occupe du reste.": "What your agency is doing for you. You can read and reply, it handles the rest.",
+  "Où ça en est": "Where it stands",
   "Faite": "Done",
   "Fiche de la tâche": "Task details",
   "Filtres": "Filters",

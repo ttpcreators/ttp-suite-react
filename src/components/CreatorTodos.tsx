@@ -13,6 +13,7 @@ import { SwipeRow } from "@/components/mobile/swipe-row";
 import { Overlay } from "@/components/mobile/ios-sheet";
 import { DoneCircle, InfoRow } from "@/components/todo-parts";
 import { NewDot } from "@/components/ui/new-dot";
+import { HelpTip } from "@/components/ui/help-tip";
 import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
 import { notifyAgencyChange } from "@/lib/push";
 import { useIntent } from "@/lib/openIntent";
@@ -21,7 +22,8 @@ import { EMPTY, fmtDay, toISODate, todayISO } from "@/lib/dates";
 import { useLocale, useT } from "@/lib/i18n";
 import { TONE_DOT, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
 import { agencyAwaits, appendPoint, latestPoint, parsePoints } from "@/lib/todoProgress";
-import { clip45, ctGroups, ctKpis, ctLateDays, ctMatchFilter, ctPostpone, ctStatus, type CtFilter, type CtKpi, type CtPriority } from "@/lib/creatorTodos";
+import { clip45, ctDroits, ctGroups, ctKpis, ctLateDays, ctMatchFilter, ctPeutRetirer, ctPostpone, ctSorte, ctStatus, type CtFilter, type CtKpi, type CtPriority } from "@/lib/creatorTodos";
+import { pourToi } from "@/lib/todoVisibility";
 import { haptic } from "@/lib/haptics";
 
 /*
@@ -31,6 +33,11 @@ import { haptic } from "@/lib/haptics";
  * « Terminer » et « Reporter ». Les points d'avancement (colonne `todos.progress`) montrent
  * les messages de l'agence ; le créateur y répond. Données et écritures : celles de
  * CreatorSpace (RLS du créateur), passées en props.
+ *
+ * Vague 1 : deux sections. « Pour toi » (ses tâches et celles que l'agence lui demande)
+ * porte les tuiles, les filtres et les retards. « Ton agence s'en occupe » (tâches de
+ * l'agence qu'il voit sans avoir à les faire) se lit et reçoit ses réponses, sans rond
+ * « Fait », sans retard, sans Modifier ni Supprimer (droits : ctDroits).
  */
 
 type Subtask = { id: string; text: string; done: boolean };
@@ -76,6 +83,8 @@ type Props = {
   me?: string;
   /** Vue agence de l'espace : ni repère « nouveau », ni notification. */
   preview?: boolean;
+  /** Son dossier de fichiers (« creator-uploads/<son id>/ ») : sur une tâche demandée par l'agence, il ne retire que ceux-là. */
+  mesFichiers?: string;
 };
 
 const STATUS: { value: string; label: string; dot: string }[] = [
@@ -139,10 +148,14 @@ export function CreatorTodos(p: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const rows = p.todos;
+  // « Pour toi » : seules ces tâches comptent (tuiles, filtres, groupes). Les autres tâches de
+  // l'agence vont dans « Ton agence s'en occupe », avec les mêmes filtres (en colonnes : les ouvertes).
+  const mine = rows.filter(pourToi);
   const kpis = ctKpis(rows, today);
-  const filtered = rows.filter((r) => (view === "colonnes" || ctMatchFilter(filter, r, today)) && (!prio || r.priority === prio));
+  const filtered = mine.filter((r) => (view === "colonnes" || ctMatchFilter(filter, r, today)) && (!prio || r.priority === prio));
   const groups = ctGroups(filtered);
-  const ordered = groups.flatMap((g) => g.rows);
+  const agencyRows = rows.filter((r) => !pourToi(r) && (view === "colonnes" ? !r.done : ctMatchFilter(filter, r, today)) && (!prio || r.priority === prio));
+  const ordered = [...groups.flatMap((g) => g.rows), ...agencyRows];
   const showInspector = isLg && view === "liste" && rows.length > 0;
   const inspected = ordered.find((r) => r.id === selId) ?? ordered[0] ?? null;
   const sheetRow = sheetOpen && (!isLg || view === "colonnes") ? rows.find((r) => r.id === selId) ?? null : null;
@@ -235,19 +248,23 @@ export function CreatorTodos(p: Props) {
     const shared = p.sharedWith(td);
     const due = dueText(td);
     const awaits = p.progressOn && agencyAwaits(td.progress);
-    // Trois infos au plus : avec qui (ou « demandée par l'agence »), l'échéance, un message de l'agence.
+    const can = ctDroits(td);
+    // Trois infos au plus : qui l'a demandée ou qui s'en occupe (tâche de l'agence, même
+    // partagée : « Avec … » reste dans la fiche), sinon avec qui ; l'échéance ; un message de l'agence.
     const meta = [
-      shared ?? (td.source === "agency" ? t("Demandée par l'agence") : null),
+      td.source === "agency" ? t(ctSorte(td) === "suivie" ? "Suivie par ton agence" : "Demandée par l'agence") : shared,
       due && !td.done ? t("Échéance {date}", { date: due }) : null,
     ].filter(Boolean) as string[];
     return (
       <li key={td.id}>
         <SwipeRow
           actions={[
-            td.done
-              ? { key: "reopen", label: t("Rouvrir"), icon: RotateCcw, tone: "gray", onClick: () => p.onToggleDone(td) }
-              : { key: "done", label: t("Fait"), icon: Check, tone: "green", onClick: () => { haptic("succes"); p.onToggleDone(td); } },
-            { key: "delete", label: t("Supprimer"), icon: Trash2, tone: "red", onClick: () => p.onDelete(td) },
+            ...(can.terminer
+              ? [td.done
+                  ? { key: "reopen", label: t("Rouvrir"), icon: RotateCcw, tone: "gray" as const, onClick: () => p.onToggleDone(td) }
+                  : { key: "done", label: t("Fait"), icon: Check, tone: "green" as const, onClick: () => { haptic("succes"); p.onToggleDone(td); } }]
+              : []),
+            ...(can.supprimer ? [{ key: "delete", label: t("Supprimer"), icon: Trash2, tone: "red" as const, onClick: () => p.onDelete(td) }] : []),
           ]}
         >
           <div
@@ -267,7 +284,7 @@ export function CreatorTodos(p: Props) {
               on ? "bg-primary/[0.06] ring-[1.5px] ring-inset ring-primary" : "hover:bg-rowhover",
             )}
           >
-            <DoneCircle done={td.done} high={td.priority === "haute"} onToggle={() => p.onToggleDone(td)} labels={doneLabels} />
+            {can.terminer && <DoneCircle done={td.done} high={td.priority === "haute"} onToggle={() => p.onToggleDone(td)} labels={doneLabels} />}
             <div className="min-w-0 flex-1">
               <div
                 className={cn("truncate text-[15px] font-semibold leading-snug text-foreground", td.done && "text-muted-foreground line-through decoration-faint")}
@@ -324,11 +341,14 @@ export function CreatorTodos(p: Props) {
     const awaits = p.progressOn && agencyAwaits(td.progress);
     const shared = p.sharedWith(td);
     const whoLabel = (w?: string | null) => (w === "Agence" ? t("L'agence") : w === "Créateur" ? t("Toi") : null);
+    const can = ctDroits(td);
+    const suivie = ctSorte(td) === "suivie";
+    const status = ctStatus(td);
     return (
       <>
         <div className="-mx-1 flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain px-1 pb-4 [&>*]:shrink-0">
           <div className="flex items-start gap-3">
-            <DoneCircle done={td.done} high={td.priority === "haute"} onToggle={() => p.onToggleDone(td)} size="lg" labels={doneLabels} />
+            {can.terminer && <DoneCircle done={td.done} high={td.priority === "haute"} onToggle={() => p.onToggleDone(td)} size="lg" labels={doneLabels} />}
             <h2
               className={cn(
                 "min-w-0 flex-1 pt-px text-[22px] font-bold leading-tight tracking-[-0.02em] text-foreground [overflow-wrap:anywhere]",
@@ -338,13 +358,15 @@ export function CreatorTodos(p: Props) {
               {td.text}
             </h2>
             <div className="-mr-1.5 -mt-1 flex shrink-0 items-center">
-              <ActionMenu
-                items={[
-                  { key: "edit", label: t("Modifier"), icon: Pencil, onClick: () => { closeSheet(); p.onEdit(td); } },
-                  { key: "file", label: t("Ajouter un fichier"), icon: Upload, onClick: () => fileRef.current?.click() },
-                  { key: "delete", label: t("Supprimer"), icon: Trash2, danger: true, onClick: () => { closeSheet(); p.onDelete(td); } },
-                ]}
-              />
+              {(can.modifier || can.deposer || can.supprimer) && (
+                <ActionMenu
+                  items={[
+                    ...(can.modifier ? [{ key: "edit", label: t("Modifier"), icon: Pencil, onClick: () => { closeSheet(); p.onEdit(td); } }] : []),
+                    ...(can.deposer ? [{ key: "file", label: t("Ajouter un fichier"), icon: Upload, onClick: () => fileRef.current?.click() }] : []),
+                    ...(can.supprimer ? [{ key: "delete", label: t("Supprimer"), icon: Trash2, danger: true, onClick: () => { closeSheet(); p.onDelete(td); } }] : []),
+                  ]}
+                />
+              )}
               {inSheet && (
                 <button
                   type="button"
@@ -360,7 +382,8 @@ export function CreatorTodos(p: Props) {
 
           {td.descr && <p className="-mt-2 whitespace-pre-wrap text-[14px] leading-relaxed text-muted-foreground">{td.descr}</p>}
 
-          {/* Où j'en suis : le dernier point ; un message de l'agence ressort en bleu. */}
+          {/* Où j'en suis : le dernier point ; un message de l'agence ressort en bleu. Tâche suivie
+              par l'agence : « Où ça en est » (on ne lui demande pas où il en est d'un travail de l'agence). */}
           {p.progressOn && (
             <button
               type="button"
@@ -375,7 +398,7 @@ export function CreatorTodos(p: Props) {
             >
               <span className="flex items-baseline justify-between gap-2">
                 <span className={cn("text-[12px] font-semibold", awaits ? "text-primary" : "text-muted-foreground")}>
-                  {awaits ? t("Message de l'agence") : t("Où j'en suis")}
+                  {awaits ? t("Message de l'agence") : suivie ? t("Où ça en est") : t("Où j'en suis")}
                 </span>
                 {last?.date && <span className="text-[11px] tabular-nums text-faint">{last.date}</span>}
               </span>
@@ -390,15 +413,20 @@ export function CreatorTodos(p: Props) {
           <dl className="divide-y divide-border overflow-hidden rounded-[14px] bg-panel">
             {shared && <InfoRow label={t("Avec")}><span className="min-w-0 truncate font-medium">{shared}</span></InfoRow>}
             <InfoRow label={t("Statut")}>
-              <Tabs
-                size="sm"
-                label={t("Statut")}
-                items={STATUS.map((o) => ({ value: o.value, label: t(o.label) }))}
-                value={ctStatus(td)}
-                onValueChange={(s) => {
-                  if (s !== ctStatus(td)) p.onSetStatus(td, s);
-                }}
-              />
+              {can.terminer ? (
+                <Tabs
+                  size="sm"
+                  label={t("Statut")}
+                  items={STATUS.map((o) => ({ value: o.value, label: t(o.label) }))}
+                  value={status}
+                  onValueChange={(s) => {
+                    if (s !== status) p.onSetStatus(td, s);
+                  }}
+                />
+              ) : (
+                // Tâche suivie par l'agence : son statut se lit, l'agence le tient à jour.
+                <StatusPill tone={status === "Fait" ? "ok" : status === "En cours" ? "progress" : "closed"}>{t(status)}</StatusPill>
+              )}
             </InfoRow>
             <InfoRow label={t("Priorité")}>
               <StatusPill tone={td.priority === "haute" ? "wait" : "closed"} className={td.priority === "haute" ? "text-priority" : undefined}>{prioLabel(td.priority)}</StatusPill>
@@ -410,91 +438,118 @@ export function CreatorTodos(p: Props) {
               </span>
             </InfoRow>
             {created && <InfoRow label={t("Créée le")}>{created}</InfoRow>}
-            <InfoRow label={t("Demandée par")}>{td.source === "agency" ? t("L'agence") : t("Toi")}</InfoRow>
+            {suivie ? (
+              <InfoRow label={t("Suivie par")}>{t("Ton agence")}</InfoRow>
+            ) : (
+              <InfoRow label={t("Demandée par")}>{td.source === "agency" ? t("L'agence") : t("Toi")}</InfoRow>
+            )}
           </dl>
 
-          {/* Sous-tâches */}
-          <section className="flex flex-col gap-2">
-            <div className="flex items-baseline justify-between gap-2">
-              <h3 className="text-[14px] font-semibold text-foreground">{t("Sous-tâches")}</h3>
-              <span className="text-[12px] tabular-nums text-muted-foreground">{subs.length ? t("{done} sur {total}", { done: subDone, total: subs.length }) : t("Aucune")}</span>
-            </div>
-            {subs.length > 0 && (
-              <div className="h-1 w-full overflow-hidden rounded-full bg-field">
-                <div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${(subDone / subs.length) * 100}%` }} />
+          {/* Sous-tâches (en lecture seule sur une tâche suivie par l'agence) */}
+          {(can.sousTaches || subs.length > 0) && (
+            <section className="flex flex-col gap-2">
+              <div className="flex items-baseline justify-between gap-2">
+                <h3 className="text-[14px] font-semibold text-foreground">{t("Sous-tâches")}</h3>
+                <span className="text-[12px] tabular-nums text-muted-foreground">{subs.length ? t("{done} sur {total}", { done: subDone, total: subs.length }) : t("Aucune")}</span>
               </div>
-            )}
-            {subs.map((s) => (
-              <div key={s.id} className="group flex items-center gap-2.5 rounded-[12px] bg-panel px-3 py-2">
-                <button
-                  type="button"
-                  onClick={() => toggleSubtask(td, s.id)}
-                  aria-label={s.done ? t("Décocher") : t("Cocher")}
-                  className={cn(
-                    "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] transition-colors",
-                    s.done ? "bg-primary text-primary-foreground" : "border-2 border-faint hover:border-foreground/60",
+              {subs.length > 0 && (
+                <div className="h-1 w-full overflow-hidden rounded-full bg-field">
+                  <div className="h-full rounded-full bg-primary transition-[width] duration-300" style={{ width: `${(subDone / subs.length) * 100}%` }} />
+                </div>
+              )}
+              {subs.map((s) => (
+                <div key={s.id} className="group flex items-center gap-2.5 rounded-[12px] bg-panel px-3 py-2">
+                  {can.sousTaches ? (
+                    <button
+                      type="button"
+                      onClick={() => toggleSubtask(td, s.id)}
+                      aria-label={s.done ? t("Décocher") : t("Cocher")}
+                      className={cn(
+                        "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] transition-colors",
+                        s.done ? "bg-primary text-primary-foreground" : "border-2 border-faint hover:border-foreground/60",
+                      )}
+                    >
+                      {s.done && <Check className="h-3 w-3" strokeWidth={3} />}
+                    </button>
+                  ) : (
+                    <span
+                      aria-hidden
+                      className={cn("grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px]", s.done ? "bg-primary text-primary-foreground" : "border-2 border-faint")}
+                    >
+                      {s.done && <Check className="h-3 w-3" strokeWidth={3} />}
+                    </span>
                   )}
+                  <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
+                  {can.sousTaches && (
+                    <button
+                      type="button"
+                      onClick={() => delSubtask(td, s.id)}
+                      aria-label={t("Supprimer la sous-tâche")}
+                      className="shrink-0 text-faint transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {can.sousTaches && (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    addSubtask(td);
+                  }}
+                  className="flex h-10 items-center gap-2 rounded-full bg-field pl-3.5 pr-1"
                 >
-                  {s.done && <Check className="h-3 w-3" strokeWidth={3} />}
-                </button>
-                <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
-                <button
-                  type="button"
-                  onClick={() => delSubtask(td, s.id)}
-                  aria-label={t("Supprimer la sous-tâche")}
-                  className="shrink-0 text-faint transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                addSubtask(td);
-              }}
-              className="flex h-10 items-center gap-2 rounded-full bg-field pl-3.5 pr-1"
-            >
-              <input
-                value={subInput}
-                onChange={(e) => setSubInput(e.target.value)}
-                placeholder={t("Ajouter une sous-tâche…")}
-                aria-label={t("Nouvelle sous-tâche")}
-                className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-faint"
-              />
-              <button type="submit" disabled={!subInput.trim()} aria-label={t("Ajouter")} className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
-                <Plus className="h-4 w-4" />
-              </button>
-            </form>
-          </section>
+                  <input
+                    value={subInput}
+                    onChange={(e) => setSubInput(e.target.value)}
+                    placeholder={t("Ajouter une sous-tâche…")}
+                    aria-label={t("Nouvelle sous-tâche")}
+                    className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-faint"
+                  />
+                  <button type="submit" disabled={!subInput.trim()} aria-label={t("Ajouter")} className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-40">
+                    <Plus className="h-4 w-4" />
+                  </button>
+                </form>
+              )}
+            </section>
+          )}
 
-          {/* Pièces jointes */}
-          <section className="flex flex-col gap-2">
-            <h3 className="text-[14px] font-semibold text-foreground">
-              {t("Pièces jointes")}{atts.length ? <span className="font-normal text-muted-foreground"> · {atts.length}</span> : null}
-            </h3>
-            {atts.map((a) => (
-              <div key={a.path} className="group flex items-center gap-3 rounded-[12px] bg-panel p-2.5">
-                <button type="button" onClick={() => p.onOpenAttachment(a)} className="shrink-0" title={t("Ouvrir")}><FileCard formatFile={fileFormatOf(a.name)} /></button>
-                <button type="button" onClick={() => p.onOpenAttachment(a)} className="min-w-0 flex-1 text-left">
-                  <div className="truncate text-[13px] font-medium text-foreground hover:underline">{a.name}</div>
-                  <div className="text-[11px] text-faint">{a.size}</div>
-                </button>
-                <button type="button" onClick={() => p.onRemoveAttachment(td, a.path)} className="shrink-0 text-faint transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100" title={t("Retirer")} aria-label={t("Retirer")}>
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-            <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => p.onUpload(td, e.target.files)} />
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={p.uploading}
-              className="flex items-center justify-center gap-2 rounded-full border-2 border-dashed border-border px-3 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
-            >
-              <Paperclip className="h-4 w-4" /> {p.uploading ? t("Envoi…") : t("Ajouter un fichier")}
-            </button>
-          </section>
+          {/* Pièces jointes (tâche demandée : il ne retire que les siennes ; tâche suivie : il les ouvre) */}
+          {(can.deposer || atts.length > 0) && (
+            <section className="flex flex-col gap-2">
+              <h3 className="text-[14px] font-semibold text-foreground">
+                {t("Pièces jointes")}{atts.length ? <span className="font-normal text-muted-foreground"> · {atts.length}</span> : null}
+              </h3>
+              {atts.map((a) => (
+                <div key={a.path} className="group flex items-center gap-3 rounded-[12px] bg-panel p-2.5">
+                  <button type="button" onClick={() => p.onOpenAttachment(a)} className="shrink-0" title={t("Ouvrir")}><FileCard formatFile={fileFormatOf(a.name)} /></button>
+                  <button type="button" onClick={() => p.onOpenAttachment(a)} className="min-w-0 flex-1 text-left">
+                    <div className="truncate text-[13px] font-medium text-foreground hover:underline">{a.name}</div>
+                    <div className="text-[11px] text-faint">{a.size}</div>
+                  </button>
+                  {ctPeutRetirer(td, a.path, p.mesFichiers ?? "creator-uploads/") && (
+                    <button type="button" onClick={() => p.onRemoveAttachment(td, a.path)} className="shrink-0 text-faint transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100" title={t("Retirer")} aria-label={t("Retirer")}>
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              ))}
+              {can.deposer && (
+                <>
+                  <input ref={fileRef} type="file" multiple className="hidden" onChange={(e) => p.onUpload(td, e.target.files)} />
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={p.uploading}
+                    className="flex items-center justify-center gap-2 rounded-full border-2 border-dashed border-border px-3 py-2 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50"
+                  >
+                    <Paperclip className="h-4 w-4" /> {p.uploading ? t("Envoi…") : t("Ajouter un fichier")}
+                  </button>
+                </>
+              )}
+            </section>
+          )}
 
           {/* Échanges avec l'agence : points d'avancement, questions, réponses */}
           {p.progressOn && (
@@ -527,7 +582,7 @@ export function CreatorTodos(p: Props) {
                   ref={pointRef}
                   value={pointInput}
                   onChange={(e) => setPointInput(e.target.value)}
-                  placeholder={awaits ? t("Réponds à l'agence…") : t("Où en es-tu ?")}
+                  placeholder={awaits ? t("Réponds à l'agence…") : suivie ? t("Écris à ton agence…") : t("Où en es-tu ?")}
                   aria-label={t("Nouveau point d'avancement")}
                   className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-faint"
                 />
@@ -544,59 +599,64 @@ export function CreatorTodos(p: Props) {
           )}
         </div>
 
-        {/* Actions, hors de la zone qui défile */}
-        <div className="mt-3 flex shrink-0 flex-col gap-2 border-t border-border pt-4">
-          {postponeOpen && (
-            <div className="flex flex-col gap-2 rounded-[14px] bg-panel p-3">
-              <span className="text-[12px] font-medium text-muted-foreground">{t("Nouvelle échéance")}</span>
-              <div className="flex flex-wrap gap-1.5">
-                {[
-                  { label: t("+ 1 jour"), n: 1 },
-                  { label: t("+ 1 semaine"), n: 7 },
-                ].map((o) => (
-                  <button
-                    key={o.n}
-                    type="button"
-                    onClick={() => void postpone(td, ctPostpone(td, o.n, today))}
-                    className="h-8 rounded-full bg-surface px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover"
-                  >
-                    {o.label}
-                  </button>
-                ))}
-                <input
-                  type="date"
-                  aria-label={t("Autre date")}
-                  defaultValue={toISODate(td.due)}
-                  onChange={(e) => {
-                    if (e.target.value) void postpone(td, e.target.value);
-                  }}
-                  className="h-8 min-w-0 flex-1 rounded-full border border-border bg-surface px-3 text-[12px] text-foreground outline-none focus:border-primary"
-                />
+        {/* Actions, hors de la zone qui défile (aucune sur une tâche suivie par l'agence ;
+            Reporter : seulement sur sa tâche) */}
+        {(can.terminer || can.modifier) && (
+          <div className="mt-3 flex shrink-0 flex-col gap-2 border-t border-border pt-4">
+            {postponeOpen && can.modifier && (
+              <div className="flex flex-col gap-2 rounded-[14px] bg-panel p-3">
+                <span className="text-[12px] font-medium text-muted-foreground">{t("Nouvelle échéance")}</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { label: t("+ 1 jour"), n: 1 },
+                    { label: t("+ 1 semaine"), n: 7 },
+                  ].map((o) => (
+                    <button
+                      key={o.n}
+                      type="button"
+                      onClick={() => void postpone(td, ctPostpone(td, o.n, today))}
+                      className="h-8 rounded-full bg-surface px-3 text-[12px] font-semibold text-foreground transition-colors hover:bg-rowhover"
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                  <input
+                    type="date"
+                    aria-label={t("Autre date")}
+                    defaultValue={toISODate(td.due)}
+                    onChange={(e) => {
+                      if (e.target.value) void postpone(td, e.target.value);
+                    }}
+                    className="h-8 min-w-0 flex-1 rounded-full border border-border bg-surface px-3 text-[12px] text-foreground outline-none focus:border-primary"
+                  />
+                </div>
               </div>
-            </div>
-          )}
-          <button
-            type="button"
-            onClick={() => p.onToggleDone(td)}
-            className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
-          >
-            {td.done ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" strokeWidth={2.5} />}
-            {td.done ? t("Rouvrir") : t("Terminer")}
-          </button>
-          {!td.done && (
-            <button
-              type="button"
-              onClick={() => setPostponeOpen((v) => !v)}
-              aria-expanded={postponeOpen}
-              className={cn(
-                "flex h-10 items-center justify-center gap-1.5 rounded-full bg-field px-3 text-[13px] font-semibold text-foreground transition-colors hover:bg-rowhover",
-                postponeOpen && "ring-[1.5px] ring-inset ring-primary",
-              )}
-            >
-              <TtpPlanning className="h-4 w-4" /> {t("Reporter")}
-            </button>
-          )}
-        </div>
+            )}
+            {can.terminer && (
+              <button
+                type="button"
+                onClick={() => p.onToggleDone(td)}
+                className="flex h-11 w-full items-center justify-center gap-2 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                {td.done ? <RotateCcw className="h-4 w-4" /> : <Check className="h-4 w-4" strokeWidth={2.5} />}
+                {td.done ? t("Rouvrir") : t("Terminer")}
+              </button>
+            )}
+            {!td.done && can.modifier && (
+              <button
+                type="button"
+                onClick={() => setPostponeOpen((v) => !v)}
+                aria-expanded={postponeOpen}
+                className={cn(
+                  "flex h-10 items-center justify-center gap-1.5 rounded-full bg-field px-3 text-[13px] font-semibold text-foreground transition-colors hover:bg-rowhover",
+                  postponeOpen && "ring-[1.5px] ring-inset ring-primary",
+                )}
+              >
+                <TtpPlanning className="h-4 w-4" /> {t("Reporter")}
+              </button>
+            )}
+          </div>
+        )}
       </>
     );
   };
@@ -654,7 +714,11 @@ export function CreatorTodos(p: Props) {
   } else if (view === "colonnes") {
     content = renderColumns();
   } else if (groups.length === 0) {
-    content = <div className="rounded-[20px] bg-surface px-4 py-8 text-center text-sm text-muted-foreground">{filter === "terminees" ? t("Aucune tâche faite.") : t("Aucune tâche pour ces filtres.")}</div>;
+    content = (
+      <div className="rounded-[20px] bg-surface px-4 py-8 text-center text-sm text-muted-foreground">
+        {mine.length === 0 ? t("Aucune tâche.") : filter === "terminees" ? t("Aucune tâche faite.") : t("Aucune tâche pour ces filtres.")}
+      </div>
+    );
   } else {
     content = (
       <div className="flex flex-col gap-4">
@@ -671,6 +735,19 @@ export function CreatorTodos(p: Props) {
       </div>
     );
   }
+  // « Ton agence s'en occupe » : sous la liste (et sous les colonnes), à lire et à commenter.
+  // Le titre « Pour toi » n'apparaît que si cette section est là.
+  const agencySection =
+    agencyRows.length > 0 ? (
+      <section className="mt-6">
+        <div className="flex items-center gap-2 px-1 pb-2">
+          <h2 className="text-[15px] font-semibold text-foreground">{t("Ton agence s'en occupe")}</h2>
+          <HelpTip title={t("Ton agence s'en occupe")}>{t("Ce que ton agence fait pour toi. Tu peux lire et répondre, elle s'occupe du reste.")}</HelpTip>
+          <span className="ml-auto text-[12px] font-semibold tabular-nums text-muted-foreground">{agencyRows.length}</span>
+        </div>
+        <ul className="flex flex-col gap-0.5 rounded-[20px] bg-surface p-1.5">{agencyRows.map(renderRow)}</ul>
+      </section>
+    ) : null;
 
   const filterGroups: FilterGroup[] = [
     ...(view === "liste"
@@ -679,7 +756,7 @@ export function CreatorTodos(p: Props) {
           label: t("Statut"),
           value: filter,
           onChange: (v: string) => setFilter(v as CtFilter),
-          options: FILTERS.map((f) => ({ value: f.id, label: t(f.label), count: rows.filter((r) => ctMatchFilter(f.id, r, today)).length })),
+          options: FILTERS.map((f) => ({ value: f.id, label: t(f.label), count: mine.filter((r) => ctMatchFilter(f.id, r, today)).length })),
         }]
       : []),
     {
@@ -726,7 +803,7 @@ export function CreatorTodos(p: Props) {
 
       <div className={cn(showInspector && "grid grid-cols-[minmax(0,1fr)_340px] items-start gap-5")}>
         <div className="min-w-0">
-          {rows.length > 0 && (
+          {mine.length > 0 && (
             <div className="mb-5 grid grid-cols-2 gap-3 md:grid-cols-4">
               {KPIS.map((k) => {
                 const on = activeKpi === k.id;
@@ -752,7 +829,9 @@ export function CreatorTodos(p: Props) {
             </div>
           )}
           {p.form}
+          {agencySection && <h2 className="px-1 pb-2 text-[15px] font-semibold text-foreground">{t("Pour toi")}</h2>}
           {content}
+          {agencySection}
         </div>
 
         {showInspector && (
