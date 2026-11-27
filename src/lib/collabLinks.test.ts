@@ -72,7 +72,7 @@ describe("fiche collab : reliés et suggérés", () => {
       briefs: [],
       todos: [],
       events: [],
-      invoices: [{ id: "i1", ref: "TTP-1", party: "Marque X × Léna", creator: "Léna Test", status, date, collab_id: "c1" }],
+      invoices: [{ id: "i1", ref: "TTP-1", party: "Marque X × Créatrice", creator: "Créatrice A", status, date, collab_id: "c1" }],
       gifting: [],
     });
     const late = (date: string, status?: string) => linkGroups(nutri, inv(date, status), (v) => String(v ?? ""), new Date(2026, 9, 23)).invoices.linked[0].late;

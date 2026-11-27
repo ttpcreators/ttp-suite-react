@@ -11,6 +11,7 @@
  * espace, sans push. Logique pure, testée par todoDemande.test.ts.
  */
 import { normalizeCreators, todoCreators, type TodoCreatorsRow } from "./todoCreators";
+import { pourToi, visiblePourCreateur } from "./todoVisibility";
 
 export type TacheVue = TodoCreatorsRow & { source?: string | null; visible_createur?: boolean | null; pour_createur?: boolean | null };
 
@@ -19,14 +20,15 @@ export type PatchVisibilite = { visible_createur?: boolean; pour_createur?: bool
 
 const cle = (s: string) => s.trim().toLocaleLowerCase("fr");
 
-/** Le créateur voit-il la tâche ? (même règle que visiblePourCreateur, src/lib/todoVisibility.ts) */
-const vue = (t: TacheVue) => t.source !== "agency" || t.visible_createur === true;
+/** Le créateur voit-il la tâche ? La règle de son espace (src/lib/todoVisibility.ts). */
+const vue = (t: TacheVue) => visiblePourCreateur(t);
 
 /**
- * La tâche est-elle « pour lui » : la sienne, ou demandée par l'agence ? Même condition que
- * `pourToi` (src/lib/todoVisibility.ts, lot A) : colonne absente (undefined) = pour lui.
+ * La tâche est-elle « pour lui » : la sienne, ou demandée par l'agence ? La formule unique
+ * `pourToi` (src/lib/todoVisibility.ts), la même que son espace : colonne absente
+ * (undefined) = pour lui.
  */
-const pourLui = (t: TacheVue) => t.source !== "agency" || t.pour_createur !== false;
+const pourLui = (t: TacheVue) => pourToi(t);
 
 /** Créateurs prévenus des nouveautés d'une tâche (push) : ceux d'une tâche visible et « pour lui ». */
 export function creatorsANotifier(t: TacheVue): string[] {
@@ -97,9 +99,5 @@ export function pushFinTache(t: TacheVue): { kind: "task-done" | "task-closed"; 
   return { kind: t.source === "creator" ? "task-done" : "task-closed", to };
 }
 
-/** La colonne `todos.pour_createur` n'existe pas encore (SQL 2026-11-27 pas lancé). */
-export function pourCreateurColumnMissing(err: { code?: string | null; message?: string | null } | null | undefined): boolean {
-  if (!err) return false;
-  const m = err.message ?? "";
-  return (err.code === "42703" || err.code === "PGRST204" || /does not exist|column|schema cache/i.test(m)) && /pour_createur/.test(m);
-}
+/** La colonne `todos.pour_createur` n'existe pas encore (SQL 2026-11-27 pas lancé) : même test que l'espace créateur. */
+export { pourCreateurColumnMissing } from "./todoVisibility";

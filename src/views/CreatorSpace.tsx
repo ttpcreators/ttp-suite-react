@@ -985,9 +985,11 @@ export function CreatorSpace({
     }
   };
 
-  // Notif agence : jamais en preview (c'est l'agence elle-même qui agit).
-  const pingAgency = (kind: Parameters<typeof notifyAgency>[0], text: string) => {
-    if (!preview) notifyAgency(kind, name, text);
+  // Notif agence : jamais en preview (c'est l'agence elle-même qui agit). `item` : id du
+  // document déposé (contenu, facture, captures du mois) : le push ouvre alors Documents, où
+  // le fichier est marqué « nouveau » (daily-digest, constat W5).
+  const pingAgency = (kind: Parameters<typeof notifyAgency>[0], text: string, item?: string) => {
+    if (!preview) notifyAgency(kind, name, text, item);
   };
   // Source des lignes créées : « agency » quand l'agence agit depuis la preview.
   const src = preview ? "agency" : "creator";
@@ -1279,7 +1281,7 @@ export function CreatorSpace({
         return;
       }
       setDocs((prev) => [created as unknown as Doc, ...prev]);
-      pingAgency("facture", brand ? `Facture ${brand} déposée · ${titleCase(name)}` : `Facture déposée · ${titleCase(name)}`);
+      pingAgency("facture", brand ? `Facture ${brand} déposée · ${titleCase(name)}` : `Facture déposée · ${titleCase(name)}`, created.id);
       toast(t("Facture envoyée à ton agence ✓"));
     } finally {
       setInvUploading(false);
@@ -1356,7 +1358,7 @@ export function CreatorSpace({
       added.push(created as unknown as Doc);
     }
     setDocs((prev) => [...added, ...prev]);
-    pingAgency("contenu", `${t("Contenu envoyé")} · ${m.brand}`);
+    pingAgency("contenu", `${t("Contenu envoyé")} · ${m.brand}`, added[0]?.id);
     if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.([10, 40, 10]);
     setContentUp({ brand: m.brand, pct: 1, done: true });
     window.setTimeout(() => setContentUp(null), 2200);
@@ -1456,6 +1458,7 @@ export function CreatorSpace({
         return;
       }
       let ok = 0;
+      let premier: string | undefined; // id du premier document : le push y mène (Documents)
       for (const file of list) {
         if (file.size > 15 * 1024 * 1024) {
           toast(t("«\u00A0{file}\u00A0» trop lourd (max 15 Mo)", { file: file.name }));
@@ -1481,10 +1484,11 @@ export function CreatorSpace({
           continue;
         }
         setDocs((prev) => [created as unknown as Doc, ...prev]);
+        premier ??= created.id;
         ok += 1;
       }
       if (ok > 0) {
-        pingAgency("stats", `${ok} capture${ok > 1 ? "s" : ""} de stats · ${titleCase(name)}`);
+        pingAgency("stats", `${ok} capture${ok > 1 ? "s" : ""} de stats · ${titleCase(name)}`, premier);
         toast(plural(ok, "{n} capture envoyée à ton agence ✓", "{n} captures envoyées à ton agence ✓"));
         setStatsModalOpen(false);
       }

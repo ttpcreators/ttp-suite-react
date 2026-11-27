@@ -6,6 +6,9 @@
 -- remettrait dans sa version d'avant, sans aucune erreur : un créateur pourrait de nouveau
 -- cocher ou réécrire une tâche suivie par l'agence, et la tâche d'étape posée par la base
 -- pendant sa session (« Créer la facture … ») deviendrait la sienne, visible et supprimable.
+-- De même, la garde creators_guard de la partie 2 est remplacée par
+-- 2026-11-27-reperes-depots-infos.sql (qui y ajoute le mois des stats, stats_month) :
+-- relancé, ce fichier rendrait au créateur le droit de cocher lui-même ses stats du mois.
 -- Avant la vague 1, il était relançable sans risque (create or replace, update idempotent,
 -- create table if not exists).
 -- Aucun changement pour l'agence. Pour un compte créateur connecté :

@@ -179,6 +179,17 @@ export function CreatorTodos(p: Props) {
   useIntent("cs-todo:open", (id) => {
     if (id) pickRef.current(id);
   });
+  // Tâche montrée d'office dans le panneau (ordinateur, vue Liste) : elle compte comme ouverte,
+  // son point « nouveau » s'efface, une fois par tâche, jamais dans l'aperçu (constat WC6).
+  // Seulement une fois son repère chargé (les repères arrivent parfois après la liste).
+  const shownId = showInspector ? inspected?.id ?? null : null;
+  const shownNew = !!shownId && activity.keys.has(`todo:${shownId}`);
+  const shownRead = useRef(new Set<string>());
+  useEffect(() => {
+    if (p.preview || !shownId || !shownNew || shownRead.current.has(shownId)) return;
+    shownRead.current.add(shownId);
+    void markActivityRead("todo", shownId);
+  }, [shownId, shownNew, p.preview]);
   /** Prévient l'agence (push, 1 fois par tâche et par changement toutes les 10 min). */
   const tellAgency = (td: CreatorTodo, what: "progress" | "subtask") => {
     if (!p.preview && p.me) notifyAgencyChange("todo", p.me, what, td.text, td.id);

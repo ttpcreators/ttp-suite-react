@@ -3,12 +3,14 @@
 -- plus de pastille pour un objet supprimé, dépôt relié à sa collab
 -- Titre Supabase : « Repères dépôts et infos »
 -- ----------------------------------------------------------------------------
--- Pourquoi (audit du 27/11, points W5, W9, WC3, WC4) :
+-- Pourquoi (audit du 27/11, points W5, W9, WC3, WC4, W17) :
 --   • le contenu, la facture et les captures de stats déposés par un créateur ne laissaient
 --     aucun repère à l'agence (seul un push partait) et n'étaient reliés à aucune collab ;
 --   • un repère restait compté après la suppression de son idée ou de son brief (pastille
 --     « Idées 1 » que personne ne pouvait effacer) ;
---   • une adresse ou un SIREN changé par le créateur n'était signalé à personne.
+--   • une adresse ou un SIREN changé par le créateur n'était signalé à personne ;
+--   • « stats du mois à jour » (creators.stats_month), le relevé de l'agence, n'était pas
+--     protégé : un créateur pouvait le cocher lui-même et faire taire les rappels.
 --
 -- Quoi :
 --   1) activity_events accepte deux types d'objets de plus : 'document' (un dépôt du
@@ -27,15 +29,20 @@
 --      ville, SIREN, email, email pro, téléphone, date de naissance, Instagram, TikTok),
 --      l'agence reçoit un repère (type 'creator', « mis à jour ») qui ne cite que les noms
 --      des champs, jamais les valeurs. Pas de push.
+--   6) Garde creators_guard : un créateur ne change plus le mois des stats (stats_month),
+--      comme les autres colonnes de l'agence (la valeur d'avant est remise, sans erreur).
+--      L'espace créateur ne l'écrit jamais : ses captures du mois suffisent à taire son
+--      rappel. Les synchros Instagram et TikTok (sans compte connecté) le cochent toujours.
 --   Rien pour le gifting ni la feuille de route (en attente d'une décision de Marc).
 --
 -- Avant ce SQL, l'app marche comme aujourd'hui (dépôt sans lien, aucun repère de ce type).
--- Contrôle : la requête à la fin. Attendu : true · true · 1 · 3 · false · false
+-- Contrôle : la requête à la fin. Attendu : true · true · 1 · 3 · false · false · true
 -- Relançable sans risque (if not exists, drop puis create, create or replace).
 -- Pas encore dans SETUP.sql (à replier après la réécriture de SETUP.sql en cours).
 -- Après ce SQL, ne plus relancer 2026-10-23-notifications-nouveautes.sql ni
 -- 2026-11-24-reperes-taches-internes.sql : ils remettraient l'ancienne règle
--- activity_events_read sans aucune erreur (leur en-tête le dit).
+-- activity_events_read sans aucune erreur (leur en-tête le dit). Ni 2026-11-27-securite-14.sql
+-- (ni un ancien fichier qui redéfinit creators_guard) : la garde y perd stats_month.
 -- ============================================================================
 
 -- 1) Deux types d'objets de plus ------------------------------------------------------
@@ -124,7 +131,40 @@ drop trigger if exists creators_infos_activity on public.creators;
 create trigger creators_infos_activity after update on public.creators
   for each row execute function public.creators_infos_activity();
 
--- Contrôle (une ligne). Attendu : true · true · 1 · 3 · false · false
+-- 6) Le mois des stats reste à l'agence (constat W17) ----------------------------------------
+-- Copie de la garde en prod (2026-11-27-securite-14.sql, relue en base le 27/11), plus la
+-- ligne stats_month. Le déclencheur creators_guard_upd ne change pas.
+create or replace function public.creators_guard() returns trigger
+  language plpgsql security definer set search_path = public as $$
+declare
+  v jsonb;
+  k text;
+begin
+  if auth.uid() is not null and not public.is_agency() then
+    new.ca          := old.ca;
+    new.commission  := old.commission;
+    new.status      := old.status;
+    new.exclu       := old.exclu;
+    new.sort_order  := old.sort_order;
+    new.stats_month := old.stats_month;
+    if new.mediakit is distinct from old.mediakit then
+      if jsonb_typeof(new.mediakit) is distinct from 'object' then
+        new.mediakit := old.mediakit;
+      else
+        v := new.mediakit - array['hideRates', 'rates', 'ratesNote', 'ratesNoteEn'];
+        if jsonb_typeof(old.mediakit) = 'object' then
+          foreach k in array array['hideRates', 'rates', 'ratesNote', 'ratesNoteEn'] loop
+            if old.mediakit ? k then v := v || jsonb_build_object(k, old.mediakit -> k); end if;
+          end loop;
+        end if;
+        new.mediakit := v;
+      end if;
+    end if;
+  end if;
+  return new;
+end $$;
+
+-- Contrôle (une ligne). Attendu : true · true · 1 · 3 · false · false · true
 select
   position('document' in (select pg_get_constraintdef(oid) from pg_constraint
                            where conname = 'activity_events_object_type_check')) > 0 as types_ok,
@@ -135,4 +175,6 @@ select
   (select count(*) from pg_trigger where not tgisinternal
     and tgname in ('documents_collab_link_guard', 'documents_activity', 'creators_infos_activity')) as declencheurs,
   has_function_privilege('authenticated', 'public.documents_activity()', 'execute') as depot_appelable,
-  has_function_privilege('authenticated', 'public.creators_infos_activity()', 'execute') as infos_appelable;
+  has_function_privilege('authenticated', 'public.creators_infos_activity()', 'execute') as infos_appelable,
+  position('stats_month' in pg_get_functiondef('public.creators_guard'::regproc)) > 0
+    and position('hideRates' in pg_get_functiondef('public.creators_guard'::regproc)) > 0 as garde_stats_ok;
