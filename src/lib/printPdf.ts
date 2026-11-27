@@ -17,6 +17,10 @@ export function printHtml(html: string): void {
   iframe.style.width = "0";
   iframe.style.height = "0";
   iframe.style.border = "0";
+  // Bac à sable : aucun script du document ne s'exécute (un nom de marque ou un texte collé
+  // ne peut rien faire dans l'app). allow-same-origin garde la lecture des polices et des
+  // images depuis l'app, allow-modals garde la boîte d'impression.
+  iframe.setAttribute("sandbox", "allow-same-origin allow-modals");
   iframe.srcdoc = html; // same-origin → contentWindow.print() autorisé
 
   let done = false;

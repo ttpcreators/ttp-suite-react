@@ -11,7 +11,7 @@
 
 import { getServiceClient } from "../_shared/google.ts";
 import { makePayload, pushReady, sendTo } from "../_shared/push.ts";
-import { LEADS_PAR_HEURE, LEAD_ORIGINS, LEAD_TAG, ROSTER_URL, lireLead, tacheLead, toucheLead } from "../_shared/siteLead.ts";
+import { LEADS_PAR_HEURE, LEAD_ORIGINS, LEAD_TAG, ROSTER_URL, ilikeExact, lireLead, tacheLead, toucheLead } from "../_shared/siteLead.ts";
 
 Deno.serve(async (req: Request) => {
   const origin = req.headers.get("Origin");
@@ -33,11 +33,13 @@ Deno.serve(async (req: Request) => {
 
   const sb = getServiceClient();
   const now = new Date();
-  const { count } = await sb.from("contacts").select("id", { count: "exact", head: true }).eq("tag", LEAD_TAG).gte("created_at", new Date(now.getTime() - 3600_000).toISOString());
+  // Plafond compté sur les tâches « Lead site : … », créées à CHAQUE demande (un contact déjà
+  // au carnet n'en crée pas, il ne peut donc pas servir à compter).
+  const { count } = await sb.from("todos").select("id", { count: "exact", head: true }).like("text", "Lead site : %").gte("created_at", new Date(now.getTime() - 3600_000).toISOString());
   if ((count ?? 0) >= LEADS_PAR_HEURE) return json({ error: "trop" }, 429);
 
   const touche = toucheLead(lead, now);
-  const { data: existants } = await sb.from("contacts").select("id, touches").ilike("email", lead.email).limit(1);
+  const { data: existants } = await sb.from("contacts").select("id, touches").ilike("email", ilikeExact(lead.email)).limit(1);
   const ex = (existants as { id: string; touches: unknown }[] | null)?.[0];
   if (ex) {
     const touches = Array.isArray(ex.touches) ? ex.touches : [];

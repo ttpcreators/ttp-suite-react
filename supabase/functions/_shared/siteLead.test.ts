@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { lireLead, tacheLead, toucheLead } from "./siteLead.ts";
+import { ilikeExact, lireLead, tacheLead, toucheLead } from "./siteLead.ts";
 
 describe("lireLead", () => {
   it("lit et nettoie une demande", () => {
@@ -28,5 +28,14 @@ describe("touche et tâche", () => {
   });
   it("tâche au format fixe", () => {
     expect(tacheLead(lead)).toBe("Lead site : Nakd demande le roster (tri : question du budget)");
+  });
+});
+
+describe("ilikeExact", () => {
+  it("neutralise les jokers d'un email pour un filtre ilike", () => {
+    expect(ilikeExact("%@%.com")).toBe("\\%@\\%.com");
+    expect(ilikeExact("prenom_nom@marque.fr")).toBe("prenom\\_nom@marque.fr");
+    expect(ilikeExact("a\\b@c.fr")).toBe("a\\\\b@c.fr");
+    expect(ilikeExact("simple@marque.fr")).toBe("simple@marque.fr");
   });
 });

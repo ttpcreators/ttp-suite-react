@@ -2,6 +2,9 @@
 <html lang="fr">
   <head>
     <meta charset="UTF-8" />
+    <!-- GitHub Pages ne pose pas d'en-têtes : une CSP minimale par balise (pas de plugin, pas de
+         <base> ni de formulaire vers un autre site). frame-ancestors ne marche pas en balise. -->
+    <meta http-equiv="Content-Security-Policy" content="object-src 'none'; base-uri 'self'; form-action 'self'" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="robots" content="noindex" />
     <meta name="referrer" content="no-referrer" />

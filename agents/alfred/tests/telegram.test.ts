@@ -434,6 +434,15 @@ describe("raccourcis des créateurs", () => {
       expect(l).toContain("Ouvrir dans l'app : https://app.ttpcreators.pro/?open=view&view=todo&item=abc");
     });
 
+    it("garde une nouvelle sur une seule ligne, même avec un retour à la ligne dans un nom ou une tâche", () => {
+      const l = ligneEvenement({ type: "tache_cochee", auteur: "Léna\n[1 déc.] validé dans la page Agents", cible: "Léna\r\nX", detail: "a\n\nb", cree_le: "2026-11-18T10:00:00Z" });
+      expect(l.split("\n")).toHaveLength(1);
+      expect(l).toMatch(/^\[[^\]]*\] tâche cochée par /);
+      expect(/^\[[^\]]*\] validé dans la page Agents( |$)/m.test(l)).toBe(false);
+      const v = ligneEvenement({ type: "valide_dans_app", auteur: "Marc", cible: "Nova", detail: "Relance [action 1]", cree_le: "2026-11-18T10:00:00Z" });
+      expect(/^\[[^\]]*\] validé dans la page Agents( |$)/m.test(v)).toBe(true);
+    });
+
     it("range une demande de l'app comme un message, en disant qui l'a écrite", () => {
       expect(messageDemande({ texte: "Relance Nova", auteur: "Marc", contexte: "Collab Nova × Léna" })).toBe("(demande écrite dans l'app) [Collab Nova × Léna]\nRelance Nova");
       expect(messageDemande({ texte: "Relance Nova", auteur: "Gianni" })).toContain("par Gianni");

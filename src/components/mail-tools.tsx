@@ -55,7 +55,8 @@ export function MailSettingsDialog({ open, onClose }: { open: boolean; onClose: 
   useEffect(() => {
     if (!open) return;
     setSig(cur.signatureHtml);
-    if (zone.current) zone.current.innerHTML = cur.signatureHtml;
+    // Assainie aussi à l'affichage : la signature enregistrée peut venir d'ailleurs que de cet écran.
+    if (zone.current) zone.current.innerHTML = cleanSignature(cur.signatureHtml);
     setDelay(cur.delaySec);
     setOn(cur.signatureOn);
     // eslint-disable-next-line react-hooks/exhaustive-deps

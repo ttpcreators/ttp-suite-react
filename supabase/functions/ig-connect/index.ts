@@ -58,7 +58,7 @@ Deno.serve(async (req: Request) => {
   // Pour qui : la créatrice connectée, ou celle que l'agence nomme.
   const name = prof?.role === "agency" ? String(body.creator ?? "").trim() : prof?.role === "creator" ? (prof.creator_name ?? "").trim() : "";
   if (!name) return res({ error: "non_autorise" }, 403);
-  const { data: creator } = await sb.from("creators").select("id, name, ig").ilike("name", name).maybeSingle<{ id: string; name: string; ig: Record<string, unknown> | null }>();
+  const { data: creator } = await sb.from("creators").select("id, name, ig").ilike("name", name.replace(/[\\%_]/g, (m) => `\\${m}`)).maybeSingle<{ id: string; name: string; ig: Record<string, unknown> | null }>();
   if (!creator) return res({ error: "createur_introuvable" }, 404);
 
   if (body.action === "disconnect") {

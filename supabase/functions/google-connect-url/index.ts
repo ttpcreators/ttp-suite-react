@@ -79,7 +79,8 @@ Deno.serve(async (req: Request) => {
   const redirectUri = Deno.env.get("GOOGLE_REDIRECT_URI");
   if (!clientId || !redirectUri) return jsonRes({ error: "server_misconfigured" }, 500);
 
-  const state = await signState({ origin: appOrigin, nonce: genNonce() });
+  // `via` dit à quoi sert ce jeton : le retour Google de l'agence refuse tout autre jeton signé.
+  const state = await signState({ origin: appOrigin, nonce: genNonce(), via: "google-agence" });
 
   const params = new URLSearchParams({
     client_id: clientId,

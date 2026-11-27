@@ -92,6 +92,8 @@ Deno.serve(async (req: Request): Promise<Response> => {
     const payload = await verifyState(state);
     origin = payload.origin;
     if (!origin) throw new Error("origin manquante");
+    // Seul un jeton émis par google-connect-url (connexion de la boîte de l'agence) est accepté ici.
+    if (payload.via !== "google-agence" || payload.sub) throw new Error("jeton d'un autre usage");
   } catch {
     return htmlError(
       "Jeton de sécurité (state) invalide ou expiré. Relancez la connexion depuis l'application.",

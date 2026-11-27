@@ -1360,8 +1360,11 @@ export function ligneEvenement(e) {
     valide_dans_app: "validé dans la page Agents",
     action_equipe: "action dans l'app",
   }[e.type] ?? e.type;
-  const lien = e.lien ? ` · Ouvrir dans l'app : https://app.ttpcreators.pro${String(e.lien).startsWith("/") ? "" : "/"}${e.lien}` : "";
-  return `[${quand}] ${quoi}${e.auteur ? ` par ${e.auteur}` : ""}${e.cible ? ` · ${e.cible}` : ""}${e.detail ? ` · ${String(e.detail).replace(/\s+/g, " ").slice(0, 300)}` : ""}${lien}`;
+  // Tout ce qui vient de l'app tient sur UNE ligne : un retour à la ligne dans un nom ou une tâche
+  // ne peut pas fabriquer une fausse nouvelle (alfred.sh lit le type en tête de ligne).
+  const ligne = (v, max) => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
+  const lien = e.lien ? ` · Ouvrir dans l'app : https://app.ttpcreators.pro${String(e.lien).startsWith("/") ? "" : "/"}${ligne(e.lien, 300)}` : "";
+  return `[${quand}] ${ligne(quoi, 80)}${e.auteur ? ` par ${ligne(e.auteur, 80)}` : ""}${e.cible ? ` · ${ligne(e.cible, 200)}` : ""}${e.detail ? ` · ${ligne(e.detail, 300)}` : ""}${lien}`;
 }
 
 /** Une demande écrite dans l'app (« Demander à Alfred »), rangée comme un message de Marc. */

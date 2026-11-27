@@ -31,6 +31,11 @@ export function lireLead(body: unknown): { lead: Lead } | { robot: true } | { er
   return { lead: { email, marque, nom: propre(b.nom, 80), message: String(b.message ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, " ").trim().slice(0, 1500) } };
 }
 
+/** Valeur d'un filtre ilike qui ne trouve QUE ce texte : « % » et « _ » perdent leur rôle de joker. */
+export function ilikeExact(v: string): string {
+  return v.replace(/[\\%_]/g, (m) => `\\${m}`);
+}
+
 /** La touche du journal de contact pour cette demande. */
 export function toucheLead(lead: Lead, now: Date) {
   return {
