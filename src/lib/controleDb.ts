@@ -4,6 +4,7 @@ import { pokeTeam, myDisplayName } from "./team";
 import { getAppState, mergeAppStateKey } from "./appState";
 import { markProspectSigned } from "./prospectsDb";
 import { IGNORES_KEY, type ControleInput, type Correction } from "./controle";
+import { commissionMap } from "./commission";
 
 /*
  * Accès base du contrôle qualité (logique pure : supabase/functions/_shared/controle.ts).
@@ -27,7 +28,8 @@ export async function chargerControle(founder: boolean, aujourdhui: string): Pro
     lire<NonNullable<ControleInput["collabs"]>[number]>("collabs", "id,brand,creator,step,status,brief_id,cachet,created_at"),
     lire<NonNullable<ControleInput["collabSteps"]>[number]>("collab_steps", "collab_id,step,reached_at"),
     founder ? lire<NonNullable<ControleInput["invoices"]>[number]>("invoices", "id,ref,party,amount,date,status,creator,collab_id,paid_at") : Promise.resolve(null),
-    lire<NonNullable<ControleInput["creators"]>[number]>("creators", "name,status,email,email_pro,phone,photo_url,platform"),
+    // commission : taux de la fiche (reste dû par facture) ; mediakit : kit en ligne incomplet.
+    lire<NonNullable<ControleInput["creators"]>[number] & { commission?: string | null }>("creators", "name,status,email,email_pro,phone,photo_url,platform,commission,mediakit"),
     lire<{ id: string }>("briefs", "id"),
     lire<NonNullable<ControleInput["prospects"]>[number]>("prospects", "id,brand,stage,creator,collab_id,proposal,created_at"),
     lire<NonNullable<ControleInput["todos"]>[number]>("todos", "id,text,done,status"),
@@ -48,6 +50,11 @@ export async function chargerControle(founder: boolean, aujourdhui: string): Pro
     cashModes: st ? ((st.collabCashMode as Record<string, string> | undefined) ?? {}) : null,
     contractHistory: st ? (st.contractHistory ?? []) : null,
     droits: st ? (st.usageRights ?? []) : null,
+    // Reste dû par facture (règle « Créateur payé », même calcul que Reversements) : fondateurs.
+    details: founder && st ? ((st.invoiceDetails as Record<string, unknown> | undefined) ?? {}) : null,
+    taux: founder && st && creators ? { roster: commissionMap(creators.map((c) => ({ name: c.name, commission: c.commission ?? null }))), memorises: (st.creatorCommission as Record<string, number> | undefined) ?? {} } : null,
+    // Dépôts des créateurs : montrés par « Les créateurs attendent » (Aujourd'hui), pas répétés ici.
+    depots: null,
   };
 }
 

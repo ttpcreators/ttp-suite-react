@@ -56,3 +56,8 @@ export function giftCounts(list: readonly Pick<Gift, "status" | "content_expecte
   const published = list.filter((g) => g.status === "publie").length;
   return { total: list.length, expected, waiting, published };
 }
+
+/** « Marque · produit » : l'objet de la notification « Du nouveau sur un cadeau » (constat WC4). */
+export function giftObjet(g: Pick<Gift, "brand" | "product">): string {
+  return [g.brand, g.product].map((s) => (s ?? "").trim()).filter(Boolean).join(" · ");
+}

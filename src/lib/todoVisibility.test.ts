@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evenementInterne, visibiliteColumnMissing, visiblePourCreateur } from "./todoVisibility";
+import { evenementInterne, pourCreateurColumnMissing, pourToi, visibiliteColumnMissing, visiblePourCreateur } from "./todoVisibility";
 
 describe("visiblePourCreateur", () => {
   it("cache une tâche de l'agence tant qu'elle n'est pas cochée visible", () => {
@@ -43,5 +43,31 @@ describe("visibiliteColumnMissing", () => {
     expect(visibiliteColumnMissing({ code: "42501", message: "permission denied" })).toBe(false);
     expect(visibiliteColumnMissing({ code: "42703", message: "column todos.progress does not exist" })).toBe(false);
     expect(visibiliteColumnMissing(null)).toBe(false);
+  });
+});
+
+describe("pourToi (vague 1)", () => {
+  it("garde « Pour toi » ses tâches et celles que l'agence lui demande", () => {
+    expect(pourToi({ source: "creator" })).toBe(true);
+    expect(pourToi({ source: null })).toBe(true);
+    expect(pourToi({ source: "creator", pour_createur: false })).toBe(true);
+    expect(pourToi({ source: "agency", pour_createur: true })).toBe(true);
+  });
+
+  it("range dans « Ton agence s'en occupe » une tâche de l'agence qui ne lui est pas demandée", () => {
+    expect(pourToi({ source: "agency", pour_createur: false })).toBe(false);
+  });
+
+  it("colonne absente (SQL pas lancé) : tout reste « Pour toi » comme avant", () => {
+    expect(pourToi({ source: "agency" })).toBe(true);
+    expect(pourToi({ source: "agency", pour_createur: null })).toBe(true);
+  });
+
+  it("reconnaît la colonne pour_createur absente", () => {
+    expect(pourCreateurColumnMissing({ code: "42703", message: "column todos.pour_createur does not exist" })).toBe(true);
+    expect(pourCreateurColumnMissing({ code: "PGRST204", message: "Could not find the 'pour_createur' column of 'todos' in the schema cache" })).toBe(true);
+    expect(pourCreateurColumnMissing({ code: "42703", message: "column todos.visible_createur does not exist" })).toBe(false);
+    expect(pourCreateurColumnMissing({ code: "42501", message: "permission denied" })).toBe(false);
+    expect(pourCreateurColumnMissing(undefined)).toBe(false);
   });
 });

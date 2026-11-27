@@ -4,9 +4,10 @@
 // 1. Départ par LIEN (envoyé par WhatsApp, préparé par l'agence ou Alfred) :
 //    GET ?lien=<jeton signé, 7 jours, une créatrice> → vérifié (signature, date,
 //    créatrice encore au roster) → 302 vers la page d'accord d'Instagram, avec un
-//    state signé de 10 min. Sans compte TTP, sans cookie ni localStorage.
+//    state signé. Sans compte TTP, sans cookie ni localStorage.
 // 2. Retour d'Instagram : GET ?code=…&state=<signé> (ou ?error=… si refus).
-//    a. verifyState(state) → { origin, sub = id de la créatrice, via }.
+//    a. verifyState(state) → { origin, sub = id de la créatrice, via }. Temps accepté
+//       depuis le départ : 30 min pour un lien, 10 min depuis l'app (_shared/igRetour.ts).
 //    b. code → jeton + compte (id, @ ; un compte personnel est refusé). Connexion
 //       unifiée (IG_CONFIG_ID posé) ou ancienne connexion Instagram : voir
 //       _shared/instagram-login.ts.
@@ -15,6 +16,8 @@
 //    d. Première synchro de ses chiffres (ig-sync, en arrière-plan).
 // 3. CHAQUE tentative, réussie ou non, est notée dans ig_connexions (date, créatrice,
 //    étape, raison, message brut de Meta) et l'agence (fondateurs) reçoit un push.
+//    Après 2 essais ratés en 24 h : en plus, une tâche interne « Aider <prénom> à
+//    connecter Instagram » (une seule ouverte), cochée toute seule à la réussite.
 // 4. Sortie : depuis l'app → 302 <origin>?instagram=connected | error&raison=<code> ;
 //    depuis un lien → page statique app.ttpcreators.pro/instagram-relie/ (aucune page
 //    HTML servie ici : Supabase les affiche en texte brut).
@@ -27,7 +30,8 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4
 import { CRON_SECRET, getServiceClient, waitUntil } from "../_shared/google.ts";
 import { genNonce, signState, type StatePayload, verifyState } from "../_shared/state.ts";
 import { authorizeUrl, exchangeCode, loginReady, SCOPES } from "../_shared/instagram-login.ts";
-import { type Etape, lireLien, messageBrut, PAGE_FIN_IG, type Raison, RAISON_AGENCE, raisonEchec, signerLien } from "../_shared/igConnexion.ts";
+import { type EssaiIg, type Etape, lireLien, messageBrut, PAGE_FIN_IG, type Raison, RAISON_AGENCE, raisonEchec, signerLien } from "../_shared/igConnexion.ts";
+import { aideFaite, fautAide, FENETRE_AIDE_MS, ligneAide, messageExpire, ratesRecents, stateExpire, titreAide } from "../_shared/igRetour.ts";
 import { sendTo } from "../_shared/push.ts";
 import { deepLinkUrl, makePayload } from "../_shared/pushPayload.ts";
 
@@ -60,8 +64,44 @@ async function noter(sb: SupabaseClient, e: Essai): Promise<Raison | null> {
     ig_username: e.username || null, account_type: e.accountType || null,
   });
   if (error) console.error("ig-callback ig_connexions", error.message); // SQL pas encore passé : on continue
-  if (e.creatorId) waitUntil(prevenir(sb, e.creatorId, raison, e.username));
+  if (e.creatorId) {
+    waitUntil(prevenir(sb, e.creatorId, raison, e.username));
+    waitUntil(suivreAide(sb, e.creatorId, e.ok));
+  }
   return raison;
+}
+
+/**
+ * Tâche interne « Aider <prénom> à connecter Instagram » (règles : _shared/igRetour.ts) :
+ * créée après 2 essais ratés en 24 h, en plus du push ; une seule ouverte par créateur ;
+ * cochée toute seule quand la connexion réussit. Ne bloque jamais le retour.
+ */
+async function suivreAide(sb: SupabaseClient, creatorId: string, ok: boolean) {
+  try {
+    const { data: c } = await sb.from("creators").select("name").eq("id", creatorId).maybeSingle<{ name: string }>();
+    const nom = (c?.name ?? "").trim();
+    if (!nom) return;
+    const { data: ouvertes, error } = await sb.from("todos").select("id, descr").eq("text", titreAide(nom)).eq("creator", nom).eq("done", false).limit(1);
+    if (error) return console.error("ig-callback tâche d'aide", error.message);
+    const ouverte = ((ouvertes as { id: string; descr: string | null }[] | null) ?? [])[0];
+    const now = new Date();
+    if (ok) {
+      if (!ouverte) return;
+      const { error: e } = await sb.from("todos").update(aideFaite(ouverte.descr, now)).eq("id", ouverte.id).eq("done", false);
+      if (e) console.error("ig-callback tâche d'aide faite", e.message);
+      return;
+    }
+    if (ouverte) return;
+    const { data: essais } = await sb.from("ig_connexions").select("at, ok")
+      .eq("creator_id", creatorId).gte("at", new Date(now.getTime() - FENETRE_AIDE_MS).toISOString())
+      .order("at", { ascending: false }).limit(20);
+    const liste = (essais as EssaiIg[] | null) ?? [];
+    if (!fautAide(liste, now.getTime())) return;
+    const { error: e2 } = await sb.from("todos").insert(ligneAide({ nom, rates: ratesRecents(liste, now.getTime()), now }));
+    if (e2) console.error("ig-callback tâche d'aide", e2.message);
+  } catch (err) {
+    console.error("ig-callback tâche d'aide", (err as Error).message);
+  }
 }
 
 /** Push aux fondateurs : connexion ratée (avec la raison) ou réussie. */
@@ -102,17 +142,17 @@ async function depuisLien(sb: SupabaseClient, jeton: string): Promise<Response> 
   return Response.redirect(authorizeUrl(state), 302);
 }
 
-/** State du retour : valide, expiré (signature bonne, plus de 10 min) ou illisible. */
+/**
+ * State du retour : valide, expiré (signature bonne, temps dépassé) ou illisible.
+ * Signature et forme d'abord, sans limite de temps ; puis le temps selon le départ,
+ * lu dans le state signé : 30 min pour un lien, 10 min depuis l'app (_shared/igRetour.ts).
+ */
 async function lireState(raw: string): Promise<{ payload: StatePayload; expire: boolean } | null> {
   try {
-    return { payload: await verifyState(raw), expire: false };
-  } catch (e) {
-    if ((e as Error).message !== "state_expired") return null;
-    try {
-      return { payload: await verifyState(raw, Number.POSITIVE_INFINITY), expire: true };
-    } catch {
-      return null;
-    }
+    const payload = await verifyState(raw, Number.POSITIVE_INFINITY);
+    return { payload, expire: stateExpire(payload) };
+  } catch {
+    return null;
   }
 }
 
@@ -151,7 +191,7 @@ Deno.serve(async (req: Request) => {
   const echec = async (etape: Etape, message: string, extra: Partial<Essai> = {}) =>
     sortie({ ok: false, raison: (await noter(sb, { creatorId, via, etape, ok: false, message, ...extra })) ?? "agence" });
 
-  if (st.expire) return echec("etat", "state_expired (plus de 10 minutes entre le départ et le retour)");
+  if (st.expire) return echec("etat", messageExpire(payload.via));
 
   const code = url.searchParams.get("code");
   if (!code) {

@@ -84,4 +84,11 @@ describe("todoCreators", () => {
     expect(creatorsPatch(["B", "A"], false)).toEqual({ creator: "B", tag: "CRÉATEUR" });
     expect(creatorsPatch([], true)).toEqual({ creator: null, tag: "AGENCE", creators: [] });
   });
+
+  it("une étiquette « Claude · … » est gardée au Modifier ou au Confier à", () => {
+    expect(creatorsPatch(["Créatrice A"], true, "Claude · Équipe")).toEqual({ creator: "Créatrice A", tag: "Claude · Équipe", creators: ["Créatrice A"] });
+    expect(creatorsPatch([], false, "claude · équipe")).toEqual({ creator: null, tag: "claude · équipe" });
+    expect(creatorsPatch(["Créatrice A"], false, "AGENCE")).toEqual({ creator: "Créatrice A", tag: "CRÉATEUR" });
+    expect(creatorsPatch([], false, "Mail")).toEqual({ creator: null, tag: "AGENCE" });
+  });
 });

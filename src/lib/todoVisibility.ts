@@ -18,6 +18,27 @@ export function visiblePourCreateur(t: TodoVisibilite): boolean {
   return t.source !== "agency" || t.visible_createur === true;
 }
 
+/*
+ * Parmi les tâches qu'il voit (vague 1, SQL 2026-11-27) : « Pour toi » = la sienne, ou une
+ * tâche de l'agence qu'elle lui DEMANDE (`pour_createur`). Les autres tâches visibles de
+ * l'agence vont dans « Ton agence s'en occupe » : il les lit et y répond, sans les cocher.
+ * Colonne absente (SQL pas lancé) : undefined, donc tout reste « Pour toi » comme avant.
+ * Même règle en SQL : source is distinct from 'agency' or pour_createur. Formule unique de
+ * l'app : la To-do de l'agence la reprend aussi (todoDemande.ts, push et cases).
+ */
+export type TodoPourToi = { source?: string | null; pour_createur?: boolean | null };
+
+export function pourToi(t: TodoPourToi): boolean {
+  return t.source !== "agency" || t.pour_createur !== false;
+}
+
+/** La colonne `todos.pour_createur` n'existe pas encore (SQL 2026-11-27 pas lancé). Sert aussi à la To-do de l'agence (todoDemande.ts). */
+export function pourCreateurColumnMissing(err: { code?: string | null; message?: string | null } | null | undefined): boolean {
+  if (!err) return false;
+  const m = err.message ?? "";
+  return (err.code === "42703" || err.code === "PGRST204" || /does not exist|column|schema cache/i.test(m)) && /pour_createur/.test(m);
+}
+
 export type EvenementVisibilite = { title?: string | null; interne?: boolean | null };
 
 /** Rendez-vous recopié depuis une tâche de la To-do (« Tâche : relancer… »). */

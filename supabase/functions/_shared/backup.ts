@@ -37,6 +37,32 @@ export function safeAppState(state: Record<string, unknown>): Record<string, unk
   return out;
 }
 
+/** Qui reçoit le mail de la sauvegarde (ou pourquoi personne). */
+export type Destinataires =
+  | { to: string[]; ignorees: number }
+  | { error: "reglages_illisibles" | "aucun_destinataire" | "destinataires_inconnus" };
+
+/**
+ * Destinataires du mail. La sauvegarde contient tout l'argent de l'agence : elle ne part
+ * que chez des fondateurs (adresses de connexion). La liste `backupRecipients` des réglages
+ * sert seulement à en choisir certains :
+ *   • pas de liste : tous les fondateurs ;
+ *   • liste réglée : celles de ses adresses qui sont des comptes fondateurs, et si aucune
+ *     ne l'est, personne. Jamais de repli vers tous les fondateurs : une faute de frappe
+ *     enverrait l'archive à ceux que la liste écarte ;
+ *   • réglages illisibles : personne (on ne sait pas si une liste est réglée).
+ * `ignorees` : adresses de la liste qui ne sont pas des comptes fondateurs (le mail le dit).
+ */
+export function destinatairesSauvegarde(reglage: unknown, fondateurs: readonly string[], reglagesLus = true): Destinataires {
+  if (!reglagesLus) return { error: "reglages_illisibles" };
+  const propres = (xs: readonly unknown[]) => [...new Set(xs.map((x) => String(x ?? "").trim().toLowerCase()).filter(Boolean))];
+  const tous = propres(fondateurs);
+  const liste = propres(reglage == null ? [] : Array.isArray(reglage) ? reglage : [reglage]);
+  if (!liste.length) return tous.length ? { to: tous, ignorees: 0 } : { error: "aucun_destinataire" };
+  const to = liste.filter((x) => tous.includes(x));
+  return to.length ? { to, ignorees: liste.length - to.length } : { error: "destinataires_inconnus" };
+}
+
 /** Pages media kit listées dans le plan du site (sitemap.xml). */
 export function mediakitPages(sitemapXml: string, origin: string): string[] {
   const out: string[] = [];

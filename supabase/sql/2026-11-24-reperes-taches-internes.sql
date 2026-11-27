@@ -3,6 +3,13 @@
 -- d'une tâche interne n'arrivent plus chez le créateur.
 -- Titre Supabase : « Repères des tâches internes »
 -- ----------------------------------------------------------------------------
+-- NE PLUS RELANCER APRÈS LA VAGUE 1 (SQL du 27/11) : todos_activity est remplacée par
+-- 2026-11-27-taches-pour-createur.sql, et la règle activity_events_read par
+-- 2026-11-27-reperes-depots-infos.sql. Relancé, ce fichier les remettrait dans leur
+-- version du 24/11, sans aucune erreur : le créateur recevrait de nouveau des repères pour
+-- les tâches suivies par l'agence, la tâche d'étape posée par la base en laisserait un, et
+-- les repères d'un objet supprimé compteraient de nouveau.
+--
 -- Bug vu chez une créatrice : « To-do 3 » dans son menu, mais une liste vide. Le
 -- déclencheur todos_activity créait un repère pour le créateur à chaque écriture
 -- de l'agence sur une tâche qui le cite, même interne. Le repère contient aussi le
@@ -12,7 +19,7 @@
 -- 2) activity_events_read : un créateur ne lit le repère d'une tâche que s'il lit
 --    la tâche elle-même (règle todos_read). Les anciens repères des tâches internes
 --    disparaissent donc de son espace, sans rien supprimer.
--- Relançable sans risque.
+-- Était relançable sans risque avant la vague 1 (voir plus haut).
 -- ============================================================================
 
 create or replace function public.todos_activity() returns trigger

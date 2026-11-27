@@ -46,3 +46,18 @@ describe("inDealWith", () => {
     expect(inDealWith("Nike", [], prospects)).toBe(false);
   });
 });
+
+describe("piste perdue (stade « Perdu », constats D2 et W22)", () => {
+  const piste = (stage: string) => ({ id: "p9", brand: "Marque X", contact: null, value: null, stage });
+  it("une piste perdue, en valeur ou en libellé, n'est plus une affaire en cours", () => {
+    expect(inDealWith("Marque X", [], [piste("Perdu")])).toBe(false);
+    expect(inDealWith("marque x", [], [piste("Perdue")])).toBe(false);
+    // Libellé « Signée » écrit par le connecteur : signée aussi.
+    expect(inDealWith("Marque X", [], [piste("Signée")])).toBe(false);
+    expect(inDealWith("Marque X", [], [piste("Contactée")])).toBe(true);
+  });
+  it("une nouvelle proposition ne rouvre pas une piste perdue (un nouveau prospect est créé)", () => {
+    expect(openProspectFor([piste("Perdu")], "Marque X")).toBeNull();
+    expect(openProspectFor([piste("Perdue"), { ...piste("Négociation"), id: "p10" }], "Marque X")?.id).toBe("p10");
+  });
+});

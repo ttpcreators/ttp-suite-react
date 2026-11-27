@@ -69,11 +69,17 @@ import { briefPdfDoc, type BriefPdfLink } from "@/lib/briefPdf";
 import { brandInitial, briefKey, buildMissions, CREATOR_STAGES, creatorStage, missionAction, missionState, type Mission, type MissionCollab } from "@/lib/creatorMissions";
 import { BriefBlocks, MissionCard, MissionStages } from "@/components/creator-missions";
 import { SkeletonCard, SkeletonFigure, SkeletonList } from "@/components/creator-skeleton";
-import { creatorSteps, whenLabel, type NextStep } from "@/lib/creatorNextStep";
+import { creatorSteps, monthlyStatsSent, whenLabel, type NextStep } from "@/lib/creatorNextStep";
+import { insertCreatorDoc } from "@/lib/creatorDocsDb";
+import { mailBadgeCount } from "@/lib/creatorMailBadge";
+import { collabIdMissing } from "@/lib/collabLinks";
 import { CreatorToday } from "@/components/CreatorToday";
 import { sharedWithText } from "@/lib/todoCreators";
 import { selectTodosFor } from "@/lib/todoCreatorsDb";
-import { evenementInterne, visibiliteColumnMissing, visiblePourCreateur } from "@/lib/todoVisibility";
+import { evenementInterne, pourCreateurColumnMissing, pourToi, visibiliteColumnMissing, visiblePourCreateur } from "@/lib/todoVisibility";
+import { ctDroits, ctPeutRetirer } from "@/lib/creatorTodos";
+import { infosPatch } from "@/lib/creatorInfos";
+import { countsByPage, keepOpen, sameOpenObjects, throttlePush, unreadKeys, type OpenObjects } from "@/lib/activityEvents";
 import { agencyAwaits, progressColumnMissing } from "@/lib/todoProgress";
 import { CreatorTodos } from "@/components/CreatorTodos";
 import { invoiceHT } from "@/lib/invoice";
@@ -90,6 +96,7 @@ import { PullToRefresh } from "@/components/mobile/pull-to-refresh";
 import { OfflineBanner } from "@/components/mobile/offline-banner";
 import { Delta, DashPanel, DashSectionTitle, DashWideLink } from "@/components/ui/dash";
 import { Overlay } from "@/components/mobile/ios-sheet";
+import { PasswordSettings } from "@/components/password-form";
 import { FEATURES } from "@/lib/features";
 import { onDeepLink, setCurrentPlace, takeDeepLink } from "@/lib/deepLink";
 import { requestIntent } from "@/lib/openIntent";
@@ -128,15 +135,18 @@ type Creator = {
 };
 type Subtask = { id: string; text: string; done: boolean };
 type Attachment = { name: string; size: string; path: string };
-type Todo = { id: string; text: string; descr: string | null; due: string | null; priority: string | null; done: boolean; status?: string | null; sort_order?: number; subtasks?: Subtask[] | null; attachments?: Attachment[] | null; creator?: string | null; creators?: string[] | null; created_at?: string | null; source?: string | null; progress?: string | null };
+// pour_createur : tâche de l'agence demandée au créateur (SQL 2026-11-27 ; undefined tant que la colonne manque).
+type Todo = { id: string; text: string; descr: string | null; due: string | null; priority: string | null; done: boolean; status?: string | null; sort_order?: number; subtasks?: Subtask[] | null; attachments?: Attachment[] | null; creator?: string | null; creators?: string[] | null; created_at?: string | null; source?: string | null; progress?: string | null; pour_createur?: boolean | null };
 
 let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
 type Idea = { id: string; text: string; status: string | null; sort_order?: number; subtasks?: Subtask[] | null };
 type Brief = { id: string; brand: string | null; deliverables: string | null; due: string | null; status: string | null; consignes: string | null; resume?: BriefResume | null; pdf?: BriefPdfLink };
 type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string | null; type: string | null; who?: string | null; description?: string | null };
-type Doc = { id: string; name: string; type: string | null; size: string | null; path: string | null; created_at: string | null };
-type Invoice = { ref: string | null; party: string | null; amount: string | null; date: string | null; status: string | null };
+// collab_id : collab du dépôt fait depuis une mission (SQL 2026-11-27 ; absente avant).
+type Doc = { id: string; name: string; type: string | null; size: string | null; path: string | null; created_at: string | null; collab_id?: string | null };
+// collab_id : collab de la facture (relue sans la colonne si elle manque).
+type Invoice = { ref: string | null; party: string | null; amount: string | null; date: string | null; status: string | null; collab_id?: string | null };
 type Contact = { id: string; brand: string; person: string | null; role: string | null; email: string | null; phone: string | null; sort_order?: number };
 
 type Tab = CsTab;
@@ -146,8 +156,9 @@ type Tab = CsTab;
  * Alimente à la fois le menu desktop (SidebarNav, sections repliables), le rail
  * replié, la barre d'onglets du téléphone et la liste « Toutes les rubriques » de
  * Profil → ils ne peuvent plus diverger.
- * Premier groupe = les 5 onglets de la barre du bas (Accueil, Missions, Mail,
- * Gains, Profil) ; toutes les autres rubriques suivent, rien n'est retiré.
+ * Premier groupe = l'essentiel (Accueil, Collabs, Gains, Mes informations, Mail, Menu) ;
+ * toutes les autres rubriques suivent, rien n'est retiré. La barre du bas du téléphone,
+ * elle, vient de CS_BAR_TABS (src/lib/creatorTabs.ts) : Accueil, Collabs, To-do, Mail, Plus.
  * Les ids de groupe sont préfixés `cs-` pour ne pas partager l'état d'ouverture
  * (localStorage) avec les groupes de l'espace agence.
  */
@@ -490,13 +501,23 @@ export function CreatorSpace({
   const [confirmDoneTodo, setConfirmDoneTodo] = useState<Todo | null>(null); // anti-missclick « fait »
   const [taskView, setTaskView] = useState<Todo | null>(null); // fiche tâche (texte complet)
   const [progressOn, setProgressOn] = useState(false); // colonne todos.progress présente (SQL 2026-10-22)
+  const pourCreateurOn = useRef(false); // colonne todos.pour_createur présente (SQL 2026-11-27)
+  const pourCreateurAbsent = useRef(false); // colonne vue absente : plus redemandée pendant la visite
   const [subInput, setSubInput] = useState(""); // saisie nouvelle sous-tâche
   const attFileRef = useRef<HTMLInputElement>(null);
   const [attUploading, setAttUploading] = useState(false);
   const live = useLiveKey();
   // Repères « nouveau » : ce que l'agence a écrit (tâches, idées, briefs, mails), avec
   // un compteur par onglet. Pas dans la vue agence de l'espace (preview).
-  const activity = useActivityEvents("creator", !preview);
+  // Seuls comptent les objets encore ouverts (tâche pas faite, brief pas terminé, idée qui
+  // existe) : sinon une pastille annonce ce que la liste ne montre pas. Les listes sont lues
+  // plus bas, `openObjects` les suit (voir « Pastilles » près de openTodos).
+  const activityAll = useActivityEvents("creator", !preview);
+  const [openObjects, setOpenObjects] = useState<OpenObjects | null>(null);
+  const activity = useMemo(() => {
+    const events = keepOpen(activityAll.events, openObjects);
+    return { events, keys: unreadKeys(events), counts: countsByPage(events, "creator") };
+  }, [activityAll, openObjects]);
   // Section « Mails » : affichée seulement si l'agence l'a activée et liée à un alias/libellé.
   const [mailsOn, setMailsOn] = useState(false);
   const [mailAlias, setMailAlias] = useState<string | null>(null);
@@ -525,17 +546,20 @@ export function CreatorSpace({
   // l'agence) depuis que le créateur les a ouverts. Calculée sur l'appareil ; le module
   // est chargé à la demande pour ne pas alourdir l'espace créateur.
   const mailBadgeOn = mailsOn && !preview;
-  const [mailBadge, setMailBadge] = useState(0);
+  const [mailUnseen, setMailUnseen] = useState<string[]>([]);
   useEffect(() => {
     if (!mailBadgeOn) {
-      setMailBadge(0);
+      setMailUnseen([]);
       return;
     }
     let alive = true;
     let unsub = () => {};
     void import("@/lib/creatorMail").then((m) => {
       if (!alive) return;
-      const update = () => setMailBadge(m.unseenMailIds(name).length);
+      const update = () => {
+        const next = m.unseenMailIds(name);
+        setMailUnseen((cur) => (cur.length === next.length && cur.every((id, i) => id === next[i]) ? cur : next));
+      };
       unsub = m.subscribeSeen(update);
       update();
     });
@@ -544,6 +568,10 @@ export function CreatorSpace({
       unsub();
     };
   }, [name, mailBadgeOn]);
+  // Chiffre de la pastille Mail (menu, rail, barre du bas, « On t'attend ») : échanges non vus
+  // sur l'appareil OU avec un repère « nouveau » de l'agence, chacun compté une fois, et
+  // seulement quand la section Mail est active (avant : les deux s'additionnaient).
+  const mailBadge = mailBadgeOn ? mailBadgeCount(mailUnseen, activity.events) : 0;
   // Hors de l'onglet Mails : remarques et statuts de l'agence relus en base (léger, au plus
   // toutes les 2 min). Dans l'onglet, la boîte s'en charge (et relit aussi la liste Gmail).
   useEffect(() => {
@@ -553,7 +581,7 @@ export function CreatorSpace({
   // Pastille de l'icône de l'app = échanges non vus ; l'onglet Mail ouvert retire les
   // notifications de mails ; le service worker sait qu'on y est (pas de doublon à l'écran).
   // Jamais en visualisation agence (c'est alors l'app agence qui tient tout ça).
-  useAppBadge(mailBadge, !preview);
+  useAppBadge(mailUnseen.length, !preview);
   useCloseMailNotifications(!preview && tab === "mails");
   useEffect(() => {
     if (!preview) setCurrentPlace(`cs-${tab}`);
@@ -594,9 +622,9 @@ export function CreatorSpace({
     const base = CREATOR_GROUPS.map((g) => ({
       ...g,
       label: t(g.label),
-      // Pastille : échanges qui ont bougé (Mail) + objets avec du nouveau de l'agence.
+      // Pastille : objets avec du nouveau de l'agence ; Mail : son propre chiffre (mailBadge).
       items: g.items.map((i) => {
-        const n = (i.id === "mails" && mailsOn ? mailBadge : 0) + (activity.counts[i.id] ?? 0);
+        const n = i.id === "mails" ? mailBadge : (activity.counts[i.id] ?? 0);
         return { ...i, label: t(i.label), ...(n ? { badge: n } : {}) };
       }),
     }));
@@ -607,10 +635,10 @@ export function CreatorSpace({
     const moved = new Set(favItems.map((i) => i.id));
     const rest = base.map((g) => ({ ...g, items: g.items.filter((i) => !moved.has(i.id)) })).filter((g) => g.items.length > 0);
     return [{ id: "favoris", label: t("Favoris"), icon: TtpStar, fixed: true, items: favItems }, ...rest];
-  }, [mailsOn, mailBadge, t, shownFavs, activity.counts]);
+  }, [mailBadge, t, shownFavs, activity.counts]);
   const navTabs = useMemo(() => navGroups.flatMap((g) => g.items), [navGroups]);
 
-  // ── Affichage iPhone (téléphone) : 4 onglets en bas (Accueil, Missions, Gains, Messages), Menu sous l'avatar ──
+  // ── Affichage iPhone (téléphone) : barre du bas Accueil, Collabs, To-do, Mail et Plus (CS_BAR_TABS), Menu aussi sous l'avatar ──
   const iosPhone = useIsPhone();
   const [mailThreadOpen, setMailThreadOpen] = useState(false); // Mail : un échange est ouvert
   const [navSlot, setNavSlot] = useState<HTMLElement | null>(null); // « + » de l'onglet dans la barre de titre
@@ -729,7 +757,8 @@ export function CreatorSpace({
   // Collabs du créateur (lecture seule : RLS `collabs_scoped`, écriture réservée à l'agence).
   const [collabs, setCollabs] = useState<MissionCollab[]>([]);
   // Premier chargement terminé (squelettes en attendant, jamais d'écran vide trompeur).
-  const [ready, setReady] = useState({ collabs: false, briefs: false, invoices: false });
+  // `docs` : ses dépôts décident des cartes « stats du mois » et « facture » de l'Accueil.
+  const [ready, setReady] = useState({ collabs: false, briefs: false, invoices: false, docs: false });
   const markReady = (k: keyof typeof ready) => setReady((r) => (r[k] ? r : { ...r, [k]: true }));
 
 
@@ -820,9 +849,17 @@ export function CreatorSpace({
     // Points d'avancement (`progress`, SQL 2026-10-22) : sans la colonne, on recharge sans elle.
     // Tâches internes de l'agence (pas cochées « Visible par le créateur ») : jamais ici,
     // même dans l'aperçu agence (lib/todoVisibility). Sans la colonne : toutes cachées.
+    // « Pour toi » ou « Ton agence s'en occupe » (`pour_createur`, SQL 2026-11-27) : sans la
+    // colonne, on relit sans elle et tout reste « Pour toi ». Vue absente une fois, elle n'est
+    // plus demandée pendant la visite (sinon une lecture refusée à chaque rafraîchissement).
     const TODO_COLS = "id,text,descr,due,priority,done,status,sort_order,subtasks,attachments,created_at,source";
     const loadTodos = async (cols: string) => {
-      let r = await selectTodosFor<Todo>(name, `${cols},visible_createur`);
+      const avecPour = !pourCreateurAbsent.current;
+      let r = await selectTodosFor<Todo>(name, `${cols},visible_createur${avecPour ? ",pour_createur" : ""}`);
+      if (avecPour && r.error && pourCreateurColumnMissing(r.error)) {
+        pourCreateurAbsent.current = true;
+        r = await selectTodosFor<Todo>(name, `${cols},visible_createur`);
+      } else if (avecPour && !r.error) pourCreateurOn.current = true;
       if (r.error && visibiliteColumnMissing(r.error)) r = await selectTodosFor<Todo>(name, cols);
       return { data: r.data ? r.data.filter(visiblePourCreateur) : r.data, error: r.error };
     };
@@ -863,13 +900,26 @@ export function CreatorSpace({
       const rows = (data as unknown as (Ev & { interne?: boolean | null })[]) ?? [];
       setEvents(rows.filter((e) => (e.who ?? "").split(", ").includes(name) && !evenementInterne(e)));
     });
-    supabase.from("documents").select("id,name,type,size,path,created_at").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => apply(error) && setDocs((data as Doc[]) ?? []));
+    // `collab_id` : dépôt fait depuis une mission (SQL 2026-11-27) ; colonne absente : relu sans.
+    const DOC_COLS = "id,name,type,size,path,created_at";
+    const docsQ = (cols: string) => supabase.from("documents").select(cols).eq("creator", name).order("created_at", { ascending: false });
+    void docsQ(`${DOC_COLS},collab_id`)
+      .then((r) => (r.error && collabIdMissing(r.error) ? docsQ(DOC_COLS) : r))
+      .then(({ data, error }) => {
+        if (alive) markReady("docs");
+        if (apply(error)) setDocs((data as unknown as Doc[]) ?? []);
+      });
     // Plus récente d'abord (« Dernière facture » = invoices[0]) ; `date` est un texte, on trie sur created_at.
-    // Nom sans tenir compte des majuscules ni des accents (« LÉNA MOREL » = « Léna Morel »).
-    supabase.from("invoices").select("ref,party,amount,date,status,creator").ilike("creator", namePattern(name)).order("created_at", { ascending: false }).then(({ data, error }) => {
-      if (alive) markReady("invoices");
-      if (apply(error)) setInvoices(((data as (Invoice & { creator: string | null })[]) ?? []).filter((i) => sameName(i.creator, name)));
-    });
+    // Nom sans tenir compte des majuscules ni des accents (« CRÉATRICE A » = « Créatrice A »).
+    // `collab_id` : la facture d'une collab se reconnaît d'abord par son lien (« Ta facture … n'apparaît pas »).
+    const INV_COLS = "ref,party,amount,date,status,creator";
+    const invoicesQ = (cols: string) => supabase.from("invoices").select(cols).ilike("creator", namePattern(name)).order("created_at", { ascending: false });
+    void invoicesQ(`${INV_COLS},collab_id`)
+      .then((r) => (r.error && collabIdMissing(r.error) ? invoicesQ(INV_COLS) : r))
+      .then(({ data, error }) => {
+        if (alive) markReady("invoices");
+        if (apply(error)) setInvoices(((data as unknown as (Invoice & { creator: string | null })[]) ?? []).filter((i) => sameName(i.creator, name)));
+      });
     supabase.functions
       .invoke("creator-report", { body: { creator: name } })
       .then(({ data, error }) => {
@@ -935,9 +985,11 @@ export function CreatorSpace({
     }
   };
 
-  // Notif agence : jamais en preview (c'est l'agence elle-même qui agit).
-  const pingAgency = (kind: Parameters<typeof notifyAgency>[0], text: string) => {
-    if (!preview) notifyAgency(kind, name, text);
+  // Notif agence : jamais en preview (c'est l'agence elle-même qui agit). `item` : id du
+  // document déposé (contenu, facture, captures du mois) : le push ouvre alors Documents, où
+  // le fichier est marqué « nouveau » (daily-digest, constat W5).
+  const pingAgency = (kind: Parameters<typeof notifyAgency>[0], text: string, item?: string) => {
+    if (!preview) notifyAgency(kind, name, text, item);
   };
   // Source des lignes créées : « agency » quand l'agence agit depuis la preview.
   const src = preview ? "agency" : "creator";
@@ -1050,8 +1102,8 @@ export function CreatorSpace({
     setStatsCapture(null);
     setStatsForm(Object.fromEntries(POST_METRICS.map(({ key }) => [key, p[key] == null ? "" : String(p[key])])) as Record<PostMetric, string>);
   };
-  /** Capture des stats : rangée dans SON dossier, comme « Envoyer mes stats ». */
-  const uploadCapture = async (file: File, brand: string): Promise<string | null> => {
+  /** Capture des stats : rangée dans SON dossier, comme « Envoyer mes stats », reliée à sa collab. */
+  const uploadCapture = async (file: File, brand: string, collabId: string | null): Promise<string | null> => {
     if (file.size > 15 * 1024 * 1024) {
       toast(t("Fichier trop lourd (max 15 Mo)"));
       return null;
@@ -1069,14 +1121,14 @@ export function CreatorSpace({
       toast(t("Envoi interrompu. Vérifie ta connexion et réessaie."));
       return null;
     }
-    const created = await dbInsert("documents", {
+    const created = await insertCreatorDoc({
       creator: name,
       name: `Stats ${brand} · ${titleCase(name)} · ${fmtDay(new Date())}`,
       type: "stats",
       size: `${Math.max(1, Math.round(file.size / 1024))} Ko`,
       path,
       sort_order: 0,
-    });
+    }, collabId);
     if (!created) {
       await supabase.storage.from("documents").remove([path]).catch(() => {});
       toast(t("Envoi interrompu. Réessaie dans un instant."));
@@ -1099,7 +1151,7 @@ export function CreatorSpace({
     try {
       let capture: string | undefined;
       if (statsCapture) {
-        const path = await uploadCapture(statsCapture, m.brand);
+        const path = await uploadCapture(statsCapture, m.brand, m.collab?.id ?? p.collab_id ?? null);
         if (!path) return;
         capture = path;
       }
@@ -1181,7 +1233,17 @@ export function CreatorSpace({
   // fichier d'une autre créatrice.
   const invFileRef = useRef<HTMLInputElement>(null);
   const [invUploading, setInvUploading] = useState(false);
+  // Collab de la facture : posée au clic depuis une mission ou la carte « Ta facture … n'apparaît
+  // pas » (le dépôt garde alors le lien et le nom de la marque), null depuis Gains.
+  const invoiceFor = useRef<{ id: string; brand: string } | null>(null);
+  const pickInvoice = (collab: { id: string; brand: string } | null) => {
+    invoiceFor.current = collab;
+    invFileRef.current?.click(); // dans le clic (sinon le téléphone bloque le sélecteur)
+  };
   const sendInvoiceFile = async (file: File) => {
+    const target = invoiceFor.current;
+    invoiceFor.current = null;
+    const brand = target?.brand.trim() ?? "";
     if (file.size > 15 * 1024 * 1024) {
       toast(t("Fichier trop lourd (max 15 Mo)"));
       return;
@@ -1204,14 +1266,14 @@ export function CreatorSpace({
         toast(t("Envoi interrompu. Vérifie ta connexion et réessaie."));
         return;
       }
-      const created = await dbInsert("documents", {
+      const created = await insertCreatorDoc({
         creator: name,
-        name: `Facture · ${titleCase(name)} · ${fmtDay(new Date())}`,
+        name: brand ? `Facture ${brand} · ${titleCase(name)} · ${fmtDay(new Date())}` : `Facture · ${titleCase(name)} · ${fmtDay(new Date())}`,
         type: "facture",
         size: `${Math.max(1, Math.round(file.size / 1024))} Ko`,
         path,
         sort_order: 0,
-      });
+      }, target?.id);
       if (!created) {
         // Ligne refusée → on ne laisse pas un fichier orphelin dans le bucket.
         await supabase.storage.from("documents").remove([path]).catch(() => {});
@@ -1219,7 +1281,7 @@ export function CreatorSpace({
         return;
       }
       setDocs((prev) => [created as unknown as Doc, ...prev]);
-      pingAgency("facture", `Facture déposée · ${titleCase(name)}`);
+      pingAgency("facture", brand ? `Facture ${brand} déposée · ${titleCase(name)}` : `Facture déposée · ${titleCase(name)}`, created.id);
       toast(t("Facture envoyée à ton agence ✓"));
     } finally {
       setInvUploading(false);
@@ -1279,14 +1341,14 @@ export function CreatorSpace({
         return;
       }
       sent += file.size;
-      const created = await dbInsert("documents", {
+      const created = await insertCreatorDoc({
         creator: name,
         name: `${t("Contenu")} ${m.brand} · ${fmtDay(new Date(), locale)}${files.length > 1 ? ` (${i + 1})` : ""}`,
         type: "contenu",
         size: `${Math.max(1, Math.round(file.size / 1024))} Ko`,
         path,
         sort_order: 0,
-      });
+      }, m.collab?.id);
       if (!created) {
         await supabase.storage.from("documents").remove([path]).catch(() => {});
         setContentUp(null);
@@ -1296,7 +1358,7 @@ export function CreatorSpace({
       added.push(created as unknown as Doc);
     }
     setDocs((prev) => [...added, ...prev]);
-    pingAgency("contenu", `${t("Contenu envoyé")} · ${m.brand}`);
+    pingAgency("contenu", `${t("Contenu envoyé")} · ${m.brand}`, added[0]?.id);
     if (typeof navigator !== "undefined" && "vibrate" in navigator) navigator.vibrate?.([10, 40, 10]);
     setContentUp({ brand: m.brand, pct: 1, done: true });
     window.setTimeout(() => setContentUp(null), 2200);
@@ -1396,6 +1458,7 @@ export function CreatorSpace({
         return;
       }
       let ok = 0;
+      let premier: string | undefined; // id du premier document : le push y mène (Documents)
       for (const file of list) {
         if (file.size > 15 * 1024 * 1024) {
           toast(t("«\u00A0{file}\u00A0» trop lourd (max 15 Mo)", { file: file.name }));
@@ -1421,10 +1484,11 @@ export function CreatorSpace({
           continue;
         }
         setDocs((prev) => [created as unknown as Doc, ...prev]);
+        premier ??= created.id;
         ok += 1;
       }
       if (ok > 0) {
-        pingAgency("stats", `${ok} capture${ok > 1 ? "s" : ""} de stats · ${titleCase(name)}`);
+        pingAgency("stats", `${ok} capture${ok > 1 ? "s" : ""} de stats · ${titleCase(name)}`, premier);
         toast(plural(ok, "{n} capture envoyée à ton agence ✓", "{n} captures envoyées à ton agence ✓"));
         setStatsModalOpen(false);
       }
@@ -1472,8 +1536,9 @@ export function CreatorSpace({
       creator: name,
       priority: tdPrio,
       source: src,
-      // Ajoutée par l'agence DEPUIS l'espace du créateur : c'est pour lui, donc visible.
-      ...(preview ? { visible_createur: true } : {}),
+      // Ajoutée par l'agence DEPUIS l'espace du créateur : c'est pour lui, donc visible et
+      // demandée (« Pour toi ») ; `pour_createur` n'est envoyé que si la colonne existe.
+      ...(preview ? { visible_createur: true, ...(pourCreateurOn.current ? { pour_createur: true } : {}) } : {}),
       done: false,
       sort_order: nextOrder(todos),
     };
@@ -1714,26 +1779,13 @@ export function CreatorSpace({
 
   const saveInfos = async () => {
     if (!creator) return;
-    const patch: Partial<Creator> = {
-      ville: (form.ville ?? "").trim(),
-      phone: (form.phone ?? "").trim(),
-      email: (form.email ?? "").trim(),
-      email_pro: (form.email_pro ?? "").trim(),
-      instagram: (form.instagram ?? "").trim(),
-      tiktok: (form.tiktok ?? "").trim(),
-      address: (form.address ?? "").trim(),
-      siren: (form.siren ?? "").trim(),
-      birth: (form.birth ?? "").trim(),
-      followers: (form.followers ?? "").trim(),
-      er: (form.er ?? "").trim(),
-      reach: (form.reach ?? "").trim(),
-      // ca/commission/status/exclu NON envoyés : colonnes agence (CA calculé depuis
-      // les factures). Verrouillées aussi côté base par le trigger creators_guard.
-    };
-    // Date de naissance legacy en texte libre illisible (« 12 mars 1998 ») : le champ
-    // date arrive vide (toISODate a renvoyé "") → on la PRÉSERVE au lieu de l'effacer.
-    if (!patch.birth && creator.birth && !toISODate(creator.birth)) delete patch.birth;
-    if (!(await dbUpdate("creators", creator.id, patch))) {
+    // Seuls les champs vraiment changés partent (lib/creatorInfos) : la base prévient l'agence
+    // en citant les champs modifiés (vague 1, SQL 2026-11-27), sans push. Une date de naissance
+    // ancienne en texte libre illisible reste telle quelle. ca/commission/status/exclu NON
+    // envoyés : colonnes agence (CA calculé depuis les factures), verrouillées aussi côté base
+    // par le trigger creators_guard.
+    const patch: Partial<Creator> = infosPatch(creator, form);
+    if (Object.keys(patch).length > 0 && !(await dbUpdate("creators", creator.id, patch))) {
       toast(t("Ça n'a pas marché. Réessaie dans un instant."));
       return;
     }
@@ -1744,7 +1796,35 @@ export function CreatorSpace({
 
   const setField = (k: keyof Creator, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
-  const openTodos = todos.filter((t) => !t.done);
+  // « Il te reste N à faire », carte To-do et « Mes tâches » de l'accueil : seulement les
+  // tâches « Pour toi » (pas celles dont l'agence s'occupe).
+  const openTodos = todos.filter((t) => !t.done && pourToi(t));
+  // Pastilles : objets encore ouverts, suivis ici parce que les repères sont calculés plus
+  // haut, avant ces listes. Rien ne change (pas de nouveau rendu) tant qu'aucun ne s'ouvre ni
+  // ne se ferme.
+  useLayoutEffect(() => {
+    const next: OpenObjects = {
+      todo: new Set(todos.filter((x) => !x.done).map((x) => x.id)),
+      brief: new Set(briefs.filter((b) => briefKey(b.status ?? "attente") !== "terminé").map((b) => b.id)),
+      idea: new Set(ideas.map((i) => i.id)),
+    };
+    setOpenObjects((prev) => (sameOpenObjects(prev, next) ? prev : next));
+  }, [todos, briefs, ideas]);
+  // Son dossier de fichiers (« creator-uploads/<son id>/ ») : sur une tâche demandée par
+  // l'agence, il ne retire que ses propres pièces jointes. Aperçu agence : tout dépôt d'un créateur.
+  // Vide (aucune à retirer) tant que son id n'est pas lu, jamais les fichiers d'un autre créateur.
+  const [mesFichiers, setMesFichiers] = useState(preview ? "creator-uploads/" : "");
+  useEffect(() => {
+    if (preview) return;
+    let alive = true;
+    void supabase.auth.getSession().then(({ data }) => {
+      const id = data.session?.user.id;
+      if (alive && id) setMesFichiers(`creator-uploads/${id}/`);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [preview]);
   // Chiffre d'affaires en HORS TAXES, comme côté agence (choix de Marc, 2026-10-25) : lignes de
   // chaque facture envoyées par `creator-report`, sinon le montant enregistré (supposé HT).
   const htInvoices = money
@@ -1821,7 +1901,30 @@ export function CreatorSpace({
   // le KPI « CA facturé » côté agence).
   const totalFacture = htInvoices.filter((i) => i.status !== "brouillon" && i.status !== "annulee").reduce((a, i) => a + i.ht, 0);
 
+  /** Tâche que le créateur vient de terminer : son repère « nouveau » n'a plus lieu d'être, et
+   *  l'agence est prévenue quand c'est une tâche qu'elle lui avait demandée (push « tâche
+   *  terminée », coupé par le réglage « Aussi quand il écrit sur une tâche »), une fois par
+   *  tâche toutes les 10 min au plus (Fait, Rouvrir puis Fait : un seul push).
+   *  Les push « tâche terminée » et « tâche supprimée » partent seulement une fois le SQL du
+   *  27/11 lancé (colonne pour_createur lue) : daily-digest est redéployé avec lui, et
+   *  l'ancienne version les annoncerait comme une nouvelle tâche. */
+  const doneSent = useRef<Record<string, number>>({});
+  const afterTodoDone = (td: Todo) => {
+    if (preview) return;
+    void markActivityRead("todo", td.id);
+    if (!pourCreateurOn.current || td.source !== "agency" || !pourToi(td)) return;
+    const next = throttlePush(doneSent.current, `a:${name}:todo:${td.id}:done`, Date.now());
+    if (!next) return;
+    doneSent.current = next;
+    notifyAgency("tache-faite", name, td.text, td.id);
+  };
+
   const markTodo = async (td: Todo, next: boolean): Promise<boolean> => {
+    // Tâche suivie par l'agence : il la lit et y répond, il ne la coche pas (la base refuse aussi).
+    if (!ctDroits(td).terminer) {
+      toast(t("Ton agence s'en occupe"));
+      return false;
+    }
     // On écrit done ET status ensemble (comme l'agence) → l'affichage statut/kanban
     // reste cohérent des deux côtés (audit : ne pas laisser status désynchronisé).
     // writeTodoStatus : trace du « Fait » (date, auteur) comme côté agence.
@@ -1829,6 +1932,7 @@ export function CreatorSpace({
     if (await writeTodoStatus(td.id, status)) {
       setTodos((prev) => prev.map((x) => (x.id === td.id ? { ...x, done: next, status } : x)));
       toast(next ? t("Fait ✓") : t("À refaire"));
+      if (next && !td.done) afterTodoDone(td);
       return true;
     }
     toast(t("Ça n'a pas marché. Réessaie dans un instant."));
@@ -1837,13 +1941,15 @@ export function CreatorSpace({
 
   // Change le statut d'une tâche depuis la vue colonnes (done dérivé de « Fait »).
   // Supprimer une tâche (menu ⋯, ou glisser la ligne en mode iPhone).
-  /** Retire une ligne d'une liste puis la remet à sa place (bandeau « Annuler »). */
+  /** Retire une ligne d'une liste puis la remet à sa place (bandeau « Annuler »).
+   *  `onDeleted` : appelé une fois la ligne vraiment supprimée en base (après le délai). */
   function removeUndoable<T extends { id: string }>(
     set: (fn: (prev: T[]) => T[]) => void,
     list: T[],
     row: T,
     table: string,
     label: string,
+    onDeleted?: () => void,
   ) {
     const at = Math.max(0, list.findIndex((y) => y.id === row.id));
     undoable(label, {
@@ -1855,31 +1961,50 @@ export function CreatorSpace({
           next.splice(Math.min(at, next.length), 0, row);
           return next;
         }),
-      commit: () => dbDelete(table, row.id),
+      commit: async () => {
+        const ok = await dbDelete(table, row.id);
+        if (ok) onDeleted?.();
+        return ok;
+      },
       failText: t("Suppression impossible. Réessaie dans un instant."),
     });
   }
   const deleteTodo = async (td: Todo) => {
+    // Tâche de l'agence (demandée ou suivie) : le créateur ne la supprime plus (vague 1).
+    if (!ctDroits(td).supprimer) {
+      toast(t("Ton agence s'en occupe"));
+      return;
+    }
     // Tâche partagée dont il n'est pas le premier créateur : seule l'agence (ou le premier) la retire.
     if (!preview && td.creator && td.creator !== name) {
       toast(t("Tâche partagée : demande à l'agence de la retirer"));
       return;
     }
-    removeUndoable(setTodos, todos, td, "todos", t("Tâche supprimée"));
+    // Une fois supprimée pour de bon (après le délai « Annuler »), l'agence est prévenue
+    // (après le SQL du 27/11, comme « tâche terminée » : voir afterTodoDone).
+    removeUndoable(setTodos, todos, td, "todos", t("Tâche supprimée"), () => {
+      if (!preview && pourCreateurOn.current) notifyAgency("tache-supprimee", name, td.text);
+    });
   };
   const setTodoStatus = async (td: Todo, status: string) => {
+    if (!ctDroits(td).terminer) {
+      toast(t("Ton agence s'en occupe"));
+      return;
+    }
     const done = status === "Fait";
     const prev = { status: td.status ?? null, done: td.done };
     setTodos((list) => list.map((x) => (x.id === td.id ? { ...x, status, done } : x)));
     if (!(await writeTodoStatus(td.id, status))) {
       setTodos((list) => list.map((x) => (x.id === td.id ? { ...x, ...prev } : x)));
       toast(t("Ça n'a pas marché. Réessaie dans un instant."));
-    }
+    } else if (done && !prev.done) afterTodoDone(td);
   };
 
   const cStatus = (t: Todo): string => t.status ?? (t.done ? "Fait" : "À faire");
 
   const startEditTodo = (t: Todo) => {
+    // Titre, détails et priorité : seulement sur sa tâche, jamais sur une tâche de l'agence.
+    if (!ctDroits(t).modifier) return;
     setTdEditId(t.id);
     setTeText(t.text);
     setTeDesc(t.descr ?? "");
@@ -2203,23 +2328,29 @@ export function CreatorSpace({
   // « Stats du mois » : même indicateur que le Roster et la notification du matin
   // (creators.stats_month), coché par l'agence ou tout seul par les synchros TikTok /
   // Instagram quand le réseau principal est couvert. Repli : dernière mesure de plus de 35 j.
+  // Captures du mois déjà envoyées depuis l'espace : elles attendent l'agence, on ne les
+  // redemande pas (seule l'agence coche stats_month, jamais l'espace créateur). Rien tant
+  // que ses dépôts ne sont pas lus (sinon la demande s'affiche puis disparaît).
   const nowD = new Date();
   const thisMonth = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, "0")}`;
   const lastMeasure = Math.max(0, ...(mySuivi ?? []).map((e) => frTime(e.date) || 0));
-  const statsStale = creator
+  const statsStale = ready.docs && (creator
     ? (creator.stats_month ?? "") !== thisMonth
-    : mySuivi !== null && (!lastMeasure || Date.now() - lastMeasure > 35 * 86400000);
+    : mySuivi !== null && (!lastMeasure || Date.now() - lastMeasure > 35 * 86400000)) && !monthlyStatsSent(docs, nowD);
   const todayIso = todayISO();
   const missions = useMemo(() => buildMissions(collabs, briefs), [collabs, briefs]);
+  // « J'ai lu » déjà touché pour le brief de la mission (colonnes absentes : non).
+  const briefRead = (m: Mission) => !!(m.brief && concepts?.[m.brief.id]?.read_at);
   const openMission = missionId ? missions.find((m) => m.id === missionId) ?? null : null;
   // Ouvrir une mission efface le repère « nouveau » de son brief.
   const openBriefId = openMission?.brief?.id;
   useEffect(() => {
     if (!preview && openBriefId) void markActivityRead("brief", openBriefId);
   }, [preview, openBriefId]);
+  // concepts : « J'ai lu » et concept (carte « Lire le brief ») ; docs : factures déjà déposées.
   const steps = useMemo(
-    () => creatorSteps({ briefs, collabs, todos, events, invoices, statsStale, now: new Date() }),
-    [briefs, collabs, todos, events, invoices, statsStale],
+    () => creatorSteps({ briefs, collabs, todos, events, invoices, statsStale, concepts, docs, now: new Date() }),
+    [briefs, collabs, todos, events, invoices, statsStale, concepts, docs],
   );
   // Ce qu'elle touche vraiment : brut moins la commission de SA fiche (src/lib/creatorGains.ts).
   const rate = parseCommissionPct(creator?.commission) ?? DEFAULT_COMMISSION;
@@ -2292,7 +2423,8 @@ export function CreatorSpace({
       return;
     }
     if (tg.tab === "gains") {
-      invFileRef.current?.click();
+      const c = tg.collabId ? collabs.find((x) => x.id === tg.collabId) : undefined;
+      pickInvoice(c ? { id: c.id, brand: c.brand } : null);
       return;
     }
     setTab(tg.tab);
@@ -2583,7 +2715,7 @@ export function CreatorSpace({
             />
           )}
           <NavActionSlotContext.Provider value={iosPhone ? navSlot : null}>
-          {/* En-tête de l'accueil (maquette « Bonjour Léna ») : date du jour, salutation
+          {/* En-tête de l'accueil (maquette « Bonjour {prénom} ») : date du jour, salutation
               selon l'heure + photo. Les autres onglets affichent leur propre titre (TabFrame). */}
           {tab === "accueil" && (
             <div className="mb-5 flex items-center justify-between gap-3">
@@ -2639,7 +2771,7 @@ export function CreatorSpace({
           {/* Aujourd'hui : les actions rangées par moment (src/components/CreatorToday.tsx) */}
           {tab === "aujourdhui" && (
             <CreatorToday
-              data={{ briefs, collabs, todos, events, invoices, statsStale }}
+              data={{ briefs, collabs, todos, events, invoices, statsStale, concepts, docs }}
               onOpen={openStep}
               onDoneTodo={async (id) => {
                 const td = todos.find((x) => x.id === id);
@@ -2712,7 +2844,8 @@ export function CreatorSpace({
               { label: t("CA encaissé HT"), value: formatEuro(caEncaisse), foot: t("sur {amount} facturés", { amount: formatEuro(totalFacture) }) },
               { label: t("To-do"), value: String(openTodos.length), foot: `${plural(briefs.length, "{n} brief", "{n} briefs")} · ${plural(ideas.length, "{n} idée", "{n} idées")}` },
             ];
-            if (!(ready.collabs && ready.briefs && ready.invoices)) {
+            // Ses dépôts aussi : sinon « Envoyer tes stats du mois » s'affiche un instant puis disparaît.
+            if (!(ready.collabs && ready.briefs && ready.invoices && ready.docs)) {
               return (
                 <div role="status" aria-label={t("Chargement de ton accueil")} className="flex flex-col gap-4">
                   <SkeletonCard action className="min-h-[200px]" />
@@ -2799,14 +2932,15 @@ export function CreatorSpace({
                   const waits: Wait[] = [];
                   for (const m of missions) {
                     if (m.done) continue;
-                    const a = missionAction(m);
+                    const a = missionAction(m, briefRead(m));
+                    // « Lire le brief » : seulement quand le brief a quelque chose à lire et tant
+                    // que « J'ai lu » n'est pas touché (missionAction).
                     if (a?.key === "brief") waits.push({ id: `b-${m.id}`, icon: FileText, text: t("Brief {brand} à lire", { brand: m.brand }), run: () => goMission(m) });
-                    else if (a?.key === "feedback") waits.push({ id: `f-${m.id}`, icon: MessageSquare, text: t("{brand} attend ta validation", { brand: m.brand }), run: () => goMission(m) });
                   }
                   for (const td of todos) {
                     if (!td.done && agencyAwaits(td.progress)) waits.push({ id: `t-${td.id}`, icon: MessageSquare, text: t("Ton agence t'a écrit : {task}", { task: td.text }), run: () => setTab("todo") });
                   }
-                  if (mailsOn && mailBadge > 0) {
+                  if (mailBadge > 0) {
                     waits.push({ id: "mail", icon: Mail, text: plural(mailBadge, "{n} message de marque", "{n} messages de marque"), run: () => setTab("mails") });
                   }
                   return (
@@ -3291,6 +3425,7 @@ export function CreatorSpace({
               progressOn={progressOn}
               me={name}
               preview={!!preview}
+              mesFichiers={mesFichiers}
               sharedWith={(td) => sharedWithText(td, name, t) || null}
               form={
                 <>
@@ -3570,10 +3705,11 @@ export function CreatorSpace({
                           dateText={m.due ? shortDay(m.due) : ""}
                           whenText={m.due && !m.done ? whenText(daysBetweenIso(todayIso, m.due)) : null}
                           late={!m.done && !!m.due && m.due < todayIso}
+                          briefRead={briefRead(m)}
                           onOpen={() => goMission(m)}
                           onAction={(key) => {
                             // Facture et contenu : le sélecteur de fichier s'ouvre dans le clic (sinon bloqué).
-                            if (key === "invoice") invFileRef.current?.click();
+                            if (key === "invoice") pickInvoice(m.collab ? { id: m.collab.id, brand: m.brand } : null);
                             else if (key === "content") pickContent(m);
                             else goMission(m);
                           }}
@@ -3995,7 +4131,7 @@ export function CreatorSpace({
                   <div className="flex flex-col items-center gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => invFileRef.current?.click()}
+                      onClick={() => pickInvoice(m.collab ? { id: m.collab.id, brand: m.brand } : null)}
                       disabled={invUploading}
                       className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary px-5 text-[16px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
                     >
@@ -4359,6 +4495,9 @@ export function CreatorSpace({
               </IosGroup>
 
 
+              {/* Mot de passe (constat W3) : jamais dans l'aperçu agence, il changerait celui du compte agence. */}
+              {!preview && <PasswordSettings variant="ios" />}
+
               <IosGroup>
                 <IosRow icon={preview ? ArrowLeft : LogOut} label={exitTitle} destructive chevron={false} onClick={exitAction} />
               </IosGroup>
@@ -4608,7 +4747,7 @@ export function CreatorSpace({
                   </div>
                   <button
                     type="button"
-                    onClick={() => invFileRef.current?.click()}
+                    onClick={() => pickInvoice(null)}
                     disabled={invUploading}
                     className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
@@ -4667,7 +4806,7 @@ export function CreatorSpace({
             const act = id === "profil"
               ? Object.entries(activity.counts).reduce((s, [k, n]) => (CS_BAR_TABS.includes(k as CsTab) ? s : s + n), 0)
               : activity.counts[id] ?? 0;
-            const n = (id === "mails" && mailsOn ? mailBadge : 0) + act;
+            const n = id === "mails" ? mailBadge : act;
             return { id, label, icon: tb?.icon ?? LayoutDashboard, badge: n || null };
           })}
           active={ownerTab(tab)}
@@ -4816,10 +4955,12 @@ export function CreatorSpace({
             )}
             {sharedWithText(taskView, name, t) && <div className="mt-2 text-xs text-faint">{sharedWithText(taskView, name, t)}</div>}
 
-            {/* Sous-tâches (checklist) */}
+            {/* Sous-tâches (checklist) ; tâche de l'agence : ni Modifier, et seulement ses propres
+                pièces jointes à retirer (ctDroits, ctPeutRetirer) */}
             {(() => {
               const subs = taskView.subtasks ?? [];
               const done = subs.filter((s) => s.done).length;
+              const canSubs = ctDroits(taskView).sousTaches;
               return (
                 <div className="mt-5 flex flex-col gap-1.5 border-t border-border pt-4">
                   <span className="text-[11px] font-medium text-muted-foreground">
@@ -4833,18 +4974,20 @@ export function CreatorSpace({
                   <div className="flex flex-col gap-1.5">
                     {subs.map((s) => (
                       <div key={s.id} className="group flex items-center gap-2 rounded-lg border border-border bg-panel/40 px-2.5 py-1.5">
-                        <button type="button" onClick={() => toggleSubtask(taskView, s.id)} className={cn("grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors", s.done ? "border-primary bg-primary text-primary-foreground" : "border-faint")}>
+                        <button type="button" disabled={!canSubs} onClick={() => toggleSubtask(taskView, s.id)} className={cn("grid h-4 w-4 shrink-0 place-items-center rounded border transition-colors", s.done ? "border-primary bg-primary text-primary-foreground" : "border-faint")}>
                           {s.done && <Check className="h-3 w-3" />}
                         </button>
                         <span className={cn("min-w-0 flex-1 break-words text-[13px]", s.done ? "text-faint line-through" : "text-foreground")}>{s.text}</span>
-                        <button type="button" onClick={() => delSubtask(taskView, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label={t("Supprimer la sous-tâche")}><Trash2 className="h-3.5 w-3.5" /></button>
+                        {canSubs && <button type="button" onClick={() => delSubtask(taskView, s.id)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" aria-label={t("Supprimer la sous-tâche")}><Trash2 className="h-3.5 w-3.5" /></button>}
                       </div>
                     ))}
                   </div>
-                  <form onSubmit={(e) => { e.preventDefault(); addSubtask(taskView); }} className="mt-1.5 flex items-center gap-2">
-                    <input value={subInput} onChange={(e) => setSubInput(e.target.value)} placeholder={t("Ajouter une sous-tâche…")} className="w-full rounded-md border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary" />
-                    <button type="submit" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"><Plus className="h-4 w-4" /></button>
-                  </form>
+                  {canSubs && (
+                    <form onSubmit={(e) => { e.preventDefault(); addSubtask(taskView); }} className="mt-1.5 flex items-center gap-2">
+                      <input value={subInput} onChange={(e) => setSubInput(e.target.value)} placeholder={t("Ajouter une sous-tâche…")} className="w-full rounded-md border border-border bg-surface px-3 py-1.5 text-[13px] outline-none focus:border-primary" />
+                      <button type="submit" className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-opacity hover:opacity-90"><Plus className="h-4 w-4" /></button>
+                    </form>
+                  )}
                 </div>
               );
             })()}
@@ -4862,30 +5005,38 @@ export function CreatorSpace({
                       <div className="truncate text-[13px] font-medium text-foreground hover:underline">{a.name}</div>
                       <div className="text-[11px] text-faint">{a.size}</div>
                     </button>
-                    <button type="button" onClick={() => removeAttachment(taskView, a.path)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title={t("Retirer")}><Trash2 className="h-4 w-4" /></button>
+                    {ctPeutRetirer(taskView, a.path, mesFichiers) && (
+                      <button type="button" onClick={() => removeAttachment(taskView, a.path)} className="shrink-0 text-faint opacity-100 transition-opacity hover:text-destructive pointer-fine:opacity-0 pointer-fine:group-hover:opacity-100 focus-visible:opacity-100" title={t("Retirer")}><Trash2 className="h-4 w-4" /></button>
+                    )}
                   </div>
                 ))}
-                <input ref={attFileRef} type="file" multiple className="hidden" onChange={(e) => uploadAttachments(taskView, e.target.files)} />
-                <button type="button" onClick={() => attFileRef.current?.click()} disabled={attUploading} className="flex items-center justify-center gap-2 rounded-full border-2 border-dashed border-border px-3 py-2.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50">
-                  <Upload className="h-4 w-4" /> {attUploading ? t("Envoi…") : t("Ajouter un fichier")}
-                </button>
+                {ctDroits(taskView).deposer && (
+                  <>
+                    <input ref={attFileRef} type="file" multiple className="hidden" onChange={(e) => uploadAttachments(taskView, e.target.files)} />
+                    <button type="button" onClick={() => attFileRef.current?.click()} disabled={attUploading} className="flex items-center justify-center gap-2 rounded-full border-2 border-dashed border-border px-3 py-2.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:bg-rowhover hover:text-foreground disabled:opacity-50">
+                      <Upload className="h-4 w-4" /> {attUploading ? t("Envoi…") : t("Ajouter un fichier")}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
-            <div className="mt-5 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const t = taskView;
-                  setTaskView(null);
-                  setTab("todo"); // le formulaire de modification est dans « À faire »
-                  startEditTodo(t);
-                }}
-                className="flex items-center gap-1.5 rounded-full bg-panel px-3 py-2 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
-              >
-                <Pencil className="h-3.5 w-3.5" /> {t("Modifier")}
-              </button>
-            </div>
+            {ctDroits(taskView).modifier && (
+              <div className="mt-5 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const t = taskView;
+                    setTaskView(null);
+                    setTab("todo"); // le formulaire de modification est dans « À faire »
+                    startEditTodo(t);
+                  }}
+                  className="flex items-center gap-1.5 rounded-full bg-panel px-3 py-2 text-xs font-medium text-foreground shadow-sm transition-colors hover:bg-rowhover"
+                >
+                  <Pencil className="h-3.5 w-3.5" /> {t("Modifier")}
+                </button>
+              </div>
+            )}
           </div>
         </Overlay>
       )}

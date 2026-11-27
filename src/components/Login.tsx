@@ -4,6 +4,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { ArrowRight, AtSign, Building2, Eye, EyeOff, Lock, Sparkles, Store } from "@/components/icons";
 import { supabase, setRemember } from "@/lib/supabase";
 import { Checkbox } from "@/components/ui/checkbox";
+import { adresseRetour } from "@/lib/passwordRecovery";
 import { cn } from "@/lib/utils";
 
 const BASE = import.meta.env.BASE_URL;
@@ -103,12 +104,13 @@ function BrandCard() {
 const fieldCls =
   "h-10 w-full rounded-lg border border-border bg-surface text-[14px] text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10";
 
-export function Login() {
+/** `lienPerime` : on arrive d'un lien « Mot de passe oublié » déjà servi ou trop ancien. */
+export function Login({ lienPerime = false }: { lienPerime?: boolean } = {}) {
   const reduced = useReducedMotion();
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(lienPerime ? "Ce lien ne marche plus (déjà utilisé ou trop ancien). Entre ton email puis touche « Mot de passe oublié ? »." : "");
   const [notice, setNotice] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [remember, setRememberChecked] = useState(true);
@@ -151,9 +153,13 @@ export function Login() {
       setError("Entre d'abord ton email.");
       return;
     }
-    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase());
+    // Le lien du mail ramène dans l'app, sur l'écran « Choisis ton nouveau mot de passe »
+    // (App.tsx). L'adresse doit figurer dans les Redirect URLs de Supabase Auth.
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+      redirectTo: adresseRetour(window.location.origin, BASE),
+    });
     if (resetErr) setError("Une erreur est survenue. Réessaie dans un moment.");
-    else setNotice("Email de réinitialisation envoyé. Regarde ta boîte de réception.");
+    else setNotice("Email envoyé. Ouvre le lien qu'il contient pour choisir ton nouveau mot de passe.");
   };
 
   const rise = (y: number, delay: number) =>

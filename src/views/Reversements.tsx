@@ -10,6 +10,8 @@ import type { ComptaDetail } from "@/lib/compta";
 import { collabIdMissing } from "@/lib/collabLinks";
 import { openCollab } from "@/lib/collabLinksDb";
 import { autoVersement } from "@/lib/collabAutoDb";
+import { notifyCreator } from "@/lib/push";
+import { marquesDuVersement, objetMarques } from "@/lib/argentPush";
 import { activeRosterNames, owesMoney, overpaid, reversementRows, reversementTotals, type Payout, type PayoutsMap, type RevInvoice, type RevRow } from "@/lib/reversements";
 import { titleCase } from "@/lib/utils";
 import { CreatorAvatar } from "@/components/ui/creator-avatar";
@@ -153,6 +155,12 @@ export function Reversements() {
       if (ok) {
         setOpenFor(null);
         toast("Paiement enregistré ✓");
+        // Le créateur est prévenu que sa part est versée (constat W15) : la marque des factures que
+        // ce versement couvre, jamais le montant. Après l'écriture réussie ; jamais sur un retrait.
+        // Aucune marque couverte : pas de texte en français, le serveur met son texte de secours
+        // dans la langue du créateur, sous le titre « Versement envoyé ».
+        const objet = objetMarques(marquesDuVersement(r.lines, r.reverse, n));
+        notifyCreator("payout", r.creator, objet ? `Ta part pour ${objet} est versée` : "", undefined, objet || undefined);
         // Factures que ce versement solde : leur collab atteint « Créateur payé » (jamais bloquant).
         void autoVersement({
           createur: r.creator,

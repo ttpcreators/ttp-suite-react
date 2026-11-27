@@ -23,6 +23,10 @@ import { appliquerCorrection, chargerControle, ignorerProbleme } from "@/lib/con
 const ICON: Record<RegleId, LucideIcon> = {
   brouillon_echu: Receipt,
   publiee_sans_facture: Receipt,
+  facture_annulee_seule: Receipt,
+  commission_a_facturer: Wallet,
+  depot_sans_suite: FileText,
+  kit_incomplet: Users,
   etape_paiement: Receipt,
   etape_reversement: Receipt,
   paiement_avant_publication: Receipt,

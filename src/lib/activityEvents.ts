@@ -6,10 +6,15 @@
  *
  * Un repère = un objet (tâche, idée, brief, fil de mail) qui a reçu du nouveau de
  * l'autre côté. Il reste jusqu'à l'ouverture de l'objet.
+ *
+ * Vague 1 (SQL 2026-11-27, pas encore lancé : rien de neuf n'arrive avant) : côté agence,
+ * « document » = un dépôt du créateur (contenu, facture, stats), « creator » = ses infos
+ * modifiées (le détail ne cite que les noms des champs), « done » = il a terminé une tâche
+ * que l'agence lui demande.
  */
 
-export type ActivityObject = "todo" | "idea" | "brief" | "mail";
-export type ActivityWhat = "new" | "text" | "description" | "subtask" | "progress" | "update" | "note" | "status";
+export type ActivityObject = "todo" | "idea" | "brief" | "mail" | "document" | "creator";
+export type ActivityWhat = "new" | "text" | "description" | "subtask" | "progress" | "update" | "note" | "status" | "done";
 
 export type ActivityEvent = {
   id: string;
@@ -49,8 +54,8 @@ export function dropReadLocally<T extends Pick<ActivityEvent, "object_type" | "o
 }
 
 /** Page du menu où vit chaque objet : agence (id de vue) ou créateur (onglet). */
-const AGENCY_PAGE: Record<ActivityObject, string> = { todo: "todo", idea: "ideas", brief: "briefs", mail: "mails" };
-const CREATOR_TAB: Record<ActivityObject, string> = { todo: "todo", idea: "ideas", brief: "missions", mail: "mails" };
+const AGENCY_PAGE: Record<ActivityObject, string> = { todo: "todo", idea: "ideas", brief: "briefs", mail: "mails", document: "documents", creator: "roster" };
+const CREATOR_TAB: Record<ActivityObject, string> = { todo: "todo", idea: "ideas", brief: "missions", mail: "mails", document: "documents", creator: "infos" };
 
 export function activityPage(type: string, side: "agency" | "creator"): string | null {
   const map = side === "agency" ? AGENCY_PAGE : CREATOR_TAB;
@@ -71,6 +76,73 @@ export function countsByPage(events: readonly Pick<ActivityEvent, "object_type" 
   return out;
 }
 
+/**
+ * Objets encore ouverts, par type (ids) : une tâche pas faite, un brief pas terminé, une
+ * idée qui existe. Un type absent de la carte n'est pas filtré (fils de mail…).
+ */
+export type OpenObjects = Partial<Record<ActivityObject, ReadonlySet<string>>>;
+
+/**
+ * Garde les repères dont l'objet est encore ouvert. Sans ce filtre, la pastille compte une
+ * tâche faite ou un brief terminé que la liste ne montre pas par défaut : une pastille sans
+ * rien à voir. `open` null (listes pas encore lues) : tout est gardé.
+ */
+export function keepOpen<T extends Pick<ActivityEvent, "object_type" | "object_id">>(events: readonly T[], open: OpenObjects | null): T[] {
+  if (!open) return [...events];
+  return events.filter((e) => {
+    const ids = (open as Record<string, ReadonlySet<string> | undefined>)[e.object_type];
+    return !ids || ids.has(e.object_id);
+  });
+}
+
+/** Mêmes objets ouverts (évite un nouveau rendu quand une tâche change sans s'ouvrir ni se fermer). */
+export function sameOpenObjects(a: OpenObjects | null, b: OpenObjects | null): boolean {
+  if (!a || !b) return a === b;
+  const types = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<ActivityObject>;
+  for (const k of types) {
+    const x = a[k];
+    const y = b[k];
+    if (!x || !y) {
+      if (x !== y) return false;
+      continue;
+    }
+    if (x.size !== y.size) return false;
+    for (const id of x) if (!y.has(id)) return false;
+  }
+  return true;
+}
+
+/** Repères « infos modifiées » d'un créateur (côté agence), retrouvés par son nom ou l'id de sa fiche. */
+export function infosEvents<T extends Pick<ActivityEvent, "object_type" | "object_id" | "creator">>(events: readonly T[], name: string, id?: string | null): T[] {
+  const key = name.trim().toLowerCase();
+  return events.filter((e) => e.object_type === "creator" && ((!!id && e.object_id === id) || (e.creator ?? "").trim().toLowerCase() === key));
+}
+
+/** Noms lisibles des infos modifiées (le repère ne garde que les noms des champs, jamais les valeurs). */
+const CHAMP_FR: Record<string, string> = {
+  address: "adresse",
+  ville: "ville",
+  siren: "SIREN",
+  email: "email",
+  email_pro: "email pro",
+  phone: "téléphone",
+  birth: "date de naissance",
+  instagram: "Instagram",
+  tiktok: "TikTok",
+};
+export function champsModifies(excerpts: readonly (string | null | undefined)[]): string[] {
+  const out: string[] = [];
+  for (const ex of excerpts) {
+    for (const raw of (ex ?? "").split(/[,;\n]/)) {
+      const k = raw.trim();
+      if (!k) continue;
+      const label = CHAMP_FR[k.toLowerCase()] ?? k;
+      if (!out.includes(label)) out.push(label);
+    }
+  }
+  return out;
+}
+
 /** Ce qui a changé, en mots simples (« Nouvelle sous-tâche »). */
 const WHAT_FR: Record<string, string> = {
   new: "Nouveau",
@@ -81,6 +153,7 @@ const WHAT_FR: Record<string, string> = {
   update: "Mis à jour",
   note: "Nouvelle remarque",
   status: "Statut modifié",
+  done: "Terminée",
 };
 export function whatLabel(what: string): string {
   return WHAT_FR[what] ?? "Du nouveau";

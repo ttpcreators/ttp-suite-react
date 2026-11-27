@@ -14,6 +14,7 @@ import { readAppState } from "../_shared/appState.ts";
 import { reversementRows, reversementTotals, type Detail, type Payout } from "../_shared/reversements.ts";
 import { deepLinkUrl, loadAppBlob, makePayload, pushReady, sendTo, type Audience } from "../_shared/push.ts";
 import type { PushKind } from "../_shared/pushPayload.ts";
+import { factureEnRetard } from "../_shared/factureRetard.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 
@@ -204,8 +205,10 @@ Deno.serve(async (req: Request) => {
     if (caller.role === "creator" && !caller.creatorName) return jsonRes({ error: "forbidden" }, 403);
     const prefs = await loadPrefs(sb);
     if (!prefOn(prefs, "pushCreatorActivity")) return jsonRes({ ok: true, skipped: "pref_off" });
-    // Du nouveau sur une tâche / idée / brief existants (« -maj ») : réglage à part.
-    const update = String(body.kind ?? "").endsWith("-maj");
+    // Du nouveau sur une tâche / idée / brief existants (« -maj »), une tâche demandée terminée
+    // ou une de ses tâches supprimée par le créateur : réglage à part (« Aussi quand il écrit… »).
+    const UPDATE_KINDS = new Set(["tache-faite", "tache-supprimee"]);
+    const update = String(body.kind ?? "").endsWith("-maj") || UPDATE_KINDS.has(String(body.kind ?? ""));
     if (update && !prefOn(prefs, "pushCreatorUpdates")) return jsonRes({ ok: true, skipped: "pref_off_updates" });
     // Anti-usurpation : pour un JWT créateur, le nom vient de SON profil (pas du corps de requête).
     const rawWho = caller.role === "creator" ? (caller.creatorName || "Un créateur") : String(body.creator ?? "Un créateur");
@@ -226,27 +229,40 @@ Deno.serve(async (req: Request) => {
       "tache-maj": "{createur} · du nouveau sur une tâche",
       "idee-maj": "{createur} · du nouveau sur une idée",
       "brief-maj": "{createur} · du nouveau sur un brief",
+      "tache-faite": "{createur} · tâche terminée",
+      "tache-supprimee": "{createur} · tâche supprimée",
     };
     const KEYA: Record<string, string> = {
       tache: "a_task", idee: "a_idea", contact: "a_contact", evenement: "a_event",
       gift: "a_gift", facture: "a_facture", stats: "a_stats", mail: "a_mail", contenu: "a_contenu",
       "tache-maj": "a_task_update", "idee-maj": "a_idea_update", "brief-maj": "a_brief_update",
+      "tache-faite": "a_task_done", "tache-supprimee": "a_task_deleted",
     };
-    // Page qui s'ouvre au toucher, sur l'objet quand il est connu.
-    const VIEW: Record<string, string> = { tache: "todo", "tache-maj": "todo", idee: "ideas", "idee-maj": "ideas", "brief-maj": "briefs", evenement: "planning" };
+    // Page qui s'ouvre au toucher, sur l'objet quand il est connu (tâche supprimée : sans objet,
+    // l'app n'envoie pas d'item puisque la tâche n'existe plus).
+    // Dépôts du créateur : la page Documents, où le fichier est marqué « nouveau » (constat W5).
+    // Une facture n'arrive que par un dépôt. « contenu » et « stats » servent aussi au post publié,
+    // aux stats à 7 jours et à la cadence, où rien n'est nouveau dans Documents : Documents
+    // seulement avec l'id du document déposé (`item`), sinon l'accueil comme avant.
+    const VIEW: Record<string, string> = { tache: "todo", "tache-maj": "todo", "tache-faite": "todo", "tache-supprimee": "todo", idee: "ideas", "idee-maj": "ideas", "brief-maj": "briefs", evenement: "planning", facture: "documents" };
+    const DEPOT_SI_ITEM = new Set(["contenu", "stats"]);
     const item = String(body.item ?? "");
     const aKind = String(body.kind ?? "tache");
+    const vue = VIEW[aKind] ?? (DEPOT_SI_ITEM.has(aKind) && item ? "documents" : "");
     const activityTitle = customText(texts, KEYA[aKind] ?? "a_task", DEFA[aKind] ?? "{createur} · nouvelle activité")
       .replace(/\{createur\}/g, who)
       .slice(0, 120);
     // Tag STABLE par créateur (pas Date.now()) : deux notifs d'activité du même
     // créateur se REMPLACENT au lieu de s'empiler → borne le spam de notifications
     // qu'un compte créateur pourrait générer en boucle. (audit 2026-07-13)
+    // Dépôts (contenu, facture, stats) : un tag par créateur ET par type, pour qu'une facture
+    // déposée ne remplace pas le contenu envoyé juste avant (constat W5).
+    const DEPOTS = new Set(["contenu", "facture", "stats"]);
     const r = await sendToAll(sb, {
       title: activityTitle,
       body: what,
-      tag: `ttp-creator-${who}`,
-      ...(VIEW[aKind] ? { url: deepLinkUrl({ open: "view", view: VIEW[aKind], ...(item ? { item } : {}) }) } : {}),
+      tag: DEPOTS.has(aKind) ? `ttp-creator-${who}-${aKind}` : `ttp-creator-${who}`,
+      ...(vue ? { url: deepLinkUrl({ open: "view", view: vue, ...(item ? { item } : {}) }) } : {}),
     }, "all", "creator-activity");
     return jsonRes({ ok: true, creatorActivity: true, ...r });
   }
@@ -295,12 +311,17 @@ Deno.serve(async (req: Request) => {
       "task-update": "Du nouveau sur une tâche",
       "idea-update": "Du nouveau sur une idée",
       "brief-update": "Ton brief a été mis à jour",
+      payout: "Versement envoyé",
+      "brand-paid": "La marque a payé",
+      "task-closed": "Tâche terminée",
+      "gift-update": "Du nouveau sur un cadeau",
     };
     const KEY: Record<string, string> = {
       document: "c_document", brief: "c_brief", debrief: "c_debrief", event: "c_event",
       mediakit: "c_mediakit", "task-done": "c_taskdone", idea: "c_idea", gift: "c_gift",
       invoice: "c_invoice", roadmap: "c_roadmap", mail: "c_mail",
       "task-update": "c_task_update", "idea-update": "c_idea_update", "brief-update": "c_brief_update",
+      payout: "c_payout", "brand-paid": "c_brandpaid", "task-closed": "c_taskclosed", "gift-update": "c_gift_update",
     };
     // Créateur à l'espace en anglais : titres par défaut en anglais (un titre
     // personnalisé dans Paramètres reste tel quel).
@@ -319,6 +340,10 @@ Deno.serve(async (req: Request) => {
       "task-update": "Something new on a task",
       "idea-update": "Something new on an idea",
       "brief-update": "Your brief was updated",
+      payout: "Payout sent",
+      "brand-paid": "The brand paid",
+      "task-closed": "Task done",
+      "gift-update": "Something new on a gift",
     };
     const kind = String(body.kind ?? "");
     const lang = await creatorLang(sb, creator);
@@ -331,9 +356,27 @@ Deno.serve(async (req: Request) => {
     const change = String((body as { change?: string }).change ?? "");
     const objTitle = String((body as { title?: string }).title ?? "").slice(0, 60);
     const label = (en ? CHANGE_EN : CHANGE_FR)[change];
-    const text = label ? (objTitle ? `${label} · « ${objTitle} »` : label) : what;
+    // Types dont le texte est composé ici, dans la langue du créateur, à partir de `title`
+    // ({objet} : la marque, la tâche ou le cadeau). Jamais de montant (écran verrouillé).
+    const BODY_FR: Record<string, string> = {
+      payout: "Ta part pour {objet} est versée",
+      "brand-paid": "{objet} · ton versement arrive",
+      "task-closed": "« {objet} »",
+      "gift-update": "{objet}",
+    };
+    const BODY_EN: Record<string, string> = {
+      payout: "Your share for {objet} has been paid",
+      "brand-paid": "{objet} · your payout is on its way",
+      "task-closed": "“{objet}”",
+      "gift-update": "{objet}",
+    };
+    const tpl = (en ? BODY_EN : BODY_FR)[kind];
+    const text = label
+      ? (objTitle ? `${label} · « ${objTitle} »` : label)
+      : tpl && objTitle ? tpl.replace("{objet}", () => objTitle) : what;
     // Onglet ouvert au toucher (sur l'objet quand il est connu) ; statut de mail : onglet Mail.
-    const TAB: Record<string, string> = { task: "todo", "task-update": "todo", "task-done": "todo", idea: "ideas", "idea-update": "ideas", brief: "missions", "brief-update": "missions", event: "planning", document: "documents", gift: "gifting", invoice: "gains", mediakit: "mediakit" };
+    // Bilan de campagne : Mes stats › Bilans ; feuille de route : sa page (avant : l'Accueil).
+    const TAB: Record<string, string> = { task: "todo", "task-update": "todo", "task-done": "todo", "task-closed": "todo", idea: "ideas", "idea-update": "ideas", brief: "missions", "brief-update": "missions", event: "planning", document: "documents", gift: "gifting", "gift-update": "gifting", invoice: "gains", payout: "gains", "brand-paid": "gains", mediakit: "mediakit", debrief: "debrief", roadmap: "roadmap" };
     const item = String(body.item ?? "");
     const url = kind === "mail"
       ? deepLinkUrl({ open: "cs-mails" })
@@ -453,9 +496,10 @@ Deno.serve(async (req: Request) => {
   }
 
   // ─── QUOTIDIEN ───
-  // 1) Factures en retard
-  const { data: inv } = await sb.from("invoices").select("status").eq("status", "retard");
-  const overdue = (inv ?? []).length;
+  // 1) Factures en retard : statut « retard », ou « attente » dont l'échéance est passée (même
+  //    règle que Facturation et la cloche, _shared/factureRetard.ts ; constat W23).
+  const { data: inv } = await sb.from("invoices").select("status,date").in("status", ["retard", "attente"]);
+  const overdue = ((inv ?? []) as { status: string | null; date: string | null }[]).filter((iv) => factureEnRetard(iv, today)).length;
 
   // 2) Blob agence __app_state__ : contrats à surveiller, commissions (override), reversements payés.
   let contractsSoon = 0;

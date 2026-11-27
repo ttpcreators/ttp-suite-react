@@ -17,9 +17,12 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 
 /** Signale à l'agence (push immédiat) qu'un créateur a ajouté quelque chose.
  *  Best-effort : ne bloque jamais l'action du créateur en cas d'échec.
- *  `item` : id de l'objet, pour que la notification l'ouvre directement. */
+ *  `item` : id de l'objet, pour que la notification l'ouvre directement.
+ *  « tache-faite » : il a terminé une tâche que l'agence lui demande ; « tache-supprimee » : il a
+ *  supprimé une de SES tâches (sans `item`, elle n'existe plus). Ces deux-là suivent le réglage
+ *  « Aussi quand il écrit sur une tâche » (pushCreatorUpdates), comme les « -maj ». */
 export function notifyAgency(
-  kind: "tache" | "idee" | "evenement" | "contact" | "gift" | "facture" | "stats" | "mail" | "contenu" | "tache-maj" | "idee-maj" | "brief-maj",
+  kind: "tache" | "idee" | "evenement" | "contact" | "gift" | "facture" | "stats" | "mail" | "contenu" | "tache-maj" | "idee-maj" | "brief-maj" | "tache-faite" | "tache-supprimee",
   creator: string,
   text: string,
   item?: string,
@@ -34,18 +37,23 @@ export function notifyAgency(
 }
 
 /** Notifie UN créateur (push immédiat sur ses appareils) quand l'agence lui
- *  ajoute quelque chose (tâche, document…). Best-effort : jamais bloquant. */
+ *  ajoute quelque chose (tâche, document…). Best-effort : jamais bloquant.
+ *  `objet` (marque, tâche, cadeau) : pour « payout », « brand-paid », « task-closed » et
+ *  « gift-update », le serveur compose alors le texte dans la langue du créateur ; `text`
+ *  (en français) ne sert que si `objet` manque. Jamais de montant dans une notification. */
 export function notifyCreator(
-  kind: "task" | "task-done" | "document" | "brief" | "debrief" | "event" | "mediakit" | "gift" | "idea" | "invoice" | "roadmap" | "mail" | "task-update" | "idea-update" | "brief-update",
+  kind: "task" | "task-done" | "document" | "brief" | "debrief" | "event" | "mediakit" | "gift" | "idea" | "invoice" | "roadmap" | "mail" | "task-update" | "idea-update" | "brief-update" | "payout" | "brand-paid" | "task-closed" | "gift-update",
   creator: string,
   text: string,
   item?: string,
+  objet?: string,
 ) {
   const who = creator.trim();
   if (!who) return;
+  const obj = objet?.trim().slice(0, 60);
   try {
     supabase.functions
-      .invoke("daily-digest", { body: { event: "agency_activity", kind, creator: who, text: text.slice(0, 140), ...(item ? { item } : {}) } })
+      .invoke("daily-digest", { body: { event: "agency_activity", kind, creator: who, text: text.slice(0, 140), ...(item ? { item } : {}), ...(obj ? { title: obj } : {}) } })
       .catch(() => {});
   } catch {
     /* jamais bloquant */

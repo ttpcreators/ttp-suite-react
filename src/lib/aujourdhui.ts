@@ -5,6 +5,7 @@ import { formatEuro, parseAmount } from "./money";
 import { invoiceTotals, type InvoiceDetailLike } from "./invoice";
 import { DEFAULT_COMMISSION, rateFor } from "./commission";
 import { titleCase } from "./utils";
+import { joursDepuis, type GroupeDepots } from "../../supabase/functions/_shared/depots.ts";
 
 /*
  * « Aujourd'hui » : la liste d'actions de la journée, construite à partir des données
@@ -12,6 +13,8 @@ import { titleCase } from "./utils";
  * (ni React ni Supabase) : testable sous Node, et la page ne fait qu'afficher.
  *   - « Argent en retard » : factures à relancer (même règle que la page Relances) ;
  *   - « Aujourd'hui » : agenda du jour, tâches dues aujourd'hui ou en retard, mails non lus ;
+ *   - « Les créateurs attendent » : contenus, factures et stats déposés par les créateurs sans
+ *     suite de l'agence (supabase/functions/_shared/depots.ts, constat W5) ;
  *   - « Demain » : agenda et briefs du lendemain.
  * Les lignes d'anticipation (« Cette semaine », « À anticiper », et ce que « Demain » ne
  * couvrait pas) sont construites à part par lib/anticipation.ts : buildToday ne change pas.
@@ -31,14 +34,19 @@ export type AujTodo = {
   subtasks?: { done: boolean }[] | null;
   /** Étiquette (« Mail », « AGENCE »…) : aide à choisir l'icône de la ligne. */
   tag?: string | null;
+  /** Qui la voit et qui est prévenu à la fin (même règles que la To-do, lib/todoDemande.ts). */
+  source?: string | null;
+  creators?: string[] | null;
+  visible_createur?: boolean | null;
+  pour_createur?: boolean | null;
 };
 export type AujEvent = { id: string; date: string | null; day: number | null; time: string | null; title: string | null; type: string | null; who: string | null };
 export type AujBrief = { id: string; brand: string | null; creator: string | null; due: string | null; status: string | null; deliverables: string | null };
 /** Mails non lus par boîte (coup d'œil Gmail) ; null = inconnu (Google non relié, erreur). */
 export type MailUnread = { box: string; label: string; count: number }[] | null;
 
-export type ItemKind = "relance" | "event" | "todo" | "brief" | "mails" | "echeance" | "contrat" | "collab" | "stats";
-export type SectionId = "argent" | "today" | "tomorrow" | "collabs" | "week" | "later";
+export type ItemKind = "relance" | "event" | "todo" | "brief" | "mails" | "echeance" | "contrat" | "collab" | "stats" | "depot";
+export type SectionId = "argent" | "today" | "createurs" | "tomorrow" | "collabs" | "week" | "later";
 
 /** Échéance de contrat suivie (blob agence `contractDeadlines`, page Échéances). */
 export type AujDeadline = { id?: string; creator: string; type: string; start: string; months: number; note?: string };
@@ -86,6 +94,8 @@ export type TodayItem = {
   collab?: AujCollab & { stepLabel: string; staleDays: number };
   /** Créateurs sans stats du mois. */
   staleCreators?: string[];
+  /** Dépôts d'un créateur qui attendent l'agence (contenu, facture, stats). */
+  depot?: GroupeDepots;
 };
 
 export type DoneEntry = { id: string; label: string; kind: "relance" | "todo" | "fait" };
@@ -93,7 +103,7 @@ export type DoneEntry = { id: string; label: string; kind: "relance" | "todo" | 
 export type TodaySection = { id: SectionId; title: string; right: string; items: TodayItem[] };
 
 /** Minutes par type d'action : des ordres de grandeur, volontairement simples. */
-export const MINUTES: Record<Exclude<ItemKind, "mails" | "stats">, number> = { relance: 2, todo: 3, event: 2, brief: 3, echeance: 2, contrat: 5, collab: 3 };
+export const MINUTES: Record<Exclude<ItemKind, "mails" | "stats">, number> = { relance: 2, todo: 3, event: 2, brief: 3, echeance: 2, contrat: 5, collab: 3, depot: 3 };
 /** Tri des mails : environ 30 s par mail non lu, entre 2 et 20 min. */
 export const mailMinutes = (n: number) => Math.min(20, Math.max(2, Math.ceil(n / 2)));
 
@@ -416,6 +426,60 @@ export function buildToday(input: TodayInput): TodayResult {
   return { items, done };
 }
 
+// ── « Les créateurs attendent » (constat W5) ─────────────────────────────────
+const DEPOT_LABEL: Record<GroupeDepots["type"], string> = { contenu: "Contenu", facture: "Facture", stats: "Stats" };
+/** Au-delà de N jours sans suite, l'attente se voit (orange) : même seuil que le contrôle des données. */
+export const DEPOT_JOURS_ALERTE = 3;
+
+/** Une ligne par groupe de dépôts : « Contenu · Marque X », créateur et nombre de fichiers, attente. */
+export function depotItems(groups: readonly GroupeDepots[], snoozed: SnoozeMap, now: Date): TodayItem[] {
+  const today = localISO(now);
+  const out: TodayItem[] = [];
+  for (const g of groups) {
+    const id = `depot:${g.cle}`;
+    if (isSnoozed(snoozed, id, today)) continue;
+    const jours = joursDepuis(localISO(new Date(g.depuis)), today);
+    const n = g.ids.length;
+    out.push({
+      id,
+      kind: "depot",
+      section: "createurs",
+      title: g.brand ? `${DEPOT_LABEL[g.type]} · ${g.brand}` : `${DEPOT_LABEL[g.type]} envoyé${g.type === "facture" ? "e" : g.type === "stats" ? "es" : ""}`,
+      sub: [titleCase(g.creator) || "Créateur", `${n} fichier${n > 1 ? "s" : ""}`].join(" · "),
+      meta: jours > 0 ? `${jours} j` : "Aujourd'hui",
+      metaSub: jours > 0 ? "d'attente" : undefined,
+      metaTone: jours >= DEPOT_JOURS_ALERTE ? "wait" : undefined,
+      metaMainTone: jours >= DEPOT_JOURS_ALERTE ? "wait" : undefined,
+      tone: "info",
+      verb: "Voir",
+      minutes: MINUTES.depot,
+      depot: g,
+      lateDays: jours,
+    });
+  }
+  return out;
+}
+
+/** Explication d'un dépôt (panneau de droite) : ce que le créateur a envoyé, quoi en faire. */
+export function explainDepot(g: Pick<GroupeDepots, "type" | "creator" | "brand">): { meaning: string; action: string } {
+  const prenom = (titleCase(g.creator).split(" ")[0] ?? "") || "Le créateur";
+  const marque = g.brand || "la marque";
+  if (g.type === "contenu")
+    return {
+      meaning: `${prenom} a envoyé son contenu${g.brand ? ` pour ${g.brand}` : ""} depuis son espace.`,
+      action: `Regarde-le, envoie-le à ${marque}, puis passe la collab à « Validation marque ».`,
+    };
+  if (g.type === "facture")
+    return {
+      meaning: `${prenom} a déposé sa facture depuis son espace.`,
+      action: "Vérifie-la, puis verse sa part dans Reversements.",
+    };
+  return {
+    meaning: `${prenom} a envoyé des captures de ses stats.`,
+    action: "Reporte les chiffres dans son media kit ou dans le bilan de la collab.",
+  };
+}
+
 /** « 23 oct. » (format commun de dates.ts). */
 export function dayMonth(iso: string): string {
   return fmtDay(iso);
@@ -430,7 +494,7 @@ export const WEEK_FROM = 2;
 export const WEEK_TO = 7;
 export const LATER_TO = 30;
 
-const TALENT_KINDS: ItemKind[] = ["event", "todo", "brief", "contrat", "collab", "stats"];
+const TALENT_KINDS: ItemKind[] = ["event", "todo", "brief", "contrat", "collab", "stats", "depot"];
 
 /** Filtre « Tout / Argent / Talents / Boîte ». */
 export function filterItems(items: TodayItem[], f: TodayFilter): TodayItem[] {
@@ -446,6 +510,7 @@ export function sectionsOf(items: TodayItem[], now: Date): TodaySection[] {
   const pick = (id: SectionId) => items.filter((i) => i.section === id);
   const argent = pick("argent");
   const today = pick("today");
+  const waiting = pick("createurs");
   const next = pick("tomorrow");
   // Collabs bloquées : leur propre section, comptée (même chiffre que la page Collabs et le
   // connecteur), au lieu d'être mêlées aux autres lignes de la semaine (audit du 2 nov., n° 9).
@@ -456,6 +521,7 @@ export function sectionsOf(items: TodayItem[], now: Date): TodaySection[] {
   const out: TodaySection[] = [];
   if (argent.length) out.push({ id: "argent", title: "Argent en retard", right: formatEuro(argent.reduce((s, i) => s + (i.amount ?? 0), 0)), items: argent });
   if (today.length) out.push({ id: "today", title: "Aujourd'hui", right: String(today.length), items: today });
+  if (waiting.length) out.push({ id: "createurs", title: "Les créateurs attendent", right: String(waiting.length), items: waiting });
   if (next.length) out.push({ id: "tomorrow", title: "Demain", right: shortDayLabel(tomorrow), items: next });
   if (stuck.length) out.push({ id: "collabs", title: "Collabs à faire avancer", right: `${stuck.length} bloquée${stuck.length > 1 ? "s" : ""}`, items: stuck });
   if (week.length) out.push({ id: "week", title: "Cette semaine", right: rangeLabel(addDaysISO(d0, WEEK_FROM), addDaysISO(d0, WEEK_TO)), items: week });
@@ -479,8 +545,8 @@ export function summaryLine(items: TodayItem[]): string {
   return `${n} action${n > 1 ? "s" : ""} à traiter${parts.length > 1 ? ` (${parts.join(", ")})` : ""} · environ\u00a0${dur}`;
 }
 
-const KIND_SINGULAR: Record<ItemKind, string> = { relance: "relance", event: "rendez-vous", todo: "tâche", brief: "brief", mails: "boîte mail", echeance: "échéance", contrat: "contrat", collab: "collab", stats: "stats" };
-const KIND_PLURAL: Record<ItemKind, string> = { relance: "relances", event: "rendez-vous", todo: "tâches", brief: "briefs", mails: "boîtes mail", echeance: "échéances", contrat: "contrats", collab: "collabs", stats: "stats" };
+const KIND_SINGULAR: Record<ItemKind, string> = { relance: "relance", event: "rendez-vous", todo: "tâche", brief: "brief", mails: "boîte mail", echeance: "échéance", contrat: "contrat", collab: "collab", stats: "stats", depot: "dépôt" };
+const KIND_PLURAL: Record<ItemKind, string> = { relance: "relances", event: "rendez-vous", todo: "tâches", brief: "briefs", mails: "boîtes mail", echeance: "échéances", contrat: "contrats", collab: "collabs", stats: "stats", depot: "dépôts" };
 
 // ── Genre d'une ligne : l'icône dit de quoi on parle (24 nov. 2026) ─────────
 /** Genre affiché par l'icône de la ligne. Une tâche reprend le genre de ce qu'elle concerne. */
@@ -508,8 +574,10 @@ export function todoGenre(text: string | null | undefined, tag?: string | null):
 }
 
 /** Genre de n'importe quelle ligne d'Aujourd'hui. */
-export function genreOf(it: Pick<TodayItem, "kind" | "title" | "todo">): ItemGenre {
+export function genreOf(it: Pick<TodayItem, "kind" | "title" | "todo" | "depot">): ItemGenre {
   switch (it.kind) {
+    case "depot":
+      return it.depot?.type === "facture" ? "facture" : it.depot?.type === "stats" ? "stats" : "collab";
     case "relance":
     case "echeance":
       return "facture";
@@ -542,7 +610,7 @@ export function tileTone(it: Pick<TodayItem, "kind">): StatusTone | undefined {
  */
 export function needsAction(it: Pick<TodayItem, "kind" | "section" | "lateDays" | "daysLeft">): boolean {
   if (it.kind === "echeance") return false;
-  if (it.section === "argent" || it.section === "today" || it.section === "collabs") return true;
+  if (it.section === "argent" || it.section === "today" || it.section === "createurs" || it.section === "collabs") return true;
   if (it.kind === "collab") return true;
   return (it.lateDays ?? 0) > 0 || (it.daysLeft ?? 0) < 0;
 }

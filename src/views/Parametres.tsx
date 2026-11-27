@@ -2,6 +2,7 @@ import { fmtDay, fmtDayTime } from "@/lib/dates";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SIGNATURE_KEY, scribble, validSig, type SignatureData } from "@/lib/agencySignature";
 import { SignaturePad } from "@/components/signature-pad";
+import { PasswordSettings } from "@/components/password-form";
 import {
   BellRing, Smartphone, Sunrise, History, LogOut, Palette, MessageCircle, Bot, Copy, Unplug, PenLine, Sparkles,
   Search, ChevronRight, ChevronDown, X, KeyRound, type LucideIcon,
@@ -153,9 +154,9 @@ const ENTRIES: Entry[] = [
   },
   {
     id: "compte", label: "Compte", group: "Compte", icon: LogOut, tile: TONE_SOLID.closed,
-    hint: "Se déconnecter de cet appareil.",
-    keywords: ["déconnexion"],
-    sections: [{ title: "Compte", keywords: ["déconnecter", "déconnexion", "sortir"] }],
+    hint: "Changer ton mot de passe, ou te déconnecter de cet appareil.",
+    keywords: ["déconnexion", "mot de passe"],
+    sections: [{ title: "Compte", keywords: ["déconnecter", "déconnexion", "sortir", "mot de passe", "changer"] }],
   },
 ];
 const ENTRY_IDS = ENTRIES.map((e) => e.id);
@@ -1624,7 +1625,7 @@ export function Parametres() {
             </Card>
             <Card title="Activité des créateurs" hint="Quand un créateur ajoute une tâche, une idée ou un évènement depuis son espace.">
               <PrefRow label="Notification immédiate sur le téléphone" hint="Un push dès qu'un créateur ajoute quelque chose." checked={on(prefs.pushCreatorActivity)} onChange={(v) => setPref("pushCreatorActivity", v)} />
-              <PrefRow label="Aussi quand il écrit sur une tâche ou une idée" hint="Sous-tâche, description, message d'avancement : un push par tâche toutes les 10 minutes au plus." checked={on(prefs.pushCreatorUpdates)} onChange={(v) => setPref("pushCreatorUpdates", v)} />
+              <PrefRow label="Aussi quand il écrit sur une tâche ou une idée" hint="Sous-tâche, description, message d'avancement, tâche demandée terminée ou tâche supprimée : un push par tâche toutes les 10 minutes au plus." checked={on(prefs.pushCreatorUpdates)} onChange={(v) => setPref("pushCreatorUpdates", v)} />
               <PrefRow label="Afficher dans la cloche" hint="L'activité des 7 derniers jours en haut des notifications de l'app." checked={on(prefs.bellCreatorActivity)} onChange={(v) => setPref("bellCreatorActivity", v)} />
             </Card>
             <Card title="Emails" hint="Quand un email arrive sur la boîte de l'agence (Gmail connecté).">
@@ -1662,6 +1663,9 @@ export function Parametres() {
       case "compte":
         return (
           <Card anchor="Compte">
+            <div className="mb-4 border-b border-border pb-4">
+              <PasswordSettings />
+            </div>
             <button
               type="button"
               onClick={() => supabase.auth.signOut()}

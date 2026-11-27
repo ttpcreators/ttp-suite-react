@@ -1,5 +1,9 @@
 -- ════════════════════════════════════════════════════════════════════════════
 -- Titre Supabase : « Espace créateur · futures collabs (onglet En discussion) »
+-- NE PLUS RELANCER APRÈS LA VAGUE 1 (SQL du 27/11) : creator_discussions est remplacée par
+-- 2026-11-27-discussions-createur.sql. Relancé, ce fichier la remettrait dans sa version du
+-- 23/10, sans aucune erreur : le créateur reverrait les marques seulement repérées, les
+-- pistes perdues et les discussions éteintes depuis plus de 60 jours.
 -- 2026-10-23 · Missions › « En discussion » : la créatrice voit les futures collabs qui la
 -- concernent (table `prospects`, réservée à l'agence). On n'ouvre PAS la table : une
 -- fonction `security definer` ne renvoie que des colonnes non sensibles (marque,
@@ -8,7 +12,8 @@
 --   • créatrice : toujours elle-même (my_creator(), le paramètre est ignoré) ;
 --   • agence : la créatrice demandée (aperçu « Voir son espace ») ;
 --   • sans compte : rien (exécution retirée à anon).
--- Relançable sans risque. L'app marche avant ce SQL (onglet vide, sans erreur).
+-- Était relançable sans risque avant la vague 1 (voir plus haut). L'app marche avant ce SQL
+-- (onglet vide, sans erreur).
 -- ════════════════════════════════════════════════════════════════════════════
 
 create or replace function public.creator_discussions(p_creator text default null)

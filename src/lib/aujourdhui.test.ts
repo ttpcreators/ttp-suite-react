@@ -3,6 +3,8 @@ import {
   buildToday,
   commissionRateFor,
   creatorShare,
+  depotItems,
+  explainDepot,
   filterItems,
   firstActionable,
   genreOf,
@@ -282,5 +284,47 @@ describe("ligne d'Aujourd'hui : retard écrit une fois, icône par genre (24 nov
     expect(needsAction({ kind: "contrat", section: "week", daysLeft: -3 })).toBe(true);
     expect(firstActionable([echeance, tacheDemain, tacheDuJour])).toBe(tacheDuJour);
     expect(firstActionable([echeance, tacheDemain])).toBeNull();
+  });
+});
+
+describe("« Les créateurs attendent » (constat W5)", () => {
+  const groupe = {
+    cle: "contenu|c1|creatrice a",
+    type: "contenu" as const,
+    creator: "CRÉATRICE A",
+    collabId: "c1",
+    brand: "Marque X",
+    ids: ["d1", "d2"],
+    noms: ["Contenu 1", "Contenu 2"],
+    depuis: new Date(2026, 9, 16, 10, 0).toISOString(),
+    dernier: new Date(2026, 9, 19, 10, 0).toISOString(),
+  };
+  it("une ligne par groupe : marque, créateur, nombre de fichiers, attente en orange dès 3 jours", () => {
+    const [it] = depotItems([groupe], {}, NOW);
+    expect(it).toMatchObject({ id: "depot:contenu|c1|creatrice a", kind: "depot", section: "createurs", title: "Contenu · Marque X", sub: "Créatrice A · 2 fichiers", meta: "4 j", metaTone: "wait", verb: "Voir" });
+    expect(genreOf(it)).toBe("collab");
+    expect(needsAction(it)).toBe(true);
+  });
+  it("sans collab : « Facture envoyée » ; déposé aujourd'hui : pas d'alerte", () => {
+    const [it] = depotItems([{ ...groupe, type: "facture", collabId: null, brand: null, ids: ["d3"], depuis: NOW.toISOString() }], {}, NOW);
+    expect(it.title).toBe("Facture envoyée");
+    expect(it.sub).toBe("Créatrice A · 1 fichier");
+    expect(it.meta).toBe("Aujourd'hui");
+    expect(it.metaTone).toBeUndefined();
+    expect(genreOf(it)).toBe("facture");
+  });
+  it("reportée à demain : cachée", () => {
+    expect(depotItems([groupe], { "depot:contenu|c1|creatrice a": "2026-10-21" }, NOW)).toEqual([]);
+  });
+  it("section à part, après Aujourd'hui, et comptée dans le filtre Talents", () => {
+    const items = depotItems([groupe], {}, NOW);
+    expect(sectionsOf(items, NOW).map((s) => [s.id, s.title, s.right])).toEqual([["createurs", "Les créateurs attendent", "1"]]);
+    expect(filterItems(items, "talents")).toHaveLength(1);
+    expect(filterItems(items, "argent")).toHaveLength(0);
+  });
+  it("explication : quoi faire de chaque dépôt", () => {
+    expect(explainDepot(groupe).action).toContain("Validation marque");
+    expect(explainDepot({ ...groupe, type: "facture" }).action).toContain("Reversements");
+    expect(explainDepot({ ...groupe, type: "stats", brand: null }).meaning).toContain("Créatrice");
   });
 });
