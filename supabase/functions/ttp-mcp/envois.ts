@@ -19,6 +19,7 @@ import { lireEntetesBrouillon, parseMailBox, sendDraft, type BrouillonLu, type M
 import { verifierBrouillon } from "./kitGarde.ts";
 import { adressesInvalides, suiviApresEnvoi } from "./prospection.ts";
 import { instantParis } from "../_shared/rdv.ts";
+import { modifieApres } from "../_shared/verrouAgent.ts";
 import { colonneAuteurAbsente, idDejaJournalise, lignesEnvoi, nomAuteur, sansAuteur, sansIdGmail, type Auteur } from "../_shared/auteurEnvoi.ts";
 import {
   MAX_PROGRAMMES, REGLES, adresses, cleSociete, coupeCircuit, dansLaFenetre, jourParis, ligneFile, planifier, quandCourt, raisonDeBloquer,
@@ -200,6 +201,8 @@ const programmerEnvoi: AdminTool = {
       boite: String(box), brouillon: b.id, destinataires: b.to.slice(0, 500), objet: b.subject.slice(0, 300), reponse: b.reponse,
       createur: str(a.createur, 80) || null, demarrer_sequence: a.demarrer_sequence === true, lot, statut: "en_attente",
       prevu_a: heures[i].toISOString(), cree_par: ctx.userId,
+      // Programmé par un agent (verrou.ts) : la date de validation, revérifiée juste avant l'envoi.
+      ...(ctx.agent && ctx.validations?.[b.id] ? { valide_le: ctx.validations[b.id] } : {}),
     }));
     const { error } = await sb.from("envoi_file").insert(lignes);
     if (error) return fail(`Rien n'a été programmé : ${error.message}`);
@@ -356,7 +359,7 @@ async function etatCoupeCircuit(sb: SupabaseClient): Promise<string | null> {
   return coupeCircuit(partis.length, rebonds.size);
 }
 
-type Ligne = { id: string; boite: string; brouillon: string; destinataires: string; objet: string; createur: string | null; demarrer_sequence: boolean; essais: number; prevu_a: string; cree_par?: string | null };
+type Ligne = { id: string; boite: string; brouillon: string; destinataires: string; objet: string; createur: string | null; demarrer_sequence: boolean; essais: number; prevu_a: string; cree_par?: string | null; valide_le?: string | null };
 
 /** Un envoi de la file : vérifications, envoi, suivi. Renvoie ce qui s'est passé. */
 async function envoyerUne(sb: SupabaseClient, row: Ligne): Promise<string> {
@@ -371,6 +374,8 @@ async function envoyerUne(sb: SupabaseClient, row: Ligne): Promise<string> {
     // Dernières vérifications : adresses du brouillon tel qu'il est maintenant (Gianni a pu le retoucher).
     const b = await lireEntetesBrouillon(sb, box, row.brouillon);
     if (!b.claude) return await fin("annule", { erreur: "le brouillon n'est plus marqué « préparé par Claude »" });
+    // Programmé par un agent : un brouillon changé depuis sa validation dans la page Agents ne part pas.
+    if (row.valide_le && modifieApres(b.date, row.valide_le)) return await fin("annule", { erreur: "brouillon modifié après sa validation dans la page Agents" });
     const dest = adresses(`${b.to}, ${b.cc}`);
     const raison = await bloquant(sb, dest, b.reponse, true);
     if (raison) return await fin("annule", { erreur: raison.slice(0, 300) });
@@ -404,7 +409,8 @@ export async function traiterFile(sb: SupabaseClient): Promise<Json> {
   if (!dansLaFenetre(now)) return { ok: true, fenetre: false };
   const pause = await etatCoupeCircuit(sb);
   if (pause) return { ok: true, pause };
-  const { data, error } = await sb.from("envoi_file").select("id, boite, brouillon, destinataires, objet, createur, demarrer_sequence, essais, prevu_a, cree_par")
+  // « * » : la colonne valide_le n'existe qu'après le SQL 2026-11-27-securite-alfred.
+  const { data, error } = await sb.from("envoi_file").select("*")
     .eq("statut", "en_attente").lte("prevu_a", now.toISOString()).order("prevu_a", { ascending: true }).limit(50);
   if (error) return { ok: false, raison: error.message };
   const dus = (data as Ligne[] | null) ?? [];

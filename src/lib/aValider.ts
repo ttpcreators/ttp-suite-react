@@ -4,7 +4,9 @@
  * - Ce que « Valider » déclenche pour chaque proposition (inchangé depuis le 17/11/2026) :
  *   un mail d'Alfred passe en « valide » (Alfred l'envoie dans la minute), tout autre message
  *   passe en « envoye » (Marc l'a copié et envoyé lui même). Nouveau type « avancer_collab » :
- *   l'app fait avancer la collab, puis la proposition passe en « envoye ».
+ *   l'app fait avancer la collab, puis la proposition passe en « envoye ». Un appel d'outil
+ *   proposé par un agent (colonne `outil`, verrou des agents du connecteur) passe en « valide » :
+ *   l'agent le fait ensuite, et le serveur le marque « envoye ».
  * - Ce que « Modifier » permet : le texte en ligne pour un message à copier (WhatsApp,
  *   Instagram, LinkedIn) ; un brouillon Gmail ou Spark s'ouvre là où il vit (son circuit
  *   d'envoi ne change pas) ; le reste ne se modifie pas.
@@ -21,6 +23,8 @@ export type PropositionLite = {
   contenu: string | null;
   lien_spark: string | null;
   agent_id?: string | null;
+  /** Appel d'outil exact proposé par un agent (SQL 2026-11-27-securite-alfred). */
+  outil?: unknown;
 };
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -58,6 +62,8 @@ export function typeAffiche(a: Pick<PropositionLite, "type" | "lien_spark">): st
 export type GesteValider =
   /** Mail d'Alfred : statut « valide », Alfred l'envoie dans la minute. */
   | "alfred_envoie"
+  /** Appel d'outil proposé par un agent : statut « valide », l'agent le fait. */
+  | "alfred_fait"
   /** L'app fait avancer la collab, puis statut « envoye ». */
   | "avancer_collab"
   /** Message à copier (WhatsApp, DM, LinkedIn) : copié, statut « envoye ». */
@@ -69,6 +75,7 @@ const A_COPIER = ["whatsapp", "instagram", "linkedin"];
 
 export function gesteValider(a: PropositionLite, alfredId: string | null): GesteValider {
   if (avanceCollabOf(a)) return "avancer_collab";
+  if (a.outil != null) return "alfred_fait";
   if (a.type === "brouillon_mail" && !!alfredId && a.agent_id === alfredId) return "alfred_envoie";
   if (A_COPIER.includes(a.type) && !!a.contenu?.trim()) return "copier_envoye";
   return "marquer_envoye";
@@ -76,7 +83,7 @@ export function gesteValider(a: PropositionLite, alfredId: string | null): Geste
 
 /** Statut écrit en base pour ce geste (avancer_collab : après l'avance réussie). */
 export function statutApresValidation(g: GesteValider): "valide" | "envoye" {
-  return g === "alfred_envoie" ? "valide" : "envoye";
+  return g === "alfred_envoie" || g === "alfred_fait" ? "valide" : "envoye";
 }
 
 export type ModeModifier = "texte" | "lien" | null;

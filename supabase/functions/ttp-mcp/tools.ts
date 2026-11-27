@@ -9,6 +9,8 @@
 // Prospection autonome (autonomie.ts) : historique des DM, profils Instagram et agence,
 // scan de la Base créateurs, e-mails pro des marques (Hunter, FullEnrich).
 // Jamais exposés : coffre des mots de passe, IBAN, jetons de connexion.
+// Connexion d'un agent autonome (Alfred) : envois et actions irréversibles validés dans l'app
+// avant de partir (verrou.ts, appelé par callTool).
 // ============================================================================
 
 import { OUTILS_EQUIPE, doublonEquipe, ligneActionEquipe, type LigneMail } from "../_shared/equipeClaude.ts";
@@ -25,6 +27,8 @@ import { findSendAs, type SendAs } from "../_shared/sendAs.ts";
 import { ADMIN_TOOLS } from "./admin.ts";
 import { AUTONOMIE_TOOLS } from "./autonomie.ts";
 import { ENVOI_TOOLS, bloquant } from "./envois.ts";
+import { verrouAgent } from "./verrou.ts";
+import { canonique, lireOutil, memeAppel, problemeOutilPropose, texteOutil, type OutilPropose } from "../_shared/verrouAgent.ts";
 import { adressesDe, adressesInvalides } from "./prospection.ts";
 import { addressList, mailHtml, sparkLink } from "../_shared/mcpAdmin.ts";
 import { guessEventKind } from "../_shared/eventKind.ts";
@@ -777,7 +781,8 @@ const aValider: Tool = {
   run: async (sb, _c, a) => {
     const db = sb.schema("agent");
     const [{ data, error }, { data: ags }] = await Promise.all([
-      db.from("actions").select("id, type, cible, contexte, contenu, cree_le, agent_id, statut").in("statut", ["a_valider", "valide"]).order("cree_le", { ascending: false }).limit(200),
+      // « * » : la colonne `outil` n'existe qu'après le SQL 2026-11-27-securite-alfred.
+      db.from("actions").select("*").in("statut", ["a_valider", "valide"]).order("cree_le", { ascending: false }).limit(200),
       db.from("agents").select("id, nom, slug"),
     ]);
     if (error) return fail(`Lecture de la file impossible : ${error.message}`);
@@ -789,7 +794,12 @@ const aValider: Tool = {
     const valides = rows.filter((r) => r.statut === "valide");
     const live = rows.filter((r) => r.statut !== "valide" && !isStale(r));
     const stale = rows.filter((r) => r.statut !== "valide" && isStale(r));
-    const line = (r: Json) => `- [${r.type}] ${r.cible ?? ""} · ${nameOf(r)} · ${frDay(String(r.cree_le))} [proposition ${r.id}]${r.contexte ? `\n  Contexte : ${String(r.contexte).slice(0, 300)}` : ""}${r.contenu ? `\n  Message : ${String(r.contenu).slice(0, 500)}` : ""}`;
+    // Un appel d'outil validé (verrou des agents) : l'appeler avec exactement ces arguments ; le serveur marque la proposition envoyée.
+    const outilDe = (r: Json) => {
+      const p = lireOutil(r.outil);
+      return p ? `\n  Outil à appeler${r.statut === "valide" ? " maintenant" : " après validation"}, exactement : ${p.nom} ${canonique(p.arguments)}` : "";
+    };
+    const line = (r: Json) => `- [${r.type}] ${r.cible ?? ""} · ${nameOf(r)} · ${frDay(String(r.cree_le))} [proposition ${r.id}]${r.contexte ? `\n  Contexte : ${String(r.contexte).slice(0, 300)}` : ""}${r.contenu ? `\n  Message : ${String(r.contenu).slice(0, 500)}` : ""}${outilDe(r)}`;
     // Les corrections de Marc (journal `marc_modifie`, écrit par la page Agents quand il modifie
     // un texte avant de le valider) : l'agent les relit pour apprendre.
     let modifs = "";
@@ -829,7 +839,12 @@ const ecarterProposition: Tool = {
     const { data, error } = await db.from("actions").update({ statut, traite_le: new Date().toISOString() }).eq("id", id).in("statut", ["a_valider", "valide"]).select("type, cible");
     if (error) return fail(`Proposition non mise à jour : ${error.message}`);
     const row = (data as Json[] | null)?.[0];
-    if (!row) return fail("Proposition introuvable ou déjà traitée.");
+    if (!row) {
+      // Un appel d'outil validé est marqué envoyé par le serveur dès qu'il a réussi (verrou des agents).
+      const { data: deja } = await db.from("actions").select("statut, type, cible").eq("id", id).maybeSingle();
+      if (statut === "envoye" && (deja as Json | null)?.statut === "envoye") return ok(`Proposition déjà marquée envoyée : ${(deja as Json).type} · ${(deja as Json).cible ?? ""}.`);
+      return fail("Proposition introuvable ou déjà traitée.");
+    }
     await db.from("journal").insert({ action: statut === "envoye" ? "marc_envoye" : "marc_ecarte", detail: `${row.type} · ${row.cible ?? ""} (via Claude)` }).then(() => {}, () => {});
     return ok(`Proposition ${statut === "envoye" ? "marquée envoyée" : "écartée"} : ${row.type} · ${row.cible ?? ""}. Elle disparaît de la liste de l'app.`);
   },
@@ -2356,7 +2371,7 @@ const ACTION_TYPES = ["whatsapp", "instagram", "linkedin", "brouillon_mail", "al
 const proposerAction: Tool = {
   name: "proposer_action",
   title: "Proposer une action à valider",
-  description: "Dépose une proposition dans la file « À valider » de l'app (section Agents) : message WhatsApp, DM Instagram, message LinkedIn, alerte, ou mail (préférer creer_brouillon_mail pour un mail). Marc la copie, l'ouvre et l'envoie lui-même, ou l'écarte. Type « avancer_collab » : proposer de passer une collab à une étape (donner « collab », l'id de l'outil collabs, et « etape », 1 à 11, plus loin que l'étape actuelle ; « contenu » = la preuve, par exemple la phrase du mail de la marque) ; quand Marc clique Valider, l'app fait avancer la collab elle même, rien d'autre ne part. Une même collab à la même étape n'est proposée qu'une fois.",
+  description: "Dépose une proposition dans la file « À valider » de l'app (section Agents) : message WhatsApp, DM Instagram, message LinkedIn, alerte, ou mail (préférer creer_brouillon_mail pour un mail). Marc la copie, l'ouvre et l'envoie lui-même, ou l'écarte. Type « avancer_collab » : proposer de passer une collab à une étape (donner « collab », l'id de l'outil collabs, et « etape », 1 à 11, plus loin que l'étape actuelle ; « contenu » = la preuve, par exemple la phrase du mail de la marque) ; quand Marc clique Valider, l'app fait avancer la collab elle même, rien d'autre ne part. Une même collab à la même étape n'est proposée qu'une fois. `outil` (connexion d'un agent dont le serveur exige une validation : le message de refus donne l'appel exact) : { nom, arguments } d'un outil à valider ; la proposition montre à Marc cet appel exact, et après sa validation dans la page Agents l'agent rappelle l'outil avec exactement les mêmes arguments, une seule fois.",
   write: true,
   founder: true,
   inputSchema: {
@@ -2370,6 +2385,13 @@ const proposerAction: Tool = {
       lien: { type: "string", description: "Lien utile (profil, fil, document) facultatif" },
       collab: { type: "string", description: "avancer_collab : id de la collab (outil collabs)" },
       etape: { type: "number", description: "avancer_collab : étape à atteindre (5 Validation marque, 6 Publication, 7 Stats à 7 jours, 9 Paiement marque reçu…)" },
+      outil: {
+        type: "object",
+        description: "Appel d'outil à faire valider (verrou des agents) : { \"nom\": \"noter_reversement\", \"arguments\": { … } }, tel que donné par le message de refus. Type « alerte » d'office ; contenu = pourquoi, avec la preuve.",
+        properties: { nom: { type: "string" }, arguments: { type: "object" } },
+        required: ["nom", "arguments"],
+        additionalProperties: false,
+      },
     },
     required: ["agent", "type", "contenu"],
     additionalProperties: false,
@@ -2395,8 +2417,32 @@ const proposerAction: Tool = {
       cible = `${col.brand} × ${titleCase(col.creator)}`.slice(0, 200);
       contexte = `Étape ${col.step} → ${etape} « ${COLLAB_STEPS[etape - 1]} »${contexte ? ` · ${contexte}` : ""}`.slice(0, 1000);
     }
-    const row = { type, cible, contexte, contenu: str(a.contenu, 6000), lien_spark: lien, statut: "a_valider", agent_id: ag?.id ?? null };
+    // Appel d'outil à valider (verrou des agents) : le texte que Marc lit est écrit ici, d'après
+    // l'appel exact, jamais par l'agent ; l'outil et ses paramètres ne changent plus ensuite (SQL).
+    let outil: OutilPropose | null = null;
+    let contenu = str(a.contenu, 6000);
+    if (a.outil !== undefined) {
+      const p = lireOutil(a.outil);
+      const vise = p ? TOOLS.find((t) => t.name === p.nom) : undefined;
+      const props = vise ? Object.keys((vise.inputSchema.properties as Json | undefined) ?? {}) : null;
+      const pb = problemeOutilPropose(p, props);
+      if (pb || !p || !vise) return fail(`Proposition non déposée : ${pb ?? "outil introuvable"}.`);
+      const { data: ouvertes } = await sb.schema("agent").from("actions").select("id, outil").in("statut", ["a_valider", "valide"]).not("outil", "is", null).limit(200);
+      const deja = ((ouvertes as Json[] | null) ?? []).find((r) => {
+        const q = lireOutil(r.outil);
+        return !!q && memeAppel(q, p.nom, p.arguments);
+      });
+      if (deja) return fail(`Déjà proposé (proposition ${deja.id}) : Marc ne l'a pas encore validé, ou tu peux l'appeler s'il l'a validé (a_valider).`);
+      outil = p;
+      type = "alerte";
+      lien = null; // jamais lu comme une autre action (avancer une collab) par la page Agents
+      contenu = texteOutil(p, vise.title, str(a.contenu, 2000));
+    }
+    const row = { type, cible, contexte, contenu, lien_spark: lien, statut: "a_valider", agent_id: ag?.id ?? null, ...(outil ? { outil } : {}) };
     let { data, error } = await sb.schema("agent").from("actions").insert(row).select("id").single();
+    if (error && outil && (error.code === "42703" || error.code === "PGRST204" || /outil/i.test(error.message))) {
+      return fail("Proposition non déposée : l'appel d'outil à valider demande le SQL 2026-11-27-securite-alfred, pas encore lancé. Dépose une alerte simple pour que Marc le fasse lui même.");
+    }
     // Avant le SQL du 23/11/2026, la base refuse le type « avancer_collab » : déposée en alerte,
     // l'app la reconnaît à son lien et fait avancer la collab de la même façon.
     if (error && type === "avancer_collab" && (error.code === "23514" || /check/i.test(error.message))) {
@@ -2405,7 +2451,7 @@ const proposerAction: Tool = {
     }
     if (error) return fail(`Proposition non déposée : ${error.message}`);
     await agentJournal(sb, ag?.id ?? null, "proposition", `${type} · ${cible ?? ""}`.slice(0, 160));
-    return ok(`Déposé dans « À valider » (${type === "alerte" && lien?.includes("avancer=1") ? "avancer_collab" : type}${cible ? ` pour ${cible.slice(0, 120)}` : ""}) [proposition ${(data as Json)?.id}]. Marc le verra dans l'app, section Agents, et dans la liste de 17 h.`);
+    return ok(`Déposé dans « À valider » (${outil ? `appel ${outil.nom}` : type === "alerte" && lien?.includes("avancer=1") ? "avancer_collab" : type}${cible ? ` pour ${cible.slice(0, 120)}` : ""}) [proposition ${(data as Json)?.id}]. Marc le verra dans l'app, section Agents, et dans la liste de 17 h.${outil ? " Après sa validation, rappelle l'outil avec exactement les mêmes arguments." : ""}`);
   },
 };
 
@@ -3335,10 +3381,25 @@ export async function callTool(sb: SupabaseClient, ctx: Ctx, name: string, args:
   if (!t) return fail(`Outil inconnu : ${name}`);
   if (t.founder && !ctx.founder) return fail("Réservé aux fondateurs de l'agence.");
   let res: ToolResult;
+  let apres: ((reussi: boolean) => Promise<void>) | undefined;
   try {
-    res = await t.run(sb, ctx, args ?? {});
+    // Connexion d'un agent autonome (Alfred) : un envoi ou une action irréversible ne part
+    // qu'avec une validation faite dans l'app (verrou.ts). Sans effet sur les autres connexions.
+    const v = await verrouAgent(sb, ctx, name, args ?? {});
+    if (!v.ok) res = fail(v.texte);
+    else {
+      apres = v.apres;
+      res = await t.run(sb, v.validations ? { ...ctx, validations: v.validations } : ctx, args ?? {});
+    }
   } catch (e) {
     res = fail(`Erreur : ${(e as Error).message}`);
+  }
+  if (apres) {
+    try {
+      await apres(!res.isError);
+    } catch {
+      // rien : l'action est faite, la proposition restera « valide » jusqu'à ecarter_proposition
+    }
   }
   // Journal : qui, quoi, quand (Paramètres → Assistants IA), et la raison d'un appel raté
   // (colonne `error`, SQL 2026-11-24-mcp-log-erreur). Le journal ne bloque jamais l'outil.

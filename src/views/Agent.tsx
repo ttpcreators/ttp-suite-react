@@ -43,6 +43,8 @@ type Action = {
   id: string; type: string; cible: string | null; contexte: string | null;
   contenu: string | null; lien_spark: string | null; statut: string;
   cree_le: string; traite_le: string | null; agent_id?: string | null;
+  /** Appel d'outil proposé par un agent (verrou du connecteur, SQL 2026-11-27-securite-alfred). */
+  outil?: unknown;
 };
 type Prospect = {
   id: string; marque: string; signal: string | null; signal_date: string | null;
@@ -389,7 +391,7 @@ export function AgentView() {
       return traiter(cur, "envoye", { ...(opts.silencieux ? { message: null } : { message: r.message }), trace: ["marc_etape", `${a.cible ?? ""} · étape ${av.etape}`] });
     }
     const statut = statutApresValidation(geste);
-    if (statut === "valide") return traiter(cur, "valide", quiet);
+    if (statut === "valide") return traiter(cur, "valide", opts.silencieux || geste !== "alfred_fait" ? quiet : { message: "Validé ✓ Alfred le fait." });
     return traiter(cur, "envoye", opts.silencieux ? quiet : { message: geste === "copier_envoye" ? "Validé ✓ Message copié" : "Validé ✓" });
   };
   const deciderProspect = async (p: Prospect, statut: "valide" | "ecarte") => {

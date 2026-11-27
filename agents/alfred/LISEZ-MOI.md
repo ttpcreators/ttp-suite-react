@@ -126,6 +126,17 @@ Ses consignes de fond et les leçons apprises se règlent aussi dans l'app : Age
 
 Alfred se met à jour tout seul (`mise-a-jour.sh`, launchd `com.ttp.alfred.maj`, chaque nuit à 4 h et au démarrage du Mac) : il regarde sur GitHub la dernière version du dossier `agents/alfred` de `main`, la contrôle, l'installe (sans toucher à `config.env`, `REDACTION.md` ni `etat/`) et prévient Marc sur Telegram. Une nouveauté d'Alfred arrive donc sur le Mac la nuit qui suit sa mise en ligne. Journal : `etat/mises-a-jour.log`. Pour l'appliquer tout de suite : `zsh ~/Code/TTPAlfred/mise-a-jour.sh`.
 
+## Son propre connecteur : validation dans l'app (facultatif)
+
+Par défaut, Alfred passe par le connecteur « TTP Suite » du compte Claude de Marc, comme les sessions de Marc. Avec son propre connecteur, marqué « agent », le serveur exige en plus une validation faite dans l'app (page Agents) avant chaque envoi et chaque action irréversible (`supabase/functions/ttp-mcp/verrou.ts`).
+
+Pour l'activer (une fois, après le SQL `supabase/sql/2026-11-27-securite-alfred.sql` et le déploiement de `ttp-mcp`), étapes 1 à 3 à la suite (entre les deux, un passage d'Alfred n'aurait pas les outils de TTP Suite) :
+1. Dans `~/Code/TTPAlfred/config.env`, ajouter la ligne `ALFRED_CONNECTEUR=ttp_alfred`.
+2. `zsh ~/Code/TTPAlfred/mise-a-jour.sh` : le connecteur `ttp_alfred` est ajouté à `.mcp.json`.
+3. `cd ~/Code/TTPAlfred && claude`, puis `/mcp`, `ttp_alfred`, « Authenticate ». Sur la page TTP Suite qui s'ouvre : « Retour vers » doit dire « une application lancée sur cet ordinateur », cocher **Agent autonome (Alfred)**, puis Autoriser. Quitter avec `/exit`.
+
+Ce qui change ensuite : un « oui » sur Telegram, une délégation « envoi autorisé » ou les relances automatiques ne suffisent plus pour envoyer. Chaque mail part après sa validation dans la page Agents (aussi depuis Telegram, bouton « Ouvrir dans l'app »). Les versements, factures, suppressions, réglages et invitations Google hors de l'agence passent par une proposition validée qui porte l'appel exact. `envoyer_mail` et `envoyer_dm` lui sont fermés. Pour revenir en arrière : retirer la ligne de `config.env` et couper la connexion dans Paramètres › Assistants IA.
+
 ## Si Alfred ne répond plus
 
 - Le Mac doit être allumé et pas en veille. Messages et points ratés sont traités au réveil.

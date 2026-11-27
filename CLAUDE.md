@@ -231,6 +231,10 @@ Plusieurs audits adversariaux menés (identité et privilège, OWASP). Détail d
     (`mcp_log`).
   - Outils dans `tools.ts`. Un outil qui écrit porte `write: true`, ce qui fait demander
     l'accord de l'utilisateur à Claude avant chaque appel.
+  - Connexion marquée « agent autonome » (case de la page d'accord, `mcp_grants.agent`, pour
+    Alfred) : ses envois et ses actions irréversibles exigent une validation faite dans la
+    page Agents (`ttp-mcp/verrou.ts`, règles `_shared/verrouAgent.ts`). Un nouvel outil qui
+    envoie ou agit sans retour possible s'ajoute à `besoinValidation`.
   - Pour un membre, un mail n'est jamais envoyé : brouillon seulement. Les fondateurs ont
     en plus des outils qui envoient vraiment (`envoyer_mail`, `envoyer_brouillon`,
     `envoyer_dm`, depuis le 2026-10-28, `ttp-mcp/admin.ts`). Les outils `founder: true` sont

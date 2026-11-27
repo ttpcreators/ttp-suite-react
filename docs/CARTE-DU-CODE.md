@@ -279,7 +279,7 @@ fonction avec `Authorization: Bearer <CRON_SECRET>`.
 | `daily-digest` | Résumés push (matin, semaine, après-midi, rappel des stats) et notifications d'activité | pg_cron, `push.ts`, `diagnostics.ts` | non | CRON_SECRET ou JWT | `0 6,7 * * *`, `0 6,7 * * 1`, `0 12,13 * * *`, `0 7,8 * * *` |
 | `report-error` | Journal des crashs + push agence (anti-spam) | `errorReport.ts` | non | aucun (crash possible hors connexion) | |
 | `dispos-du-mois` | Liste « Dispos de <mois> » pour les agences (Base créateurs › Listes, lien public), logique `_shared/disposDuMois.ts` et `disposDuMoisDb.ts` | pg_cron | non | CRON_SECRET | `45 6 1 * *` |
-| `ttp-mcp` | Connecteur Claude : serveur MCP (`index.ts`), OAuth (`oauth.ts`), outils (`tools.ts`, accès fondateurs `admin.ts`, prospection autonome `autonomie.ts`), Gmail (`gmail.ts`) | Claude, `connecteur/`, `Parametres.tsx` | non | jetons propres hachés, rôle agence, outils fondateurs filtrés | |
+| `ttp-mcp` | Connecteur Claude : serveur MCP (`index.ts`), OAuth (`oauth.ts`), outils (`tools.ts`, accès fondateurs `admin.ts`, prospection autonome `autonomie.ts`), Gmail (`gmail.ts`), verrou des agents autonomes (`verrou.ts`, règles `_shared/verrouAgent.ts`) | Claude, `connecteur/`, `Parametres.tsx` | non | jetons propres hachés, rôle agence, outils fondateurs filtrés, adresses de retour `_shared/oauthRetour.ts`, connexion « agent » : envois et actions irréversibles validés dans la page Agents | |
 
 Les crons doublés (`6,7`, `12,13`, `7,8`) servent à tomber à la bonne heure de Paris été comme
 hiver : la fonction ne garde que le bon passage. Hors fonction : `ttp-app-state-backup`

@@ -50,6 +50,12 @@ const INSTRUCTIONS =
   "Avant d'écrire à une marque, une agence ou un créateur : lis tout l'historique avec eux (rechercher_mails sur le nom et le domaine, sans limite de date, puis lire_mail ; dm_instagram ; rechercher pour la fiche, les collabs et les devis), et appuie le mail sur ce qui s'est déjà dit (personne, projet, période, tarif, créateur déjà proposé) ; un refus net ou une collab en cours : pas de mail de prospection. " +
   "Envoi des mails de prospection : après le « oui » de l'utilisateur pour une liste précise de brouillons, programmer_envoi (envoi étalé aux heures de bureau, plafonné, revérifié juste avant), jamais envoyer_brouillons_valides pour un lot de prospection ; file_envoi pour suivre, annuler_envoi pour retirer. Un refus, une demande d'arrêt ou un rebond : ne_plus_contacter (après accord).";
 
+// Connexion d'un agent autonome (mcp_grants.agent) : ce qui change pour lui (verrou.ts).
+const INSTRUCTIONS_AGENT =
+  " CONNEXION D'AGENT : tes envois et tes actions irréversibles (envoyer un brouillon, programmer un envoi, versement, facture, suppression, réglages, invitation Google hors de l'agence) " +
+  "ne partent qu'après une validation de Marc dans la page Agents de l'app ; un « oui » écrit ailleurs ne suffit pas. Un mail : creer_brouillon_mail puis proposer_action (brouillon_mail, « brouillon <id> · boîte <boîte> » dans contexte). " +
+  "Une autre action : proposer_action avec `outil` (le message de refus donne l'appel exact), puis le même appel après la validation. envoyer_mail et envoyer_dm te sont fermés.";
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
   const url = new URL(req.url);
@@ -132,7 +138,7 @@ Deno.serve(async (req: Request) => {
           protocolVersion: SUPPORTED.includes(asked) ? asked : "2025-06-18",
           capabilities: { tools: { listChanged: false } },
           serverInfo: { name: "ttp-suite", title: "TTP Suite", version: "1.0.0" },
-          instructions: INSTRUCTIONS,
+          instructions: ctx.agent ? INSTRUCTIONS + INSTRUCTIONS_AGENT : INSTRUCTIONS,
         });
       }
       case "ping":
