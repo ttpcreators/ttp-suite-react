@@ -37,6 +37,8 @@ Deno.serve(async (req: Request) => {
   let payload;
   try {
     payload = await verifyState(url.searchParams.get("state") ?? "");
+    // Seul un jeton émis par tt-connect est accepté ici.
+    if (payload.via !== "tiktok") throw new Error("jeton d'un autre usage");
   } catch {
     return page("Lien expiré ou invalide. Retourne dans l'app TTP et relance « Connecter mon TikTok ».");
   }

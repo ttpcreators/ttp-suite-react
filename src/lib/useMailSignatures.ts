@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { safeImgSrc } from "./safeUrl";
 import { supabase } from "./supabase";
 import { useAppState, saveAppStateKey, getAppState, invalidateAppState, type AppState } from "./appState";
 import { toast } from "@/components/ui/toast";
@@ -43,7 +44,9 @@ function esc(s: string): string {
 
 /** Signature image simple. */
 export function signatureImgHtml(url: string): string {
-  return `<div style="margin-top:22px"><img src="${url}" alt="Signature" style="max-width:360px;width:100%;height:auto;border:0;display:block" /></div>`;
+  const src = safeImgSrc(url);
+  if (!src) return "";
+  return `<div style="margin-top:22px"><img src="${src}" alt="Signature" style="max-width:360px;width:100%;height:auto;border:0;display:block" /></div>`;
 }
 
 /**
@@ -56,10 +59,11 @@ export function htmlSignatureMarkup(f: SigFields): string {
   const ig = (f.instagram || "").replace(/^@+/, "").trim();
   const igUrl = ig ? `https://instagram.com/${encodeURIComponent(ig)}` : "";
   const tel = (f.phone || "").replace(/[^\d+]/g, "");
-  const photoCell = f.photoUrl
+  const photo = safeImgSrc(f.photoUrl);
+  const photoCell = photo
     ? `<td valign="top" style="padding:0 16px 12px 0">` +
       (igUrl ? `<a href="${igUrl}" style="text-decoration:none">` : "") +
-      `<img src="${f.photoUrl}" width="92" height="92" alt="${esc(f.name)}" style="display:block;width:92px;height:92px;border-radius:16px;object-fit:cover;border:0" />` +
+      `<img src="${photo}" width="92" height="92" alt="${esc(f.name)}" style="display:block;width:92px;height:92px;border-radius:16px;object-fit:cover;border:0" />` +
       (igUrl ? `</a>` : "") +
       `</td>`
     : "";

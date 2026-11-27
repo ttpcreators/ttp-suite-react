@@ -170,9 +170,10 @@ function prettyName(n: string): string {
 }
 /** Extrait d'une réponse envoyée (sans signature ni citation), comme Gmail l'afficherait. */
 function htmlToSnippet(html: string): string {
-  const d = document.createElement("div");
-  d.innerHTML = html.replace(/<(br|\/p|\/div)[^>]*>/gi, " ");
-  return (d.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+  // DOMParser : document inerte (aucune image chargée, aucun attribut on… exécuté), même si
+  // le texte cite un mail reçu.
+  const d = new DOMParser().parseFromString(html.replace(/<(br|\/p|\/div)[^>]*>/gi, " "), "text/html");
+  return (d.body.textContent ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
 }
 /** Décode les entités HTML des extraits Gmail (« l&#39;ensemble » → « l'ensemble »). */
 const entityCache = new Map<string, string>();

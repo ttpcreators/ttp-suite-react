@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from "react";
+import { isAvatarImage } from "@/lib/safeUrl";
 import { Spin } from "@/components/ui/loader";
 import { Camera } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
@@ -56,7 +57,7 @@ export function AvatarUpload({
     const file = e.target.files?.[0];
     e.target.value = ""; // permet de re-choisir le même fichier
     if (!file || !creatorId) return;
-    if (!file.type.startsWith("image/")) {
+    if (!isAvatarImage(file)) {
       toast(t("Choisis une image"));
       return;
     }

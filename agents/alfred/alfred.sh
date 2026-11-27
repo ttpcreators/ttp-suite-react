@@ -307,12 +307,22 @@ denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash(spark:*)"
 # et seulement pendant un passage où Marc a écrit : ses consignes exigent son « oui » pour CE texte.
 # Même règle pour ajouter une discussion à la liste autorisée (`autoriser`).
 (( recus > 0 )) || denied+=("Bash(node whatsapp.mjs envoyer:*)" "Bash(node whatsapp.mjs autoriser:*)")
+# Les fichiers qui décident de ce qu'Alfred a le droit de faire ne s'écrivent jamais par Alfred
+# lui même dans un passage : la file des messages de Marc (elle ouvre tous les outils), les
+# nouvelles de l'app (elles ouvrent l'envoi des brouillons validés) et les réglages reçus de
+# l'app. Seul telegram.mjs les écrit. Un mail ou une page piégés ne peuvent donc pas lui donner
+# plus de droits au passage suivant.
+denied+=("Edit($ici/etat/file-recue*)" "Edit($ici/etat/recu*)" "Edit($ici/etat/evenements*)" "Edit($ici/etat/reglages.json)")
+# Délégations et mode vacances : Alfred les note seulement quand Marc vient de le lui demander.
+(( recus > 0 )) || denied+=("Edit($ici/etat/delegations.md)" "Edit($ici/etat/vacances.txt)")
 # Une photo téléversée sur l'app (demande de Marc le 2026-11-24) : seulement quand Marc vient d'écrire.
 (( recus > 0 )) && allowed+=("Bash(node telegram.mjs photo:*)") || denied+=("Bash(node telegram.mjs photo:*)")
 # Les nouvelles de l'app contiennent une validation faite dans la page Agents : l'envoi est permis
 # pour ce passage (voir « La liste à valider de 17 h », point 5, et « Qui fait quoi »).
 envoi_valide=0
-[[ "$mode" == "les nouvelles de l'app" ]] && grep -q "validé dans la page Agents" etat/evenements-lus.txt 2>/dev/null && envoi_valide=1
+# Le type est en tête de ligne, juste après la date entre crochets (telegram.mjs, ligneEvenement) :
+# un texte « validé dans la page Agents » glissé dans une tâche ou un nom ne compte pas.
+[[ "$mode" == "les nouvelles de l'app" ]] && grep -qE '^\[[^]]*\] validé dans la page Agents( |$)' etat/evenements-lus.txt 2>/dev/null && envoi_valide=1
 if (( recus > 0 )); then
   # Marc vient d'écrire : Alfred gère toute l'app sur sa demande (choix de Marc le 2026-11-06).
   # Ses consignes gardent la règle : un mail ou un DM ne part que sur un « oui » explicite.

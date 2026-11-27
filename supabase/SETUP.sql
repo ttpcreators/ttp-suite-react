@@ -325,8 +325,12 @@ alter table public.creators drop constraint if exists creators_lang_check;
 alter table public.creators add constraint creators_lang_check check (lang in ('fr', 'en'));
 
 -- Sans compte connecté (serveur, SQL Editor) : rien n'est bloqué (sql/2026-10-25-audit).
+-- Tarifs du media kit verrouillés pour le créateur (sql/2026-11-27-securite-14).
 create or replace function public.creators_guard() returns trigger
   language plpgsql security definer set search_path = public as $$
+declare
+  v jsonb;
+  k text;
 begin
   if auth.uid() is not null and not public.is_agency() then
     new.ca         := old.ca;
@@ -334,6 +338,19 @@ begin
     new.status     := old.status;
     new.exclu      := old.exclu;
     new.sort_order := old.sort_order;
+    if new.mediakit is distinct from old.mediakit then
+      if jsonb_typeof(new.mediakit) is distinct from 'object' then
+        new.mediakit := old.mediakit;
+      else
+        v := new.mediakit - array['hideRates', 'rates', 'ratesNote', 'ratesNoteEn'];
+        if jsonb_typeof(old.mediakit) = 'object' then
+          foreach k in array array['hideRates', 'rates', 'ratesNote', 'ratesNoteEn'] loop
+            if old.mediakit ? k then v := v || jsonb_build_object(k, old.mediakit -> k); end if;
+          end loop;
+        end if;
+        new.mediakit := v;
+      end if;
+    end if;
   end if;
   return new;
 end $$;
@@ -1007,11 +1024,24 @@ create policy documents_obj_creator_read on storage.objects for select to authen
 -- Bucket PUBLIC pour les photos de profil (avatars) : lecture publique (URL
 -- permanente), écriture réservée aux comptes connectés. Permet que la photo
 -- posée par l'agence OU le créateur soit visible partout (cross-device).
--- Images seulement, 25 Mo maximum (sql/2026-10-25-audit).
+-- Photos seulement, sans SVG, 25 Mo maximum (sql/2026-10-25-audit, sql/2026-11-27-securite-14).
 insert into storage.buckets (id, name, public, allowed_mime_types, file_size_limit)
-  values ('avatars','avatars', true, array['image/*'], 26214400)
+  values ('avatars','avatars', true, array['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif', 'image/heic', 'image/heif'], 26214400)
   on conflict (id) do update set allowed_mime_types = excluded.allowed_mime_types,
                                  file_size_limit    = excluded.file_size_limit;
+
+-- Journal des réservations de visio, fonction rdv seulement (sql/2026-11-27-securite-14).
+create table if not exists public.rdv_journal (
+  id bigserial primary key,
+  email text not null,
+  cree_le timestamptz not null default now()
+);
+create index if not exists rdv_journal_cree_le on public.rdv_journal (cree_le);
+alter table public.rdv_journal enable row level security;
+revoke all on public.rdv_journal from anon, authenticated;
+grant select, insert on public.rdv_journal to service_role;
+grant usage, select on sequence public.rdv_journal_id_seq to service_role;
+
 
 -- Lecture : publique (bucket public), pas de policy nécessaire.
 -- Upload : tout compte connecté peut poser un avatar (chemins horodatés
@@ -2382,9 +2412,19 @@ begin
     if tg_op = 'INSERT' then
       new.creators := case when nullif(btrim(new.creator), '') is null then '{}'::text[]
                            else array[btrim(new.creator)] end;
+      if new.source is not distinct from 'agency' then new.source := 'creator'; end if;
     else
       new.creator  := old.creator;
       new.creators := old.creators;
+      new.source   := old.source;
+    end if;
+    -- « Fait par » : le nom du compte connecté, jamais un texte choisi par l'appelant.
+    if new.done_by is not null
+       and (tg_op = 'INSERT' or new.done_by is distinct from old.done_by) then
+      new.done_by := coalesce(
+        (select coalesce(nullif(btrim(p.display_name), ''), nullif(btrim(p.creator_name), ''))
+           from public.profiles p where p.user_id = auth.uid()),
+        'Créateur');
     end if;
   end if;
   return new;

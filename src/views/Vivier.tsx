@@ -1,4 +1,5 @@
 import { useStickyState } from "@/lib/useStickyState";
+import { isAvatarImage } from "@/lib/safeUrl";
 import { HelpTip } from "@/components/ui/help-tip";
 import { fmtCompact } from "@/lib/timeSeries";
 import { Spin } from "@/components/ui/loader";
@@ -410,7 +411,7 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
   // Photo ajoutée à la main (bucket public « avatars »), gardée avec le suivi du scouting.
   const uploadPhoto = async (r: Row, file: File | undefined) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) return toast("Choisis une image");
+    if (!isAvatarImage(file)) return toast("Choisis une image");
     if (file.size > 5 * 1024 * 1024) return toast("Image trop lourde (max 5 Mo)");
     setPhotoBusy(true);
     const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";

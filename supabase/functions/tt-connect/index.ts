@@ -46,7 +46,7 @@ Deno.serve(async (req: Request) => {
   }
   const name = prof?.role === "agency" ? String(body.creator ?? "").trim() : prof?.role === "creator" ? (prof.creator_name ?? "").trim() : "";
   if (!name) return res({ error: "non_autorise" }, 403);
-  const { data: creator } = await sb.from("creators").select("id, name, tt").ilike("name", name).maybeSingle<{ id: string; name: string; tt: Record<string, unknown> | null }>();
+  const { data: creator } = await sb.from("creators").select("id, name, tt").ilike("name", name.replace(/[\\%_]/g, (m) => `\\${m}`)).maybeSingle<{ id: string; name: string; tt: Record<string, unknown> | null }>();
   if (!creator) return res({ error: "createur_introuvable" }, 404);
 
   if (body.action === "disconnect") {
@@ -60,6 +60,6 @@ Deno.serve(async (req: Request) => {
   if (!ttReady() || !Deno.env.get("STATE_SIGNING_SECRET")) return res({ error: "tiktok_non_configure" });
   const origin = String(body.origin ?? "");
   if (!allowedOrigin(origin)) return res({ error: "origine_refusee" }, 400);
-  const state = await signState({ origin, nonce: genNonce(), sub: creator.id });
+  const state = await signState({ origin, nonce: genNonce(), sub: creator.id, via: "tiktok" });
   return res({ url: ttAuthorizeUrl(state) });
 });

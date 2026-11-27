@@ -1600,8 +1600,7 @@ const inviterRdv: Tool = {
       q = p ? q.gte("id", p.de).lte("id", p.a) : q.eq("id", id);
     } else {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(str(a.date, 10)) || !str(a.cherche)) return fail("Donne l'id du rendez-vous (`evenement`), ou `date` et `cherche`.");
-      const m = like(str(a.cherche, 80));
-      q = q.eq("date", str(a.date, 10)).or(`title.ilike.${m},who.ilike.${m}`);
+      q = q.eq("date", str(a.date, 10)).or(orLike(["title", "who"], str(a.cherche, 80)));
     }
     const { data, error } = await q;
     if (error) return fail(`Lecture du Planning impossible : ${error.message}`);

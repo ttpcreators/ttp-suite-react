@@ -97,7 +97,8 @@ async function depuisLien(sb: SupabaseClient, jeton: string): Promise<Response> 
     await noter(sb, { creatorId: c.id, via: "lien", etape: "configuration", ok: false, message: "secrets de connexion Instagram absents (IG_REDIRECT_URI, IG_CONFIG_ID + META_APP_SECRET ou IG_APP_ID + IG_APP_SECRET)" });
     return pageFin({ statut: "erreur", raison: "agence" });
   }
-  const state = await signState({ origin: PAGE_FIN_IG, nonce: genNonce(), sub: c.id, via: "lien" });
+  // La date du lien voyage dans le state : un « Réessayer » garde la même fin de validité.
+  const state = await signState({ origin: PAGE_FIN_IG, nonce: genNonce(), sub: c.id, via: `lien:${l.iat}` });
   return Response.redirect(authorizeUrl(state), 302);
 }
 
@@ -122,21 +123,26 @@ Deno.serve(async (req: Request) => {
   if (lien !== null) return await depuisLien(sb, lien);
 
   const st = await lireState(url.searchParams.get("state") ?? "");
-  if (!st?.payload.sub) {
+  // Seuls les jetons émis pour Instagram (ig-connect ou un lien) sont acceptés ici.
+  const viaOk = (v?: string) => v === "espace" || v === "agence" || v === "lien" || /^lien:\d+$/.test(v ?? "");
+  if (!st?.payload.sub || !viaOk(st.payload.via)) {
     await noter(sb, { creatorId: null, via: "inconnu", etape: "etat", ok: false, message: "state absent ou signature invalide" });
     return pageFin({ statut: "erreur", raison: "expire" });
   }
   const { payload } = st;
   const creatorId = payload.sub!;
-  const viaLien = payload.via === "lien";
-  const via = payload.via ?? "espace";
+  const viaLien = payload.via === "lien" || payload.via!.startsWith("lien:");
+  const via = viaLien ? "lien" : payload.via!;
+  // Date du lien d'origine (absente des anciens jetons : pas de lien neuf pour eux).
+  const lienIat = viaLien ? Number(payload.via!.split(":")[1]) || null : null;
 
   // Sortie : vers l'app (départ depuis l'app), ou vers la page de fin (départ par lien).
   const sortie = async (r: { ok: true; username: string } | { ok: false; raison: Raison }): Promise<Response> => {
     if (viaLien) {
       if (r.ok) return pageFin({ statut: "ok", ...(r.username ? { compte: r.username } : {}) });
       // « Réessayer » sur la page de fin : un lien neuf pour la même créatrice.
-      const neuf = r.raison === "lien_invalide" ? null : await signerLien(SECRET(), creatorId).catch(() => null);
+      // Il garde la date du lien de départ : refuser chez Instagram ne prolonge jamais le lien.
+      const neuf = r.raison === "lien_invalide" || !lienIat ? null : await signerLien(SECRET(), creatorId, lienIat).catch(() => null);
       return pageFin({ statut: "erreur", raison: r.raison, ...(neuf ? { r: neuf } : {}) });
     }
     const to = retour(payload.origin, r.ok ? { instagram: "connected" } : { instagram: "error", raison: r.raison });

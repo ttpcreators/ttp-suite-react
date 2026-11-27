@@ -128,12 +128,24 @@ Deno.serve(async (req: Request) => {
 
   const { count } = await sb.from("todos").select("id", { count: "exact", head: true }).like("text", "Visio : %").gte("created_at", new Date(now.getTime() - 3_600_000).toISOString());
   if ((count ?? 0) >= 10) return json({ error: "trop" }, 429);
+  // Le compte ci-dessus ne bouge pas quand une marque déjà en tâche réserve encore : le journal
+  // des réservations (une ligne par visio, supabase/sql/2026-11-27-securite-14.sql) plafonne
+  // aussi à 10 par heure en tout et 2 par jour et par adresse. Table absente : seul le compte
+  // des tâches s'applique.
+  const mail = r.email.toLowerCase();
+  const [{ count: parHeure }, { count: parMail }] = await Promise.all([
+    sb.from("rdv_journal").select("id", { count: "exact", head: true }).gte("cree_le", new Date(now.getTime() - 3_600_000).toISOString()),
+    sb.from("rdv_journal").select("id", { count: "exact", head: true }).eq("email", mail).gte("cree_le", new Date(now.getTime() - 86_400_000).toISOString()),
+  ]);
+  if ((parHeure ?? 0) >= 10 || (parMail ?? 0) >= 2) return json({ error: "trop" }, 429);
 
   try {
     if (!creneauOk(c, now, await occupe(sb, c, now), r.jour, r.heure)) return json({ error: "pris" }, 409);
   } catch {
     return json({ error: "agenda" }, 503);
   }
+
+  await sb.from("rdv_journal").insert({ email: mail }).then(() => {}, () => {});
 
   // Le rendez-vous, avec Meet et l'invitation Google au contact.
   const cal = `/calendars/${encodeURIComponent(CALENDAR_ID)}/events`;

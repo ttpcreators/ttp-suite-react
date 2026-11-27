@@ -36,6 +36,8 @@ const SQL_MANQUANT = "La file d'envoi n'est pas encore installée (SQL 2026-11-2
 const tableAbsente = (e: { code?: string; message?: string } | null | undefined) =>
   !!e && (e.code === "42P01" || e.code === "PGRST205" || /does not exist|could not find the table/i.test(e.message ?? ""));
 
+// Valeurs de filtre .or() : toujours entre guillemets (JSON.stringify), pour qu'une virgule ou
+// une parenthèse dans une adresse ne casse pas le filtre ni n'y ajoute une condition.
 const echappe = (s: string) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
 /** La liste « ne plus contacter » ; [] si la table n'existe pas encore. Lève une erreur si la lecture échoue. */
@@ -49,7 +51,7 @@ async function lireListe(sb: SupabaseClient): Promise<NePlusContacter[]> {
 /** Adresses marquées « en erreur » sur leur fiche contact. */
 async function adressesEnErreur(sb: SupabaseClient, emails: string[]): Promise<string[]> {
   if (!emails.length) return [];
-  const { data, error } = await sb.from("contacts").select("email, email_check").or(emails.slice(0, 20).map((e) => `email.ilike.${echappe(e)}`).join(","));
+  const { data, error } = await sb.from("contacts").select("email, email_check").or(emails.slice(0, 20).map((e) => `email.ilike.${JSON.stringify(echappe(e))}`).join(","));
   if (error) return [];
   return ((data as Json[] | null) ?? [])
     .filter((c) => (c.email_check as Json | null)?.statut === "erreur")
@@ -62,8 +64,8 @@ async function envoisRecents(sb: SupabaseClient, emails: string[], jours: number
   const filtres = [...new Set(emails.map(cleSociete))].slice(0, 10).map((k) => (k.includes("@") ? echappe(k) : `%@${echappe(k)}`));
   if (!filtres.length) return [];
   const [journal, file] = await Promise.all([
-    sb.from("email_activity").select("contact_email, created_at").eq("direction", "out").gte("created_at", depuis).or(filtres.map((f) => `contact_email.ilike.${f}`).join(",")).limit(200),
-    sb.from("envoi_file").select("destinataires, envoye_at").eq("statut", "envoye").gte("envoye_at", depuis).or(filtres.map((f) => `destinataires.ilike.%${f.replace(/^%/, "")}%`).join(",")).limit(200),
+    sb.from("email_activity").select("contact_email, created_at").eq("direction", "out").gte("created_at", depuis).or(filtres.map((f) => `contact_email.ilike.${JSON.stringify(f)}`).join(",")).limit(200),
+    sb.from("envoi_file").select("destinataires, envoye_at").eq("statut", "envoye").gte("envoye_at", depuis).or(filtres.map((f) => `destinataires.ilike.${JSON.stringify(`%${f.replace(/^%/, "")}%`)}`).join(",")).limit(200),
   ]);
   const out: EnvoiRecent[] = [];
   for (const r of (journal.data as Json[] | null) ?? []) for (const e of adresses(r.contact_email)) out.push({ email: e, at: String(r.created_at) });
