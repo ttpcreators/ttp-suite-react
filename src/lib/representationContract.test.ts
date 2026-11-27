@@ -47,7 +47,7 @@ describe("fin du contrat calculée (audit 2026-11-11)", () => {
 describe("conditions particulières dans le PDF", () => {
   it("encadré en fin de contrat, avant les signatures, avec la mention", async () => {
     const { representationHTML, rcDefaultConfig, CONDITIONS_MENTION } = await import("./representationContract");
-    const html = representationHTML({ ...rcDefaultConfig("nonexclusif"), talentNom: "Adelina", conditionsParticulieres: "Aucune commission sur <les cadeaux>." });
+    const html = representationHTML({ ...rcDefaultConfig("nonexclusif"), talentNom: "Camille", conditionsParticulieres: "Aucune commission sur <les cadeaux>." });
     const i = html.indexOf("Conditions particulières</h2>");
     expect(i).toBeGreaterThan(html.indexOf("Litiges et loi applicable"));
     expect(i).toBeLessThan(html.indexOf("class=\"ct-sign\""));

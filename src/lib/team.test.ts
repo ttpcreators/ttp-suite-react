@@ -15,8 +15,8 @@ describe("équipe : qui fait quoi", () => {
   });
 
   it("prénom deviné depuis l'adresse", () => {
-    expect(guessName("gianni.valter@gmail.com")).toBe("Gianni");
-    expect(guessName("marcbouraoui@gmail.com")).toBe("Marc");
+    expect(guessName("gianni.exemple@exemple.fr")).toBe("Gianni");
+    expect(guessName("marcexemple@exemple.fr")).toBe("Marc");
     expect(guessName("talent@ttpcreators.pro")).toBe("Talent");
     expect(guessName("jean-paul@x.fr")).toBe("Jean");
   });

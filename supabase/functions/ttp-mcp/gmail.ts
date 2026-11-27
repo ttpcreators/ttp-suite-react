@@ -49,8 +49,8 @@ export type ThreadSummary = { box: MailBox; threadId: string; subject: string; f
 
 /** Recherche Gmail (même syntaxe que la barre Gmail) dans une ou deux boîtes. */
 /** « partout » : les boîtes de l'agence ET les boîtes de créateurs connectées. Pour vérifier qu'une
- *  chose n'a pas déjà été faite : Marc envoie souvent depuis la boîte du créateur (cas Prison Island,
- *  17 novembre 2026 : facture déjà partagée depuis la boîte de Léna, Alfred ne l'a pas vue). */
+ *  chose n'a pas déjà été faite : Marc envoie souvent depuis la boîte du créateur (cas du
+ *  17 novembre 2026 : facture déjà partagée depuis la boîte d'un créateur, Alfred ne l'a pas vue). */
 export const PARTOUT = "partout";
 
 export async function searchThreads(sb: SupabaseClient, box: string | undefined, q: string, max: number): Promise<{ threads: ThreadSummary[]; errors: string[] }> {

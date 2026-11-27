@@ -37,7 +37,7 @@ export function hasCreator(row: TodoCreatorsRow, name: string): boolean {
   return !!k && todoCreators(row).some((n) => key(n) === k);
 }
 
-/** Prénom affiché (« JUSTINE GENTET » → « Justine »). */
+/** Prénom affiché (« JUSTINE FAURE » → « Justine »). */
 export const firstName = (name: string): string => titleCase(name.trim().split(/\s+/)[0] ?? "");
 
 /**
@@ -51,7 +51,7 @@ export function creatorsLabel(list: readonly string[], empty = "Sélectionner…
   return `${firstName(names[0])} + ${names.length - 1}`;
 }
 
-/** Noms complets à la suite : « Justine Gentet, Léna Martin et Inès ». */
+/** Noms complets à la suite : « Justine Faure, Léna Martin et Inès ». */
 export function joinNames(list: readonly string[], fmt: (s: string) => string = titleCase): string {
   const names = normalizeCreators(list).map(fmt);
   if (names.length <= 1) return names[0] ?? "";

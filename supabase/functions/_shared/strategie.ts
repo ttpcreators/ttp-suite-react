@@ -68,12 +68,12 @@ const fmt = (n: number) => n.toLocaleString("fr-FR").replace(/ /g, " ");
 export function strategieTexte(jour: string): string {
   const moments = tempsFortsDuMoment(jour);
   return `# Stratégie de TTP Creators : signer 10 à 20 k€ de collabs par mois
-Source : document de Gianni du 20 novembre 2026, adopté par Marc. Rien ne part sans le oui de Marc : tout message passe par la file « À valider ».
+Source : document de Gianni du 20 novembre 2026, adopté par Marc. Rien ne part sans validation : la prospection (premier contact ou relance d'une marque ou d'une agence qui n'a pas montré d'intérêt) sur le oui de Gianni (ou de Marc s'il la reprend), tout le reste (réponse à une marque intéressée, devis, prix, message à un créateur) sur le oui de Marc.
 
 ## Le cap
 - Point de départ : environ 310 € de commission par mois depuis juillet, 2 400 € HT signés en novembre, deal moyen d'environ 800 € HT.
 - Cibles de montant HT signé : ${CIBLES_MENSUELLES.map((c) => `${c.mois} ${fmt(c.montantHT)} €`).join(" · ")} (environ 3 300 € de commission en mars).
-- Mix visé en mars (≈ 15 100 € HT, 18 deals par mois) : 4 contrats mensuels à 1 000 €, 4 gros deals (plus de 150 000 abonnés) à 1 500 €, 6 deals moyens à 650 €, 4 UGC sans publication à 300 €.
+- Mix visé en mars (≈ 15 100 € HT, 18 deals par mois) : 4 contrats mensuels à 1 000 €, 4 gros deals (plus de 150 000 abonnés) à 1 500 €, 6 deals moyens à 650 €, 4 UGC sans publication à 300 € (sous le deal minimum : seulement en test stratégique décidé par Marc, sinon le pack UGC).
 - Ce que ça demande chaque mois : 28 devis, 42 visios ou briefs, 84 discussions ouvertes (35 agences, 25 demandes entrantes, 24 prospection). Roster : 12 à 14 créatrices actives, dont 6 de plus de 150 000 abonnés. Taux à recaler après 4 semaines.
 
 ## Ce qui s'applique maintenant (${jour})
@@ -141,8 +141,9 @@ ${REGLES_OFFRE}
 - Toutes les boîtes mail des créatrices reliées à l'app ; l'adresse pro dans chaque bio ; des média kits en ligne à jour.
 - Tri : refus en un mail type pour le gifting et les arnaques, question du budget pour le reste.
 
-## Ce qu'Alfred prépare (toujours dans « À valider »)
-Séquence multicanal dès la validation du premier mail ; 15 contacts du carnet par jour avec le mail rédigé ; 12 marques neuves par jour avec signaux de paiement et adresse vérifiée ; liste LinkedIn du jour (20 profils et le message) ; liste Instagram du jour (15 marques, 5 créatrices, DM rédigés) ; WhatsApp du lundi aux relations proches ; envoi depuis l'alias de la créatrice ; tri des demandes entrantes ; facture préparée dès la signature ; bilan J+7 ; dispos du mois pour les agences ; tableau de bord du lundi avec les volumes par canal.
+## Ce qu'Alfred prépare (rien ne part sans validation)
+En soutien de Gianni depuis le 25/11, Alfred ne prépare plus de mails de prospection : ses pistes en tâches « Gianni : contacter … », la garde des doublons, la liste LinkedIn du jour pour Gianni (20 profils et le message) et la liste Instagram du jour pour Gianni (15 marques, 5 créateurs, DM rédigés).
+Et toujours : WhatsApp du lundi aux relations proches ; envoi depuis l'alias de la créatrice ; tri des demandes entrantes ; facture préparée dès la signature ; bilan J+7 ; dispos du mois pour les agences ; tableau de bord du lundi avec les volumes par canal.
 
 ## Le tableau de bord du lundi (aujourd'hui → fin décembre → mars)
 Montant HT signé dans le mois 2 400 € → 8 000 € → 15 000 € ; deal moyen ~800 € → 1 000 € → 1 100 € ; contrats mensuels actifs 1 → 2 → 4 ; contacts du carnet traités (sur 513) ~280 → 400 → 513 ; mails / invitations LinkedIn / DM par semaine → 145 / 100 / 75 ; réponses positives par semaine → 8 → 12 ; visios par semaine ~1 → 6 → 10 ; relations proches suivies sur WhatsApp → 15 → 20 ; agences actives 8 → 12 → 20 ; recrues signées 0 → 3 → 6 ; créatrices qui signent au moins un deal dans le mois 3 → 7 → 12 ; part de Léna dans le montant signé plus de 50 % → 40 % → 25 % ; incidents de conformité 4 en novembre → 0 → 0.

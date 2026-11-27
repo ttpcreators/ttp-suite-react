@@ -1,9 +1,10 @@
 #!/bin/zsh
 # Mise à jour automatique d'Alfred (launchd : com.ttp.alfred.maj, chaque nuit à 4 h et au
 # démarrage du Mac). Regarde sur GitHub la dernière version du dossier agents/alfred de la
-# branche main (ttpcreators/ttp-suite-react, dépôt public : seule une mise en ligne validée par
-# Marc la change). Si elle est nouvelle : téléchargement, contrôle, installation, et Marc est
-# prévenu sur Telegram. Ne touche jamais à config.env, REDACTION.md ni etat/. Aucun secret ici.
+# branche main (ttpcreators/ttp-suite-react, dépôt public : toute PR fusionnée dans main qui
+# touche agents/alfred/ s'installe ici à 4 h, qu'elle vienne de Marc ou de Gianni). Si elle est
+# nouvelle : téléchargement, contrôle, installation, et Marc est prévenu sur Telegram. Ne touche
+# jamais à config.env, REDACTION.md ni etat/. Aucun secret ici.
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$HOME/.local/bin"
 DEST="$HOME/Code/TTPAlfred"
 SRC="$HOME/Code/agents-alfred"

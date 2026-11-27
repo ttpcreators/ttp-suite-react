@@ -11,13 +11,13 @@ describe("adresse du media kit (même règle que le site)", () => {
   it("champ « Lien » d'abord, sinon le prénom, doublons numérotés dans l'ordre du roster", () => {
     const m = siteSlugs([
       { name: "LÉA MARTIN", mediakit: null },
-      { name: "JUSTINE GENTET", mediakit: { slug: "justinegentet" } },
+      { name: "JUSTINE FAURE", mediakit: { slug: "justinefaure" } },
       { name: "LÉA DURAND", mediakit: {} },
       { name: "JUSTINE ROUX", mediakit: null },
       { name: "LÉA PETIT", mediakit: null },
     ]);
     expect(m.get("LÉA MARTIN")).toBe("lea");
-    expect(m.get("JUSTINE GENTET")).toBe("justinegentet");
+    expect(m.get("JUSTINE FAURE")).toBe("justinefaure");
     expect(m.get("LÉA DURAND")).toBe("lea-2");
     expect(m.get("JUSTINE ROUX")).toBe("justine");
     expect(m.get("LÉA PETIT")).toBe("lea-3");

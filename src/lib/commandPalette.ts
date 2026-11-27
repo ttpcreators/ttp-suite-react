@@ -46,12 +46,12 @@ export function rankEntries<T extends { label: string; keywords?: readonly strin
     .map((x) => x.e);
 }
 
-/** « LÉNA PASQUALE » → « Léna » (libellés courts de la palette). */
+/** « LÉNA MOREL » → « Léna » (libellés courts de la palette). */
 export function firstName(name: string | null | undefined): string {
   return titleCase(name).trim().split(/\s+/)[0] ?? "";
 }
 
-/** « Relancer JNPR × Léna » */
+/** « Relancer Nova × Léna » */
 export function relanceActionLabel(iv: { party: string | null; creator: string | null }): string {
   const who = firstName(iv.creator);
   const party = (iv.party ?? "").trim();

@@ -44,17 +44,17 @@ describe("accès complet de Claude", () => {
     expect(nextQuoteRef(["D-2026-004", "D-2025-120", "D-2026-011"], 2026)).toBe("D-2026-012");
     expect(nextQuoteRef(["D-2025-120"], 2026)).toBe("D-2026-001");
     expect(euro2(1273)).toBe("1 273,00 €");
-    expect(invoiceParty("Aroma Zone", "ana milanovic")).toBe("Aroma Zone × Ana");
+    expect(invoiceParty("Kora", "zoé morel")).toBe("Kora × Zoé");
     expect(pct("25,5 %")).toBe(25.5);
   });
   it("mail : texte échappé, liens, signature", () => {
-    const h = mailHtml("Bonjour <3\nhttps://ttpcreators.pro/mediakit/ana/", "<b>Marc</b>");
+    const h = mailHtml("Bonjour <3\nhttps://ttpcreators.pro/mediakit/zoe/", "<b>Marc</b>");
     expect(h).toContain("&lt;3");
-    expect(h).toContain('<a href="https://ttpcreators.pro/mediakit/ana/">');
+    expect(h).toContain('<a href="https://ttpcreators.pro/mediakit/zoe/">');
     expect(h).toContain('<div class="ttp-signature"><b>Marc</b></div>');
     // Sauts de ligne en <br> (Gmail et Spark ignorent white-space:pre-line), lignes vides gardées.
-    const p = mailHtml("Hello Lorna,\r\n\r\nTop, merci !\nÀ très vite");
-    expect(p).toContain("Hello Lorna,<br><br>Top, merci !<br>À très vite");
+    const p = mailHtml("Hello Inès,\r\n\r\nTop, merci !\nÀ très vite");
+    expect(p).toContain("Hello Inès,<br><br>Top, merci !<br>À très vite");
     expect(p).not.toContain("pre-line");
     // Lien Spark : même jeton que celui que Spark ouvre (vérifié sur un vrai brouillon).
     expect(sparkLink("partnerships@ttpcreators.pro", "<CAJx0e2ZtGOFUs=ZjaN-gnguRAsHy9OyhsR+bRDh6xwLY02UJxg@mail.gmail.com>", "1a1ae2f80e638772"))

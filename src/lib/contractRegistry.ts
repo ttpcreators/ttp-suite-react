@@ -117,7 +117,7 @@ export function buildRows(brandHist: unknown, reprHist: unknown): ContractRow[] 
   return rows;
 }
 
-/** « Saucony × Candice » ; la représentation lie l'agence au créateur. */
+/** « Saucony × Romane » ; la représentation lie l'agence au créateur. */
 export function rowName(r: Pick<ContractRow, "type" | "brand" | "creatorLabel">): string {
   const left = r.type === "repr" ? "TTP Creators" : r.brand || "Marque";
   return `${left} × ${r.creatorLabel}`;

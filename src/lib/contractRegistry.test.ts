@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { buildCategories, buildRows, countByStatus, filterRows, findBrandContact, normStatus, relanceDraft, rowName, sortRows } from "./contractRegistry";
 
 const brandHist = [
-  { id: "b1", ts: Date.UTC(2026, 9, 10), ctType: "marque", ctName: "CANDICE", brand: "Saucony", ref: "TTP-2026-118", title: "Contrat de partenariat commercial", html: "<p>1</p>", status: "signed" },
+  { id: "b1", ts: Date.UTC(2026, 9, 10), ctType: "marque", ctName: "ROMANE", brand: "Saucony", ref: "TTP-2026-118", title: "Contrat de partenariat commercial", html: "<p>1</p>", status: "signed" },
   { id: "b2", ts: Date.UTC(2026, 9, 13), ctType: "ugc", ctName: "johanna", brand: "Speedo", ref: "TTP-2026-121", title: "Cession de droits UGC", html: "<p>2</p>" },
   { id: "b3", ts: Date.UTC(2026, 9, 14), ctType: "marque", ctName: "[Créateur]", brand: "Nutripure", ref: "TTP-2026-122", title: "x", html: "<p>3</p>", status: "changes" },
   { id: "bad", ts: 1, ctType: "marque" }, // sans HTML : ignorée
@@ -30,7 +30,7 @@ describe("registre des contrats", () => {
   });
 
   it("nomme la ligne « Marque × Créateur » (représentation : agence × créateur)", () => {
-    expect(rowName(rows.find((r) => r.id === "b1")!)).toBe("Saucony × Candice");
+    expect(rowName(rows.find((r) => r.id === "b1")!)).toBe("Saucony × Romane");
     expect(rowName(rows.find((r) => r.id === "r1")!)).toBe("TTP Creators × Léa");
     expect(rows.find((r) => r.id === "b3")!.creator).toBeNull();
   });
@@ -39,11 +39,11 @@ describe("registre des contrats", () => {
     const base = { tab: "all" as const, q: "", creator: "", type: "" as const };
     expect(filterRows(rows, { ...base, tab: "pending" }).map((r) => r.id).sort()).toEqual(["b2", "r1"]);
     expect(filterRows(rows, { ...base, q: "speedo" }).map((r) => r.id)).toEqual(["b2"]);
-    expect(filterRows(rows, { ...base, q: "candice" }).map((r) => r.id)).toEqual(["b1"]);
+    expect(filterRows(rows, { ...base, q: "romane" }).map((r) => r.id)).toEqual(["b1"]);
     expect(filterRows(rows, { ...base, q: "2026-122" }).map((r) => r.id)).toEqual(["b3"]);
     expect(filterRows(rows, { ...base, q: "lea" }).map((r) => r.id)).toEqual(["r1"]); // sans accent
     expect(filterRows(rows, { ...base, type: "repr" }).length).toBe(2);
-    expect(filterRows(rows, { ...base, creator: "Candice" }).map((r) => r.id)).toEqual(["b1"]);
+    expect(filterRows(rows, { ...base, creator: "Romane" }).map((r) => r.id)).toEqual(["b1"]);
   });
 
   it("tri : plus récents d'abord, ou par nom", () => {

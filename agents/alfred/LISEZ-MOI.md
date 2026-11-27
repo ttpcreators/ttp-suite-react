@@ -1,6 +1,6 @@
 # Alfred, le bras droit et talent manager
 
-Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé de Megan). Il tourne sur le Mac de Marc avec l'abonnement Claude de Marc, sans clé API.
+Alfred est l'assistant de Marc, avec **son propre bot Telegram**. Il tourne sur le Mac de Marc avec l'abonnement Claude de Marc, sans clé API.
 
 | Ce qu'il fait | Comment |
 |---|---|
@@ -10,19 +10,20 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Va à l'essentiel | Messages à Marc très courts (une ligne par point, 6 lignes pour une réponse, 12 pour un point), le détail sur demande ; les textes à copier et documents restent complets |
 | Comprend les vocaux de Marc | Transcrits sur le Mac (whisper.cpp et ffmpeg, gratuit, sans internet), puis traités comme un message écrit |
 | Le point à 9 h et 17 h en semaine | Mails des marques et DM, devis, factures en retard, créateurs, argent à aller chercher |
+| Prospection du jour | Du lundi au vendredi à 10 h : en soutien de Gianni tant qu'il prospecte (pistes en tâches « Gianni : contacter … », garde des doublons, listes LinkedIn et Instagram pour lui) ; si Marc reprend la prospection, les automatisations de la stratégie, tout dans « À valider » |
 | Bilans et renouvellements | 7 jours après une publication : stats relevées par l'app, rapport de fin de collab en PDF aux couleurs de l'agence (chiffres, post par post, captures, ce qui a marché, la suite ; fichier `.rapport.json` fabriqué avec le moteur des bilans de l'app) et mail « on refait ça ? » avec une offre plus grosse |
-| Veille des pubs | Mardi 11 h : la bibliothèque publicitaire de Meta (avec l'araignée), les marques qui paient déjà des créateurs proches des nôtres ; prospect, tâche pour Gianni et premier mail prêt |
+| Veille des pubs | Mardi 11 h : la bibliothèque publicitaire de Meta (avec l'araignée), les marques qui paient déjà des créateurs proches des nôtres ; prospect et tâche pour Gianni (mode soutien), sinon aussi le premier mail prêt |
 | Visios sans vocal | Les visios enregistrées par Spark (boîtes de l'agence seulement) : compte rendu, tâches, dates et mail récap faits tout seuls à la veille ou au point suivant |
-| Prospection du lundi | Lundi 11 h : deux ou trois marques par créateur actif (radar à marques de l'app, agences concurrentes, bilans, pipeline, web), avec Megan, premier mail prêt ; « oui tout » pour tout envoyer |
-| Tarifs du mois | Premier lundi du mois, 14 h : qui mérite une hausse, quels précédents sont trop bas |
+| Prospection du lundi | Lundi 11 h : deux ou trois marques par créateur actif (radar à marques de l'app, agences concurrentes, bilans, pipeline, web) ; pistes confiées à Gianni en tâches « Gianni : contacter … » tant qu'il prospecte (mode soutien) ; sinon premier mail prêt et « oui tout », qui part par la file d'envoi (`programmer_envoi`) |
+| Tarifs du mois | Le 1er du mois, 14 h : qui mérite une hausse, quels précédents sont trop bas, et les chiffres des media kits mis à jour |
 | Facture prête | Collab publiée sans facture : facture préparée et montrée, créée dans Facturation sur « oui facture Marque » |
 | Reversements | Marque payée, créateur pas encore payé : rappel, tâche et message au créateur |
 | Contrats | Contrats pas signés relancés à J+3, signalés à J+7 ; collab avancée quand c'est signé |
 | Relances automatiques | Sur « active les relances automatiques » : relances de factures (J+1, J+8) et de marques (J+4, J+10) envoyées seules, avec compte rendu ; jamais la mise en demeure |
 | Fiche avant rendez vous | Une heure avant chaque rendez vous du jour : qui, historique, en cours, objectif, points à obtenir |
 | Rapport du lundi | Argent, deals, créateurs, ce qu'Alfred a fait, priorités ; envoyé à Marc et noté au journal pour Gianni |
-| Recrutement du mercredi | Mercredi 11 h : les trois meilleurs profils du scouting et leur premier DM |
-| Media kits | Dans la revue du mois : media kits dépassés signalés avec les nouveaux chiffres |
+| Recrutement du mercredi | Mercredi 11 h : 25 approches par semaine avec la séquence de recrutement ; les meilleurs profils du scouting et leur premier DM, sans reprendre ceux que Gianni a déjà approchés |
+| Media kits | Le 1er du mois, dans la revue des tarifs : Alfred met à jour lui même les chiffres des media kits relevés par l'app (`maj_chiffres_mediakit`, écart raisonnable) ; au delà, il demande le « oui » de Marc |
 | Nouveau créateur | Contrat de représentation, fiche, accès, media kit, bienvenue, mémoire, chacun en tâche |
 | Droits d'utilisation | Registre des droits vendus aux marques (`droits_usage`) : prolongation proposée 21 jours avant la fin ; droits expirés vérifiés dans la bibliothèque publicitaire de Meta, et facture de prolongation si la vidéo tourne encore |
 | Vidéos qui cartonnent | Chaque matin, les posts qui font au moins deux fois les chiffres habituels du créateur (`posts_createur`) : relances des marques qui hésitaient, avec le nouveau chiffre |
@@ -34,7 +35,7 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 | Compte rendu de rendez vous | Un vocal après le call : compte rendu, tâches, dates, et mail récapitulatif à la marque |
 | Mode vacances | « Je pars jusqu'au 20 » : seulement l'urgent, réponses d'attente aux marques (sur délégation), résumé au retour |
 | Trésorerie | Chaque lundi et sur demande : sur le compte, à encaisser, à reverser, à mettre de côté, fin de mois prévue |
-| Skills | 29 savoir faire chargés au bon moment (`skills/`, liste dans `skills/LISEZ-MOI.md`) : marques et prospection, comptabilité, Instagram, juriste |
+| Skills | 30 savoir faire dans le dépôt, chargés au bon moment (`skills/`, liste dans `skills/LISEZ-MOI.md`) : marques et prospection, comptabilité, Instagram, juriste, mesure des vidéos ; plus ses skills privées remises par le pont (vidéo, métiers de l'agence) |
 | Boutons sur Telegram | Envoyer, Fait, Créer la facture, Rappelle-moi demain, Ajouter au calendrier (ou avec Meet, puis Envoyer l'invitation), Copier, Ouvrir dans WhatsApp (message déjà écrit) ; « Ouvrir dans l'app » ouvre TTP Suite dans Telegram (connexion une seule fois) ; chaque bouton d'action demande « Confirmer » ou « Annuler » avant d'agir |
 | Documents en PDF | Contrats, bilans et propositions partent en PDF quand Chrome est installé sur le Mac (sinon en HTML) |
 | Alerte si Alfred tombe | Chaque jour de semaine, l'app vérifie qu'Alfred a fait son point du matin ; sinon notification à Marc et Gianni |
@@ -78,9 +79,9 @@ Alfred est l'assistant de Marc sur Telegram, avec **son propre bot** (séparé d
 ALFRED_SPARK_BOITES="contact.lea@example.com nova.pro@example.com"
 ```
 
-Alfred ne peut pas modifier `config.env` ni sa liste WhatsApp. Côté connecteurs, il n'a droit qu'à « TTP Suite ».
+Alfred ne peut pas modifier `config.env` ni sa liste WhatsApp. Côté connecteurs, il n'a droit qu'à « TTP Suite » (son propre connecteur `ttp_alfred` une fois activé, voir plus bas) et à Légifrance (`mcp__legifrance`, en lecture seule, s'il est installé).
 
-**Rien ne part vers l'extérieur sans un « oui » de Marc**, sauf dans une délégation où Marc a écrit qu'Alfred pouvait envoyer. WhatsApp : toujours copié par Marc.
+**Rien ne part vers l'extérieur sans un « oui » de Marc**, sauf dans une délégation où Marc a écrit qu'Alfred pouvait envoyer, et pour un mail de prospection validé par Gianni dans la page Agents. Un lot de prospection passe par la file d'envoi (`programmer_envoi` : envois étalés, plafond par jour, règle des 30 jours par société), jamais par `envoyer_brouillons_valides`. WhatsApp : envoyé par le pont de l'iMac sur le « oui » de Marc pour ce texte (bouton « Envoyer »), ou copié par Marc.
 
 ## Les fichiers
 
@@ -95,7 +96,7 @@ Dans le dépôt (`agents/alfred/`, public, aucun secret) :
 | `legifrance/` | Le serveur Légifrance et Judilibre, facultatif (clés PISTE) |
 | `lancement/` | Les trois réglages launchd : passages, écoute, mise à jour |
 | `tests/` | Les tests (`npm test`), jamais copiés sur l'iMac |
-| `alfred.sh` | Un passage (point, réponse, nouvelles, examen) |
+| `alfred.sh` | Un passage (point, réponse, nouvelles, examen) et les droits d'Alfred : chaque outil du connecteur est classé dans une liste (`lire`, `agir`, `sur_oui`, `interdits`), ce que vérifie `tests/outils.test.ts` |
 | `ecoute.sh`, `telegram.mjs` | L'écoute et tout Telegram |
 | `whatsapp.mjs`, `installer-whatsapp.sh` | La lecture de WhatsApp Desktop et le pont d'envoi |
 | `spark.mjs` | Sa seule porte vers Spark |

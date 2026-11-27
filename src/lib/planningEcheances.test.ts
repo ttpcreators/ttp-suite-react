@@ -4,15 +4,15 @@ import type { Exclusivite } from "../../supabase/functions/_shared/exclusivites.
 
 describe("contractEcheances", () => {
   it("pose la fin du contrat (début + durée, moins un jour comme le contrat)", () => {
-    const [e] = contractEcheances([{ id: "a", creator: "LÉNA PASQUALE", type: "représentation", start: "2026-11-02", months: 12 }]);
-    expect(e).toMatchObject({ date: "2027-11-01", kind: "contrat", who: "LÉNA PASQUALE" });
-    expect(e.title).toBe("Léna Pasquale · Représentation");
+    const [e] = contractEcheances([{ id: "a", creator: "LÉNA MOREL", type: "représentation", start: "2026-11-02", months: 12 }]);
+    expect(e).toMatchObject({ date: "2027-11-01", kind: "contrat", who: "LÉNA MOREL" });
+    expect(e.title).toBe("Léna Morel · Représentation");
   });
   it("garde seulement la dernière fin d'un contrat renouvelé", () => {
     const out = contractEcheances([
-      { id: "a", creator: "Ivana", type: "représentation", start: "2025-11-01", months: 12 },
-      { id: "b", creator: "ivana", type: "Représentation", start: "2026-11-01", months: 12 },
-      { id: "c", creator: "Ivana", type: "ugc", start: "2026-01-01", months: 6 },
+      { id: "a", creator: "Nina", type: "représentation", start: "2025-11-01", months: 12 },
+      { id: "b", creator: "nina", type: "Représentation", start: "2026-11-01", months: 12 },
+      { id: "c", creator: "Nina", type: "ugc", start: "2026-01-01", months: 6 },
     ]);
     expect(out.map((e) => e.date).sort()).toEqual(["2026-06-30", "2027-10-31"]);
   });
@@ -26,9 +26,9 @@ describe("contractEcheances", () => {
 });
 
 describe("excluEcheances", () => {
-  const base: Exclusivite = { id: "x", creator: "LÉNA PASQUALE", brand: "Nutripure", scope: "", competitors: [], start: "2026-11-01", end: "2027-02-01", points: [], source: "manuel", createdAt: 0 };
+  const base: Exclusivite = { id: "x", creator: "LÉNA MOREL", brand: "Solvi", scope: "", competitors: [], start: "2026-11-01", end: "2027-02-01", points: [], source: "manuel", createdAt: 0 };
   it("pose la fin d'une exclusivité confirmée", () => {
-    expect(excluEcheances([base])).toEqual([{ id: "exclu:x", date: "2027-02-01", title: "Léna Pasquale × Nutripure", label: "Nutripure", who: "LÉNA PASQUALE", kind: "exclu" }]);
+    expect(excluEcheances([base])).toEqual([{ id: "exclu:x", date: "2027-02-01", title: "Léna Morel × Solvi", label: "Solvi", who: "LÉNA MOREL", kind: "exclu" }]);
   });
   it("ignore celles à confirmer et celles sans fin", () => {
     expect(excluEcheances([{ ...base, pending: true }, { ...base, id: "y", end: null }])).toEqual([]);
@@ -37,9 +37,9 @@ describe("excluEcheances", () => {
 
 describe("birthdayEcheances", () => {
   it("place l'anniversaire sur trois années avec l'âge", () => {
-    const out = birthdayEcheances([{ name: "Ivana", birth: "05/11/1999", status: "actif" }], "2026-11-04");
+    const out = birthdayEcheances([{ name: "Nina", birth: "05/11/2000", status: "actif" }], "2026-11-04");
     expect(out.map((e) => e.date)).toEqual(["2025-11-05", "2026-11-05", "2027-11-05"]);
-    expect(out[1].title).toBe("Ivana · 27 ans");
+    expect(out[1].title).toBe("Nina · 26 ans");
   });
   it("fête un 29 février le 28 les années non bissextiles", () => {
     const out = birthdayEcheances([{ name: "A", birth: "2000-02-29" }], "2027-01-01");

@@ -39,7 +39,7 @@ const todo = (id: string, due: string, over: Partial<{ priority: string | null; 
   creator: null,
 });
 
-const inv = (id: string, date: string, status = "attente") => ({ id, ref: `2026-${id}`, party: "JNPR", amount: "600", date, status, creator: "léna pasquale" });
+const inv = (id: string, date: string, status = "attente") => ({ id, ref: `2026-${id}`, party: "Nova", amount: "450", date, status, creator: "léna morel" });
 
 describe("fenêtres", () => {
   it("demain, cette semaine (J+2 à J+7), à anticiper (J+8 à J+30)", () => {
@@ -116,9 +116,9 @@ describe("factures qui arrivent à échéance", () => {
     ]);
     expect(items[0].metaSub).toBe("en retard demain");
     expect(items[1].kind).toBe("echeance");
-    expect(items[1].title).toBe("JNPR × Léna Pasquale");
+    expect(items[1].title).toBe("Nova × Léna Morel");
     expect(items[1].sub).toMatch(/^Facture #2026-1 arrive à échéance le 26 oct\.?$/);
-    expect(items[1].amount).toBe(600);
+    expect(items[1].amount).toBe(450);
   });
 
   it("sans accès Finance : aucune", () => {
@@ -180,7 +180,7 @@ describe("contrats à renouveler", () => {
 });
 
 describe("collabs bloquées", () => {
-  const collab = (id: string, step: number, status = "active", updated_at: string | null = "2026-10-01T10:00:00Z") => ({ id, brand: "Nike", creator: "léna pasquale", step, status, updated_at });
+  const collab = (id: string, step: number, status = "active", updated_at: string | null = "2026-10-01T10:00:00Z") => ({ id, brand: "Nike", creator: "léna morel", step, status, updated_at });
   const steps = groupSteps([
     { collab_id: "x", step: 3, reached_at: "2026-10-01T10:00:00Z" },
     { collab_id: "x", step: 4, reached_at: "2026-10-12T06:00:00Z" },
@@ -198,7 +198,7 @@ describe("collabs bloquées", () => {
   it("ligne « Faire avancer » dans la semaine, la plus ancienne en tête", () => {
     const items = buildAnticipation({ ...base, collabs: [collab("x", 4), collab("z", 2), collab("y", 4)], collabSteps: steps });
     expect(items.map((i) => i.id)).toEqual(["collab:z", "collab:x"]);
-    expect(items[1].title).toBe("Faire avancer : Nike × Léna Pasquale");
+    expect(items[1].title).toBe("Faire avancer : Nike × Léna Morel");
     expect(items[1].sub).toBe("Rien n'a bougé depuis 9 j · étape Tournage");
     expect(items[1].section).toBe("week");
   });
@@ -206,7 +206,7 @@ describe("collabs bloquées", () => {
 
 describe("stats du mois", () => {
   const creators = [
-    { name: "léna pasquale", status: "actif", stats_month: "2026-09" },
+    { name: "léna morel", status: "actif", stats_month: "2026-09" },
     { name: "ana", status: null, stats_month: null },
     { name: "zoé", status: "actif", stats_month: "2026-10" },
     { name: "mia", status: "Inactif", stats_month: null },
@@ -214,14 +214,14 @@ describe("stats du mois", () => {
 
   it("seulement à partir du 25, créateurs actifs pas à jour", () => {
     expect(statsMissing(creators, NOW)).toEqual([]);
-    expect(statsMissing(creators, new Date(2026, 9, 25, 9))).toEqual(["Léna Pasquale", "Ana"]);
+    expect(statsMissing(creators, new Date(2026, 9, 25, 9))).toEqual(["Léna Morel", "Ana"]);
   });
 
   it("une seule ligne « Relancer les stats »", () => {
     const items = buildAnticipation({ ...base, statsCreators: creators, now: new Date(2026, 9, 26, 9) });
     expect(items).toHaveLength(1);
     expect(items[0].title).toBe("Relancer les stats de 2 créateurs");
-    expect(items[0].sub).toBe("Léna Pasquale, Ana");
+    expect(items[0].sub).toBe("Léna Morel, Ana");
     expect(items[0].section).toBe("week");
   });
 });

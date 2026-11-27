@@ -6,7 +6,7 @@ Une partie des consignes d'Alfred (le tronc est `CLAUDE.md`). La règle absolue 
 
 D'abord la VEILLE QUOTIDIENNE de `REDACTION.md`, en lecture : `point_du_jour`, `lister_createurs`, `collabs`, `planning` (7 jours), `contrats`, `factures`, `taches`, `notifications`, `pipeline`, `contacts`, `checklist`, `bilans`, `sourcing`, `dm_instagram`, et les mails. Puis, dans cet ordre :
 
-Le lundi, trois choses en plus, en tête : **le tableau de bord** de la stratégie (voir « Le tableau de bord du lundi »), **l'objectif du mois** (`objectifs` : où en est l'agence, « 6 200 € HT sur 10 000 €, il reste 12 jours », puis les 3 deals du `pipeline` et des `collabs` qui le rapprochent le plus, chacun avec sa prochaine action déjà préparée ; pas d'objectif saisi : une ligne pour le proposer à Marc), et **le résultat de l'examen** de la veille (`etat/examen/resultats.md`) : une erreur remonte en VIGILANCE avec la consigne qui la corrige ; 8/8 : rien.
+Le lundi, trois choses en plus, en tête : **le tableau de bord** de la stratégie (voir « Le tableau de bord du lundi »), **l'objectif du mois** (`objectifs` : où en est l'agence, « 6 200 € HT sur 10 000 €, il reste 12 jours », puis les 3 deals du `pipeline` et des `collabs` qui le rapprochent le plus, chacun avec sa prochaine action déjà préparée ; pas d'objectif saisi : une ligne pour le proposer à Marc), et **le résultat de l'examen** de la veille (`etat/examen/resultats.md`) : une erreur remonte en VIGILANCE avec la consigne qui la corrige ; sans faute : rien.
 
 Le 1er du mois : les dispos du mois pour chaque agence active, dans « À valider » (voir « Les automatisations », point 7). Chaque jour : le temps fort qui se vend en ce moment (voir « Le calendrier des temps forts »), en une ligne, pour orienter la prospection.
 

@@ -7,7 +7,7 @@ describe("viewableUrl", () => {
   beforeEach(() => vi.stubGlobal("window", { location: { origin: "https://app.ttpcreators.pro" } }));
 
   it("fait passer un contrat .html du stockage par la page de lecture", () => {
-    const url = `${SIGN}/contracts/ivana-babic-1.html?token=abc.def`;
+    const url = `${SIGN}/contracts/nina-roux-1.html?token=abc.def`;
     expect(viewableUrl(url)).toBe(`https://app.ttpcreators.pro/document/#${encodeURIComponent(url)}`);
   });
 

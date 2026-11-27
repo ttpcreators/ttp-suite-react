@@ -1,9 +1,9 @@
 -- ════════════════════════════════════════════════════════════════════════════
 -- TTP Suite · Media kit toujours en objet (2026-11-27)
--- La fiche d'Anthony Gharbi, créée le 20/11 par Claude (outil creer_element du connecteur),
+-- La fiche d'un créateur, créée le 20/11 par Claude (outil creer_element du connecteur),
 -- avait son media kit rangé en texte : une chaîne qui contient du JSON, au lieu d'un objet.
 -- Le générateur des media kits du site (websitettpcreators) plantait sur lui, et le
--- créateur suivant (Adelina Krasnici) n'était plus généré : pages introuvables.
+-- créateur suivant n'était plus généré : pages introuvables.
 --   1. Remet en objet tout media kit rangé en texte, quand ce texte est un objet JSON
 --      valide (même contenu, même slug).
 --   2. Ajoute une contrainte : un media kit est un objet (ou vide), jamais du texte.

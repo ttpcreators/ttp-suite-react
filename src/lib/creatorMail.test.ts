@@ -217,12 +217,12 @@ describe("creator-mail : avis En cours / Validé / Refusé", () => {
   });
 
   it("mail de l'agence au seul créateur : pas du démarchage", () => {
-    expect(autoStatusOf([{ fromAgency: true, to: "candice@ttpcreators.pro", cc: "" }])).toBe("nouvelle");
-    expect(autoStatusOf([{ fromAgency: true, to: "TTP Creators, candice@ttpcreators.pro", cc: "" }])).toBe("nouvelle");
-    expect(autoStatusOf([{ fromAgency: true, to: "Julie <julie@nike.com>", cc: "candice@ttpcreators.pro" }])).toBe("demarchee");
-    expect(writesOutside(msg({ From: "partnerships@ttpcreators.pro", To: "candice@ttpcreators.pro" }), "ttpcreators.pro")).toBe(false);
-    expect(writesOutside(msg({ From: "partnerships@ttpcreators.pro", To: "talent@ttpcreators.pro", Bcc: "candice@ttpcreators.pro" }), "ttpcreators.pro")).toBe(false);
-    expect(writesOutside(msg({ From: "partnerships@ttpcreators.pro", To: "julie@nike.com", Bcc: "candice@ttpcreators.pro" }), "ttpcreators.pro")).toBe(true);
+    expect(autoStatusOf([{ fromAgency: true, to: "romane@ttpcreators.pro", cc: "" }])).toBe("nouvelle");
+    expect(autoStatusOf([{ fromAgency: true, to: "TTP Creators, romane@ttpcreators.pro", cc: "" }])).toBe("nouvelle");
+    expect(autoStatusOf([{ fromAgency: true, to: "Julie <julie@nike.com>", cc: "romane@ttpcreators.pro" }])).toBe("demarchee");
+    expect(writesOutside(msg({ From: "partnerships@ttpcreators.pro", To: "romane@ttpcreators.pro" }), "ttpcreators.pro")).toBe(false);
+    expect(writesOutside(msg({ From: "partnerships@ttpcreators.pro", To: "talent@ttpcreators.pro", Bcc: "romane@ttpcreators.pro" }), "ttpcreators.pro")).toBe(false);
+    expect(writesOutside(msg({ From: "partnerships@ttpcreators.pro", To: "julie@nike.com", Bcc: "romane@ttpcreators.pro" }), "ttpcreators.pro")).toBe(true);
   });
 });
 

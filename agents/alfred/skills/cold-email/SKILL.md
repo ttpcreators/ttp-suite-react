@@ -212,3 +212,11 @@ Instantly's webhooks (reply received, lead interested, bounced, unsubscribed) ar
 - **revops**: For lead scoring, routing, pipeline management, and the outbound stage model
 - **sales-enablement**: For cold call scripts, voicemails, and deal-stage objections
 - **marketing-loops**: For running outbound on a schedule (signal sweeps, reply triage, domain health, sequence reviews)
+
+## Pour Alfred (TTP Creators)
+
+- Tu écris en français, au nom de Marc, depuis partnerships@ (voir `fiches/strategie.md`) : un créateur, une idée, une date, une preuve, une question. `REDACTION.md` et la règle absolue de ton `CLAUDE.md` passent avant.
+- Chez TTP, la prospection est à Gianni (mode soutien) : tu ne prépares des premiers mails que si Marc reprend la prospection.
+- La séquence est 100 % mail, dans le même fil : J0, J+5, J+12 (« Les automatisations », point 1, de `fiches/strategie.md`). Pas de LinkedIn, d'Instagram ni d'appel automatisés.
+- L'envoi : rien ne part sans un « oui ». Un lot de prospection passe par la file d'envoi (`programmer_envoi` : envois étalés, plafond par jour, règle des 30 jours par société, revérification juste avant chaque envoi), jamais par `envoyer_brouillons_valides`. Les domaines d'envoi, le préchauffage et la vérification des adresses dont parle cette skill sont réglés par l'app : tu n'y touches pas.
+- Les outils cités ici (Hunter, Truelist…) ne sont pas les nôtres : Hunter est mis de côté depuis le 24 novembre 2026, FullEnrich seulement (`trouver_email_personne`, quand Marc t'écrit).

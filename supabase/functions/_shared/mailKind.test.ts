@@ -8,11 +8,11 @@ const msg = (from: string, subject: string, extra: Partial<KindMsg> & { h?: Reco
 });
 const us = (m: KindMsg) => /@ttpcreators\.pro/i.test(m.headers.find((x) => x.name === "From")?.value ?? "");
 
-// Cas réels de la boîte (novembre 2026).
+// Cas tirés de la boîte (novembre 2026), noms et adresses changés.
 describe("threadKind", () => {
   it("réponses automatiques", () => {
-    expect(threadKind([msg("Lorna Wood <lorna@lornawood.fr>", "Accès limité à mes mails jusqu'au 28 novembre Re: Facturation Léna")], us)).toBe("auto");
-    expect(threadKind([msg("Rebecca <rebecca@steam-one.com>", "Réponse automatique : Justine Gentet x SteamOne")], us)).toBe("auto");
+    expect(threadKind([msg("Inès Caron <ines@agence-exemple.fr>", "Accès limité à mes mails jusqu'au 28 novembre Re: Facturation Léna")], us)).toBe("auto");
+    expect(threadKind([msg("Rebecca <rebecca@marque-exemple.fr>", "Réponse automatique : Justine Faure x Solvi")], us)).toBe("auto");
     expect(threadKind([msg("x <x@brand.fr>", "Re: Collab", { h: { "Auto-Submitted": "auto-replied" } })], us)).toBe("auto");
   });
 
@@ -22,14 +22,14 @@ describe("threadKind", () => {
   });
 
   it("notifications et reçus", () => {
-    expect(threadKind([msg("Youtrust pour Lorna WOOD <notifications@yousign.app>", "Marc, vous avez signé")], us)).toBe("notif");
+    expect(threadKind([msg("Youtrust pour Inès CARON <notifications@yousign.app>", "Marc, vous avez signé")], us)).toBe("notif");
     expect(threadKind([msg("GitHub <noreply@github.com>", "[GitHub] Claude is requesting updated permissions")], us)).toBe("notif");
     expect(threadKind([msg('"Supabase" <invoice+statements@supabase.com>', "Payment received")], us)).toBe("notif");
     expect(threadKind([msg('"DPD France" <enquetes@voc.dpd.fr>', "Quel est votre niveau de satisfaction ?")], us)).toBe("notif");
   });
 
   it("mails transférés", () => {
-    expect(threadKind([msg("lunivana <contact.lunivana@gmail.com>", "Fwd: Proposition de collaboration TopTop")], us)).toBe("forward");
+    expect(threadKind([msg("Lou <createur@exemple.fr>", "Fwd: Proposition de collaboration Kora")], us)).toBe("forward");
     expect(threadKind([msg("a <a@b.fr>", "TR: devis")], us)).toBe("forward");
   });
 
@@ -39,9 +39,9 @@ describe("threadKind", () => {
   });
 
   it("les vraies demandes restent à traiter", () => {
-    expect(threadKind([msg('"Léane Vabre" <leane@thenode.gg>', "Opportunité de collaboration – Opera Air PR Package")], us)).toBeNull();
+    expect(threadKind([msg('"Inès Caron" <ines@agence-exemple.fr>', "Opportunité de collaboration : Nova PR Package")], us)).toBeNull();
     // Prospection d'une marque via un outil (List-Unsubscribe seul) : reste une vraie demande.
-    expect(threadKind([msg("Tina <tina@flexihome.fr>", "Collab", { h: { "List-Unsubscribe": "<mailto:u@hubspot.com>" } })], us)).toBeNull();
+    expect(threadKind([msg("Tina <tina@marque-exemple.fr>", "Collab", { h: { "List-Unsubscribe": "<mailto:u@hubspot.com>" } })], us)).toBeNull();
     expect(threadKind([msg("Marketing <marketing@brand.fr>", "Partenariat avec Léna")], us)).toBeNull();
     // Conversation où l'agence a écrit : jamais rangée en notification, même depuis un robot.
     const fil = [msg("TTP <talent@ttpcreators.pro>", "Fwd: devis"), msg("Compta <invoice@brand.fr>", "Re: Fwd: devis")];

@@ -208,7 +208,7 @@ export function RepresentationContract({ initial = null, draftId }: { initial?: 
           };
         }
         // Pas de cas enregistré → on préremplit DEPUIS LE ROSTER et on ÉCRASE les
-        // infos de l'ancien créateur (sinon elles restaient, ex. Candice au lieu de Lucie).
+        // infos de l'ancien créateur (sinon elles restaient, ex. Romane au lieu de Zoé).
         return {
           ...prev,
           talentNom: row ? titleCase(row.name) : "",

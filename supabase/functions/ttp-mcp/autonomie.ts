@@ -3,13 +3,17 @@
 // (plan « MCP TTP autonomie », demandé par Marc le 2026-11-24).
 // ----------------------------------------------------------------------------
 //   importer_historique_instagram : tout l'historique des DM de @ttpcreators, par tranches
-//      reprenables (_shared/igHistoriqueDb.ts, aussi action « backfill » de ig-inbox) ;
+//      reprenables (_shared/igHistoriqueDb.ts, aussi action « backfill » de ig-inbox, que la
+//      tâche planifiée ig-historique-import lance toutes les 3 minutes jusqu'à la fin) ;
 //   lire_profil_instagram / lire_profils_instagram : profils lus par Business Discovery,
 //      agence détectée, Base créateurs mise à jour (_shared/profilInstagramDb.ts) ;
 //   scanner_base_createurs : relit la Base par lots (jamais lus, ou lus il y a plus de 30 j) ;
 //   trouver_emails_marque : les bonnes personnes chez une marque (FullEnrich, recherche de
-//      personnes ; Hunter seulement si FullEnrich n'est pas configuré) ;
-//   trouver_email_personne : l'e-mail pro d'une personne (FullEnrich, puis Hunter en secours).
+//      personnes) ;
+//   trouver_email_personne : l'e-mail pro d'une personne (FullEnrich).
+//      Ces deux outils dépensent des crédits FullEnrich : write (accord demandé avant chaque appel).
+//      Hunter est mis de côté depuis le 24/11/2026 : son code reste en sommeil (sans la clé
+//      HUNTER_API_KEY, il n'appelle rien), ne pas créer de compte.
 //   lire_site_marque : l'adresse de contact écrite sur le site d'une marque (gratuit).
 //   dm_sans_reponse : les conversations Instagram où notre dernier message est resté sans
 //      réponse, avec ce qu'on sait déjà pour reprendre le contact par e-mail.
@@ -28,6 +32,7 @@ import { MAX_OCTETS, adresseSite, domaineDuSite, emailsDuSite, ligneEmailSite, p
 import { cleCompte, decompte, ligneSansReponse, sansReponse, type FilDm, type ProfilDm, type TypeDemande } from "../_shared/dmSansReponse.ts";
 import { LIBELLES, etatRecrut, lireSuivi, noterMessage, texteSuivi, type Canal, type EtatRecrut } from "../_shared/recrutementSuivi.ts";
 import { readAppState } from "../_shared/appState.ts";
+import { PLAFONDS } from "../_shared/quotaMeta.ts";
 import { str } from "../_shared/texteSur.ts";
 
 type Json = Record<string, unknown>;
@@ -47,12 +52,12 @@ const importerHistorique: AdminTool = {
   name: "importer_historique_instagram",
   title: "Importer l'historique des DM Instagram",
   description:
-    "Importe TOUT l'historique des conversations Instagram de @ttpcreators (environ 3 000) dans la page DM de TTP Suite, par tranches : pour chaque conversation, le @ et l'id Instagram de la personne, son nom, la date du premier et du dernier message, qui a parlé en dernier et les 20 derniers messages (limite Meta). Pas de doublon : une conversation déjà là est mise à jour. Chaque appel lance UNE tranche (1 à 6 pages de 25 conversations, environ 25 conversations par 40 s) et dit combien est importé, combien il reste et où on en est ; relancer pour la suite (le curseur est gardé). S'arrête proprement si Meta limite (heure de reprise donnée). etat_seulement = voir où on en est sans rien lancer. Fondateurs.",
+    `L'historique des conversations Instagram de @ttpcreators (environ 3 000) dans la page DM de TTP Suite : pour chaque conversation, le @ et l'id Instagram de la personne, son nom, la date du premier et du dernier message, qui a parlé en dernier et les 20 derniers messages (limite Meta). Il est déjà importé en entier (tâche planifiée ig-historique-import, qui s'arrête seule à la fin) ; les nouvelles conversations arrivent par la synchro ig-inbox. etat_seulement = voir l'état, sans appeler Meta. Un appel sans option relance une tranche si l'import n'est pas fini (1 à 6 pages de 25 conversations, pas de doublon), sinon montre l'état ; arrêt propre si Meta limite (heure de reprise donnée) ou à ${PLAFONDS.import} % du quota. recommencer relit tout depuis le début (des heures d'appels Meta, sur le quota partagé) : seulement sur demande explicite de Marc ou de Gianni. Fondateurs.`,
   inputSchema: {
     type: "object",
     properties: {
       pages: { type: "integer", minimum: 1, maximum: 6, description: "Pages de 25 conversations dans cette tranche (défaut 2)" },
-      recommencer: { type: "boolean", description: "Repartir du début (relit tout, sans doublon)" },
+      recommencer: { type: "boolean", description: "Repartir du début : relit tout (des heures d'appels Meta, sur le quota partagé). Seulement sur demande explicite de Marc ou de Gianni" },
       etat_seulement: { type: "boolean", description: "Seulement l'état de l'import, sans appeler Meta" },
     },
     additionalProperties: false,
@@ -121,7 +126,7 @@ const lireProfilsLot: AdminTool = {
   name: "lire_profils_instagram",
   title: "Lire des profils Instagram par lots",
   description:
-    `Comme lire_profil_instagram, pour une liste de 1 à ${MAX_LOT} comptes en un appel (3 lus à la fois). Les comptes personnels, privés ou introuvables sont listés à part. Si Meta approche de sa limite (80 % du quota) ou si le temps manque, les comptes pas lus sont rendus : relancer avec eux. Met à jour la Base créateurs (enregistrer = false pour ne rien écrire).`,
+    `Comme lire_profil_instagram, pour une liste de 1 à ${MAX_LOT} comptes en un appel (3 lus à la fois). Les comptes personnels, privés ou introuvables sont listés à part. Si Meta approche de sa limite (${PLAFONDS.profils} % du quota) ou si le temps manque, les comptes pas lus sont rendus : relancer avec eux. Met à jour la Base créateurs (enregistrer = false pour ne rien écrire).`,
   inputSchema: {
     type: "object",
     properties: {
@@ -149,7 +154,7 @@ const scannerBaseTool: AdminTool = {
   name: "scanner_base_createurs",
   title: "Scanner la Base créateurs",
   description:
-    `Relit par lots les profils de la Base créateurs jamais lus par lire_profil_instagram, puis ceux lus il y a plus de ${RELIRE_APRES_JOURS} jours (les plus anciens d'abord ; pas les marques ni YouTube ; pas les créateurs retirés de la Base). Met à jour abonnés, bio, e-mail, site, engagement, dernier post et agence. Reprenable : ce qui est lu sort de la file, relancer pour le lot suivant ; s'arrête à 80 % du quota Meta. Fondateurs.`,
+    `Relit par lots les profils de la Base créateurs jamais lus par lire_profil_instagram, puis ceux lus il y a plus de ${RELIRE_APRES_JOURS} jours (les plus anciens d'abord ; pas les marques ni YouTube ; pas les créateurs retirés de la Base). Met à jour abonnés, bio, e-mail, site, engagement, dernier post et agence. Reprenable : ce qui est lu sort de la file, relancer pour le lot suivant ; s'arrête à ${PLAFONDS.profils} % du quota Meta. Fondateurs.`,
   inputSchema: {
     type: "object",
     properties: { lot: { type: "integer", minimum: 1, maximum: 100, description: "Profils à lire dans ce lot (défaut 40)" } },
@@ -224,7 +229,7 @@ async function marqueParFullEnrich(a: Record<string, unknown>) {
     !domaine ? `Recherche par le nom « ${marque} », sans le site : vérifier que les personnes travaillent bien pour cette marque.` : "",
     toutes.length
       ? `${fr(toutes.length)} personne(s)${res.total > toutes.length ? ` sur ${fr(res.total)} connue(s) de FullEnrich` : ""}${country ? `, ${country}` : ""}${elargi ? ", recherche élargie à tous les postes" : ""}. ${fr(dansLaCible.length)} avec un poste dans la cible, les plus utiles en premier.`
-      : `FullEnrich ne connaît personne chez ${nom}${country ? ` (${country})` : ""}${elargi ? ", même sans filtre de poste" : ""}. Essayer avec le domaine exact du site, sans le pays, ou garder l'adresse générale de la marque.`,
+      : `FullEnrich ne connaît personne chez ${nom}${country ? ` (${country})` : ""}${elargi ? ", même sans filtre de poste" : ""}. Essayer avec le domaine exact du site, sans le pays, ou chercher l'adresse partenariats ou presse du site (lire_site_marque).`,
     ...toutes.map(lignePersonneFE),
     toutes.length ? "Pour l'e-mail d'une personne : trouver_email_personne (prenom, nom, domaine, ou son lien LinkedIn) : 1 crédit seulement si l'e-mail est trouvé." : "",
     `Coût de cette recherche : ${fr(cout)} crédit(s) FullEnrich.${restants === null ? "" : ` Crédits restants : ${fr(restants)}.`}`,
@@ -237,7 +242,7 @@ const trouverEmailsMarque: AdminTool = {
   name: "trouver_emails_marque",
   title: "Trouver les personnes à contacter chez une marque",
   description:
-    "Trouve chez une marque les personnes à contacter (influence, partenariats, relations presse, social media, marketing), classées de la plus utile à la moins utile, avec leur poste, leur ville et leur LinkedIn. Passe par FullEnrich (abonnement de l'agence) : 0,25 crédit par personne trouvée, donc 5 personnes par défaut. Donner le domaine du site (ex. marque.fr) de préférence, sinon le nom de la marque. La recherche ne donne PAS l'e-mail : pour la ou les personnes retenues, appeler ensuite trouver_email_personne (1 crédit seulement si l'e-mail est trouvé). Le solde de crédits est affiché à la fin : à surveiller, l'abonnement en donne 500 par mois. N'écrit RIEN : pour garder une personne, appeler ajouter_contact.",
+    "Trouve chez une marque les personnes à contacter (influence, partenariats, relations presse, social media, marketing), classées de la plus utile à la moins utile, avec leur poste, leur ville et leur LinkedIn. Coûte des crédits FullEnrich (abonnement de l'agence, 500 par mois) : 0,25 crédit par personne trouvée, donc 5 personnes par défaut. Annoncer le coût et attendre l'accord ; seulement pour une marque prioritaire, après lire_site_marque (gratuit). Donner le domaine du site (ex. marque.fr) de préférence, sinon le nom de la marque. La recherche ne donne PAS l'e-mail : pour la ou les personnes retenues, appeler ensuite trouver_email_personne (1 crédit seulement si l'e-mail est trouvé). Le solde de crédits est affiché à la fin. N'enregistre rien dans l'app : pour garder une personne, appeler ajouter_contact.",
   inputSchema: {
     type: "object",
     properties: {
@@ -247,15 +252,18 @@ const trouverEmailsMarque: AdminTool = {
       postes: { type: "string", description: "Postes cherchés, séparés par des virgules (défaut : influence, partenariat, marketing, communication, relations presse, social media, brand manager)" },
       pays: { type: "string", description: "Ne garder que les personnes dans ce pays (ex. France). Vide : tous les pays" },
       tous_les_postes: { type: "boolean", description: "Chercher sans filtre de poste (petite marque où personne n'a un titre marketing)" },
-      verifier: { type: "boolean", description: "Hunter seulement : vérifier les adresses non vérifiées (5 au plus)" },
     },
     additionalProperties: false,
   },
+  // Dépense des crédits FullEnrich à chaque appel : jamais annoncé « lecture seule » (accord demandé).
+  write: true,
+  founder: true,
   run: async (_sb, _c, a) => {
-    // FullEnrich d'abord (abonnement de l'agence, décision du 24/11/2026 : pas de Hunter).
+    // FullEnrich seulement (abonnement de l'agence, décision du 24/11/2026 : pas de Hunter).
     if (FULLENRICH_KEY) return await marqueParFullEnrich(a);
+    // Hunter en sommeil : il ne sert que si une clé HUNTER_API_KEY existe encore.
     const key = hunterKey();
-    if (!key) return fail(CLE_MANQUANTE);
+    if (!key) return fail("FullEnrich non configuré (secret FULLENRICH_API_KEY) : rien n'a été cherché.");
     const domaine = domaineDe(str(a.domaine, 200)) || domaineDe(str(a.marque, 200));
     const marque = str(a.marque, 120);
     if (!domaine && !marque) return fail("Donne le domaine du site de la marque (ex. marque.fr) ou son nom.");
@@ -320,7 +328,7 @@ const trouverEmailPersonne: AdminTool = {
   name: "trouver_email_personne",
   title: "Trouver l'e-mail pro d'une personne",
   description:
-    "Trouve l'e-mail pro d'une personne précise (prénom, nom et domaine de la marque, ou son lien LinkedIn) : FullEnrich d'abord (1 crédit seulement si l'e-mail est trouvé), puis Hunter (email-finder) en secours. Renvoie l'e-mail et son statut de vérification. Si FullEnrich met trop de temps, l'outil donne un numéro de suivi : rappeler avec suivi = ce numéro. N'écrit RIEN : pour garder la personne, appeler ajouter_contact.",
+    "Trouve l'e-mail pro d'une personne précise (prénom, nom et domaine de la marque, ou son lien LinkedIn) par FullEnrich, et donne son statut de vérification. Coûte des crédits FullEnrich (1 crédit seulement si l'e-mail est trouvé, abonnement de 500 par mois) : annoncer le coût et attendre l'accord ; seulement pour une marque prioritaire, après lire_site_marque (gratuit). Si FullEnrich met trop de temps, l'outil donne un numéro de suivi : rappeler avec suivi = ce numéro (ce rappel ne redemande pas l'accord). N'enregistre rien dans l'app : pour garder la personne, appeler ajouter_contact.",
   inputSchema: {
     type: "object",
     properties: {
@@ -333,6 +341,9 @@ const trouverEmailPersonne: AdminTool = {
     },
     additionalProperties: false,
   },
+  // Dépense des crédits FullEnrich : jamais annoncé « lecture seule » (accord demandé avant l'appel).
+  write: true,
+  founder: true,
   run: async (_sb, _c, a) => {
     const prenom = str(a.prenom, 60);
     const nom = str(a.nom, 60);
@@ -351,19 +362,23 @@ const trouverEmailPersonne: AdminTool = {
     if (!linkedin && !domaine && !marque) return fail("Il faut le domaine du site de la marque (ex. marque.fr) ou son nom.");
 
     const lignes: string[] = [`# E-mail pro de ${qui}${domaine ? ` (${domaine})` : marque ? ` (${marque})` : ""}`];
+    // FullEnrich a cherché sans trouver (ni réponse en attente) : la suite est dite plus bas.
+    let pasTrouve = false;
     // 1. FullEnrich.
     if (FULLENRICH_KEY) {
       const contact = enrichContact({ first: prenom, last: nom, domain: domaine, company: marque, linkedin });
       if (contact) {
-        const t = texteFullEnrich(await enrichir(contact, 25_000), qui);
+        const r = await enrichir(contact, 25_000);
+        const t = texteFullEnrich(r, qui);
         lignes.push(t.texte);
         if (t.trouve) return ok([...lignes, "Rien n'a été enregistré. Pour garder la personne : ajouter_contact."].join("\n"));
         if (t.attente) lignes.push(`Rappeler avec suivi = ${t.attente} dans une minute pour le résultat FullEnrich.`);
-      }
+        else pasTrouve = !("error" in r);
+      } else lignes.push("Lien LinkedIn illisible : donner un lien linkedin.com, ou le prénom, le nom et le domaine.");
     } else lignes.push("FullEnrich non configuré (secret FULLENRICH_API_KEY absent).");
-    // 2. Hunter en secours.
+    // 2. Hunter, mis de côté le 24/11/2026 : en sommeil, il ne sert que si une clé HUNTER_API_KEY existe encore.
     const key = hunterKey();
-    if (!key) return ok([...lignes, CLE_MANQUANTE].join("\n"));
+    if (!key) return ok([...lignes, ...(pasTrouve ? [CLE_MANQUANTE] : [])].join("\n"));
     if (!prenom || !nom) return ok([...lignes, "Hunter a besoin du prénom et du nom (le lien LinkedIn seul ne suffit pas)."].join("\n"));
     const q = new URLSearchParams({ first_name: prenom, last_name: nom, ...(domaine ? { domain: domaine } : { company: marque }) });
     const r = await hunter(`/email-finder?${q}`, key);
