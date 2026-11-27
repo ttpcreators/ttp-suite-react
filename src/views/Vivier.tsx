@@ -100,16 +100,20 @@ const esc = (s: unknown) => String(s ?? "").replace(/[<>&]/g, (c) => ({ "<": "&l
 
 /** Chaîne YouTube (ajoutée depuis le Sourcing YouTube) plutôt qu'un @ Instagram. */
 const isYtHandle = (handle?: string | null) => /youtube\.com|youtu\.be/i.test(handle ?? "");
+/** Profil TikTok rangé en lien (Radar TikTok, candidature « Rejoindre l'agence » du site). */
+const isTtHandle = (handle?: string | null) => /tiktok\.com/i.test(handle ?? "");
+/** Lien YouTube ou TikTok : pas de profil Instagram à lire, le lien s'ouvre tel quel. */
+const isLinkHandle = (handle?: string | null) => isYtHandle(handle) || isTtHandle(handle);
 /** @handle → nom d'utilisateur nettoyé (sans @, sans URL). YouTube : le @ de la chaîne. */
 const igName = (handle?: string | null) =>
-  isYtHandle(handle)
-    ? /@([\w.-]+)/.exec(handle ?? "")?.[1] ?? "chaîne YouTube"
+  isLinkHandle(handle)
+    ? /@([\w.-]+)/.exec(handle ?? "")?.[1] ?? (isTtHandle(handle) ? "compte TikTok" : "chaîne YouTube")
     : (handle ?? "").trim().replace(/^@/, "").replace(/^https?:\/\/(www\.)?instagram\.com\//i, "").replace(/[/?].*$/, "").replace(/\s/g, "");
 /** Clé de catégorie : sans espaces ni majuscules (« Mode » = « mode »). */
 const tagKey = (t: string) => t.trim().toLocaleLowerCase("fr");
 /** URL du profil Instagram (ou de la chaîne YouTube), ou "" si pas de handle. */
 const igUrl = (handle?: string | null) => {
-  if (isYtHandle(handle)) {
+  if (isLinkHandle(handle)) {
     const h = (handle ?? "").trim();
     return /^https?:\/\//i.test(h) ? h : `https://${h.replace(/^\/+/, "")}`;
   }
@@ -370,7 +374,7 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
   useEffect(() => {
     if (!rows || trackData === null) return;
     const want = rows
-      .filter((r) => !isYtHandle(r.handle)) // une chaîne YouTube n'a pas de profil Instagram à lire
+      .filter((r) => !isLinkHandle(r.handle)) // une chaîne YouTube ou un compte TikTok n'a pas de profil Instagram à lire
       .map((r) => ({ id: r.id, h: igName(r.handle) }))
       .filter((x) => x.h && !igAsked.has(x.h) && igStale(tracking[x.id], x.h))
       .slice(0, 20);
@@ -635,7 +639,7 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
   const menuFor = (r: Row) => [
     { key: "edit", label: "Modifier", icon: Pencil, onClick: () => fromSheet(() => openEdit(r)) },
     ...(r.email ? [{ key: "mail", label: "Écrire", icon: Send, onClick: () => fromSheet(() => openMail(r)) }] : []),
-    ...(igUrl(r.handle) ? [{ key: "open", label: isYtHandle(r.handle) ? "Ouvrir la chaîne YouTube" : "Ouvrir le profil Instagram", icon: ArrowUpRight, onClick: () => window.open(igUrl(r.handle), "_blank", "noopener,noreferrer") }] : []),
+    ...(igUrl(r.handle) ? [{ key: "open", label: isYtHandle(r.handle) ? "Ouvrir la chaîne YouTube" : isTtHandle(r.handle) ? "Ouvrir le profil TikTok" : "Ouvrir le profil Instagram", icon: ArrowUpRight, onClick: () => window.open(igUrl(r.handle), "_blank", "noopener,noreferrer") }] : []),
     { key: "delete", label: "Supprimer", icon: Trash2, danger: true, onClick: () => remove(r), confirm: { title: "Retirer du scouting", message: `Retirer « ${r.name} » du scouting ? Tu pourras le restaurer depuis la corbeille.` } },
   ];
 
