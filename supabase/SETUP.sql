@@ -19,6 +19,12 @@
 -- ============================================================================
 
 create extension if not exists "pgcrypto";
+-- Tâches planifiées (pg_cron, qui s'installe dans pg_catalog) et appels HTTP depuis la base
+-- (pg_net, dans public comme en production : sans clause schema, comme dans les scripts
+-- datés 05-cron-alertes-email.sql et suivants). Seules les extensions sont ici : les tâches
+-- planifiées restent dans les scripts datés de sql/, jamais dans ce fichier.
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
 
 -- ----------------------------------------------------------------------------
 -- 1) TABLES (créées seulement si absentes — ne touche pas aux données existantes)
@@ -64,6 +70,11 @@ create table if not exists public.invoices (
   sort_order int default 0, created_at timestamptz default now()
 );
 alter table public.invoices add column if not exists creator text;
+-- Date de paiement, remplie par le déclencheur invoices_paid_at, et numéro de facture
+-- unique (les brouillons sans numéro ne comptent pas) (sql/2026-11-01-factures-garde-fous).
+alter table public.invoices add column if not exists paid_at timestamptz;
+create unique index if not exists invoices_ref_unique on public.invoices (ref)
+  where coalesce(trim(ref), '') <> '';
 
 create table if not exists public.contacts (
   id uuid primary key default gen_random_uuid(),
@@ -78,6 +89,15 @@ alter table public.contacts add column if not exists instagram text;     -- @ de
 alter table public.contacts add column if not exists city text;          -- ville de la marque
 alter table public.contacts add column if not exists touches jsonb;      -- journal de contact multi-canal (sql/2026-09-28-contacts-touches)
 alter table public.contacts add column if not exists ig jsonb;           -- chiffres Instagram de la marque, écrits par ig-sync (sql/2026-10-13-instagram-api)
+alter table public.contacts add column if not exists linkedin text;      -- profil LinkedIn de la personne, rempli par « Trouver des contacts » (sql/2026-10-28-contacts-linkedin)
+-- Séquence de prospection en cours (règles dans supabase/functions/_shared/sequence.ts) et
+-- état de l'adresse (rebond, domaine sans serveur mail) (sql/2026-11-20-sequences-contacts).
+alter table public.contacts add column if not exists sequence jsonb;
+alter table public.contacts add column if not exists email_check jsonb;
+-- Contacts à relancer : séquence en cours, triés par date de la prochaine étape.
+create index if not exists contacts_sequence_prochaine_idx
+  on public.contacts ((sequence ->> 'prochaine'))
+  where (sequence ->> 'statut') = 'en_cours';
 
 create table if not exists public.prospects (
   id uuid primary key default gen_random_uuid(),
@@ -94,6 +114,10 @@ create table if not exists public.todos (
 );
 alter table public.todos add column if not exists status text default 'À faire';  -- sql/04
 update public.todos set status = case when done then 'Fait' else 'À faire' end where status is null;
+-- « Visible par le créateur » : une tâche de l'agence n'est lue par le créateur que si elle
+-- est cochée (sql/2026-11-24-taches-internes-privees). Créée ici, avant les règles todos_read,
+-- todos_update et todos_delete, la fonction todos_activity et la règle des pièces jointes.
+alter table public.todos add column if not exists visible_createur boolean not null default false;
 
 create table if not exists public.briefs (
   id uuid primary key default gen_random_uuid(),
@@ -164,6 +188,9 @@ alter table public.events add column if not exists last_synced_at  timestamptz;
 alter table public.events add column if not exists sync_source     text default 'agence';
 alter table public.events add column if not exists deleted         boolean not null default false;
 alter table public.events add column if not exists deleted_at      timestamptz;
+-- Rendez-vous interne de l'agence, jamais lu par le créateur (sql/2026-11-24-taches-internes-privees).
+-- Créée ici, avant les règles events_read et events_write et le déclencheur events_interne_auto.
+alter table public.events add column if not exists interne         boolean not null default false;
 
 create table if not exists public.messages (
   id uuid primary key default gen_random_uuid(),
@@ -224,15 +251,20 @@ create or replace function public.is_founder() returns boolean
   language sql stable security definer set search_path = public as $$
   select exists (
     select 1 from public.profiles p
-    where p.user_id = auth.uid() and p.role = 'agency' and coalesce(p.agency_role,'member') = 'founder'
+    where p.user_id = auth.uid()
+      and p.role = 'agency'
+      and coalesce(p.agency_role, 'member') = 'founder'
   );
 $$;
 
 -- Clés « argent » du blob agence, rangées dans la ligne '__finance_state__' (fondateurs).
+-- + comptaSettings, collabCashMode : page Compta (sql/2026-10-29-compta.sql).
+-- + quotes : les devis, rangés avec l'argent comme les factures (audit du 2 nov.,
+--   sql/2026-11-02-corrections-audit.sql). Sans elle, les montants des devis partiraient
+--   dans la ligne commune '__app_state__', que lisent tous les comptes agence.
 create or replace function public.app_finance_key(p_key text) returns boolean
 language sql immutable set search_path = public as $$
-  -- + comptaSettings, collabCashMode : page Compta (sql/2026-10-29-compta.sql).
-  select p_key = any (array['invoiceDetails', 'invoiceBankAccounts', 'invoiceIssuer', 'creatorPayouts', 'creatorCommission', 'comptaSettings', 'collabCashMode']);
+  select p_key = any (array['invoiceDetails', 'invoiceBankAccounts', 'invoiceIssuer', 'creatorPayouts', 'creatorCommission', 'comptaSettings', 'collabCashMode', 'quotes']);
 $$;
 
 create or replace function public.my_creator() returns text
@@ -413,6 +445,8 @@ create table if not exists public.ig_connexions (
   ig_username  text,
   account_type text
 );
+-- Description de la table, la même qu'en production (sql/2026-11-25-ig-connexions).
+comment on table public.ig_connexions is 'Une ligne par tentative de connexion Instagram d''une créatrice (ig-callback). Lecture : agence, et la créatrice pour ses lignes.';
 create index if not exists ig_connexions_creator_idx on public.ig_connexions (creator_id, at desc);
 alter table public.ig_connexions enable row level security;
 revoke all on public.ig_connexions from anon, authenticated;
@@ -696,6 +730,9 @@ create table if not exists public.ig_messages (
   text      text not null default ''
 );
 create index if not exists ig_messages_thread_idx on public.ig_messages (thread_id, at);
+-- Photos, vidéos, vocaux et partages d'un message, lus à part par ig-inbox :
+-- [{ kind, path?, src?, link?, name? }] (sql/2026-10-28-dm-instagram-medias).
+alter table public.ig_messages add column if not exists media jsonb;
 alter table public.ig_threads  enable row level security;
 alter table public.ig_messages enable row level security;
 revoke all on public.ig_threads  from anon;
@@ -707,6 +744,16 @@ create policy ig_threads_agency_update on public.ig_threads for update to authen
   using (public.is_agency()) with check (public.is_agency());
 drop policy if exists ig_messages_agency_read on public.ig_messages;
 create policy ig_messages_agency_read on public.ig_messages for select to authenticated using (public.is_agency());
+-- Fichiers des DM (photos, vidéos, vocaux, partages : colonne media ci-dessus, même script
+-- sql/2026-10-28-dm-instagram-medias) : ig-inbox les recopie dans ce bucket PRIVÉ, car leurs
+-- adresses chez Meta expirent. Lecture par l'agence seulement (liens signés d'une heure),
+-- écriture par le serveur seulement. Pas de limite de taille ni de type, comme en production.
+insert into storage.buckets (id, name, public)
+  values ('ig-media', 'ig-media', false)
+  on conflict (id) do update set public = false;
+drop policy if exists ig_media_agency_read on storage.objects;
+create policy ig_media_agency_read on storage.objects for select to authenticated
+  using (bucket_id = 'ig-media' and public.is_agency());
 
 -- 2. Posts programmés ----------------------------------------------------------
 create table if not exists public.ig_planned (
@@ -851,7 +898,11 @@ create policy collab_steps_agency on public.collab_steps for all to authenticate
   using (public.is_agency()) with check (public.is_agency());
 -- updated_at auto + journalisation datée de chaque changement d'étape.
 create or replace function public.collabs_touch() returns trigger
-  language plpgsql as $$ begin new.updated_at := now(); return new; end $$;
+  language plpgsql set search_path = public, pg_temp as $$
+begin
+  new.updated_at := now();
+  return new;
+end $$;
 drop trigger if exists collabs_touch_upd on public.collabs;
 create trigger collabs_touch_upd before update on public.collabs
   for each row execute function public.collabs_touch();
@@ -912,6 +963,43 @@ $$;
 revoke all on function public.creator_discussions(text) from public, anon;
 grant execute on function public.creator_discussions(text) to authenticated;
 
+-- Espace créateur › Agenda (sql/2026-11-04-echeances-createur.sql) : les fins de contrat
+-- (`contractDeadlines`) et les exclusivités CONFIRMÉES (`exclusivites`, pas celles « à
+-- confirmer ») du créateur connecté, lues dans le blob agence (module_rows, qu'il ne peut
+-- pas lire). Rien d'autre ne sort (ni montant, ni droits). L'agence peut demander celles
+-- d'un créateur précis (p_creator), comme creator_discussions. Appelée par
+-- supabase.rpc('creator_echeances') dans src/views/CreatorSpace.tsx.
+create or replace function public.creator_echeances(p_creator text default null)
+returns jsonb
+language sql stable security definer
+set search_path = public, pg_temp
+as $$
+  with me as (
+    select lower(btrim(case when public.is_agency() then coalesce(p_creator, '') else coalesce(public.my_creator(), '') end)) as n
+  ), blob as (
+    select a::jsonb as j from public.module_rows where module = '__app_state__' limit 1
+  ), dl as (
+    select d from blob, me,
+      jsonb_array_elements(case when jsonb_typeof(blob.j -> 'contractDeadlines') = 'array' then blob.j -> 'contractDeadlines' else '[]'::jsonb end) d
+    where me.n <> '' and jsonb_typeof(d) = 'object' and lower(btrim(coalesce(d ->> 'creator', ''))) = me.n
+  ), ex as (
+    select x from blob, me,
+      jsonb_array_elements(case when jsonb_typeof(blob.j -> 'exclusivites') = 'array' then blob.j -> 'exclusivites' else '[]'::jsonb end) x
+    where me.n <> '' and jsonb_typeof(x) = 'object'
+      and lower(btrim(coalesce(x ->> 'creator', ''))) = me.n
+      and coalesce(x -> 'pending', 'false'::jsonb) <> 'true'::jsonb
+  )
+  select jsonb_build_object(
+    'contrats', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', d ->> 'id', 'creator', d ->> 'creator', 'type', d ->> 'type', 'start', d ->> 'start', 'months', d -> 'months')) from dl), '[]'::jsonb),
+    'exclusivites', coalesce((select jsonb_agg(jsonb_build_object(
+        'id', x ->> 'id', 'creator', x ->> 'creator', 'brand', x ->> 'brand', 'scope', x ->> 'scope',
+        'competitors', coalesce(x -> 'competitors', '[]'::jsonb), 'start', x ->> 'start', 'end', x ->> 'end')) from ex), '[]'::jsonb)
+  );
+$$;
+revoke all on function public.creator_echeances(text) from public, anon;
+grant execute on function public.creator_echeances(text) to authenticated;
+
 
 -- 2) Garde : hors agence, collab_id doit être vide ou une collab du créateur connecté.
 --    Sans compte connecté (serveur, SQL Editor) : rien n'est bloqué (sql/2026-10-25-audit).
@@ -940,20 +1028,110 @@ create trigger briefs_collab_link_guard before insert or update of collab_id on 
 drop trigger if exists invoices_collab_link_guard on public.invoices;
 create trigger invoices_collab_link_guard before insert or update of collab_id on public.invoices
   for each row execute function public.collab_link_guard();
+
+-- Briefs ⇄ Collabs (sql/2026-11-04-briefs-collabs-synchro.sql) : toujours à jour, sans
+-- saisie à la main.
+-- 1) Une nouvelle collab (active ou gagnée) crée son brief (marque, créateur, livrables),
+--    relié par briefs.collab_id et collabs.brief_id.
+-- 2) L'étape de la collab fixe le statut du brief : 1 Signature → « attente »,
+--    2 Brief transmis à 5 Validation → « cours », 6 Publication et après → « terminé ».
+-- 3) Un brief passé « cours » ou « terminé » par l'agence fait AVANCER la collab (étape 2
+--    ou 6 au moins), jamais reculer. Un créateur qui change le statut de son brief ne
+--    touche pas à la collab.
+-- La condition pg_trigger_depth() < 2 des déclencheurs de mise à jour évite la boucle
+-- collab ⇄ brief. Le rattrapage des collabs existantes du script daté (données) n'est pas
+-- repris ici.
+create or replace function public.brief_status_for_step(p_step integer)
+returns text language sql immutable set search_path = public, pg_temp as $$
+  select case when coalesce(p_step, 1) <= 1 then 'attente'
+              when p_step <= 5 then 'cours'
+              else 'terminé' end
+$$;
+
+-- Étape minimale qu'un statut de brief impose à sa collab (null = aucune).
+create or replace function public.collab_step_for_brief(p_status text)
+returns integer language sql immutable set search_path = public, pg_temp as $$
+  select case lower(coalesce(p_status, ''))
+              when 'cours' then 2
+              when 'terminé' then 6
+              when 'termine' then 6
+              else null end
+$$;
+
+-- Collab créée → son brief ; étape changée (UPDATE) → statut du brief.
+create or replace function public.collabs_sync_brief()
+returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  v_brief uuid;
+begin
+  if tg_op = 'INSERT' then
+    if new.status not in ('active', 'gagnee') then return new; end if;
+    select id into v_brief from public.briefs where collab_id = new.id limit 1;
+    if v_brief is null then
+      insert into public.briefs (brand, creator, deliverables, due, status, collab_id)
+      values (new.brand, new.creator, coalesce(new.deliverables, ''), '—',
+              public.brief_status_for_step(new.step), new.id)
+      returning id into v_brief;
+    end if;
+    update public.collabs set brief_id = v_brief where id = new.id and brief_id is distinct from v_brief;
+    return new;
+  end if;
+  if new.step is distinct from old.step then
+    update public.briefs
+       set status = public.brief_status_for_step(new.step)
+     where collab_id = new.id
+       and status is distinct from public.brief_status_for_step(new.step);
+  end if;
+  return new;
+end $$;
+drop trigger if exists collabs_sync_brief_ins on public.collabs;
+create trigger collabs_sync_brief_ins after insert on public.collabs
+  for each row execute function public.collabs_sync_brief();
+drop trigger if exists collabs_sync_brief_upd on public.collabs;
+create trigger collabs_sync_brief_upd after update of step on public.collabs
+  for each row when (pg_trigger_depth() < 2) execute function public.collabs_sync_brief();
+
+-- Brief « cours » ou « terminé » (par l'agence, ou sans compte connecté) → la collab
+-- avance, jamais ne recule.
+create or replace function public.briefs_sync_collab()
+returns trigger language plpgsql security definer set search_path = public, pg_temp as $$
+declare
+  v_min integer := public.collab_step_for_brief(new.status);
+begin
+  if new.collab_id is null or v_min is null then return new; end if;
+  if new.status is not distinct from old.status and new.collab_id is not distinct from old.collab_id then return new; end if;
+  if auth.uid() is not null and not public.is_agency() then return new; end if;
+  update public.collabs set step = v_min where id = new.collab_id and coalesce(step, 1) < v_min;
+  return new;
+end $$;
+drop trigger if exists briefs_sync_collab_upd on public.briefs;
+create trigger briefs_sync_collab_upd after update of status, collab_id on public.briefs
+  for each row when (pg_trigger_depth() < 2) execute function public.briefs_sync_collab();
+-- Droits comme en production (sql/2026-11-25-securite-fonctions-anon.sql, puis
+-- sql/2026-11-27-securite-lot2.sql) : ces deux fonctions de déclencheur ne s'appellent pas
+-- directement ; seuls le propriétaire et service_role gardent le droit d'exécution. Posé
+-- ici, juste après leur création : les boucles de sécurité de la fin du fichier le font
+-- aussi, mais ce retrait tient même si l'ordre des blocs change.
+revoke execute on function public.briefs_sync_collab(), public.collabs_sync_brief() from public, anon, authenticated;
+
 -- events : un événement peut concerner plusieurs créateurs (who = "Nom A, Nom B").
--- Le créateur le voit si son nom figure dans la liste.
--- LECTURE : le créateur voit tout évènement où son nom figure (liste "Nom A, Nom B").
--- ÉCRITURE : il ne peut créer/modifier QUE des évènements qui le concernent lui seul
--- (who = son nom) — il ne peut pas taguer d'autres créateurs à sa place. (sql/13)
--- LECTURE par appartenance à la liste (who = "A, B") ; mais ÉCRITURE/SUPPRESSION
--- réservée aux évènements qui le concernent LUI SEUL (who = son nom, strict) — sinon
--- un créateur listé pouvait supprimer un évènement multi-créateurs et propager la
--- suppression à l'agenda Google via events_guard_delete. (audit 2026-07-13)
+-- LECTURE : le créateur voit tout évènement où son nom figure (liste "Nom A, Nom B"),
+-- sauf un rendez-vous INTERNE de l'agence (interne = true, par exemple les « Tâche : … »
+-- recopiés des tâches internes) (sql/13, sql/2026-11-24-taches-internes-privees).
+-- ÉCRITURE/SUPPRESSION : réservée aux évènements qui le concernent LUI SEUL (who = son
+-- nom, strict) et qui ne sont pas internes. Sinon un créateur listé pouvait supprimer un
+-- évènement multi-créateurs et propager la suppression à l'agenda Google via
+-- events_guard_delete (audit 2026-07-13), ou modifier, supprimer ou créer un rendez-vous
+-- interne (2026-11-24). Il ne peut pas non plus taguer d'autres créateurs à sa place.
+-- La colonne interne est créée en section 1, avec les autres colonnes d'events.
+drop policy if exists events_read  on public.events;
 create policy events_read  on public.events for select to authenticated
-  using (public.is_agency() or public.my_creator() = any(string_to_array(coalesce(who,''), ', ')));
+  using (public.is_agency() or (
+    public.my_creator() = any(string_to_array(coalesce(who, ''), ', ')) and not interne));
+drop policy if exists events_write on public.events;
 create policy events_write on public.events for all to authenticated
-  using (public.is_agency() or who = public.my_creator())
-  with check (public.is_agency() or who = public.my_creator());
+  using (public.is_agency() or (who = public.my_creator() and not interne))
+  with check (public.is_agency() or (who = public.my_creator() and not interne));
 
 -- MESSAGES : agence = tout ; créateur = les siens + annonces globales (creator NULL).
 -- Même découpage que contacts : la branche `creator is null` reste en LECTURE mais
@@ -1105,6 +1283,10 @@ create index if not exists seq_enroll_due_idx         on public.sequence_enrollm
 create index if not exists email_activity_contact_idx on public.email_activity (contact_email, created_at);
 create unique index if not exists email_activity_gmail_msg_uidx on public.email_activity (gmail_message_id) where gmail_message_id is not null;
 create index if not exists email_activity_dir_created_idx on public.email_activity (direction, created_at desc);
+-- Cloche des mails (sql/2026-11-18-cloche-mails-lus.sql) : gmail-poll note quand le mail a
+-- été lu dans Gmail ou Spark (read_at) et de quelle boîte il vient (box).
+alter table public.email_activity add column if not exists read_at timestamptz;
+alter table public.email_activity add column if not exists box text;
 -- « Envoyé par » (sql/2026-11-25-mails-envoye-par.sql) : qui de l'équipe a envoyé le mail.
 alter table public.email_activity add column if not exists envoye_par uuid;
 alter table public.email_activity add column if not exists envoye_par_nom text;
@@ -1173,6 +1355,10 @@ create policy push_sub_del on public.push_subscriptions for delete to authentica
 -- ─── 7.4 Blob agence : écriture atomique + backup quotidien (sql/07) ──────────
 -- app_state_set : écrit UNE clé du blob __app_state__ en une instruction (jsonb_set
 -- sous verrou de ligne) → deux sauvegardes concurrentes ne s'écrasent plus.
+-- Le coalesce de la mise à jour compte : jsonb_set(…, NULL) renverrait NULL et effacerait
+-- TOUT le blob (2026-10-15). Les clés « argent » (app_finance_key) vont dans la ligne
+-- '__finance_state__', réservée aux fondateurs ; app_state_merge et app_state_list font de
+-- même (sql/2026-10-25-finance-fondateurs.sql).
 create or replace function public.app_state_set(p_key text, p_value jsonb)
 returns void
 language plpgsql
@@ -1195,7 +1381,6 @@ begin
     insert into public.module_rows (module, a)
       values (v_module, jsonb_build_object(p_key, coalesce(p_value, 'null'::jsonb))::text);
   else
-    -- coalesce : jsonb_set(…, NULL) renverrait NULL et effacerait TOUT le blob (2026-10-15).
     update public.module_rows
        set a = jsonb_set(coalesce(nullif(a, ''), '{}')::jsonb, array[p_key], coalesce(p_value, 'null'::jsonb), true)::text
      where id = v_id;
@@ -1256,6 +1441,9 @@ end;
 $$;
 grant execute on function public.app_state_merge(text, jsonb, text[]) to authenticated;
 
+-- app_state_list : liste d'entrées {id, …} d'une clé du blob. Les entrées existantes sont
+-- remplacées sur place, retirées (p_remove) ou gardées telles quelles ; les nouvelles vont
+-- au début ou à la fin selon p_prepend.
 create or replace function public.app_state_list(p_key text, p_upsert jsonb, p_remove text[] default '{}', p_prepend boolean default false)
 returns void
 language plpgsql
@@ -1286,7 +1474,6 @@ begin
   if v_cur is null or jsonb_typeof(v_cur) <> 'array' then v_cur := '[]'::jsonb; end if;
   if p_upsert is null or jsonb_typeof(p_upsert) <> 'array' then p_upsert := '[]'::jsonb; end if;
   select coalesce(array_agg(x ->> 'id'), '{}') into v_ids from jsonb_array_elements(p_upsert) x;
-  -- Remplacées sur place, retirées, ou gardées telles quelles.
   for v_el in select * from jsonb_array_elements(v_cur) loop
     if (v_el ->> 'id') = any(coalesce(p_remove, '{}')) then continue; end if;
     if (v_el ->> 'id') = any(v_ids) then
@@ -1296,7 +1483,6 @@ begin
       v_out := v_out || jsonb_build_array(v_el);
     end if;
   end loop;
-  -- Nouvelles entrées : au début ou à la fin selon p_prepend.
   for v_up in select * from jsonb_array_elements(p_upsert) loop
     if not exists (select 1 from jsonb_array_elements(v_cur) y where y ->> 'id' = v_up ->> 'id') then
       v_new := v_new || jsonb_build_array(v_up);
@@ -1348,20 +1534,31 @@ revoke execute on function public.backup_app_state() from public, anon, authenti
 -- (google-watch-renew, events-purge-tombstones, google-sync-hourly) sont EXCLUS.
 
 -- 7.5.a Fonctions trigger updated_at (+ garde de source d'écriture).
+-- touch_updated_at : corps identique à la production, recopié de la migration
+-- (migrations/20260702_google_calendar.sql). Le search_path est celui posé par
+-- sql/2026-11-27-securite-lot2.sql (la boucle de ce script, en fin de fichier, le repose aussi).
 create or replace function public.touch_updated_at()
 returns trigger
 language plpgsql
+set search_path = public, pg_temp
 as $$
 declare
+  -- Discrimine l'origine de l'écriture. Le rôle Postgres effectif est le plus
+  -- fiable : les Edge Functions (sync serveur) se connectent en 'service_role',
+  -- l'app front en 'authenticated'. On complète avec la claim JWT (défense en
+  -- profondeur) au cas où current_user serait masqué.
   v_pg_role  text := current_user;
   v_jwt_role text := current_setting('request.jwt.claim.role', true);
 begin
-  -- Écriture applicative (UI agence) → origine 'agence', horodatée now().
-  -- Écriture serveur (service_role, sync Google) → préserve updated_at si 'google'.
+  -- Écriture serveur (sync) UNIQUEMENT si le rôle effectif est service_role.
+  -- Toute autre origine (authenticated = UI/front) est traitée comme 'agence'.
   if v_pg_role <> 'service_role' and coalesce(v_jwt_role, '') <> 'service_role' then
+    -- Mutation applicative (agence via l'app) : origine 'agence', horodatage now().
     new.sync_source := 'agence';
     new.updated_at := now();
   else
+    -- Écriture serveur (sync). Si marquée 'google', on préserve updated_at posé
+    -- explicitement par le code de sync (date Google). Sinon on rafraîchit.
     if new.sync_source is distinct from 'google' then
       new.updated_at := now();
     end if;
@@ -1465,21 +1662,25 @@ create trigger events_touch_updated_at
   before insert or update on public.events
   for each row execute function public.touch_updated_at();
 
+-- Une ligne déjà synchronisée devient une tombstone (deleted = true), propagée à Google ;
+-- une ligne jamais synchronisée se supprime vraiment.
 create or replace function public.events_guard_delete()
 returns trigger
 language plpgsql
+set search_path = public, pg_temp
 as $$
 begin
   if old.google_event_id is not null and old.deleted = false then
+    -- Transforme le DELETE en soft-delete (tombstone) et ANNULE le DELETE physique.
     update public.events
        set deleted     = true,
            deleted_at  = now(),
            sync_source = 'agence',
            updated_at  = now()
      where id = old.id;
-    return null;  -- annule le DELETE physique → tombstone propagée à Google
+    return null;  -- annule le DELETE physique
   end if;
-  return old;     -- laisse supprimer les lignes jamais synchronisées
+  return old;     -- laisse supprimer les lignes non synchronisées
 end;
 $$;
 drop trigger if exists events_guard_delete on public.events;
@@ -1751,6 +1952,11 @@ create index if not exists agent_actions_statut_idx on agent.actions (statut);
 alter table agent.actions drop constraint if exists actions_type_check;
 alter table agent.actions add constraint actions_type_check
   check (type = any (array['brouillon_mail', 'whatsapp', 'linkedin', 'instagram', 'alerte', 'avancer_collab']));
+-- Statut « valide » (2026-11-18, sql/2026-11-18-alfred-relie-a-l-app.sql) : Marc a dit oui
+-- dans la page Agents, Alfred n'a pas encore envoyé.
+alter table agent.actions drop constraint if exists actions_statut_check;
+alter table agent.actions add constraint actions_statut_check
+  check (statut = any (array['a_valider', 'valide', 'envoye', 'modifie_envoye', 'ecarte']));
 create table if not exists agent.prospects (
   id uuid primary key default gen_random_uuid(),
   marque text not null, signal text, signal_date date, contact text, contact_role text,
@@ -1816,16 +2022,153 @@ alter default privileges in schema agent
 revoke all on all tables in schema agent from anon;
 
 -- ----------------------------------------------------------------------------
--- AGENT · droits du rôle ttp_agent (cf. sql/2026-09-27-agent-role.sql).
--- Le rôle LUI-MÊME (login + mot de passe) se crée via ce fichier daté — jamais
--- de mot de passe ici. Ce bloc ne fait que (re)poser grants + policies SI le
--- rôle existe (re-run de SETUP.sql sans le rôle = no-op propre).
+-- AGENT · fiches des agents et liaison Alfred (2026-10-20, 2026-11-18, 2026-11-22).
+-- agent.agents : un agent = une fiche (nom, emoji, rôle, consignes, routines, en pause ou
+-- non), créée et réglée dans la page Agents ; moteur « claude » = joué par Claude via le
+-- connecteur, « externe » = programme à part (sql/2026-10-20-agents.sql). Le pouls et les
+-- réglages d'Alfred : vu_le, passage, passage_le, hors_ligne_alerte_le, reglages
+-- (sql/2026-11-18-alfred-relie-a-l-app.sql). Les fiches de départ (Megan, Talent manager)
+-- sont des données : elles ne sont pas reprises ici.
+-- Placées AVANT le bloc ttp_agent ci-dessous, ces tables reçoivent aussi ses droits.
 -- ----------------------------------------------------------------------------
+create table if not exists agent.agents (
+  id         uuid primary key default gen_random_uuid(),
+  slug       text not null unique,
+  nom        text not null,
+  emoji      text not null default '🤖',
+  role       text,
+  moteur     text not null default 'claude' check (moteur in ('claude', 'externe')),
+  consignes  text not null default '',
+  routines   jsonb not null default '[]'::jsonb,
+  actif      boolean not null default true,
+  sort_order int not null default 0,
+  cree_le    timestamptz not null default now(),
+  maj_le     timestamptz not null default now(),
+  vu_le      timestamptz,
+  passage    text,
+  passage_le timestamptz,
+  hors_ligne_alerte_le timestamptz,
+  reglages   jsonb not null default '{}'::jsonb
+);
+-- Base où la table existe déjà sans le pouls d'Alfred (sql/2026-11-18-alfred-relie-a-l-app.sql).
+alter table agent.agents
+  add column if not exists vu_le timestamptz,
+  add column if not exists passage text,
+  add column if not exists passage_le timestamptz,
+  add column if not exists hors_ligne_alerte_le timestamptz,
+  add column if not exists reglages jsonb not null default '{}'::jsonb;
+
+-- Quel agent a proposé l'action, pour quel agent est la leçon, quel agent a écrit dans le
+-- journal (sql/2026-10-20-agents.sql). Avant les colonnes de validation de agent.actions
+-- (plus bas), pour garder l'ordre des colonnes de la production.
+alter table agent.actions add column if not exists agent_id uuid references agent.agents(id) on delete set null;
+alter table agent.lecons  add column if not exists agent_id uuid references agent.agents(id) on delete cascade;
+alter table agent.journal add column if not exists agent_id uuid references agent.agents(id) on delete set null;
+
+drop trigger if exists agents_touch on agent.agents;
+create trigger agents_touch before update on agent.agents
+  for each row execute function agent.touch_maj();
+
+-- Fondateurs seulement, comme le reste du schéma agent.
+alter table agent.agents enable row level security;
+drop policy if exists agents_agence on agent.agents;
+create policy agents_agence on agent.agents for all to authenticated
+  using (public.is_founder()) with check (public.is_founder());
+revoke all on agent.agents from anon;
+grant select, insert, update, delete on agent.agents to authenticated;
+
+-- Les nouvelles de l'app pour Alfred (tâche cochée, pièce déposée, facture payée, mail
+-- validé dans la page Agents, action de Gianni), relevées chaque minute par la fonction
+-- alfred-pont (sql/2026-11-18-alfred-relie-a-l-app.sql). Les déclencheurs qui écrivent ici
+-- sont plus bas, dans le bloc « Alfred relié à l'app ». Lecture : fondateurs ; aucune
+-- règle d'écriture, donc rien n'y est écrit depuis l'app.
+create table if not exists agent.evenements (
+  id uuid primary key default gen_random_uuid(),
+  type text not null,
+  cible text,
+  detail text,
+  lien text,
+  auteur text,
+  cree_le timestamptz not null default now(),
+  livre_le timestamptz
+);
+create index if not exists evenements_a_livrer on agent.evenements (cree_le) where livre_le is null;
+alter table agent.evenements enable row level security;
+drop policy if exists evenements_fondateurs on agent.evenements;
+create policy evenements_fondateurs on agent.evenements for select using (public.is_founder());
+revoke all on agent.evenements from anon;
+grant select, insert, update, delete on agent.evenements to authenticated;
+
+-- « Demander à Alfred » depuis l'app (sql/2026-11-18-alfred-relie-a-l-app.sql) : un
+-- fondateur lit les demandes et en dépose une ; la réponse vient d'Alfred, par le serveur.
+-- L'auteur est posé par la base (déclencheur alfred_demande_auteur, plus bas).
+create table if not exists agent.demandes (
+  id uuid primary key default gen_random_uuid(),
+  texte text not null check (length(texte) between 1 and 2000),
+  contexte text,
+  lien text,
+  auteur text,
+  auteur_id uuid default auth.uid(),
+  statut text not null default 'nouvelle' check (statut in ('nouvelle', 'recue', 'repondue')),
+  reponse text,
+  cree_le timestamptz not null default now(),
+  recue_le timestamptz,
+  repondu_le timestamptz
+);
+alter table agent.demandes enable row level security;
+drop policy if exists demandes_lire on agent.demandes;
+create policy demandes_lire on agent.demandes for select using (public.is_founder());
+drop policy if exists demandes_ecrire on agent.demandes;
+create policy demandes_ecrire on agent.demandes for insert
+  with check (public.is_founder() and statut = 'nouvelle' and reponse is null);
+revoke all on agent.demandes from anon;
+grant select, insert, update, delete on agent.demandes to authenticated;
+
+-- Skills privées d'Alfred, hors du dépôt public (sql/2026-11-18-skills-privees-alfred.sql) :
+-- lisibles du seul serveur (RLS sans aucune règle, aucun droit pour anon ni pour les comptes
+-- connectés). Leur contenu est inséré directement dans la base, jamais dans ce fichier.
+-- Ce retrait doit rester APRÈS le « grant … on all tables in schema agent to
+-- authenticated » plus haut, sinon les comptes connectés récupèrent tous les droits.
+create table if not exists agent.skills_privees (
+  nom text primary key check (nom ~ '^[a-z0-9-]{2,40}$'),
+  fichiers jsonb not null,
+  maj_le timestamptz not null default now()
+);
+alter table agent.skills_privees enable row level security;
+revoke all on agent.skills_privees from anon, authenticated;
+-- Le rôle ttp_agent (bloc suivant) et le serveur (service_role, juste après ce bloc) y
+-- reçoivent SELECT, INSERT et UPDATE, comme en production.
+
+-- ----------------------------------------------------------------------------
+-- AGENT · rôle ttp_agent et ses droits (sql/2026-09-27-agent-role.sql).
+-- Le rôle de l'ancienne agente Megan, qui se connectait directement à la base. Cette
+-- connexion directe est fermée depuis le 27/11 (rôle NOLOGIN, sans script daté) : le rôle
+-- ne sert plus à se connecter, mais il existe en production avec ses droits et ses règles.
+-- Ce fichier le crée s'il manque, SANS connexion ni mot de passe, et remet NOLOGIN à chaque
+-- passage. ⚠️ Ne pas suivre sql/2026-09-27-agent-role.sql sur une nouvelle base : il crée
+-- le rôle en LOGIN avec un mot de passe (s'il a déjà tourné, « nologin » ci-dessous referme
+-- la connexion). Limite de 5 connexions et délais (30 s par requête, 60 s de transaction
+-- inactive) : sql/2026-09-27-agent-role.sql. postgres en est membre, comme en production
+-- (SET ROLE ttp_agent pour les tests, sql/2026-09-27-agent-role-tests.sql).
+-- ----------------------------------------------------------------------------
+do $$
+begin
+  if not exists (select 1 from pg_roles where rolname = 'ttp_agent') then
+    create role ttp_agent nologin nosuperuser nocreatedb nocreaterole noreplication connection limit 5;
+  end if;
+end $$;
+alter role ttp_agent nologin connection limit 5;
+alter role ttp_agent set statement_timeout = '30s';
+alter role ttp_agent set idle_in_transaction_session_timeout = '60s';
+grant ttp_agent to postgres;
+
+-- Droits et règles du rôle, (re)posés à chaque passage. Le rôle existe toujours ici (bloc
+-- juste au-dessus) : le test n'est qu'un garde-fou.
 do $$
 declare t text;
 begin
   if not exists (select 1 from pg_roles where rolname = 'ttp_agent') then
-    raise notice 'ttp_agent absent — lancer sql/2026-09-27-agent-role.sql (mot de passe hors dépôt)';
+    raise notice 'ttp_agent absent : il aurait dû être créé juste au-dessus';
     return;
   end if;
   execute 'grant usage on schema agent_lecture to ttp_agent';
@@ -1845,7 +2188,19 @@ begin
     execute format('create policy %I_ttp_agent_ins on agent.%I for insert to ttp_agent with check (true);', t, t);
     execute format('create policy %I_ttp_agent_upd on agent.%I for update to ttp_agent using (true) with check (true);', t, t);
   end loop;
+  -- Megan (rôle ttp_agent) lit les fiches agents, sans les modifier (sql/2026-10-20-agents.sql).
+  execute 'drop policy if exists agents_ttp_agent_sel on agent.agents';
+  execute 'create policy agents_ttp_agent_sel on agent.agents for select to ttp_agent using (true)';
 end $$;
+
+-- Le serveur (clé service_role : ttp-mcp, alfred-pont, agent-watchdog) lit et écrit dans
+-- les 11 tables du schéma agent (sql/2026-10-20-agents.sql, puis
+-- sql/2026-11-22-alfred-droits-serveur.sql pour evenements, demandes et skills_privees).
+-- Sans ces droits : « permission denied for schema agent » (le bug du 22/11). À garder après
+-- la création des 11 tables ; placé après le bloc ttp_agent pour retrouver l'ordre des droits
+-- de la production (rien d'autre n'en dépend).
+grant usage on schema agent to service_role;
+grant select, insert, update on all tables in schema agent to service_role;
 
 -- ============================================================================
 -- FIN. Vérif rapide (en étant DÉCONNECTÉ, ces requêtes doivent renvoyer 0 ligne) :
@@ -1903,18 +2258,10 @@ create policy briefs_agency_write on public.briefs for all to authenticated
   using (public.is_agency()) with check (public.is_agency());
 create policy briefs_creator_update on public.briefs for update to authenticated
   using (creator = public.my_creator()) with check (creator = public.my_creator());
-
-create or replace function public.briefs_creator_guard() returns trigger
-language plpgsql security definer set search_path = public as $$
-begin
-  -- Sans compte connecté (serveur : résumé déposé par Claude) : tout passe (sql/2026-10-25-audit).
-  if auth.uid() is null or public.is_agency() then return new; end if;
-  -- Créatrice : tout reste comme avant, sauf status et consignes.
-  return jsonb_populate_record(old, jsonb_build_object('status', new.status, 'consignes', new.consignes));
-end $$;
-drop trigger if exists briefs_creator_guard on public.briefs;
-create trigger briefs_creator_guard before update on public.briefs
-  for each row execute function public.briefs_creator_guard();
+-- La garde briefs_creator_guard (le créateur ne change que le statut et son script, puis
+-- aussi « J'ai lu » et son concept) et son déclencheur sont définis une seule fois, plus
+-- bas, dans la section « Espace créateur : brief lu, concept… »
+-- (sql/2026-11-23-espace-createur-collab.sql), après les colonnes qu'elle lit.
 
 -- 6) MEDIA KIT PUBLIC : quand « Prix masqués » est coché, les tarifs ne doivent pas
 --    être lisibles non plus via l'API publique.
@@ -1936,19 +2283,10 @@ revoke insert, update, delete, truncate
 
 -- 7) PIÈCES JOINTES DES TÂCHES : une créatrice ne pouvait ni ouvrir ni supprimer
 --    ses propres pièces jointes (ni celles que l'agence joint à SES tâches).
-drop policy if exists documents_obj_creator_own_read on storage.objects;
-create policy documents_obj_creator_own_read on storage.objects for select to authenticated
-  using (
-    bucket_id = 'documents' and (
-      name like 'creator-uploads/' || auth.uid()::text || '/%'
-      or exists (
-        select 1 from public.todos t, jsonb_array_elements(coalesce(t.attachments, '[]'::jsonb)) a
-         where a->>'path' = storage.objects.name and t.creator = public.my_creator()
-           -- seulement un fichier rangé sous CETTE tâche (pas un chemin recopié, 2026-10-15)
-           and storage.objects.name like 'todo-attachments/' || t.id::text || '/%'
-      )
-    )
-  );
+--    La lecture (règle documents_obj_creator_own_read) est définie une seule fois, plus
+--    bas, avec les règles des tâches internes privées (version du 2026-11-24,
+--    sql/2026-11-24-taches-internes-privees.sql) : l'ancienne version d'ici laissait la
+--    créatrice ouvrir les pièces jointes des tâches internes de l'agence.
 drop policy if exists documents_obj_creator_own_delete on storage.objects;
 create policy documents_obj_creator_own_delete on storage.objects for delete to authenticated
   using (bucket_id = 'documents' and name like 'creator-uploads/' || auth.uid()::text || '/%');
@@ -2007,6 +2345,9 @@ alter table public.creator_mail_settings add constraint creator_mail_settings_al
 -- les normalise, refuse les boîtes communes et une adresse déjà utilisée par un autre créateur.
 alter table public.creator_mail_settings add column if not exists aliases text[] not null default '{}';
 
+-- Adresses en plus : minuscules, sans vide ni doublon, sans l'adresse principale (ordre
+-- gardé). Un verrou fait passer une écriture à la fois sur ces adresses : deux
+-- enregistrements simultanés ne peuvent pas donner la même adresse à deux créateurs.
 create or replace function public.creator_mail_settings_addresses()
 returns trigger
 language plpgsql
@@ -2019,7 +2360,6 @@ declare
   v_addr  text;
   v_other text;
 begin
-  -- Adresses en plus : minuscules, sans vide ni doublon, sans l'adresse principale (ordre gardé).
   new.aliases := coalesce((
     select array_agg(d.a order by d.pos)
       from (select lower(btrim(x)) as a, min(u.pos) as pos
@@ -2044,8 +2384,6 @@ begin
     return new;
   end if;
 
-  -- Une écriture à la fois sur ces adresses : deux enregistrements simultanés ne
-  -- peuvent pas donner la même adresse à deux créateurs.
   perform pg_advisory_xact_lock(hashtext('creator_mail_settings_addresses'));
 
   select x.a, o.creator into v_addr, v_other
@@ -2250,6 +2588,9 @@ drop policy if exists agency_activity_read on public.agency_activity;
 create policy agency_activity_read on public.agency_activity for select to authenticated
   using (public.is_agency() and (entity <> 'invoices' or public.is_founder()));
 
+-- Seules les actions d'un compte agence connecté sont notées (pas les crons, ni la synchro
+-- Google, ni les créatrices). La trace ne doit JAMAIS empêcher l'action elle-même
+-- (exception when others).
 create or replace function public.log_agency_activity() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare
@@ -2262,15 +2603,12 @@ declare
   who text;
   lbl text;
 begin
-  -- Seules les actions d'un compte agence connecté sont notées (pas les crons,
-  -- ni la synchro Google, ni les créatrices).
   if uid is null or not public.is_agency() then
     return null;
   end if;
   n := case when tg_op = 'DELETE' then null else to_jsonb(new) end;
   o := case when tg_op = 'INSERT' then null else to_jsonb(old) end;
   r := coalesce(n, o);
-
   if tg_op = 'INSERT' then
     v := 'add';
   elsif tg_op = 'DELETE' then
@@ -2295,7 +2633,6 @@ begin
   if v is null then
     return null;
   end if;
-
   select coalesce(nullif(trim(p.display_name), ''), split_part(u.email::text, '@', 1))
     into who
     from auth.users u left join public.profiles p on p.user_id = u.id
@@ -2310,7 +2647,6 @@ begin
           left(coalesce(nullif(lbl, ''), '(sans titre)'), 200), d, r->>'creator');
   return null;
 exception when others then
-  -- La trace ne doit JAMAIS empêcher l'action elle-même.
   return null;
 end $$;
 
@@ -2377,19 +2713,22 @@ grant select, insert, update on public.nav_seen to authenticated;
 alter table public.todos add column if not exists creators text[] not null default '{}';
 create index if not exists todos_creators_gin on public.todos using gin (creators);
 
+-- Mise en ordre de la liste des créateurs, corps identique à la production (commentaires
+-- sortis du corps) :
+--   * ancien client : seul `creator` a changé → la liste devient ce seul nom ;
+--   * noms rognés, vides retirés, doublons (casse ignorée) retirés, ordre gardé ;
+--   * creator = le premier de la liste, null si la liste est vide (tâche agence).
 create or replace function public.todos_creators_sync() returns trigger
   language plpgsql set search_path = public, pg_temp as $$
 declare
   clean text[];
 begin
-  -- Ancien client : seul `creator` a changé → la liste devient ce seul nom.
   if tg_op = 'UPDATE'
      and new.creator is distinct from old.creator
      and new.creators is not distinct from old.creators then
     new.creators := case when nullif(btrim(new.creator), '') is null then '{}'::text[]
                          else array[btrim(new.creator)] end;
   end if;
-  -- Noms rognés, vides retirés, doublons (casse ignorée) retirés, ordre gardé.
   select coalesce(array_agg(x.n order by x.pos), '{}'::text[]) into clean
     from (
       select distinct on (lower(btrim(u.n))) btrim(u.n) as n, u.pos
@@ -2401,11 +2740,15 @@ begin
     clean := array[btrim(new.creator)];
   end if;
   new.creators := clean;
-  new.creator := clean[1];  -- null si la liste est vide (tâche agence)
+  new.creator := clean[1];
   return new;
 end $$;
 
 -- Triggers BEFORE par ordre alphabétique : la garde (a_) avant la mise en ordre (b_).
+-- Garde, version en production (sql/2026-11-27-securite-14.sql, commentaires sortis du
+-- corps) : un compte créateur ne crée que pour lui-même, ne change ni la liste ni l'origine
+-- (source) d'une tâche, et le « Fait par » est le nom du compte connecté, jamais un texte
+-- choisi par l'appelant.
 create or replace function public.todos_creators_guard() returns trigger
   language plpgsql security definer set search_path = public, pg_temp as $$
 begin
@@ -2419,7 +2762,6 @@ begin
       new.creators := old.creators;
       new.source   := old.source;
     end if;
-    -- « Fait par » : le nom du compte connecté, jamais un texte choisi par l'appelant.
     if new.done_by is not null
        and (tg_op = 'INSERT' or new.done_by is distinct from old.done_by) then
       new.done_by := coalesce(
@@ -2440,22 +2782,42 @@ drop trigger if exists todos_a_creators_guard on public.todos;
 create trigger todos_a_creators_guard before insert or update on public.todos
   for each row execute function public.todos_creators_guard();
 
+-- Tâches internes privées (2026-11-24, sql/2026-11-24-taches-internes-privees.sql) : une
+-- tâche de l'agence (source = 'agency', y compris celles d'Alfred et du connecteur) n'est
+-- lue, modifiée ou supprimée par le créateur que si elle est cochée « Visible par le
+-- créateur » (todos.visible_createur, colonne créée en section 1). Ses propres tâches
+-- (source = 'creator') ne changent pas. La création reste limitée à ses propres tâches,
+-- et la garde todos_a_creators_guard remet source à 'creator' quand un créateur crée.
 drop policy if exists todos_scoped on public.todos;
 drop policy if exists todos_read   on public.todos;
 drop policy if exists todos_insert on public.todos;
 drop policy if exists todos_update on public.todos;
 drop policy if exists todos_delete on public.todos;
 create policy todos_read on public.todos for select to authenticated
-  using (public.is_agency() or creator = public.my_creator() or public.my_creator() = any(creators));
+  using (public.is_agency() or (
+    (creator = public.my_creator() or public.my_creator() = any(creators))
+    and (source is distinct from 'agency' or visible_createur)));
 create policy todos_insert on public.todos for insert to authenticated
   with check (public.is_agency() or creator = public.my_creator());
 create policy todos_update on public.todos for update to authenticated
-  using (public.is_agency() or creator = public.my_creator() or public.my_creator() = any(creators))
-  with check (public.is_agency() or creator = public.my_creator() or public.my_creator() = any(creators));
+  using (public.is_agency() or (
+    (creator = public.my_creator() or public.my_creator() = any(creators))
+    and (source is distinct from 'agency' or visible_createur)))
+  with check (public.is_agency() or (
+    (creator = public.my_creator() or public.my_creator() = any(creators))
+    and (source is distinct from 'agency' or visible_createur)));
 create policy todos_delete on public.todos for delete to authenticated
-  using (public.is_agency() or creator = public.my_creator());
+  using (public.is_agency() or (
+    creator = public.my_creator()
+    and (source is distinct from 'agency' or visible_createur)));
 
--- Pièces jointes : aussi celles des tâches partagées (remplace la version plus haut).
+-- Pièces jointes des tâches (seule définition de cette règle, version en production) : le
+-- créateur ouvre (lien signé) ses propres dépôts et les pièces jointes des tâches qu'il lit,
+-- y compris les tâches partagées (creators), mais pas celles d'une tâche INTERNE de
+-- l'agence non cochée « Visible par le créateur » (2026-11-24,
+-- sql/2026-11-24-taches-internes-privees.sql, partie 3), même condition que todos_read
+-- ci-dessus. Seulement un fichier rangé sous CETTE tâche (pas un chemin recopié, 2026-10-15).
+-- La colonne todos.visible_createur est créée en section 1.
 drop policy if exists documents_obj_creator_own_read on storage.objects;
 create policy documents_obj_creator_own_read on storage.objects for select to authenticated
   using (
@@ -2465,7 +2827,7 @@ create policy documents_obj_creator_own_read on storage.objects for select to au
         select 1 from public.todos t, jsonb_array_elements(coalesce(t.attachments, '[]'::jsonb)) a
          where a->>'path' = storage.objects.name
            and (t.creator = public.my_creator() or public.my_creator() = any(t.creators))
-           -- seulement un fichier rangé sous CETTE tâche (pas un chemin recopié, 2026-10-15)
+           and (t.source is distinct from 'agency' or t.visible_createur)
            and storage.objects.name like 'todo-attachments/' || t.id::text || '/%'
       )
     )
@@ -2510,9 +2872,17 @@ create index if not exists activity_events_unread_idx on public.activity_events 
 create index if not exists activity_events_object_idx on public.activity_events (object_type, object_id);
 
 alter table public.activity_events enable row level security;
+-- Lecture : le créateur ne lit le repère d'une tâche que s'il lit la tâche elle-même ; la
+-- sous-requête passe par la règle todos_read, donc les repères des tâches internes et des
+-- tâches supprimées ne s'affichent plus chez lui (2026-11-24,
+-- sql/2026-11-24-reperes-taches-internes.sql).
 drop policy if exists activity_events_read on public.activity_events;
 create policy activity_events_read on public.activity_events for select to authenticated
-  using ((target = 'creator' and creator = public.my_creator()) or (target = 'agency' and public.is_agency()));
+  using (
+    (target = 'agency' and public.is_agency())
+    or (target = 'creator' and creator = public.my_creator()
+        and (object_type <> 'todo' or exists (select 1 from public.todos t where t.id::text = activity_events.object_id)))
+  );
 drop policy if exists activity_events_mark_read on public.activity_events;
 create policy activity_events_mark_read on public.activity_events for update to authenticated
   using ((target = 'creator' and creator = public.my_creator()) or (target = 'agency' and public.is_agency()))
@@ -2584,12 +2954,23 @@ create or replace function public.activity_new_subtask(o jsonb, n jsonb) returns
 $$;
 
 -- ── Tâches ───────────────────────────────────────────────────────────────────
+-- Version du 24/11 (sql/2026-11-24-reperes-taches-internes.sql), corps identique à la
+-- production (commentaires sortis du corps) :
+--   * créateurs de la tâche : la liste `creators`, sinon `creator` ;
+--   * tâche interne de l'agence (source 'agency', « Visible par le créateur » non cochée) :
+--     aucun repère pour le créateur quand l'agence l'écrit (ni texte, ni titre) ;
+--   * l'agence coche « Visible par le créateur » (devient_visible) : repère « nouveau » ;
+--   * un créateur n'écrit que sur une tâche partagée avec lui (la RLS l'assure déjà) ;
+--   * jamais bloquant : une erreur ici n'empêche pas l'écriture de la tâche.
+-- Va avec la règle activity_events_read du même script (le créateur ne lit le repère
+-- d'une tâche que s'il lit la tâche) et la colonne todos.visible_createur (section 1).
 create or replace function public.todos_activity() returns trigger
   language plpgsql security definer set search_path = public, pg_temp as $$
 declare
   actor text; who text; j jsonb; o jsonb; names text[]; nm text; sub text; title text;
   changes text[][] := '{}';
   i int;
+  interne boolean; devient_visible boolean;
 begin
   begin
     actor := public.activity_actor();
@@ -2597,14 +2978,18 @@ begin
     who := public.activity_actor_name();
     j := to_jsonb(new);
     o := case when tg_op = 'UPDATE' then to_jsonb(old) else '{}'::jsonb end;
+    interne := (j->>'source') is not distinct from 'agency' and not coalesce((j->>'visible_createur')::boolean, false);
+    if actor = 'agency' and interne then return new; end if;
+    devient_visible := tg_op = 'UPDATE'
+      and coalesce((j->>'visible_createur')::boolean, false)
+      and not coalesce((o->>'visible_createur')::boolean, false);
     title := left(coalesce(j->>'text', ''), 120);
-    -- Créateurs de la tâche (liste `creators`, sinon `creator`).
     select coalesce(array_agg(btrim(x)) filter (where btrim(x) <> ''), '{}') into names
       from jsonb_array_elements_text(case when jsonb_typeof(j->'creators') = 'array' and jsonb_array_length(j->'creators') > 0
                                           then j->'creators' else jsonb_build_array(coalesce(j->>'creator', '')) end) x;
     if coalesce(array_length(names, 1), 0) = 0 then return new; end if;
 
-    if tg_op = 'INSERT' then
+    if tg_op = 'INSERT' or devient_visible then
       changes := array[array['new', title]];
     else
       if (j->>'text') is distinct from (o->>'text') and coalesce(j->>'text', '') <> '' then
@@ -2627,12 +3012,11 @@ begin
           perform public.log_activity_event('creator', nm, 'todo', new.id::text, title, changes[i][1], who, changes[i][2]);
         end loop;
       else
-        -- Un créateur : seulement sur une tâche partagée avec lui (la RLS l'assure déjà).
         perform public.log_activity_event('agency', public.my_creator(), 'todo', new.id::text, title, changes[i][1], who, changes[i][2]);
       end if;
     end loop;
   exception when others then
-    null; -- jamais bloquant
+    null;
   end;
   return new;
 end $$;
@@ -2641,6 +3025,7 @@ create trigger todos_activity after insert or update on public.todos
   for each row execute function public.todos_activity();
 
 -- ── Idées ────────────────────────────────────────────────────────────────────
+-- Une idée générale de l'agence (sans créateur) ne prévient personne.
 create or replace function public.ideas_activity() returns trigger
   language plpgsql security definer set search_path = public, pg_temp as $$
 declare
@@ -2653,7 +3038,7 @@ begin
     j := to_jsonb(new);
     o := case when tg_op = 'UPDATE' then to_jsonb(old) else '{}'::jsonb end;
     nm := btrim(coalesce(j->>'creator', ''));
-    if nm = '' then return new; end if; -- idée générale de l'agence : personne à prévenir
+    if nm = '' then return new; end if;
     if actor = 'creator' then nm := public.my_creator(); end if;
     title := left(coalesce(j->>'text', ''), 120);
     if tg_op = 'INSERT' then
@@ -2677,6 +3062,8 @@ create trigger ideas_activity after insert or update on public.ideas
   for each row execute function public.ideas_activity();
 
 -- ── Briefs ───────────────────────────────────────────────────────────────────
+-- Côté agence, seul ce que le créateur lit compte : consignes, livrables, échéance,
+-- résumé, PDF.
 create or replace function public.briefs_activity() returns trigger
   language plpgsql security definer set search_path = public, pg_temp as $$
 declare
@@ -2699,7 +3086,6 @@ begin
       return new;
     end if;
     if actor = 'agency' then
-      -- Ce que le créateur lit : consignes, livrables, échéance, résumé, PDF.
       changed := (j->'consignes') is distinct from (o->'consignes') or (j->'deliverables') is distinct from (o->'deliverables')
               or (j->'due') is distinct from (o->'due') or (j->'resume') is distinct from (o->'resume') or (j->'pdf') is distinct from (o->'pdf');
       if changed then
@@ -2739,11 +3125,12 @@ drop trigger if exists creator_mail_notes_activity on public.creator_mail_notes;
 create trigger creator_mail_notes_activity after insert on public.creator_mail_notes
   for each row execute function public.mail_notes_activity();
 
+-- Statut d'un mail posé par l'agence (création de la ligne par upsert, ou changement) :
+-- repère pour le créateur. Corps identique à la production (commentaire sorti du corps).
 create or replace function public.mail_threads_activity() returns trigger
   language plpgsql security definer set search_path = public, pg_temp as $$
 begin
   begin
-    -- Statut posé par l'agence (création de la ligne par upsert, ou changement).
     if public.activity_actor() = 'agency'
        and ((tg_op = 'INSERT' and new.status <> 'nouvelle') or (tg_op = 'UPDATE' and new.status is distinct from old.status)) then
       perform public.log_activity_event('creator', new.creator, 'mail', new.thread_id,
@@ -2795,6 +3182,7 @@ drop policy if exists ig_profile_history_agency_delete on public.ig_profile_hist
 create policy ig_profile_history_agency_delete on public.ig_profile_history for delete to authenticated
   using (public.is_agency());
 
+-- L'historique ne doit jamais bloquer la lecture d'un profil (exception when others).
 create or replace function public.ig_profiles_history() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
@@ -2809,7 +3197,7 @@ begin
   end if;
   return new;
 exception when others then
-  return new;  -- l'historique ne doit jamais bloquer la lecture d'un profil
+  return new;
 end $$;
 drop trigger if exists ig_profiles_history on public.ig_profiles;
 create trigger ig_profiles_history after insert or update of data on public.ig_profiles
@@ -2888,8 +3276,8 @@ revoke all on public.creator_mail_boxes from anon, authenticated;
 
 -- ════════════════════════════════════════════════════════════════════════════
 -- Espace créateur : brief lu, concept, lien du post et stats à 7 jours
--- (2026-11-23, sql/2026-11-23-espace-createur-collab.sql). Remplace briefs_creator_guard
--- défini plus haut (le créateur écrit aussi read_at, concept, concept_link).
+-- (2026-11-23, sql/2026-11-23-espace-createur-collab.sql). Seule définition de
+-- briefs_creator_guard (le créateur écrit aussi read_at, concept, concept_link).
 -- ════════════════════════════════════════════════════════════════════════════
 -- 1) Brief lu et concept ------------------------------------------------------
 alter table public.briefs add column if not exists read_at              timestamptz;
@@ -2899,6 +3287,10 @@ alter table public.briefs add column if not exists concept_at           timestam
 alter table public.briefs add column if not exists concept_status       text;
 alter table public.briefs add column if not exists concept_validated_at timestamptz;
 
+-- Garde du créateur. Sans compte connecté (serveur : résumé déposé par Claude) ou pour
+-- l'agence, tout passe (sql/2026-10-25-audit). Le créateur ne change que son statut et son
+-- script (consignes), « J'ai lu » (read_at : date du serveur, posée une seule fois) et son
+-- concept (toujours « proposé », jamais validé par lui-même).
 create or replace function public.briefs_creator_guard() returns trigger
 language plpgsql security definer set search_path = public as $$
 declare
@@ -2906,13 +3298,9 @@ declare
   v_concept text;
   v_link text;
 begin
-  -- Sans compte connecté (serveur : résumé déposé par Claude) ou agence : tout passe.
   if auth.uid() is null or public.is_agency() then return new; end if;
-  -- Créateur : tout reste comme avant, sauf son statut et son script…
   j := jsonb_build_object('status', new.status, 'consignes', new.consignes);
-  -- … « J'ai lu » : date du serveur, posée une seule fois…
   j := j || jsonb_build_object('read_at', coalesce(old.read_at, case when new.read_at is not null then now() end));
-  -- … et son concept : toujours « proposé », jamais validé par lui-même.
   if new.concept is distinct from old.concept or new.concept_link is distinct from old.concept_link then
     v_concept := nullif(btrim(left(coalesce(new.concept, ''), 2000)), '');
     v_link := nullif(btrim(left(coalesce(new.concept_link, ''), 500)), '');
@@ -3086,6 +3474,294 @@ revoke all on public.ne_plus_contacter from anon;
 
 create index if not exists email_activity_sortants_idx on public.email_activity (created_at desc) where direction = 'out';
 
+-- Connecteur Claude (2026-10-19, sql/2026-10-19-connecteur-claude.sql) : TTP Suite branché
+-- sur le compte Claude (ordinateur et téléphone). Connexion OAuth 2.1 (PKCE) avec le compte
+-- TTP Suite, jetons courts et révocables, journal de chaque outil utilisé. Fonction : ttp-mcp.
+--   mcp_clients : applications enregistrées (Claude s'enregistre tout seul)
+--   mcp_grants  : une connexion = un accès accordé par un compte (révocable dans Paramètres)
+--   mcp_codes   : codes d'autorisation (10 min, usage unique)
+--   mcp_tokens  : jetons d'accès (1 h) et de renouvellement (60 j), stockés hachés
+--   mcp_log     : ce que Claude a consulté ou fait, par qui, quand
+-- Seule la fonction (clé serveur) lit et écrit les clients, les codes et les jetons. Chaque
+-- compte voit ses connexions et son journal, et peut couper une connexion (revoked_at).
+-- Tables dans l'ordre des clés étrangères. Doit rester avant la section securite-alfred
+-- plus bas, qui lit mcp_grants.
+-- ═════════════════════════════════════════════════
+create table if not exists public.mcp_clients (
+  client_id     text primary key,
+  client_name   text,
+  redirect_uris text[] not null,
+  secret_hash   text,            -- null = client public (PKCE seul)
+  created_at    timestamptz not null default now()
+);
+alter table public.mcp_clients enable row level security;
+revoke all on public.mcp_clients from anon, authenticated;
+
+create table if not exists public.mcp_grants (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users(id) on delete cascade,
+  client_id    text references public.mcp_clients(client_id) on delete set null,
+  client_name  text,
+  created_at   timestamptz not null default now(),
+  last_used_at timestamptz,
+  revoked_at   timestamptz,
+  agent        boolean not null default false
+);
+-- agent : connexion d'un agent autonome, Alfred (sql/2026-11-27-securite-alfred.sql) ;
+-- son commentaire est posé dans la section de ce script, plus bas.
+alter table public.mcp_grants add column if not exists agent boolean not null default false;
+create index if not exists mcp_grants_user_idx on public.mcp_grants (user_id, created_at desc);
+alter table public.mcp_grants enable row level security;
+revoke all on public.mcp_grants from anon;
+-- Un compte lit ses connexions et ne peut écrire que revoked_at (couper une connexion).
+-- La reprise du droit update sur la table doit précéder le droit sur la colonne.
+revoke insert, update, delete on public.mcp_grants from authenticated;
+grant select on public.mcp_grants to authenticated;
+grant update (revoked_at) on public.mcp_grants to authenticated;
+drop policy if exists mcp_grants_own_read on public.mcp_grants;
+create policy mcp_grants_own_read on public.mcp_grants for select to authenticated
+  using (user_id = auth.uid());
+drop policy if exists mcp_grants_own_revoke on public.mcp_grants;
+create policy mcp_grants_own_revoke on public.mcp_grants for update to authenticated
+  using (user_id = auth.uid()) with check (user_id = auth.uid());
+
+create table if not exists public.mcp_codes (
+  code_hash      text primary key,
+  grant_id       uuid not null references public.mcp_grants(id) on delete cascade,
+  client_id      text not null references public.mcp_clients(client_id) on delete cascade,
+  redirect_uri   text not null,
+  code_challenge text not null,
+  expires_at     timestamptz not null,
+  used_at        timestamptz
+);
+alter table public.mcp_codes enable row level security;
+revoke all on public.mcp_codes from anon, authenticated;
+
+create table if not exists public.mcp_tokens (
+  token_hash text primary key,
+  kind       text not null check (kind in ('access', 'refresh')),
+  grant_id   uuid not null references public.mcp_grants(id) on delete cascade,
+  client_id  text not null,
+  expires_at timestamptz not null,
+  revoked_at timestamptz,
+  created_at timestamptz not null default now()
+);
+create index if not exists mcp_tokens_grant_idx on public.mcp_tokens (grant_id);
+alter table public.mcp_tokens enable row level security;
+revoke all on public.mcp_tokens from anon, authenticated;
+
+create table if not exists public.mcp_log (
+  id       bigserial primary key,
+  user_id  uuid references auth.users(id) on delete cascade,
+  grant_id uuid references public.mcp_grants(id) on delete set null,
+  tool     text not null,
+  summary  text,
+  ok       boolean not null default true,
+  at       timestamptz not null default now(),
+  error    text
+);
+-- error : raison d'un appel raté, et index des échecs récents (sql/2026-11-24-mcp-log-erreur.sql).
+alter table public.mcp_log add column if not exists error text;
+comment on column public.mcp_log.error is 'Raison d''un appel raté (message renvoyé à Claude), null si réussi';
+create index if not exists mcp_log_user_idx on public.mcp_log (user_id, at desc);
+create index if not exists mcp_log_echecs_idx on public.mcp_log (at desc) where not ok;
+alter table public.mcp_log enable row level security;
+revoke all on public.mcp_log from anon;
+-- Un compte lit son propre journal ; seule la fonction écrit.
+revoke insert, update, delete on public.mcp_log from authenticated;
+grant select on public.mcp_log to authenticated;
+drop policy if exists mcp_log_own_read on public.mcp_log;
+create policy mcp_log_own_read on public.mcp_log for select to authenticated
+  using (user_id = auth.uid());
+
+-- Factures : garde-fous en base (audit du 1er novembre, sql/2026-11-01-factures-garde-fous.sql).
+-- 1) Une facture émise (tout sauf « brouillon ») ne se supprime pas, même hors de l'app :
+--    elle s'annule (statut « annulee ») et garde son numéro, sans trou dans la numérotation.
+-- 2) Date de paiement paid_at (colonne créée en section 1, avec le numéro unique
+--    invoices_ref_unique) : remplie toute seule au passage en « payee », vidée quand la
+--    facture quitte « payee ». Sert à « Encaissé ce mois », au rapprochement bancaire (Qonto)
+--    et à « Ce qu'on te doit » dans l'espace créateur.
+create or replace function public.invoices_no_delete()
+returns trigger language plpgsql set search_path = public, pg_temp as $$
+begin
+  if coalesce(old.status, '') <> 'brouillon' then
+    raise exception 'Facture % émise : elle ne se supprime pas, elle s''annule (statut Annulée).', old.ref
+      using errcode = '42501';
+  end if;
+  return old;
+end $$;
+drop trigger if exists invoices_no_delete on public.invoices;
+create trigger invoices_no_delete before delete on public.invoices
+  for each row execute function public.invoices_no_delete();
+
+create or replace function public.invoices_paid_at()
+returns trigger language plpgsql set search_path = public, pg_temp as $$
+begin
+  if new.status = 'payee' and (tg_op = 'INSERT' or old.status is distinct from 'payee') then
+    new.paid_at := coalesce(new.paid_at, now());
+  elsif new.status <> 'payee' then
+    new.paid_at := null;
+  end if;
+  return new;
+end $$;
+drop trigger if exists invoices_paid_at on public.invoices;
+create trigger invoices_paid_at before insert or update of status, paid_at on public.invoices
+  for each row execute function public.invoices_paid_at();
+
+-- Tâches internes privées (24/11) : un rendez-vous recopié d'une tâche (« Tâche : … ») est
+-- TOUJOURS interne, d'où qu'il vienne : Planning de l'app, Google Agenda ou connecteur
+-- (sql/2026-11-24-rdv-taches-internes-auto.sql). La colonne events.interne est créée en
+-- section 1 ; les règles events_read et events_write (section 5), todos_read et
+-- activity_events_read complètent la protection. Le rattrapage des rendez-vous existants
+-- du script daté (données) n'est pas repris ici.
+create or replace function public.events_interne_auto() returns trigger
+  language plpgsql set search_path = public, pg_temp as $$
+begin
+  if coalesce(new.title, '') ~* '^\s*t[âa]che\s*:' then new.interne := true; end if;
+  return new;
+end $$;
+drop trigger if exists events_interne_auto on public.events;
+create trigger events_interne_auto before insert or update of title, interne on public.events
+  for each row execute function public.events_interne_auto();
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- Alfred relié à l'app (2026-11-18, sql/2026-11-18-alfred-relie-a-l-app.sql) : les
+-- nouvelles de l'app pour Alfred. Une tâche cochée par un créateur ou par Gianni, une pièce
+-- déposée sur une tâche, une facture payée, un mail validé dans la page Agents ou une action
+-- de Gianni ajoute une ligne dans agent.evenements, qu'Alfred reçoit dans la minute
+-- (fonction alfred-pont). Marc, Claude et les automatismes ne réveillent pas Alfred
+-- (agent.est_marc). Une erreur chez Alfred ne bloque JAMAIS la modification faite dans l'app.
+-- Les tables agent.evenements (avec sa règle evenements_fondateurs et ses droits) et
+-- agent.demandes, les colonnes de agent.agents et le statut « valide » de agent.actions sont
+-- posés plus haut, dans le module « AGENT · fiches des agents et liaison Alfred ». Les
+-- fonctions et déclencheurs viennent ici, après ce qu'ils lisent (public.profiles.display_name,
+-- public.agency_activity). La tâche planifiée agent-watchdog du script daté n'est jamais
+-- reprise (pas de cron dans ce fichier).
+-- Droits : les fonctions de déclencheur ci-dessous sont fermées à anon, aux comptes connectés
+-- et à public, comme en production, par un retrait explicite juste après le dernier
+-- déclencheur et par les boucles de sécurité qui suivent
+-- (sql/2026-11-25-securite-fonctions-anon.sql et sql/2026-11-27-securite-lot2.sql).
+-- agent.qui_agit() reste appelable par tous, comme en production.
+-- ════════════════════════════════════════════════════════════════════════════
+
+-- Qui agit (prénom affiché), d'après la session ; null pour le serveur.
+create or replace function agent.qui_agit() returns text
+language sql stable security definer set search_path = public as $$
+  select coalesce(nullif(trim(p.display_name), ''), nullif(trim(p.creator_name), ''), p.role)
+    from public.profiles p where p.user_id = auth.uid() limit 1;
+$$;
+
+-- Marc, Claude et les automatismes ne réveillent pas Alfred (il le sait déjà).
+-- search_path : celui posé par sql/2026-11-27-securite-lot2.sql.
+create or replace function agent.est_marc(nom text) returns boolean
+language sql immutable set search_path = public, pg_temp as $$
+  select coalesce(nom, '') ~* '^(marc|claude|automatique|alfred)' ;
+$$;
+
+-- Nombre de pièces d'une tâche (0 si le champ n'est pas une liste).
+-- search_path : celui posé par sql/2026-11-27-securite-lot2.sql.
+create or replace function agent.nb_pieces(j jsonb) returns integer
+language sql immutable set search_path = public, pg_temp as $$
+  select case when jsonb_typeof(j) = 'array' then jsonb_array_length(j) else 0 end;
+$$;
+
+-- Corps identique à la production (commentaires sortis du corps) : d'abord une tâche cochée
+-- par un créateur ou par Gianni (« Fait par », sinon le compte connecté), puis une pièce
+-- déposée sur une tâche (preview, capture, facture du créateur). En cas d'erreur, la tâche
+-- s'enregistre quand même (« exception when others then return new »).
+create or replace function agent.nouvelle_tache() returns trigger
+language plpgsql security definer set search_path = public, agent as $$
+declare v_qui text := coalesce(new.done_by, agent.qui_agit());
+begin
+  if new.done and not coalesce(old.done, false) and not agent.est_marc(v_qui) then
+    insert into agent.evenements (type, cible, detail, lien, auteur)
+    values ('tache_cochee', coalesce(new.creator, new.creators::text), new.text, '/?open=view&view=todo&item=' || new.id, v_qui);
+  end if;
+  if agent.nb_pieces(new.attachments) > agent.nb_pieces(old.attachments)
+     and not agent.est_marc(agent.qui_agit()) then
+    insert into agent.evenements (type, cible, detail, lien, auteur)
+    values ('piece_deposee', coalesce(new.creator, new.creators::text), new.text, '/?open=view&view=todo&item=' || new.id, agent.qui_agit());
+  end if;
+  return new;
+exception when others then
+  return new;
+end $$;
+drop trigger if exists alfred_nouvelle_tache on public.todos;
+create trigger alfred_nouvelle_tache after update on public.todos
+  for each row execute function agent.nouvelle_tache();
+
+-- Une facture passée « payee » (alfred_nouvelle_facture). En cas d'erreur, la facture
+-- s'enregistre quand même.
+create or replace function agent.nouvelle_facture() returns trigger
+language plpgsql security definer set search_path = public, agent as $$
+begin
+  if new.status = 'payee' and coalesce(old.status, '') <> 'payee' then
+    insert into agent.evenements (type, cible, detail, lien, auteur)
+    values ('facture_payee', new.creator, new.ref || ' · ' || new.party || ' · ' || new.amount, '/?open=view&view=facturation', agent.qui_agit());
+  end if;
+  return new;
+exception when others then
+  return new;
+end $$;
+drop trigger if exists alfred_nouvelle_facture on public.invoices;
+create trigger alfred_nouvelle_facture after update on public.invoices
+  for each row execute function agent.nouvelle_facture();
+
+-- Un mail ou un message validé dans la page Agents (bouton « Valider », statut « valide ») :
+-- Alfred est prévenu dans la minute qu'il doit l'envoyer (alfred_action_validee).
+create or replace function agent.action_validee() returns trigger
+language plpgsql security definer set search_path = public, agent as $$
+begin
+  if new.statut = 'valide' and coalesce(old.statut, '') <> 'valide' then
+    insert into agent.evenements (type, cible, detail, lien, auteur)
+    values ('valide_dans_app', new.cible, coalesce(new.contexte, '') || ' [action ' || new.id || ']', '/?open=view&view=agent', agent.qui_agit());
+  end if;
+  return new;
+exception when others then
+  return new;
+end $$;
+drop trigger if exists alfred_action_validee on agent.actions;
+create trigger alfred_action_validee after update on agent.actions
+  for each row execute function agent.action_validee();
+
+-- Ce que fait Gianni (ou un autre membre de l'équipe, hors Marc) dans l'app, noté dans
+-- agency_activity (alfred_action_equipe).
+create or replace function agent.action_equipe() returns trigger
+language plpgsql security definer set search_path = public, agent as $$
+begin
+  if not agent.est_marc(new.actor_name) then
+    insert into agent.evenements (type, cible, detail, auteur)
+    values ('action_equipe', new.entity, coalesce(new.verb, '') || ' · ' || coalesce(new.label, ''), new.actor_name);
+  end if;
+  return new;
+exception when others then
+  return new;
+end $$;
+drop trigger if exists alfred_action_equipe on public.agency_activity;
+create trigger alfred_action_equipe after insert on public.agency_activity
+  for each row execute function agent.action_equipe();
+
+-- L'auteur d'une demande à Alfred vient de la session, jamais de ce que le navigateur envoie
+-- (alfred_demande_auteur). Sans « exception when others » : une erreur ici refuse la demande
+-- au lieu de laisser le navigateur choisir l'auteur.
+create or replace function agent.demande_auteur() returns trigger
+language plpgsql security definer set search_path = public, agent as $$
+begin
+  new.auteur := agent.qui_agit();
+  new.auteur_id := auth.uid();
+  return new;
+end $$;
+drop trigger if exists alfred_demande_auteur on agent.demandes;
+create trigger alfred_demande_auteur before insert on agent.demandes
+  for each row execute function agent.demande_auteur();
+
+-- Droits comme en production (sql/2026-11-25-securite-fonctions-anon.sql et
+-- sql/2026-11-27-securite-lot2.sql) : les cinq fonctions de déclencheur d'Alfred ne sont
+-- exécutables que par leur propriétaire. Les boucles qui suivent le font aussi ; ce retrait
+-- explicite tient même si l'ordre des blocs change.
+revoke execute on function agent.nouvelle_tache(), agent.nouvelle_facture(), agent.action_validee(),
+  agent.action_equipe(), agent.demande_auteur() from public, anon, authenticated;
+
 -- Sécurité (sql/2026-11-25-securite-fonctions-anon.sql) : les fonctions de déclencheur
 -- SECURITY DEFINER ne sont pas appelables par anon (un déclencheur ne vérifie pas ce droit).
 do $$
@@ -3192,3 +3868,27 @@ begin
     alter table public.envoi_file add column if not exists valide_le timestamptz;
   end if;
 end $$;
+
+-- ════════════════════════════════════════════════════════════════════════════
+-- Notes (repliée depuis la production le 27/11/2026). Aucun script daté : ni dans sql/,
+-- ni dans migrations/, et aucun code de ce dépôt ne s'en sert. La table a été créée à la
+-- main pour un outil extérieur au dépôt (sans doute un coffre de notes), qui y écrit avec
+-- la clé serveur : une note par chemin (path), avec titre, dossier, contenu et date de
+-- mise à jour. Aucune règle d'écriture.
+-- Lecture : le seul compte de Marc, désigné par son adresse dans la règle (« lecture
+-- agence », nom gardé tel qu'en production).
+-- Droits de table : ceux que Supabase donne à toute nouvelle table de public (anon et
+-- authenticated compris), comme en production. C'est la RLS qui protège la table : ne
+-- jamais la créer sans la RLS et la règle qui suivent.
+-- ════════════════════════════════════════════════════════════════════════════
+create table if not exists public.notes (
+  path       text primary key,
+  title      text not null,
+  folder     text default '',
+  content    text not null,
+  updated_at timestamptz default now()
+);
+alter table public.notes enable row level security;
+drop policy if exists "lecture agence" on public.notes;
+create policy "lecture agence" on public.notes for select to authenticated
+  using ((auth.jwt() ->> 'email') = 'marcbouraoui@gmail.com');
