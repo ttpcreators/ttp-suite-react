@@ -7,7 +7,7 @@ import { mentionSuggestions } from "@/lib/todoQuickAdd";
 import { useT } from "@/lib/i18n";
 import { Field } from "@/components/ui/form";
 import { toast } from "@/components/ui/toast";
-import { estAVerifier } from "../../../supabase/functions/_shared/exclusivites.ts";
+import { estAVerifier, raisonPour } from "../../../supabase/functions/_shared/exclusivites.ts";
 
 export type PickCreator = { name: string; photo_url?: string | null };
 
@@ -52,7 +52,8 @@ export function CreatorPicker({
     ...extraNames.filter((n) => n && !known.has(key(n))).map((name) => ({ name, photo_url: null })),
   ];
   const found = mentionSuggestions(q, all, all.length);
-  const why = (n: string) => blocked?.get(key(n));
+  // Sous le nom du roster, ou sous un prénom seul (exclusivité écrite « Zoé » pour « Zoé X »).
+  const why = (n: string) => blocked?.get(key(n)) ?? raisonPour(blocked, n);
   const bloque = (n: string) => !!why(n) && !estAVerifier(why(n));
   // Créateurs en exclusivité avec un concurrent : à la fin de la liste (pas ceux « à vérifier »).
   const list = blocked?.size ? [...found.filter((c) => !bloque(c.name)), ...found.filter((c) => bloque(c.name))] : found;

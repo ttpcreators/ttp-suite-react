@@ -19,7 +19,7 @@ import { APP_TIMEZONE, CALENDAR_ID, gcalFetch, triggerSync } from "../_shared/go
 import { fusionInvites, meetEventBody, meetLinkOf, parseMeetRequest } from "../_shared/meetEvent.ts";
 import { doublonPlanning, type Candidat, type PlanEvent } from "../_shared/planningDoublon.ts";
 import { readAppState } from "../_shared/appState.ts";
-import { activeByCreator, aVerifierLine, alertesExclu, excluLine, excluState, foldName, readExclusivites, texteAlerte, trouverCreateur, type Exclusivite } from "../_shared/exclusivites.ts";
+import { aVerifierLine, alertesExclu, excluLine, excluState, foldName, memeCreateur, readExclusivites, texteAlerte, trouverCreateur, type Exclusivite } from "../_shared/exclusivites.ts";
 import { CONTACT_TAGS } from "../_shared/contactTags.ts";
 import type { Ctx } from "./oauth.ts";
 import { boxAddress, boxesFor, createDraft, parseMailBox, deleteClaudeDraft, draftRefs, listClaudeDrafts, listSendAs, PARTOUT, attachmentFromThread, markThreadRead, readThread, resolveSender, searchThreads, unreadCounts, type MailBox } from "./gmail.ts";
@@ -299,17 +299,18 @@ const roster: Tool = {
     if (error) return fail("Lecture du roster impossible.");
     const rows = (data as Json[]) ?? [];
     // Exclusivités en cours (page Exclusivités) : à ne jamais oublier avant de proposer quelqu'un.
+    // Lignes « à confirmer » : signalées « à vérifier », jamais comme une exclusivité sûre. Une ligne
+    // écrite au prénom seul compte aussi pour le créateur (memeCreateur).
     const state = await appState(sb).catch(() => ({} as Json));
     const registre = readExclusivites(state.exclusivites);
-    const exclu = activeByCreator(registre, isoDay());
-    // Lignes « à confirmer » : signalées « à vérifier », jamais comme une exclusivité sûre.
-    const aVerif = new Map<string, Exclusivite[]>();
-    for (const e of registre) {
-      const k = foldName(e.creator);
-      if (e.pending && k && excluState(e, isoDay()) !== "terminee") aVerif.set(k, [...(aVerif.get(k) ?? []), e]);
-    }
-    const ex = (n: unknown) =>
-      [...(exclu.get(String(n).trim().toLowerCase()) ?? []).map((e) => ` · ⚠ ${excluLine(e)}`), ...(aVerif.get(foldName(String(n))) ?? []).map((e) => ` · ⚠ ${aVerifierLine(e)}`)].join("");
+    const jour = isoDay();
+    const ex = (n: unknown) => {
+      const siennes = registre.filter((e) => memeCreateur(e.creator, String(n ?? "")));
+      return [
+        ...siennes.filter((e) => !e.pending && excluState(e, jour) === "en_cours").map((e) => ` · ⚠ ${excluLine(e)}`),
+        ...siennes.filter((e) => e.pending && excluState(e, jour) !== "terminee").map((e) => ` · ⚠ ${aVerifierLine(e)}`),
+      ].join("");
+    };
     const hist = engHistory(state);
     // Anciens créateurs (factures sans fiche roster) : listés pour « inactif » et « tous ».
     let former: string[] = [];
@@ -403,7 +404,8 @@ const ficheCreateur: Tool = {
       `\n## Tâches ouvertes`,
       lines(((td.data as Json[] | null) ?? []).map((t) => `- ${t.text}${t.due ? ` · échéance ${t.due}` : ""}`), "Aucune."),
     ];
-    const exclus = readExclusivites(st.exclusivites).filter((e) => foldName(e.creator) === foldName(name) && excluState(e, today) !== "terminee");
+    // Ligne écrite au prénom seul comprise (memeCreateur).
+    const exclus = readExclusivites(st.exclusivites).filter((e) => memeCreateur(e.creator, name) && excluState(e, today) !== "terminee");
     out.push(`\n## Exclusivités (ne pas proposer de concurrent)`, lines(exclus.filter((e) => !e.pending).map((e) => `- ${excluLine(e)}${e.points.length ? `\n  Points clés : ${e.points.join(" | ")}` : ""}`), "Aucune."));
     // Lignes « à confirmer » : ni un feu vert ni un refus, à vérifier avant de proposer.
     const aVerif = exclus.filter((e) => e.pending);
@@ -411,7 +413,7 @@ const ficheCreateur: Tool = {
       out.push(
         `\n## Exclusivités à vérifier (lues toutes seules dans un contrat, jamais confirmées)`,
         ...aVerif.map((e) => `- ${aVerifierLine(e)}${e.quote ? `\n  Phrase lue : « ${str(e.quote, 300)} »` : ""}`),
-        `Avant de proposer ${titleCase(name)} à une marque de ce secteur : demander à Marc de confirmer ou d'écarter la ligne (page Exclusivités). Ne pas l'écarter non plus sur cette seule ligne.`,
+        `Avant de proposer ${titleCase(name)} à une marque de ce secteur : demander à Marc de confirmer ou d'écarter la ligne (page Exclusivités). Ne pas écarter non plus le créateur sur la seule foi de cette ligne.`,
       );
     if (ctx.founder) out.push(`\n## Factures`, lines(((inv.data as Json[] | null) ?? []).map((f) => `- ${f.ref} · ${f.party} · ${money(f.amount)} · ${INVOICE_STATUS[invoiceStatus(f, today)] ?? f.status} · échéance ${dueText(f.date)}`), "Aucune."));
     return ok(out.filter(Boolean).join("\n"));

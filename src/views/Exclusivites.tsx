@@ -102,7 +102,7 @@ export function Exclusivites() {
       return openEdit(e);
     }
     // La phrase lue dit le contraire (« licence non exclusive », « exclusivement ») : on le dit avant.
-    if (!sur && e.quote?.trim() && phraseDouteuse(e.quote)) return setDoute({ quote: e.quote, suite: () => void confirm(e, true) });
+    if (!sur && e.quote?.trim() && phraseDouteuse(e.quote, e.brand)) return setDoute({ quote: e.quote, suite: () => void confirm(e, true) });
     if (await persist([{ ...e, pending: false }])) {
       toast(e.competitors.length ? `Exclusivité ${e.brand} confirmée ✓` : `Exclusivité ${e.brand} confirmée ✓ · sans concurrents, elle sera « à vérifier » pour les autres marques`);
     }
@@ -152,7 +152,7 @@ export function Exclusivites() {
     if (draft.end && draft.end < draft.start) return toast("La fin est avant le début");
     const prev = list.find((e) => e.id === draft.id);
     // Enregistrer une ligne « à confirmer » la confirme : même garde que le bouton Confirmer.
-    if (!sur && prev?.pending && prev.quote?.trim() && phraseDouteuse(prev.quote)) return setDoute({ quote: prev.quote, suite: () => void submit(true) });
+    if (!sur && prev?.pending && prev.quote?.trim() && phraseDouteuse(prev.quote, draft.brand)) return setDoute({ quote: prev.quote, suite: () => void submit(true) });
     const row: Exclusivite = {
       id: draft.id ?? uid(), creator: draft.creator.trim(), brand: draft.brand.trim(), scope: draft.scope.trim(),
       competitors: splitList(draft.competitors), start: draft.start, end: draft.end || null, points: draft.points.split("\n").map((p) => p.trim()).filter(Boolean),
@@ -421,9 +421,9 @@ export function Exclusivites() {
       )}
       {doute && (
         <ConfirmDialog
-          title="La phrase lue dit plutôt le contraire"
-          message={`« ${doute.quote} » : cette phrase ne parle pas d'une exclusivité du créateur (licence non exclusive, « exclusivement »…). Confirme seulement si le contrat en prévoit vraiment une ailleurs.`}
-          confirmLabel="Confirmer quand même"
+          title="La phrase lue ne prouve pas l'exclusivité"
+          message={`« ${doute.quote} » : cette phrase ne parle pas d'une exclusivité du créateur (licence non exclusive, « exclusivement » au sens de « seulement »…). Confirme seulement si le contrat en prévoit vraiment une ailleurs.`}
+          confirmLabel="Confirmer"
           onConfirm={() => {
             const { suite } = doute;
             setDoute(null);

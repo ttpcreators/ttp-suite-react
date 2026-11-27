@@ -24,11 +24,13 @@
 //   2. CONFLIT D'EXCLUSIVITÉ. Un post publié pendant une exclusivité en cours (confirmée)
 //      qui cite une marque concurrente : liste des concurrents du contrat (même règle que
 //      `verifier_exclusivite`, `hitsBrand`), ou une marque du carnet dont le nom dit la
-//      catégorie interdite (« Maison Parfums » pendant une exclusivité « parfum »,
-//      `secteurDansNom`) ou dont le secteur est un MOT ENTIER de la catégorie. Plus strict que
-//      `hitsBrand` pour les secteurs : « sport » ne tombe pas sous « nutrition sportive ». Une
-//      catégorie de fiche contact (Marque, Agence…) n'est jamais un secteur.
+//      catégorie interdite par un MOT ENTIER (« Maison Parfums » pendant une exclusivité
+//      « parfum », jamais « Parfumerie » ni « Modern » pour « mode » : `secteurDansNom` avec
+//      `motEntier`) ou dont le secteur est un MOT ENTIER de la catégorie. Plus strict que
+//      `hitsBrand` : « sport » ne tombe pas sous « nutrition sportive ». Une catégorie de fiche
+//      contact (Marque, Agence…) n'est jamais un secteur.
 //      Les marques des collabs du créateur ne comptent jamais : l'agence les a signées.
+//      Une exclusivité écrite au prénom seul compte pour le créateur (`memeCreateur`).
 //
 //   3. EXCLUSIVITÉ À VÉRIFIER. Même règle pendant une exclusivité « à confirmer » (lue toute
 //      seule dans un contrat reçu par mail, souvent une erreur de lecture) : incident à part,
@@ -41,7 +43,7 @@
 
 import { brandMatcher } from "./collabPosts.ts";
 import { tagConnu } from "./contactTags.ts";
-import { excluState, foldName, hitsBrand, secteurDansNom, type Exclusivite } from "./exclusivites.ts";
+import { excluState, foldName, hitsBrand, memeCreateur, secteurDansNom, type Exclusivite } from "./exclusivites.ts";
 
 export type ConformitePost = { id: string; url: string; at: string; caption: string; product?: string };
 /** Collab du créateur : marque et date de création (ISO). */
@@ -203,7 +205,7 @@ export function incidentsConformite(input: ConformiteIn): Incident[] {
   const handlesOf = (brand: string) => (input.marques ?? []).filter((m) => foldName(m.brand) === foldName(brand)).flatMap((m) => m.handles ?? []);
   const collabs = input.collabs.filter((c) => c.brand?.trim());
   const ownBrands = new Set(collabs.map((c) => foldName(c.brand).replace(/ /g, "")));
-  const siennes = input.exclusivites.filter((e) => foldName(e.creator) === foldName(creator) && e.brand.trim());
+  const siennes = input.exclusivites.filter((e) => memeCreateur(e.creator, creator) && e.brand.trim());
   const exclus = siennes.filter((e) => !e.pending);
   const possibles = siennes.filter((e) => e.pending);
   const out: Incident[] = [];
@@ -250,7 +252,7 @@ export function incidentsConformite(input: ConformiteIn): Incident[] {
         for (const m of known) {
           const f = foldName(m.brand).replace(/ /g, "");
           if (ownBrands.has(f) || hits.has(foldName(m.brand)) || deja.has(foldName(m.brand)) || sameBrand(e.brand, m.brand)) continue;
-          if (!sectorHit(e.scope, m.tags) && !secteurDansNom(e.scope, m.brand)) continue;
+          if (!sectorHit(e.scope, m.tags) && !secteurDansNom(e.scope, m.brand, { motEntier: true })) continue;
           hits.set(foldName(m.brand), e);
         }
       }

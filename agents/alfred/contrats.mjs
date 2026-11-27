@@ -1449,13 +1449,14 @@ function includeOk(token, c) {
 		default: return is(c, token);
 	}
 }
-/** Le contrat est-il réglé « Contrat test » (mention dans le titre) ? */
-const estContratTest = (config) => !!config && is(config, "contratTest");
 /**
-* Assemble le contrat de représentation pour une configuration donnée. Un contrat marqué
-* signé ne porte jamais la mention « CONTRAT TEST », même réglé ainsi.
+* Le contrat est-il réglé « Contrat test » (mention dans le titre) ? Réglage par défaut de la
+* formule exclusive (contrat d'essai). Un contrat signé se réimprime tel que réglé, mention
+* comprise : la page Contrats prévient seulement avant de le marquer signé.
 */
-function buildRepresentation(config, opts = {}) {
+const estContratTest = (config) => !!config && is(config, "contratTest");
+/** Assemble le contrat de représentation pour une configuration donnée. */
+function buildRepresentation(config) {
 	const variante = config.variante === "nonexclusif" ? "nonexclusif" : "exclusif";
 	const v = RC_VARIANTS.find((x) => x.key === variante) ?? RC_VARIANTS[0];
 	const articles = RC_ARTICLES.filter((a) => (a.variant === "both" || a.variant === variante) && includeOk(a.includeIf, config)).map((a) => {
@@ -1473,7 +1474,7 @@ function buildRepresentation(config, opts = {}) {
 		};
 	});
 	const titleBits = [v.title];
-	if (estContratTest(config) && !opts.signe) titleBits.push("CONTRAT TEST");
+	if (estContratTest(config)) titleBits.push("CONTRAT TEST");
 	return {
 		title: titleBits.join(" — "),
 		subtitle: (config.titrePersonnalise || "").trim(),
@@ -1534,9 +1535,9 @@ function signaturesHTML(text) {
 	};
 	return `<div class="ct-sign">${place.map((p) => `<p class="place">${esc$1(p)}</p>`).join("")}<div class="cols">${col(parties[0], false)}${col(parties[1], true)}</div></div>`;
 }
-/** Contrat HTML imprimable (PDF) : mise en page « contrat » commune (CONTRACT_CSS, pdfDoc.ts). `signe` : jamais « CONTRAT TEST ». */
-function representationHTML(config, opts = {}) {
-	const c = buildRepresentation(config, opts);
+/** Contrat HTML imprimable (PDF) : mise en page « contrat » commune (CONTRACT_CSS, pdfDoc.ts). */
+function representationHTML(config) {
+	const c = buildRepresentation(config);
 	const indexed = c.articles.map((a, idx) => ({
 		...a,
 		idx,

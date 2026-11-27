@@ -29,7 +29,7 @@
 // ============================================================================
 
 import { creatorFloor, readTarifGrid, type TarifGrid } from "./tarif.ts";
-import { foldName, readExclusivites, type Exclusivite } from "./exclusivites.ts";
+import { foldName, memeCreateur, readExclusivites, type Exclusivite } from "./exclusivites.ts";
 
 export type DisposFormat = "reel" | "story" | "tiktok" | "pack";
 /** Formats clés des dispos, avec le format de la méthode TARIF qu'ils utilisent. */
@@ -270,12 +270,12 @@ export function prixDe(reseaux: readonly DisposReseau[], g: TarifGrid, plancher:
 /** Catégorie trop vague pour être utile sans la marque (« même catégorie de produits »). */
 const SCOPE_VAGUE = /^$|^(la |toute la )?meme (categorie|secteur)|^toute la (categorie|secteur)/;
 
-/** Catégories où le créateur est pris pendant le mois, sans jamais nommer la marque. */
+/** Catégories où le créateur est pris pendant le mois, sans jamais nommer la marque (ligne au prénom seul comprise). */
 export function indisposDe(list: readonly Exclusivite[], creator: string, mois: string): DisposIndispo[] {
   const { first, last } = bornesMois(mois);
   const out: DisposIndispo[] = [];
   for (const e of list) {
-    if (e.pending || foldName(e.creator) !== foldName(creator)) continue;
+    if (e.pending || !memeCreateur(e.creator, creator)) continue;
     if ((e.start && e.start > last) || (e.end && e.end < first)) continue;
     const scope = e.scope.trim().replace(/\s+/g, " ");
     const label = SCOPE_VAGUE.test(foldName(scope)) ? "une catégorie de produits (nous consulter)" : scope.slice(0, 80);
@@ -360,7 +360,7 @@ export function disposDuMois(input: DisposInput): DisposResultat {
       notes.push(`${name} : vues ${String(p.key ?? "")} du media kit (${String(p.avgViews)}, saisies à la main) non utilisées pour le prix.`);
     }
     for (const e of aVerifier) {
-      if (foldName(e.creator) !== foldName(row.name ?? "")) continue;
+      if (!memeCreateur(e.creator, row.name ?? "")) continue;
       notees.add(e.id);
       notes.push(`${name} : ${noteAVerifier(e)}`);
     }
@@ -395,7 +395,7 @@ export function disposDuMois(input: DisposInput): DisposResultat {
 export function tacheDispos(r: DisposResultat, url: string): { titre: string; details: string } | null {
   if (!r.notes.length) return null;
   return {
-    titre: `${titreDispos(r.selection.mois)} : à relire avant l'envoi`,
+    titre: `${titreDispos(r.selection.mois)} : à relire`,
     details: [`Lien de la liste : ${url}`, "", "À vérifier avant d'envoyer le lien aux agences (jamais dans un message) :", ...r.notes.map((n) => `- ${n}`)].join("\n"),
   };
 }

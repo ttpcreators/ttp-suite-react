@@ -57,12 +57,12 @@ describe("conditions particulières dans le PDF", () => {
   });
 });
 
-describe("contrat signé : PDF sans la mention « Contrat test »", () => {
-  it("la formule exclusive porte la mention tant qu'elle n'est pas signée", async () => {
+describe("mention « Contrat test » : le PDF suit le réglage", () => {
+  it("formule exclusive : la mention tant que le réglage est là ; sans le réglage, aucune", async () => {
     const { representationHTML, rcDefaultConfig } = await import("./representationContract");
     const cfg = { ...rcDefaultConfig("exclusif"), talentNom: "Nora Fictive" };
     expect(representationHTML(cfg)).toContain("Contrat test");
-    expect(representationHTML(cfg, { signe: true })).not.toContain("Contrat test");
-    expect(representationHTML(cfg, { signe: true })).toContain("Nora Fictive");
+    expect(representationHTML({ ...cfg, contratTest: "false" })).not.toContain("Contrat test");
+    expect(representationHTML({ ...cfg, contratTest: "false" })).toContain("Nora Fictive");
   });
 });

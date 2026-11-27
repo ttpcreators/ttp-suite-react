@@ -92,20 +92,19 @@ describe("contrat non exclusif sans boîte mail ni clause pénale", () => {
   });
 });
 
-describe("mention « CONTRAT TEST » : jamais sur un contrat signé", () => {
+describe("mention « CONTRAT TEST » : le texte suit le réglage, signé ou non", () => {
   const cfg = { ...rcDefaultConfig("exclusif"), talentNom: "Nora Fictive" };
-  it("réglage par défaut de la formule exclusive : la mention tant que le contrat n'est pas signé", () => {
+  it("réglage par défaut de la formule exclusive (contrat d'essai)", () => {
     expect(estContratTest(cfg)).toBe(true);
     expect(estContratTest(rcDefaultConfig("nonexclusif"))).toBe(false);
     expect(buildRepresentation(cfg).title).toContain("CONTRAT TEST");
-    expect(buildRepresentation(cfg, { signe: true }).title).not.toContain("CONTRAT TEST");
-    expect(representationText(cfg, { signe: true })).not.toContain("CONTRAT TEST");
+    expect(buildRepresentation({ ...cfg, contratTest: "false" }).title).not.toContain("CONTRAT TEST");
   });
-  it("lire_contrat : le contrat enregistré signé se lit sans la mention, en attente avec", () => {
+  it("lire_contrat : un contrat signé se lit tel que réglé, comme le fichier rangé", () => {
     const contrat = { id: "rc1", creator: "Nora Fictive", title: "Contrat de représentation · Nora Fictive", variante: "exclusif", config: cfg, createdAt: "2026-11-02T10:00:00Z" };
-    const lu = (status?: string) => texteContrat({ kind: "enregistre", id: "rc1", qui: "Nora Fictive", date: "2026-11-02", contrat: { ...contrat, status } });
-    expect(lu("signed")).not.toContain("CONTRAT TEST");
+    const lu = (status?: string, config = cfg) => texteContrat({ kind: "enregistre", id: "rc1", qui: "Nora Fictive", date: "2026-11-02", contrat: { ...contrat, config, status } });
+    expect(lu("signed")).toContain("CONTRAT TEST");
     expect(lu("pending")).toContain("CONTRAT TEST");
-    expect(lu(undefined)).toContain("CONTRAT TEST");
+    expect(lu("signed", { ...cfg, contratTest: "false" })).not.toContain("CONTRAT TEST");
   });
 });

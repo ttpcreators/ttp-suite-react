@@ -138,6 +138,19 @@ describe("conflit d'exclusivité", () => {
     const large = exclu({ brand: "Atelier Brume", scope: "toute marque concurrente", competitors: [] });
     expect(incidentsConformite(base([post("Ma tenue kora du jour")], { exclusivites: [large], marques }))).toEqual([]);
   });
+  it("catégorie dans le nom : le mot entier seulement (ni « Modernité » pour « mode », ni « Parfumerie » pour « parfum »)", () => {
+    // Marques fictives.
+    const mode = exclu({ brand: "Atelier Brume", scope: "mode", competitors: [] });
+    const marques = [{ brand: "Modernite Cuisine", tags: ["Marque"] }, { brand: "Mode Lumen", tags: ["Marque"] }, { brand: "Parfumerie Kora", tags: ["Marque"] }];
+    const r = incidentsConformite(base([post("Ma cuisine modernite cuisine du soir"), post("Ma tenue mode lumen du jour")], { exclusivites: [mode], marques }));
+    expect(r.map((i) => [i.type, i.brand])).toEqual([["exclusivite", "Mode Lumen"]]);
+    const parfum = exclu({ brand: "Atelier Brume", scope: "parfum", competitors: [] });
+    expect(incidentsConformite(base([post("Ma routine parfumerie kora")], { exclusivites: [parfum], marques }))).toEqual([]);
+  });
+  it("une exclusivité écrite au prénom seul compte pour le créateur", () => {
+    const zoe = exclu({ creator: "Zoé", brand: "Orbe", scope: "snacks", competitors: ["Kolibri"] });
+    expect(incidentsConformite(base([post("Mes snacks kolibri du matin")], { exclusivites: [zoe] })).map((i) => [i.type, i.brand])).toEqual([["exclusivite", "Kolibri"]]);
+  });
   it("un post peut avoir les deux incidents", () => {
     const r = incidentsConformite(base([post("Mes snacks prozis -10% code ZOE10")], { exclusivites: [exclu({})] }));
     expect(r.map((i) => i.id.split(":")[1]).sort()).toEqual(["exclusivite", "mention"]);

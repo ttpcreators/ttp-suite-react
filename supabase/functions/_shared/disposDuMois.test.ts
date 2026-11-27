@@ -136,9 +136,20 @@ describe("dispos du mois : la sélection", () => {
     expect(JSON.stringify(r2.selection)).not.toMatch(/Velours|parfum/);
     expect(r2.selection.creators[0].indispos).toEqual([]);
   });
+  it("ligne écrite au prénom seul : elle compte pour le créateur (indisponibilité, note), jamais « hors des dispos »", () => {
+    const sure = { id: "p1", creator: "Tom", brand: "Orbe", scope: "snacks", competitors: [], start: "2026-11-01", end: "2027-01-31", points: [], source: "manuel", createdAt: 1 };
+    const lue = { ...sure, id: "p2", scope: "boissons", pending: true, source: "mail" };
+    const r3 = disposDuMois({ creators: [TOM], pricingRates: {}, exclusivites: [sure, lue], mois: "2026-12", now: NOW });
+    expect(r3.selection.creators[0].indispos).toEqual([{ label: "snacks", from: null, until: "2027-01-31" }]);
+    expect(r3.notes.filter((n) => /boissons/.test(n))).toEqual([
+      "Tom Fictif : exclusivité « boissons » (Orbe) lue toute seule dans un contrat reçu par mail, jamais confirmée : à vérifier dans la page Exclusivités avant l'envoi (confirmer ou écarter), pas affichée sur la page.",
+    ]);
+  });
   it("tâche de la fonction du 1er du mois : lien et points à vérifier ; rien sans point", () => {
     const t = tacheDispos(r, "https://ttpcreators.pro/selection/?l=dispos-2026-12-a7k2");
-    expect(t?.titre).toBe("Dispos de décembre 2026 : à relire avant l'envoi");
+    expect(t?.titre).toBe("Dispos de décembre 2026 : à relire");
+    // Règle d'écriture de l'interface : un titre de ligne tient en 45 caractères, même en septembre.
+    expect(tacheDispos({ ...r, selection: { ...r.selection, mois: "2026-09" } }, "x")?.titre.length).toBeLessThanOrEqual(45);
     expect(t?.details).toContain("Lien de la liste : https://ttpcreators.pro/selection/?l=dispos-2026-12-a7k2");
     expect(t?.details).toContain("- Tom Fictif : exclusivité « parfum » (Parfums X)");
     expect(tacheDispos({ ...r, notes: [] }, "x")).toBeNull();

@@ -161,8 +161,8 @@ export function ContractsHome({
     const raw = rawById.get(rowKey(r));
     if (!raw) return null;
     if (r.key === "brandContractHistory") return typeof raw.html === "string" ? raw.html : null;
-    // Contrat signé : jamais la mention « CONTRAT TEST » dans le titre.
-    return raw.config && typeof raw.config === "object" ? representationHTML(raw.config as Record<string, string>, { signe: r.status === "signed" }) : null;
+    // Réimprimé tel que réglé, signé ou non (mention « CONTRAT TEST » comprise) : le même texte que le fichier rangé.
+    return raw.config && typeof raw.config === "object" ? representationHTML(raw.config as Record<string, string>) : null;
   };
   const view = (r: ContractRow) => {
     const html = htmlOf(r);
@@ -453,7 +453,7 @@ export function ContractsHome({
       {testASigner && (
         <ConfirmDialog
           title="Contrat réglé en « Contrat test »"
-          message={`${rowName(testASigner)} porte la mention « CONTRAT TEST » dans son titre. Marqué signé, il sera réimprimé sans elle (le fichier déjà rangé dans Documents la garde). Vérifie que la version signée est bien le vrai contrat, et dépose le scan signé dans Documents.`}
+          message={`${rowName(testASigner)} porte la mention « CONTRAT TEST » dans son titre (réglage « Contrat test ») et la garde une fois signé. Si le document signé n'a pas ce titre, corrige d'abord le réglage du contrat. Dépose aussi le scan signé dans Documents.`}
           confirmLabel="Marquer signé"
           onConfirm={() => {
             const r = testASigner;

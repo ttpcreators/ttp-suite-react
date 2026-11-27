@@ -10,7 +10,8 @@
 //
 // Deux niveaux (alertesExclu), les mêmes partout où le registre est lu :
 //  - « bloque » : exclusivité CONFIRMÉE, en cours ou à venir, qui cite la marque parmi les
-//    concurrents, ou dont la catégorie se lit dans le nom (ou le secteur) de la marque ;
+//    concurrents, ou dont la catégorie se lit dans le nom (mot entier pour un mot court :
+//    « mode » ne bloque pas « Modern ») ou le secteur de la marque ;
 //  - « à vérifier » : ligne « à confirmer » (lue toute seule dans un contrat reçu par mail,
 //    souvent une erreur de lecture) ou exclusivité confirmée sans aucun concurrent saisi. Ni
 //    un feu vert ni un refus : on vérifie avant de proposer le créateur. Jamais présentée
@@ -102,30 +103,65 @@ const MOTS_VAGUES = new Set([
   "entreprise", "entreprises", "societe", "societes", "generale", "general", "grand", "grande", "public", "france",
   "monde", "industrie", "dans", "pour", "avec", "sans", "leur", "leurs", "chez", "entre", "vers", "plus", "cette",
   "industry", "sector", "category", "categories", "product", "products", "brand", "brands", "same", "other", "with",
+  // Mots qui qualifient sans dire un secteur (« concurrents directs », « haut de gamme », « bien être ») :
+  // pris seuls, ils bloqueraient « Direct… », « Bien… » ou « High… ».
+  "bien", "etre", "haut", "haute", "high", "fast", "direct", "directe",
 ]);
 
+/** Singulier d'un mot de catégorie (« parfums » → parfum, « probiotiques » → probiotique ; « stress » reste). */
+const singulier = (w: string) => (w.length > 4 && !w.endsWith("ss") ? w.replace(/[sx]$/, "") : w);
+const motVague = (w: string) => MOTS_VAGUES.has(w) || MOTS_VAGUES.has(singulier(w));
+/** Un mot au pluriel près, pour comparer (« parfums » = « parfum », « bijoux » = « bijou »). */
+const radical = (w: string) => (w.length > 3 ? w.replace(/[sx]$/, "") : w);
+
+/** Une catégorie repliée comme foldName, mais un mot à trait d'union reste un seul mot (« bien-etre », « high-tech »). */
+const plierCategorie = (s: string) =>
+  String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[’‘]/g, "'").toLowerCase()
+    .replace(/[^a-z0-9'-]+/g, " ").replace(/(?<![a-z0-9])-+|-+(?![a-z0-9])/g, " ").replace(/\bbien etre\b/g, "bien-etre")
+    .replace(/\s+/g, " ").trim();
+
 /**
- * Le mot qui dit chaque secteur interdit : le premier mot parlant de chaque partie
- * (« nutrition sportive et compléments alimentaires » → nutrition, complement ;
- * « produits de beauté » → beaute). Vide pour une catégorie vague (« même catégorie de produits »).
+ * Le terme qui dit chaque secteur interdit : le premier mot parlant de chaque partie, coupée aux
+ * virgules, « ; », « / », et, ou (« nutrition sportive et compléments alimentaires » → nutrition,
+ * complement ; « minceur, digestion ou sommeil » → minceur, digestion, sommeil ; « produits de
+ * beauté » → beaute). Un mot à trait d'union est un seul terme (« bien-être » → « bien etre »).
+ * Vide pour une catégorie vague (« même catégorie de produits », « concurrents directs »).
  */
 export function termesSecteur(scope: string): string[] {
   const out: string[] = [];
-  for (const part of foldName(scope).split(/\b(?:et|ou|and|or)\b/)) {
-    const mot = part.split(" ").map((w) => w.replace(/^(?:d|l|qu)'/, "")).find((w) => w.length >= 4 && !MOTS_VAGUES.has(w) && !/\d/.test(w));
-    const t = mot ? mot.replace(/(?<=.{4})[sx]$/, "") : "";
-    if (t.length >= 4 && !out.includes(t)) out.push(t);
+  for (const morceau of String(scope ?? "").split(/[,;/]/)) {
+    for (const part of plierCategorie(morceau).split(/\b(?:et|ou|and|or)\b/)) {
+      const mot = part.split(" ").map((w) => w.replace(/^(?:d|l|qu)'/, "")).find((w) => w.replace(/-/g, "").length >= 4 && !motVague(w) && !/\d/.test(w));
+      const t = mot ? mot.split("-").filter(Boolean).map(singulier).join(" ") : "";
+      if (t.replace(/ /g, "").length >= 4 && !out.includes(t)) out.push(t);
+    }
   }
   return out;
 }
 
-/** La catégorie interdite se lit-elle dans le nom de la marque (« Maison des Parfums » pour « parfum ») ? Le mot, sinon null. */
-export function secteurDansNom(scope: string, brand: string): string | null {
+/** Les mots du terme se suivent-ils dans le nom, chacun au pluriel près (« sous vetements » pour « sous vetement ») ? */
+const motsQuiSeSuivent = (mots: readonly string[], terme: readonly string[]) =>
+  mots.some((_, i) => terme.every((t, j) => i + j < mots.length && radical(mots[i + j]) === radical(t)));
+
+/**
+ * La catégorie interdite se lit-elle dans le nom de la marque (« Maison des Parfums » pour
+ * « parfum ») ? Le terme, sinon null. Toujours le mot entier, au pluriel près. Un terme de
+ * 6 lettres ou plus se lit aussi au début d'un mot ou collé (« Parfumerie », « Lumenparfum ») ;
+ * un terme plus court jamais (« mode » ne se lit pas dans « Modern », ni « tech » dans
+ * « Technogrid »). `motEntier` : le mot entier seulement, quelle que soit sa longueur (conformité).
+ */
+export function secteurDansNom(scope: string, brand: string, o: { motEntier?: boolean } = {}): string | null {
   const nom = foldName(brand);
   if (!nom) return null;
   const mots = nom.split(" ");
   const colle = nom.replace(/ /g, "");
-  return termesSecteur(scope).find((t) => mots.some((w) => w.startsWith(t)) || (t.length >= 6 && colle.includes(t))) ?? null;
+  return termesSecteur(scope).find((t) => {
+    const terme = t.split(" ");
+    const tc = terme.join("");
+    // Le mot entier (« Maison Parfums »), ou un terme à trait d'union écrit en un mot (« Bienetre Shop »).
+    if (motsQuiSeSuivent(mots, terme) || mots.some((w) => radical(w) === radical(tc))) return true;
+    return !o.motEntier && tc.length >= 6 && colle.includes(tc);
+  }) ?? null;
 }
 
 /** Secteur d'une marque : jamais une catégorie de fiche contact (Marque, Agence, Média…), qui dit un type, pas un secteur. */
@@ -159,9 +195,21 @@ export function hitsBrand(e: Exclusivite, brand: string, brandTags: readonly str
   return pourquoiBloque(e, brand, brandTags) !== null;
 }
 
-/** Exclusivités CONFIRMÉES en cours ou à venir d'un créateur qui bloquent cette marque. */
+/** La raison d'un blocage en clair : « Kora est cité parmi ses concurrents », « « parfum » se lit dans le nom de Kora ». */
+export function raisonBloque(e: Exclusivite, brand: string, p: RaisonBloque): string {
+  switch (p) {
+    case "concurrent":
+      return `${brand} est cité parmi ses concurrents`;
+    case "nom":
+      return `« ${secteurDansNom(e.scope, brand) ?? e.scope} » se lit dans le nom de ${brand}`;
+    case "secteur":
+      return `le secteur de ${brand} est dans la catégorie interdite`;
+  }
+}
+
+/** Exclusivités CONFIRMÉES en cours ou à venir d'un créateur qui bloquent cette marque (ligne au prénom seul comprise). */
 export function conflictsFor(list: readonly Exclusivite[], creator: string, brand: string, today: string, brandTags: readonly string[] = []): Exclusivite[] {
-  return list.filter((e) => !e.pending && foldName(e.creator) === foldName(creator) && excluState(e, today) !== "terminee" && hitsBrand(e, brand, brandTags));
+  return list.filter((e) => !e.pending && memeCreateur(e.creator, creator) && excluState(e, today) !== "terminee" && hitsBrand(e, brand, brandTags));
 }
 
 /** Même créateur : même nom replié, ou un prénom seul égal au prénom de l'autre (« Zoé » et « ZOÉ X »). */
@@ -186,7 +234,9 @@ export type AlerteExclu = { e: Exclusivite; niveau: NiveauExclu; pourquoi: Pourq
  *  - confirmée avec des concurrents, avec `categories` : « à vérifier » (categorie), la liste
  *    n'est pas forcément complète (pour un contrôle fait exprès, verifier_exclusivite) ;
  *  - « à confirmer » qui touche la marque ou n'a aucun concurrent : « à vérifier » (a_confirmer),
- *    y compris une ligne sans créateur reconnu quand on demande pour un créateur précis.
+ *    y compris une ligne sans créateur reconnu quand on demande pour un créateur précis ; avec
+ *    `categories`, aussi celle qui a une liste de concurrents et une catégorie (la liste lue après
+ *    « notamment » n'est jamais complète).
  * Le créateur se compare avec memeCreateur (une ligne écrite au prénom seul compte aussi).
  */
 export function alertesExclu(
@@ -204,7 +254,7 @@ export function alertesExclu(
     if (qui && !memeCreateur(e.creator, qui) && !(e.pending && !sien)) continue;
     const p = pourquoiBloque(e, brand, o.brandTags ?? []);
     if (e.pending) {
-      if (p || !e.competitors.length) out.push({ e, niveau: "a_verifier", pourquoi: "a_confirmer" });
+      if (p || !e.competitors.length || (o.categories && e.scope.trim())) out.push({ e, niveau: "a_verifier", pourquoi: "a_confirmer" });
     } else if (!sien) {
       continue; // confirmée sans créateur : la page ne le permet pas
     } else if (p) out.push({ e, niveau: "bloque", pourquoi: p });
@@ -221,14 +271,15 @@ export const estAVerifier = (raison: string | null | undefined) => !!raison && r
 /**
  * Créateurs à vérifier pour une marque (lignes « à confirmer », exclusivités confirmées sans
  * concurrents) : nom (minuscules) → « À vérifier : exclu Nike non confirmée ». Ceux que
- * blockedCreators bloque déjà n'y sont pas ; une ligne sans créateur ne s'attache à personne.
+ * blockedCreators bloque déjà n'y sont pas (sous le même nom ou un prénom seul) ; une ligne sans
+ * créateur ne s'attache à personne.
  */
 export function aVerifierCreators(list: readonly Exclusivite[], brand: string, today: string, brandTags: readonly string[] = []): Map<string, string> {
-  const bloques = blockedCreators(list, brand, today, brandTags);
+  const bloques = [...blockedCreators(list, brand, today, brandTags).keys()];
   const out = new Map<string, string>();
   for (const a of alertesExclu(list, brand, today, { brandTags })) {
     const k = a.e.creator.trim().toLowerCase();
-    if (a.niveau !== "a_verifier" || !k || bloques.has(k) || out.has(k)) continue;
+    if (a.niveau !== "a_verifier" || !k || bloques.some((b) => memeCreateur(b, k)) || out.has(k)) continue;
     out.set(k, `${A_VERIFIER} : exclu ${a.e.brand.trim() || "?"}${a.pourquoi === "a_confirmer" ? " non confirmée" : ""}`);
   }
   return out;
@@ -244,9 +295,8 @@ export function texteAlerte(a: AlerteExclu, brand: string): string {
     case "concurrent":
       return excluLine(e);
     case "nom":
-      return `${excluLine(e)} : « ${secteurDansNom(e.scope, brand) ?? e.scope} » se lit dans le nom de ${brand}`;
     case "secteur":
-      return `${excluLine(e)} : le secteur de ${brand} est dans la catégorie interdite`;
+      return `${excluLine(e)} : ${raisonBloque(e, brand, a.pourquoi)}`;
     case "a_confirmer": {
       const quote = e.quote?.trim() ? ` Phrase lue : « ${e.quote.length > 220 ? `${couper(e.quote, 219)}…` : e.quote} »` : "";
       return `exclusivité ${marque}${e.scope.trim() ? ` (catégorie « ${e.scope} »)` : ""}${e.start ? ` du ${e.start}` : ""}${e.end ? ` au ${e.end}` : ""} lue toute seule dans un contrat reçu par mail, jamais confirmée : peut-être une erreur de lecture.${quote}`;
@@ -304,6 +354,18 @@ export function blockedCreators(
     if (!out.has(k)) out.set(k, `Exclu ${e.brand}${e.end ? ` · ${fmtDate(e.end)}` : ""}`);
   }
   return out;
+}
+
+/**
+ * La raison donnée par blockedCreators ou aVerifierCreators pour une fiche du roster : sous son
+ * nom, ou sous un prénom seul (ligne écrite « Zoé » pour « Zoé X », memeCreateur).
+ */
+export function raisonPour(m: ReadonlyMap<string, string> | null | undefined, nom: string): string | undefined {
+  if (!m?.size || !nom.trim()) return undefined;
+  const exacte = m.get(nom.trim().toLowerCase());
+  if (exacte !== undefined) return exacte;
+  for (const [cle, raison] of m) if (memeCreateur(cle, nom)) return raison;
+  return undefined;
 }
 
 /** Créateurs en exclusivité EN COURS (toutes marques) : pour prévenir dans les listes. */
@@ -403,60 +465,103 @@ export function findDuration(text: string): { n: number; unit: "jours" | "mois" 
 }
 
 // ── Clause d'exclusivité : ce qui en est une, et ce qui dit le contraire ─────
-// Tout se lit sur le texte replié (foldName : minuscules, sans accents, apostrophes gardées).
-// Avant (lignes « à confirmer » de novembre 2026) : « non exclusive », « sans aucune
-// exclusivité » ou « exclusivement » suffisaient à proposer une exclusivité.
+// Tout se lit sur la phrase repliée (plierClause : minuscules, sans accents, apostrophes
+// gardées) où virgules, points-virgules, deux-points et parenthèses restent des mots à part :
+// une négation ne compte que collée au mot, et aucune fenêtre de mots ne franchit une virgule.
+// Avant : en novembre 2026, « non exclusive », « sans aucune exclusivité » ou « exclusivement »
+// suffisaient à proposer une exclusivité ; puis une négation lue jusqu'à 3 mots avant le mot
+// faisait manquer de vraies clauses (« ne pourra pas, pendant l'exclusivité, travailler avec… »).
 
-/** Tournures qui disent qu'il n'y a PAS d'exclusivité : retirées avant de chercher la clause. */
+/** La phrase repliée, ponctuation utile gardée : « le createur ne pourra pas , pendant l'exclusivite , … ». */
+const plierClause = (s: string) =>
+  ` ${String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[’‘]/g, "'").toLowerCase()
+    .replace(/[^a-z0-9',;:()]+/g, " ").replace(/([,;:()])/g, " $1 ").replace(/\s+/g, " ").trim()} `;
+
+/** Le mot qui dit l'exclusivité, ou la non-concurrence. */
+const MOT_EXCLU = "(?:l'|d')?(?:exclusi[a-z]*|non ?concurren[a-z]*|non ?compet[a-z]*)";
+/** Ce qui peut se glisser entre la négation et le mot : « aucune clause d'… », « pas d'obligation de… ». */
+const ENTRE = "(?:aucune? |toute )?(?:(?:clause|obligation|engagement|regime|droit|caractere|periode|accord|contrainte|condition|pacte|garantie)s? (?:d'|de ))?";
+/**
+ * Après le mot : une exclusivité tournée vers les autres n'est pas niée (« aucun engagement
+ * d'exclusivité avec une autre marque », « no exclusivity with any competitor » : une interdiction).
+ */
+const VERS_AUTRES = "\\b(?! (?:avec|envers|aupres de|a|au|aux|with|to) (?:une |un |des |d'|toute |tout |aucune? |any |an? )?(?:(?:marques?|societes?|entreprises?|brands?|companies) )?(?:autres?\\b|concurren|compet|tiers\\b|rival|other\\b))";
+
+/** Tournures qui disent qu'il n'y a PAS d'exclusivité : retirées avant de chercher la clause (dans cet ordre). */
 const NEGATIONS: RegExp[] = [
-  // « Exclusivité : non », « Exclusivité : aucune », « Exclusivité : non exclusif » (pas « aucune marque concurrente »).
-  /\b(?:l'|d')?exclusivit\w*(?: \S+){0,2}? (?:aucune?|neant|none|non(?: ?exclusi\w*)?)\b(?!(?: \S+){0,3}? (?:marques?|concurren\w*|compet\w*|autres?|other)\b)/g,
-  // « exclusivement » veut dire « seulement » (« payée exclusivement en produits »).
-  /\bexclusivement\b/g,
+  // « Exclusivité : non. », « Exclusivité : aucune », « Exclusivité : néant », « Exclusivité : non exclusif » : en fin de
+  // phrase ou avant une ponctuation (pas « Exclusivité : aucune marque concurrente », ni « … aucune collaboration »).
+  /\b(?:l'|d')?exclusivit[a-z]* (?:: )?(?:aucune?|neant|none|n a|sans objet|non(?: ?exclusi[a-z]*| applicable| concernee?s?| prevue?s?)?)(?= (?:[,;:()]|$))/g,
   // « non exclusive », « non-exclusif », « nonexclusive », « non exclusivité ».
-  /\bnon ?exclusi\w*/g,
-  // « sans (aucune) exclusivité », « aucune clause d'exclusivité », « pas d'exclusivité », « n'est pas
-  // consentie à titre exclusif », « absence d'exclusivité », « no exclusivity », « not an exclusive »,
-  // « aucune clause de non-concurrence ». Pas « sans préjudice de l'exclusivité » ni « ne pourra pas
-  // rompre l'exclusivité », qui la confirment.
-  /\b(?:sans(?! prejudice\b)|aucune?|d'aucune?|absence|pas(?! (?:rompre|violer|enfreindre|porter|contrevenir|remettre|deroger|meconnaitre|nuire)\b)|ni|nulle|nullement|jamais|no|without(?! prejudice\b)|not|never)(?: \S+){0,3}? (?:d'|l')?(?:exclusi\w*|non ?concurren\w*|non ?compet\w*)/g,
-  // « libre de toute exclusivité », « exempt de toute exclusivité ».
-  /\b(?:libres?|exempte?s?|degagee?s?) de toute (?:clause d'|obligation d')?exclusi\w*/g,
+  /\bnon ?exclusi[a-z]*/g,
+  // Négation collée au mot : « pas d'exclusivité », « aucune (clause d') exclusivité », « sans (aucune) exclusivité »,
+  // « absence d'exclusivité », « ni non-concurrence », « n'est pas exclusif », « n'est pas consentie à titre exclusif »,
+  // « n'est pas tenu à une exclusivité », « pas exclusivement avec la Marque ». Jamais par-dessus un autre mot :
+  // « ne pourra pas, pendant l'exclusivité », « ne peut en aucun cas rompre l'exclusivité » ou « sans préjudice de
+  // l'exclusivité » la confirment.
+  new RegExp(
+    `\\b(?:pas|aucune?|d'aucune?|sans|absence|ni|nulle|nullement|aucunement|jamais) (?:d'|de )?${ENTRE}(?:(?:consenti|accorde|octroye|concede|conclu|donne|reserve)e?s? )?(?:(?:tenu|soumis|lie|astreint|oblige|engage)e?s? (?:a |par |au |aux )?(?:une |la |l'|des |toute )?)?(?:a titre |de (?:maniere|facon) )?${MOT_EXCLU}${VERS_AUTRES}`,
+    "g",
+  ),
+  // « no exclusivity », « not an exclusive », « will not be exclusive », « without any exclusivity », « no non-compete »,
+  // « is not bound by any exclusivity », « does not grant any exclusivity » (pas « shall not, during the exclusivity… »).
+  new RegExp(
+    `\\b(?:no|not|without|never)(?: be)?(?: (?:bound|subject|granted|grant|give|given|create|confer|imply|include|entitled)(?: by| to| with)?)?(?: an?| any)? (?:exclusi[a-z]*|non ?compet[a-z]*)${VERS_AUTRES}`,
+    "g",
+  ),
+  // « libre de toute exclusivité », « exempt de toute clause d'exclusivité ».
+  /\b(?:libres?|exempte?s?|degagee?s?) de toute (?:clause d'|obligation d')?exclusi[a-z]*/g,
 ];
 
-/** Le mot dans un autre sens : licence ou cession sur les contenus, tribunal compétent, propriété, responsabilité. */
+/** Ce qui peut qualifier une licence avant « exclusive » : « licence gratuite, mondiale et exclusive ». */
+const ADJ_LICENCE = "(?:gratuite?s?|mondiale?s?|perpetuelle?s?|irrevocables?|personnelle?s?|(?:in)?cessibles?|transferables?|totale?s?|entiere?s?|pleine?s?|seule?s?|worldwide|perpetual|irrevocable|royalty free|sole)";
+/**
+ * Le mot dans un autre sens, seulement quand il qualifie directement la licence ou le droit sur
+ * les contenus, le tribunal, la propriété ou la charge : « licence exclusive », « droit
+ * d'exploitation exclusif », « compétence exclusive », « exclusif d'une licence ». Jamais par-dessus
+ * un autre mot : « la cession des droits, le Créateur accorde une exclusivité » en est une.
+ */
 const AUTRES_SENS: RegExp[] = [
-  /\b(?:licence|license|cession|exploitation|droits? d'(?:exploitation|utilisation|usage|auteur|diffusion|reproduction)|competence|juridiction|jurisdiction|tribunaux?|responsabilite|responsibility|propriete|property|proprietaire|owner|titulaire|charge|frais)(?: \S+){0,4}? (?:d'|l')?exclusi\w*/g,
-  /\bexclusi\w*(?: \S+)? (?:licence|license|cession|competence|juridiction|jurisdiction|responsabilite|responsibility|propriete|property|proprietaire|owner|titulaire)\b/g,
+  new RegExp(
+    `\\b(?:licences?|licenses?|cessions?|concessions?|droits? d'(?:exploitation|utilisation|usage|auteur|diffusion|reproduction|propriete)|competence|juridiction|jurisdiction|tribunaux|courts?|responsabilite|responsibility|liability|propriete|property|ownership|proprietaire|owner|titulaire|charge|frais|expenses?)(?: ${ADJ_LICENCE}(?: ,| et| and)?)* (?:a titre )?exclusi[a-z]*`,
+    "g",
+  ),
+  /\bexclusi[a-z]*(?: (?:d'une?|de la|du|des|de|d'|of|an?|the))? (?:licences?|licenses?|cessions?|concessions?|competence|juridiction|jurisdiction|propriete|property|ownership|proprietaire|owner|titulaire|responsabilite|responsibility|liability)\b|\bexclusi[a-z]* d'(?:exploitation|utilisation|usage|diffusion|reproduction)\b/g,
 ];
 
-/** Mots qui disent à eux seuls une exclusivité. */
-const FORTE = /\b(?:l'|d')?exclusi(?:f|fs|ve|ves|vite|vites|vity|vities)\b|\bnon ?concurren|\bnon ?compet/;
-/** Une interdiction… */
+/**
+ * Mots qui disent à eux seuls une exclusivité, et « exclusivement avec la Marque » (« exclusivement »
+ * seul veut dire « seulement » : « payée exclusivement en produits » n'est ni une clause ni une négation).
+ */
+const FORTE =
+  /\b(?:l'|d')?exclusi(?:f|fs|ve|ves|vite|vites|vity|vities)\b|\bnon ?concurren|\bnon ?compet|\bexclusivement (?:avec|pour) (?:le compte (?:de |d'))?(?:la |le |les |l'|cette |ladite |ledit )?(?:marque|annonceur|societe|client|partenaire|entreprise|enseigne)s?\b|\bexclusively (?:with|for) (?:the )?(?:brand|company|client|advertiser|partner)s?\b/;
+/** Une interdiction… (fenêtres de mots qui s'arrêtent à la ponctuation) */
 const INTERDIT =
-  /\bs'interdi|\binterdi(?:t|te|ts|tes|ction)\b|\bs'engage\w* a ne\b|\bs'abst|\bne (?:pourra|pourront|peut|peuvent|doit|devra|devront|saurait|fera|signera|acceptera|collaborera|travaillera)\b|\bn'(?:accepte|acceptera|accepteront|engagera|aura)\b|\baucune? (?:\S+ ){0,2}?(?:collaboration|partenariat|contrat|campagne|prestation|promotion|publication|concurren\w*)|\bpas de (?:\S+ ){0,2}?concurren\w*|\bshall not\b|\bmust not\b|\bmay not\b|\bwill not\b|\bagrees? not to\b|\bundertakes? not to\b|\bnot to (?:promote|work|endorse|collaborate|partner|advertise)\b|\brefrain/;
+  /\bs'interdi|\binterdi(?:t|te|ts|tes|ction)\b|\bs'engage\w* a ne\b|\bs'abst|\bne (?:pourra|pourront|peut|peuvent|doit|devra|devront|saurait|fera|signera|acceptera|collaborera|travaillera)\b|\bn'(?:accepte|acceptera|accepteront|engagera|aura)\b|\baucune? (?:[a-z0-9']+ ){0,2}?(?:collaboration|partenariat|contrat|campagne|prestation|promotion|publication|concurren\w*)|\bpas de (?:[a-z0-9']+ ){0,2}?concurren\w*|\bshall not\b|\bmust not\b|\bmay not\b|\bwill not\b|\bagrees? not to\b|\bundertakes? not to\b|\bnot to (?:promote|work|endorse|collaborate|partner|advertise)\b|\brefrain/;
 /** … qui vise des concurrents : avec INTERDIT, une clause d'exclusivité sans le mot. */
 const RIVAL =
   /\bconcurren|\bcompeting\b|\bcompetitors?\b|\bcompetitive\b|\brival|\b(?:autres?|other) (?:marques?|brands?|annonceurs?|entreprises?|societes?|partenaires?)\b|\bmeme (?:categorie|secteur|segment|domaine|univers)\b|\bsame (?:category|sector|industry|segment)\b|\btiers? (?:du|de la) meme\b/;
 /** « reste libre de collaborer avec des marques concurrentes » : le contraire d'une exclusivité. */
-const LIBRE = /\b(?:libre|librement|liberte|free|freely)(?: \S+){0,3}? (?:collabor|travaill|contract|partenari|s'associer|promouv|conclure|work|partner|promot|engag)\w*/;
+const LIBRE = /\b(?:libre|librement|liberte|free|freely)(?: [a-z0-9']+){0,3}? (?:collabor|travaill|contract|partenari|s'associer|promouv|conclure|work|partner|promot|engag)\w*/;
 
 /** La phrase dit-elle qu'il n'y a pas d'exclusivité (« non exclusive », « aucune exclusivité »…) ? */
 export function nieExclusivite(phrase: string): boolean {
-  const t = ` ${foldName(phrase)} `;
+  const t = plierClause(phrase);
   return NEGATIONS.some((re) => t.replace(re, " ") !== t);
 }
 
 /**
  * Clause d'exclusivité dans cette phrase ? « forte » : le mot (exclusivité, exclusif,
- * non-concurrence) employé pour le créateur ; « faible » : une interdiction qui vise des
- * concurrents (« s'interdit toute collaboration avec une marque concurrente »). null sinon,
- * et quand la phrase dit le contraire.
+ * non-concurrence, « exclusivement avec la Marque ») employé pour le créateur ; « faible » : une
+ * interdiction qui vise des concurrents (« s'interdit toute collaboration avec une marque
+ * concurrente »). null sinon, et quand la phrase dit le contraire. `marque` : la marque du contrat
+ * (« exclusivement avec Nova »).
  */
-export function clauseExclusivite(phrase: string): "forte" | "faible" | null {
-  let t = ` ${foldName(phrase)} `;
+export function clauseExclusivite(phrase: string, marque?: string | null): "forte" | "faible" | null {
+  let t = plierClause(phrase);
   for (const re of [...NEGATIONS, ...AUTRES_SENS]) t = t.replace(re, " ");
-  if (FORTE.test(t)) return "forte";
+  const m = foldName(marque);
+  if (FORTE.test(t) || (m.length >= 3 && new RegExp(`\\bexclusivement (?:avec|pour) (?:la marque )?${m}\\b`).test(t))) return "forte";
   if (INTERDIT.test(t) && RIVAL.test(t) && !LIBRE.test(t)) return "faible";
   return null;
 }
@@ -464,18 +569,27 @@ export function clauseExclusivite(phrase: string): "forte" | "faible" | null {
 /**
  * Phrase lue qui ne prouve pas une exclusivité : elle dit le contraire, ou ne parle ni
  * d'exclusivité ni d'interdiction. À confirmer seulement après avoir relu le contrat.
+ * `marque` : la marque de la ligne (« exclusivement avec Nova »).
  */
-export function phraseDouteuse(phrase: string): boolean {
+export function phraseDouteuse(phrase: string, marque?: string | null): boolean {
   if (nieExclusivite(phrase)) return true;
-  return !clauseExclusivite(phrase) && !INTERDIT.test(` ${foldName(phrase)} `);
+  return !clauseExclusivite(phrase, marque) && !INTERDIT.test(plierClause(phrase));
 }
 
-/** Titre d'article (« Article 6 – Exclusivité », « 6. Exclusivité ») : ouvre un article, n'est pas une clause. */
+/** Titre d'article (« Article 6 – Exclusivité », « 6. Exclusivité », « 6.2 – Durée ») : court, n'est pas une clause. */
 const estEntete = (s: string) => s.length <= 80 && /^(?:art(?:icle|\.)\s*\d+|\d{1,2}(?:\.\d{1,2})?\s*[.)–-]\s)/i.test(s.trim());
+/**
+ * Début d'un article, même dans une longue phrase : « Article 6 – Licence : … », « 6. Droits
+ * d'utilisation : … ». Pas un sous-numéro (« 6.2 … ») : il reste dans son article.
+ */
+const ouvreArticle = (s: string) => /^(?:art(?:icle|\.)\s*\d+|\d{1,2}\s*[.)–-]\s)/i.test(s.trim());
 
-/** Marques citées après « notamment », « tels que », « such as », « à savoir »… */
+/**
+ * Marques citées après « notamment », « tels que », « such as », « à savoir », « les marques
+ * suivantes : »… Des mots entiers (« comme » ne se lit pas dans « commerciale »).
+ */
 function listedBrands(sentence: string): string[] {
-  const m = /(?:notamment|tels? que|telles? que|such as|including|a savoir|comme|par exemple|e\.g\.)\s*:?\s*([^.;]+)/i.exec(sentence.normalize("NFD").replace(/[̀-ͯ]/g, ""));
+  const m = /(?:\b(?:notamment|tels? que|telles? que|such as|including|a savoir|comme|par exemple|suivante?s?|following)\b|\be\.g\.)\s*:?\s*([^.;]+)/i.exec(sentence.normalize("NFD").replace(/[̀-ͯ]/g, ""));
   if (!m) return [];
   return m[1]
     .split(/,|\bet\b|\band\b|\bou\b|\bor\b|\//i)
@@ -514,6 +628,8 @@ export function readContract(text: string, known: { creators: readonly string[];
   // Exclusivité : les phrases qui en sont une (jamais celles qui disent le contraire). Dans un
   // article titré « Exclusivité », une phrase qui interdit ou donne une durée en fait partie.
   // Un article dont une phrase dit « aucune exclusivité » ne compte que par ses vraies clauses.
+  // L'article change à chaque titre, et à toute phrase « Article 6 … » ou « 6. … », même longue :
+  // avant, un article suivant sans titre court restait rattaché à « Exclusivité ».
   type Lue = { s: string; k: "forte" | "faible"; entete: boolean; contexte: boolean; article: number };
   const lues: Lue[] = [];
   const articlesNies = new Set<number>();
@@ -521,14 +637,14 @@ export function readContract(text: string, known: { creators: readonly string[];
   let articleExclu = false;
   sentences.forEach((s, i) => {
     const entete = estEntete(s);
-    const k = clauseExclusivite(s);
-    if (entete) {
+    const k = clauseExclusivite(s, brand);
+    if (entete || ouvreArticle(s)) {
       article = i;
-      articleExclu = k === "forte";
+      articleExclu = entete && k === "forte";
     }
     if (nieExclusivite(s) && article >= 0) articlesNies.add(article);
     if (k) lues.push({ s, k, entete, contexte: false, article });
-    else if (articleExclu && !entete && !nieExclusivite(s) && (INTERDIT.test(` ${foldName(s)} `) || findDuration(s))) lues.push({ s, k: "faible", entete, contexte: true, article });
+    else if (articleExclu && !entete && !nieExclusivite(s) && (INTERDIT.test(plierClause(s)) || findDuration(s))) lues.push({ s, k: "faible", entete, contexte: true, article });
   });
   const excl = lues.filter((x) => !((x.entete || x.contexte) && articlesNies.has(x.article)));
   let exclusivity: ContractReading["exclusivity"] = null;
@@ -589,18 +705,41 @@ export function looksLikeContract(fileName: string, subject: string): boolean {
 }
 
 /**
- * Ligne « à confirmer » déjà tirée du même fil de mails pour la même affaire : même marque et
- * même créateur, ou l'un des deux pas lu. Un nouveau message du fil qui rejoint le contrat
- * met cette ligne à jour au lieu d'en créer une autre (avant : une ligne par message).
+ * Ligne « à confirmer » déjà tirée du même fil de mails pour la même affaire : même marque (ou
+ * marque pas lue d'un côté) et même créateur. Une ligne qui a déjà son créateur ne prend que le
+ * contrat du même créateur : un contrat sans créateur lu peut être celui d'un autre (contrat de
+ * couple, deux créateurs dans le fil). Un nouveau message du fil qui rejoint le contrat met
+ * cette ligne à jour au lieu d'en créer une autre (avant : une ligne par message).
  */
 export function memeAffaire(e: Exclusivite, p: Pick<Exclusivite, "brand" | "creator" | "mail">): boolean {
   if (!e.pending || !e.mail?.threadId || e.mail.threadId !== p.mail?.threadId) return false;
   const marque = !e.brand.trim() || !p.brand.trim() || sameBrand(e.brand, p.brand);
-  const createur = !e.creator.trim() || !p.creator.trim() || foldName(e.creator) === foldName(p.creator);
+  const createur = !e.creator.trim() || (!!p.creator.trim() && memeCreateur(e.creator, p.creator));
   return marque && createur;
 }
 
-/** La ligne « à confirmer » mise à jour par le contrat plus récent du même fil (id et date d'ajout gardés, rien de lu perdu). */
+/**
+ * La ligne à écrire pour une proposition tirée d'un mail : la ligne « à confirmer » de la même
+ * affaire, mise à jour (`nouvelle` false : sa tâche existe déjà), ou une nouvelle ligne (il faut
+ * aussi sa tâche). `registre` : relu juste avant d'écrire, null si la lecture a raté (nouvelle
+ * ligne : rien n'est réécrit à l'aveugle ; une ligne confirmée ou modifiée dans la page entre-temps
+ * n'est plus « à confirmer », donc jamais touchée). `exclus` : lignes à ne pas toucher (celles
+ * déjà écrites pour le même message : deux PDF d'un même message sont deux contrats).
+ */
+export function ligneDeProposition(
+  registre: readonly Exclusivite[] | null,
+  p: Omit<Exclusivite, "id" | "createdAt">,
+  o: { id: () => string; now: number; exclus?: ReadonlySet<string> },
+): { row: Exclusivite; nouvelle: boolean } {
+  const avant = registre?.find((e) => !o.exclus?.has(e.id) && memeAffaire(e, p));
+  return avant ? { row: fusionnerProposition(avant, p), nouvelle: false } : { row: { ...p, id: o.id(), createdAt: o.now }, nouvelle: true };
+}
+
+/**
+ * La ligne « à confirmer » mise à jour par le contrat plus récent du même fil (gmail-poll lit les
+ * messages du plus ancien au plus récent) : id et date d'ajout gardés, et ce que ce contrat ne dit
+ * pas (créateur, marque, catégorie, concurrents, fin, PDF) reste celui de la ligne.
+ */
 export function fusionnerProposition(e: Exclusivite, p: Omit<Exclusivite, "id" | "createdAt">): Exclusivite {
   return {
     ...e,
