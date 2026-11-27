@@ -6,10 +6,15 @@
  *
  * Un repère = un objet (tâche, idée, brief, fil de mail) qui a reçu du nouveau de
  * l'autre côté. Il reste jusqu'à l'ouverture de l'objet.
+ *
+ * Vague 1 (SQL 2026-11-27, pas encore lancé : rien de neuf n'arrive avant) : côté agence,
+ * « document » = un dépôt du créateur (contenu, facture, stats), « creator » = ses infos
+ * modifiées (le détail ne cite que les noms des champs), « done » = il a terminé une tâche
+ * que l'agence lui demande.
  */
 
-export type ActivityObject = "todo" | "idea" | "brief" | "mail";
-export type ActivityWhat = "new" | "text" | "description" | "subtask" | "progress" | "update" | "note" | "status";
+export type ActivityObject = "todo" | "idea" | "brief" | "mail" | "document" | "creator";
+export type ActivityWhat = "new" | "text" | "description" | "subtask" | "progress" | "update" | "note" | "status" | "done";
 
 export type ActivityEvent = {
   id: string;
@@ -49,8 +54,8 @@ export function dropReadLocally<T extends Pick<ActivityEvent, "object_type" | "o
 }
 
 /** Page du menu où vit chaque objet : agence (id de vue) ou créateur (onglet). */
-const AGENCY_PAGE: Record<ActivityObject, string> = { todo: "todo", idea: "ideas", brief: "briefs", mail: "mails" };
-const CREATOR_TAB: Record<ActivityObject, string> = { todo: "todo", idea: "ideas", brief: "missions", mail: "mails" };
+const AGENCY_PAGE: Record<ActivityObject, string> = { todo: "todo", idea: "ideas", brief: "briefs", mail: "mails", document: "documents", creator: "roster" };
+const CREATOR_TAB: Record<ActivityObject, string> = { todo: "todo", idea: "ideas", brief: "missions", mail: "mails", document: "documents", creator: "infos" };
 
 export function activityPage(type: string, side: "agency" | "creator"): string | null {
   const map = side === "agency" ? AGENCY_PAGE : CREATOR_TAB;
@@ -81,6 +86,7 @@ const WHAT_FR: Record<string, string> = {
   update: "Mis à jour",
   note: "Nouvelle remarque",
   status: "Statut modifié",
+  done: "Terminée",
 };
 export function whatLabel(what: string): string {
   return WHAT_FR[what] ?? "Du nouveau";

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { activityPage, changeText, countsByPage, dropReadLocally, throttlePush, unreadKeys } from "./activityEvents";
 
-const ev = (object_type: "todo" | "idea" | "brief" | "mail", object_id: string) => ({ object_type, object_id });
+const ev = (object_type: "todo" | "idea" | "brief" | "mail" | "document" | "creator", object_id: string) => ({ object_type, object_id });
 
 describe("repères « nouveau »", () => {
   it("clés et compteurs par page (un objet compte une fois)", () => {
@@ -11,6 +11,11 @@ describe("repères « nouveau »", () => {
     expect(countsByPage([ev("brief", "x")], "creator")).toEqual({ missions: 1 });
     expect(activityPage("brief", "agency")).toBe("briefs");
     expect(activityPage("autre", "agency")).toBe(null);
+  });
+  it("vague 1 : dépôt et infos d'un créateur comptés sur Documents et Roster côté agence", () => {
+    expect(countsByPage([ev("document", "d1"), ev("document", "d1"), ev("creator", "c1")], "agency")).toEqual({ documents: 1, roster: 1 });
+    expect(activityPage("creator", "creator")).toBe("infos");
+    expect(changeText("done", "Envoyer la preview Marque X")).toBe("Terminée · « Envoyer la preview Marque X »");
   });
   it("texte de notification court et clair", () => {
     expect(changeText("subtask", "Tournage Gymshark")).toBe("Nouvelle sous-tâche · « Tournage Gymshark »");

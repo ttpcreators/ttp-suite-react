@@ -95,6 +95,9 @@ type Row = {
   progress?: string | null;
   /** Tâche de l'agence que le créateur voit dans son espace (SQL 2026-11-24 ; défaut : interne). */
   visible_createur?: boolean | null;
+  /** Tâche de l'agence DEMANDÉE au créateur : il peut la terminer (SQL 2026-11-27, défaut false ;
+   *  colonne absente avant ce SQL : undefined). Sinon il la lit dans « Ton agence s'en occupe ». */
+  pour_createur?: boolean | null;
 };
 
 /** Créateurs qui VOIENT la tâche (et reçoivent ses notifications) : aucun si elle est interne. */

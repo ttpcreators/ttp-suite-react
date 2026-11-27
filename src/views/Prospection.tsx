@@ -55,6 +55,8 @@ type Row = {
   proposal?: Proposal | null;
   contact_id?: string | null;
   collab_id?: string | null;
+  // Dernier mouvement du prospect (SQL 2026-11-27, posé par la base ; absente avant).
+  updated_at?: string | null;
 };
 
 // Ordre de colonnes fidèle à l'original (app.js : stages).

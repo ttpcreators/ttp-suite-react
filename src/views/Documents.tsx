@@ -34,6 +34,8 @@ type Row = {
   path: string;
   created_at: string;
   sort_order: number;
+  /** Collab du dépôt d'un créateur fait depuis une mission (SQL 2026-11-27 ; absente avant). */
+  collab_id?: string | null;
 };
 
 type TypeMeta = { label: string; icon: LucideIcon; className: string; tagClassName: string };

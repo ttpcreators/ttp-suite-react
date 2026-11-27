@@ -12,6 +12,9 @@ export type CtTodo = {
   priority: string | null;
   done: boolean;
   status?: string | null;
+  source?: string | null;
+  /** Tâche de l'agence demandée au créateur (SQL 2026-11-27 ; undefined tant que la colonne manque). */
+  pour_createur?: boolean | null;
 };
 
 export type CtFilter = "encours" | "retard" | "terminees" | "toutes";

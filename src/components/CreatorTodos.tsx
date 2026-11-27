@@ -50,6 +50,8 @@ export type CreatorTodo = {
   created_at?: string | null;
   source?: string | null;
   progress?: string | null;
+  /** Tâche de l'agence demandée au créateur (SQL 2026-11-27 ; undefined tant que la colonne manque). */
+  pour_createur?: boolean | null;
 };
 
 type Props = {

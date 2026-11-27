@@ -128,14 +128,16 @@ type Creator = {
 };
 type Subtask = { id: string; text: string; done: boolean };
 type Attachment = { name: string; size: string; path: string };
-type Todo = { id: string; text: string; descr: string | null; due: string | null; priority: string | null; done: boolean; status?: string | null; sort_order?: number; subtasks?: Subtask[] | null; attachments?: Attachment[] | null; creator?: string | null; creators?: string[] | null; created_at?: string | null; source?: string | null; progress?: string | null };
+// pour_createur : tâche de l'agence demandée au créateur (SQL 2026-11-27 ; undefined tant que la colonne manque).
+type Todo = { id: string; text: string; descr: string | null; due: string | null; priority: string | null; done: boolean; status?: string | null; sort_order?: number; subtasks?: Subtask[] | null; attachments?: Attachment[] | null; creator?: string | null; creators?: string[] | null; created_at?: string | null; source?: string | null; progress?: string | null; pour_createur?: boolean | null };
 
 let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
 type Idea = { id: string; text: string; status: string | null; sort_order?: number; subtasks?: Subtask[] | null };
 type Brief = { id: string; brand: string | null; deliverables: string | null; due: string | null; status: string | null; consignes: string | null; resume?: BriefResume | null; pdf?: BriefPdfLink };
 type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string | null; type: string | null; who?: string | null; description?: string | null };
-type Doc = { id: string; name: string; type: string | null; size: string | null; path: string | null; created_at: string | null };
+// collab_id : collab du dépôt fait depuis une mission (SQL 2026-11-27 ; absente avant).
+type Doc = { id: string; name: string; type: string | null; size: string | null; path: string | null; created_at: string | null; collab_id?: string | null };
 type Invoice = { ref: string | null; party: string | null; amount: string | null; date: string | null; status: string | null };
 type Contact = { id: string; brand: string; person: string | null; role: string | null; email: string | null; phone: string | null; sort_order?: number };
 

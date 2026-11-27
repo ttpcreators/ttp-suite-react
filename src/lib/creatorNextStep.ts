@@ -21,7 +21,8 @@ import { isDone } from "./collabs";
 
 export type NsBrief = { id: string; brand: string | null; deliverables: string | null; due: string | null; status: string | null; consignes: string | null };
 export type NsCollab = { id: string; brand: string; step: number; status: string | null; brief_id: string | null };
-export type NsTodo = { id: string; text: string; due: string | null; priority: string | null; done: boolean; status?: string | null };
+/** `pour_createur` : tâche de l'agence demandée au créateur (SQL 2026-11-27 ; undefined tant que la colonne manque). */
+export type NsTodo = { id: string; text: string; due: string | null; priority: string | null; done: boolean; status?: string | null; source?: string | null; pour_createur?: boolean | null };
 export type NsEvent = { id: string; date: string | null; day: number | null; time: string | null; title: string | null; type: string | null };
 export type NsInvoice = { party: string | null };
 

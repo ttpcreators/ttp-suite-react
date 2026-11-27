@@ -27,6 +27,10 @@ export const NOTIF_TEXTS_CREATOR: NotifTextField[] = [
   { key: "c_task_update", label: "Du nouveau sur une tâche", def: "Du nouveau sur une tâche" },
   { key: "c_idea_update", label: "Du nouveau sur une idée", def: "Du nouveau sur une idée" },
   { key: "c_brief_update", label: "Brief mis à jour", def: "Ton brief a été mis à jour" },
+  { key: "c_payout", label: "Versement envoyé au créateur", def: "Versement envoyé" },
+  { key: "c_brandpaid", label: "La marque a payé, versement à venir", def: "La marque a payé" },
+  { key: "c_taskclosed", label: "Tâche de l'agence terminée", def: "Tâche terminée" },
+  { key: "c_gift_update", label: "Du nouveau sur un cadeau", def: "Du nouveau sur un cadeau" },
 ];
 
 /** Notifs reçues par l'AGENCE (quand un créateur agit), PAR type d'action.
@@ -44,4 +48,6 @@ export const NOTIF_TEXTS_AGENCY: NotifTextField[] = [
   { key: "a_brief_update", label: "Créateur modifie un brief", def: "{createur} · du nouveau sur un brief" },
   { key: "a_stats", label: "Créateur envoie ses stats", def: "{createur} · stats envoyées" },
   { key: "a_mail", label: "Créateur : avis ou message sur un mail", def: "{createur} · message sur un mail" },
+  { key: "a_task_done", label: "Créateur termine une tâche demandée", def: "{createur} · tâche terminée" },
+  { key: "a_task_deleted", label: "Créateur supprime une de ses tâches", def: "{createur} · tâche supprimée" },
 ];
