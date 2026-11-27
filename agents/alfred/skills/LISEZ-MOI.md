@@ -9,6 +9,7 @@ Copiées dans `~/Code/TTPAlfred/.claude/skills/` par `installer.sh`, donc charg�
 | revue-contrat (note « Pour Alfred » en bas, 23 novembre 2026) | [evolsb/claude-legal-skill](https://github.com/evolsb/claude-legal-skill) | MIT, voir `LICENSE-claude-legal-skill` |
 | nda-review, escalation-flagger, ip-clause-review, cease-desist, takedown, demand-received, demand-draft (copiées du pack d'Anthropic, modifiées le 23 novembre 2026 par l'ajout d'une note « Pour Alfred » en bas : droit français, playbook de TTP) | [anthropics/claude-for-legal](https://github.com/anthropics/claude-for-legal) | Apache 2.0, voir `LICENSE-claude-for-legal` |
 | comptable (consignes, références et modèles de facturation seulement, sans les scripts) | [romainsimon/paperasse](https://github.com/romainsimon/paperasse) | MIT, voir `LICENSE-paperasse` |
+| ffmpeg-skill (SKILL.md, scripts et références, sans les démos ni le site ; note « Pour Alfred » en bas, 27 novembre 2026 : seulement la mesure des vidéos) | [kajisho5/ffmpeg-skill](https://github.com/kajisho5/ffmpeg-skill) | MIT, voir `LICENSE-ffmpeg-skill` |
 
 Le dépôt est public : n'ajouter ici qu'une skill dont la licence permet la publication et qui ne contient aucune donnée personnelle ni secret.
 
