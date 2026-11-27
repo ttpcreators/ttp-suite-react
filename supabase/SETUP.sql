@@ -992,9 +992,10 @@ create policy documents_creator_insert on public.documents for insert to authent
 --    Accès réservé aux comptes connectés (anonyme = rien). Le cloisonnement
 --    par créateur est assuré par la table `documents` ci-dessus + URLs signées.
 -- ----------------------------------------------------------------------------
-insert into storage.buckets (id, name, public)
-  values ('documents','documents', false)
-  on conflict (id) do nothing;
+-- 25 Mo au plus par fichier, types libres (sql/2026-11-27-securite-lot2).
+insert into storage.buckets (id, name, public, file_size_limit)
+  values ('documents','documents', false, 26214400)
+  on conflict (id) do update set file_size_limit = excluded.file_size_limit;
 
 -- Bucket privé `documents` : l'AGENCE gère tout ; un CRÉATEUR ne peut que LIRE
 -- (créer une URL signée) les fichiers rattachés à une de SES fiches documents.
@@ -3098,5 +3099,47 @@ begin
       and has_function_privilege('anon', p.oid, 'execute')
   loop
     execute format('revoke execute on function %s from anon, public', f.sig);
+  end loop;
+end $$;
+
+-- Sécurité (sql/2026-11-27-securite-lot2.sql) : search_path fixé pour les fonctions
+-- signalées par le contrôle de Supabase, et fonctions de déclencheur SECURITY DEFINER
+-- fermées aux comptes connectés aussi (un déclencheur ne vérifie pas ce droit).
+do $$
+declare f text;
+begin
+  foreach f in array array[
+    'public.invoices_no_delete()',
+    'public.invoices_paid_at()',
+    'public.brief_status_for_step(integer)',
+    'public.collab_step_for_brief(text)',
+    'public.touch_updated_at()',
+    'public.touch_updated_at_simple()',
+    'public.events_guard_delete()',
+    'public.collabs_touch()',
+    'public.activity_last_line(text)',
+    'public.activity_new_subtask(jsonb, jsonb)',
+    'agent.touch_maj()',
+    'agent.est_marc(text)',
+    'agent.nb_pieces(jsonb)'
+  ] loop
+    -- Certaines viennent d'autres scripts de sql/ : seulement celles qui existent.
+    if to_regprocedure(f) is not null then
+      execute format('alter function %s set search_path = public, pg_temp', f);
+    end if;
+  end loop;
+end $$;
+do $$
+declare f record;
+begin
+  for f in
+    select p.oid::regprocedure as sig
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where p.prosecdef and n.nspname in ('public', 'agent')
+      and pg_get_function_result(p.oid) = 'trigger'
+      and (has_function_privilege('authenticated', p.oid, 'execute')
+           or has_function_privilege('anon', p.oid, 'execute'))
+  loop
+    execute format('revoke execute on function %s from anon, authenticated, public', f.sig);
   end loop;
 end $$;
