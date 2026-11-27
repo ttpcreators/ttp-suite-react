@@ -10,6 +10,7 @@ import type { NotificationItem } from "@/components/ui/notifications";
 import { teamNames } from "./team";
 import { closeMailThreadNotifications } from "./appBadge";
 import { activityText } from "../../supabase/functions/_shared/activityText";
+import { isOverdueInvoice } from "./relance";
 import { upcomingBirthdays } from "../../supabase/functions/_shared/birthdays";
 
 type Deadline = { creator: string; type: string; start: string; months: number };
@@ -59,7 +60,8 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
     const emailSince = new Date(Date.now() - 3 * 86400000).toISOString(); // emails reçus : 72 h
     Promise.all([
-      supabase.from("invoices").select("id,party,amount,status").eq("status", "retard"),
+      // Factures en retard : même règle que Facturation (statut « retard », ou « attente » échue).
+      supabase.from("invoices").select("id,party,amount,status,date").in("status", ["retard", "attente"]),
       supabase.from("briefs").select("id,brand,creator,status").eq("status", "valider"),
       supabase.from("events").select("id,date,time,title").or("deleted.is.null,deleted.eq.false").gte("date", todayStr).order("date").limit(3),
       // Blob frais, mais partagé avec le rafraîchissement des pages (une seule lecture par
@@ -218,7 +220,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
           }),
         );
       }
-      ((inv.data as { id: string; party: string; amount: string }[]) ?? []).forEach((i) =>
+      ((inv.data as { id: string; party: string; amount: string; status: string; date: string | null }[]) ?? []).filter((i) => isOverdueInvoice(i)).forEach((i) =>
         out.push({
           id: `inv:${i.id}`,
           title: "Facture en retard",

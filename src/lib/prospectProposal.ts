@@ -11,10 +11,22 @@
 import { formatEuro, parseAmount } from "./money";
 import { sameBrand } from "./brandRecord";
 import { priceRange } from "./pricingForm";
+import { stageEnregistre } from "./collabTabs";
 
 /** Étapes enregistrées d'un prospect (libellés affichés : Prospection.tsx). */
 export const PROPOSAL_STAGE = "Négociation";
 export const SIGNED_STAGE = "Signé";
+const LOST_STAGE = "Perdu";
+
+/**
+ * Piste encore ouverte : ni signée ni perdue, que l'étape soit écrite en valeur ou en libellé
+ * (« Signée », « Perdue » : le connecteur a écrit des libellés). Même règle que prospectOuvert
+ * côté serveur (supabase/functions/_shared/collabAuto.ts).
+ */
+function pisteOuverte(stage: string | null | undefined): boolean {
+  const s = stageEnregistre(stage);
+  return s !== SIGNED_STAGE && s !== LOST_STAGE;
+}
 
 export type Proposal = {
   mode: "influence" | "ugc";
@@ -50,9 +62,13 @@ export function contactForBrand<T extends { id: string; brand: string | null }>(
   return contacts.find((c) => sameBrand(c.brand, brand)) ?? null;
 }
 
-/** Prospect de la marque déjà en cours (pas encore transformé en collab), sinon null. */
+/**
+ * Prospect de la marque déjà en cours (pas encore transformé en collab), sinon null. Une piste
+ * perdue n'est pas rouverte : une nouvelle proposition crée un nouveau prospect, comme après
+ * « Signé », et la piste perdue reste dans l'historique.
+ */
 export function openProspectFor(prospects: readonly ProspectLite[], brand: string): ProspectLite | null {
-  return prospects.find((p) => sameBrand(p.brand, brand) && !p.collab_id && p.stage !== SIGNED_STAGE) ?? null;
+  return prospects.find((p) => sameBrand(p.brand, brand) && !p.collab_id && pisteOuverte(p.stage)) ?? null;
 }
 
 /**
@@ -98,7 +114,8 @@ export function collabFromProspect(
 /**
  * La marque est-elle en affaire avec l'agence (collab en cours avant le bilan, ou prospect
  * ouvert au pipeline) ? On lui parle déjà : la page Contacts ne la classe ni « à relancer »
- * ni « jamais contactée », même si le carnet n'a pas encore noté l'échange.
+ * ni « jamais contactée », même si le carnet n'a pas encore noté l'échange. Une piste perdue
+ * n'est plus une affaire en cours : la marque peut redevenir « à relancer ».
  */
 export function inDealWith(
   brand: string | null | undefined,
@@ -107,5 +124,5 @@ export function inDealWith(
 ): boolean {
   if (!(brand ?? "").trim()) return false;
   return collabs.some((c) => c.status === "active" && Number(c.step ?? 0) < 11 && sameBrand(c.brand, brand))
-    || prospects.some((p) => sameBrand(p.brand, brand) && !p.collab_id && p.stage !== SIGNED_STAGE);
+    || prospects.some((p) => sameBrand(p.brand, brand) && !p.collab_id && pisteOuverte(p.stage));
 }

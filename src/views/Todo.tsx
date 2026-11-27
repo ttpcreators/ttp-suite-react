@@ -41,7 +41,8 @@ import { insertMention, mentionAt, mentionSuggestions, parseQuickAdd } from "@/l
 import { creatorsLabel, creatorsPatch, hasCreator, joinNames, todoCreators } from "@/lib/todoCreators";
 import { CollabField, ObjectCollabLink, linkNewToCollab } from "@/components/collab-links";
 import { noteCreatorsColumn, todosHaveCreators } from "@/lib/todoCreatorsDb";
-import { visiblePourCreateur } from "@/lib/todoVisibility";
+import { aPrevenirApresConfier, creatorsANotifier, memesCreateurs, mentionCachee, patchConfier, pushFinTache, visibiliteCreation } from "@/lib/todoDemande";
+import { notePourCreateurColumn, todosHavePourCreateur } from "@/lib/todoDemandeDb";
 import { Checkbox } from "@/components/ui/checkbox";
 import { appendPoint, latestPoint, parsePoints, progressColumnMissing } from "@/lib/todoProgress";
 import { TONE_DOT, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
@@ -100,8 +101,9 @@ type Row = {
   pour_createur?: boolean | null;
 };
 
-/** Créateurs qui VOIENT la tâche (et reçoivent ses notifications) : aucun si elle est interne. */
-const shownTo = (r: Pick<Row, "source" | "visible_createur" | "creator" | "creators">): string[] => (visiblePourCreateur(r) ? todoCreators(r) : []);
+/** Créateurs prévenus des nouveautés d'une tâche (push) : aucun si elle est interne, ni si
+ *  l'agence la suit sans la leur demander (« Ton agence s'en occupe », contrat a6). */
+const shownTo = (r: Pick<Row, "source" | "visible_createur" | "pour_createur" | "creator" | "creators">): string[] => creatorsANotifier(r);
 
 let _stid = 0;
 const stid = () => `st${Date.now().toString(36)}${(_stid += 1)}`;
@@ -477,18 +479,43 @@ export function Todo() {
     }
   });
 
+  // Colonne `pour_createur` (SQL 2026-11-27) : la case « À faire par le créateur » n'existe
+  // qu'avec elle (la lecture `select *` la ramène, ou pas).
+  const pourCol = !!rows && rows.length > 0 && "pour_createur" in rows[0];
+
   // « Visible par le créateur » : la tâche de l'agence apparaît (ou disparaît) de son espace.
-  // En la rendant visible, le créateur est prévenu comme pour une nouvelle tâche.
+  // En la rendant visible, le créateur est prévenu comme pour une nouvelle tâche, seulement si
+  // elle lui est demandée. La décocher décoche aussi « À faire par le créateur » (contrat a7).
   const setVisibleCreateur = async (row: Row, on: boolean) => {
-    const ok = await patchTodo(row.id, () => ({ visible_createur: on }));
+    // Avec la colonne, les deux à false : sinon la base, qui pose visible dès que pour_createur
+    // est vrai, la rendrait de nouveau visible.
+    const avecColonne = !on && (await todosHavePourCreateur());
+    const ok = await patchTodo(row.id, () => (on ? { visible_createur: true } : { visible_createur: false, ...(avecColonne ? { pour_createur: false } : {}) }));
     if (!ok) return;
-    if (on) for (const name of todoCreators(row)) notifyCreator("task", name, row.text);
+    if (on) for (const name of shownTo({ ...row, visible_createur: true })) notifyCreator("task", name, row.text, row.id);
     toast(on ? `Visible par ${creatorsLabel(todoCreators(row))} ✓` : "Tâche redevenue interne ✓");
   };
+  // « À faire par le créateur » : la tâche lui est demandée (il peut la terminer) ; la cocher la
+  // rend aussi visible et le prévient. Décochée : il la lit dans « Ton agence s'en occupe ».
+  const setPourCreateur = async (row: Row, on: boolean) => {
+    const ok = await patchTodo(row.id, () => (on ? { pour_createur: true, visible_createur: true } : { pour_createur: false }));
+    if (!ok) return;
+    if (on) for (const name of todoCreators(row)) notifyCreator("task", name, row.text, row.id);
+    const who = creatorsLabel(todoCreators(row));
+    toast(on ? `À faire par ${who} ✓ · visible par ${who}` : "Suivie par l'agence ✓ · toujours visible");
+  };
 
-  // Prévient le créateur (si notifs activées) quand SA tâche/demande est terminée.
+  // Prévient le créateur (si notifs activées) quand l'agence termine une tâche qui le concerne :
+  // « Ta demande est faite » pour SA tâche, « Tâche terminée » pour une tâche qu'on lui demandait,
+  // rien pour une tâche interne ou suivie par l'agence (constat W16).
   const notifyTaskDone = (row: Row, status: string) => {
-    if (status === "Fait") for (const name of shownTo(row)) notifyCreator("task-done", name, `✅ Ta demande est faite : « ${row.text} »`);
+    if (status !== "Fait") return;
+    const push = pushFinTache(row);
+    if (!push) return;
+    for (const name of push.to) {
+      if (push.kind === "task-done") notifyCreator("task-done", name, `« ${row.text} »`, row.id);
+      else notifyCreator("task-closed", name, `Tâche terminée : « ${row.text} »`, row.id, row.text);
+    }
   };
 
   /**
@@ -554,13 +581,17 @@ export function Todo() {
       : oldDue && oldDue !== "—" && !toISODate(oldDue)
         ? oldDue
         : "—";
+    // Confiée à un créateur alors qu'elle n'en avait aucun : visible et demandée ; plus aucun
+    // créateur : interne (contrat a7). Entre créateurs, rien ne change.
+    const confier = patchConfier(row, editCreators, await todosHavePourCreateur());
     const patch = {
       text: editText.trim(),
       descr: editDescr.trim() || null,
       due: dueVal,
       priority: editPriority,
-      // creator (le premier), tag, et creators si la colonne existe.
-      ...creatorsPatch(editCreators, await todosHaveCreators()),
+      // creator (le premier), tag (« Claude · … » gardé), et creators si la colonne existe.
+      ...creatorsPatch(editCreators, await todosHaveCreators(), row.tag),
+      ...confier,
     };
     if (!(await dbUpdate("todos", row.id, patch))) {
       toast("Erreur, réessaie");
@@ -572,12 +603,27 @@ export function Todo() {
       )
     );
     const noteOk = await saveNote(row.id, editNote);
-    // Du nouveau pour les créateurs de la tâche (texte ou description).
+    // Nouveaux destinataires : une tâche qu'on leur confie (push « task »).
+    const recus = aPrevenirApresConfier(row, editCreators, confier);
+    for (const name of recus) notifyCreator("task", name, patch.text, row.id);
+    // Du nouveau pour les créateurs déjà prévenus de la tâche (texte ou description).
     const changed: ActivityWhat | null =
       (patch.descr ?? "") !== (row.descr ?? "") && patch.descr ? "description" : patch.text !== row.text ? "text" : null;
-    if (changed && visiblePourCreateur(row)) notifyCreatorsChange("todo", editCreators, changed, patch.text, row.id);
+    const dejaLa = shownTo(row).filter((n) => editCreators.some((e) => e.trim().toLowerCase() === n.trim().toLowerCase()));
+    if (changed && dejaLa.length) notifyCreatorsChange("todo", dejaLa, changed, patch.text, row.id);
     setEditingId(null);
-    toast(noteOk ? "Tâche modifiée ✓" : "Tâche modifiée, avancement non enregistré : réessaie");
+    const label = creatorsLabel(editCreators);
+    // Créateurs changés sur une tâche qui reste interne (rappel de collab…) : le dire (constat W4).
+    const cachee = memesCreateurs(todoCreators(row), editCreators) ? "" : mentionCachee(row, editCreators, confier);
+    toast(
+      !noteOk
+        ? "Tâche modifiée, avancement non enregistré : réessaie"
+        : confier.visible_createur
+          ? `Tâche confiée à ${label} ✓ · visible par ${label}`
+          : cachee
+            ? `Tâche modifiée ✓ · ${cachee}`
+            : "Tâche modifiée ✓",
+    );
   };
 
   // « Reporter » : déplace l'échéance (champ `due` existant).
@@ -587,10 +633,27 @@ export function Todo() {
   };
   // « Déléguer » : change « Pour qui » (un ou plusieurs créateurs, comme dans « Modifier »).
   // Le panneau reste ouvert : on peut cocher plusieurs créateurs à la suite.
+  // Confiée alors qu'elle n'avait aucun créateur : visible, demandée, et le créateur est
+  // prévenu (constat W4) ; rendue à l'agence : interne. L'étiquette « Claude · … » reste.
   const delegate = async (row: Row, list: string[]) => {
-    const patch = creatorsPatch(list, await todosHaveCreators());
+    const confier = patchConfier(row, list, await todosHavePourCreateur());
+    const patch = { ...creatorsPatch(list, await todosHaveCreators(), row.tag), ...confier };
     const ok = await patchTodo(row.id, () => patch);
-    if (ok) toast(patch.creator ? `Tâche confiée à ${creatorsLabel(list)} ✓` : "Tâche rendue à l'agence ✓");
+    if (!ok) return;
+    for (const name of aPrevenirApresConfier(row, list, confier)) notifyCreator("task", name, row.text, row.id);
+    const label = creatorsLabel(list);
+    // Tâche qui reste interne (rappel de collab, case « Côté créateur » décochée) : le créateur
+    // ne la voit pas, le toast le dit (constat W4).
+    const cachee = mentionCachee(row, list, confier);
+    toast(
+      !patch.creator
+        ? "Tâche rendue à l'agence ✓"
+        : confier.visible_createur
+          ? `Tâche confiée à ${label} ✓ · visible par ${label}`
+          : cachee
+            ? `Tâche confiée à ${label} ✓ · ${cachee}`
+            : `Tâche confiée à ${label} ✓`,
+    );
   };
 
   useEffect(() => {
@@ -610,6 +673,7 @@ export function Todo() {
       }
       const list = (data as Row[]) ?? [];
       noteCreatorsColumn(list);
+      notePourCreateurColumn(list);
       setError(false);
       setCache("todos", list);
       setRows(list);
@@ -629,10 +693,12 @@ export function Todo() {
       ...creatorsPatch(f.creators, await todosHaveCreators()),
       priority: f.priority,
       source: "agency" as Source,
-      // Tâche écrite à la main pour un créateur : elle est pour lui, donc visible dans son
-      // espace (la case « Côté créateur » de la fiche la rend interne). Les tâches d'Alfred
-      // et les rappels automatiques des collabs, eux, restent internes.
-      ...(f.creators.length ? { visible_createur: true } : {}),
+      // Tâche écrite à la main pour un créateur : elle lui est demandée, donc visible dans son
+      // espace et à faire par lui (les cases « Côté créateur » de la fiche la rendent interne,
+      // ou la laissent suivie par l'agence). « L'agence (tâche interne) » : les deux à false.
+      // Ailleurs : les tâches d'Alfred sont visibles du créateur (décision du 24/11) mais suivies
+      // par l'agence (pour_createur false) ; les rappels automatiques des collabs restent internes.
+      ...visibiliteCreation(f.creators.length, await todosHavePourCreateur()),
       done: false,
       sort_order: nextOrder(rows ?? []),
     };
@@ -647,7 +713,7 @@ export function Todo() {
     // Le commentaire ne bloque jamais la réinitialisation du formulaire (saveNote ne lève pas).
     if (f.note.trim() && !(await saveNote(createdRow.id, f.note))) toast("Avancement non enregistré, réessaie");
     // Push à chaque créateur concerné (s'il a activé les notifs sur son téléphone).
-    for (const name of shownTo(createdRow)) notifyCreator("task", name, f.text.trim());
+    for (const name of shownTo(createdRow)) notifyCreator("task", name, f.text.trim(), createdRow.id);
     toast(f.creators.length ? `Tâche ajoutée ✓ · visible par ${creatorsLabel(f.creators)}` : "Tâche ajoutée ✓");
     return createdRow;
   };
@@ -760,7 +826,11 @@ export function Todo() {
   // + filtre priorité (sans le filtre de statut) : base des colonnes.
   const filteredBase = scoped.filter((row) => priorityFilter == null || row.priority === priorityFilter);
   // Vue liste : on applique en plus le filtre En cours / En retard / Terminées / Toutes.
-  const filtered = filteredBase.filter((row) => matchTodoFilter(todoFilter, row));
+  // Une tâche terminée par le créateur (repère « nouveau » pas encore lu) reste dans « Pas
+  // terminées » jusqu'à son ouverture : sinon la pastille To-do resterait allumée sans rien à voir.
+  // La même règle sert à la liste et au compteur du filtre (sinon « Pas terminées 4 » sur 5 lignes).
+  const dansFiltre = (f: TodoFilter, row: Row) => matchTodoFilter(f, row) || (f === "encours" && row.done && activity.keys.has(`todo:${row.id}`));
+  const filtered = filteredBase.filter((row) => dansFiltre(todoFilter, row));
   // Liste groupée par priorité (ordre d'origine dans chaque groupe).
   const groups = PRIO_GROUPS.map((g) => ({
     ...g,
@@ -1123,6 +1193,21 @@ export function Todo() {
                   />
                   <span className={row.visible_createur ? "text-foreground" : "text-muted-foreground"}>
                     {row.visible_createur ? `Visible par ${creatorsLabel(todoCreators(row))}` : "Interne, cachée au créateur"}
+                  </span>
+                </label>
+              </InfoRow>
+            )}
+            {/* Après le SQL 2026-11-27 : demandée au créateur (il peut la terminer) ou suivie par l'agence. */}
+            {pourCol && row.source !== "creator" && todoCreators(row).length > 0 && (
+              <InfoRow label="À faire par">
+                <label className="flex min-h-9 cursor-pointer items-center gap-2 font-medium">
+                  <Checkbox
+                    checked={row.pour_createur === true}
+                    onCheckedChange={(v) => void setPourCreateur(row, v === true)}
+                    aria-label="À faire par le créateur"
+                  />
+                  <span className={row.pour_createur ? "text-foreground" : "text-muted-foreground"}>
+                    {row.pour_createur ? creatorsLabel(todoCreators(row)) : "L'agence"}
                   </span>
                 </label>
               </InfoRow>
@@ -1521,7 +1606,7 @@ export function Todo() {
                   options: TODO_FILTERS.map((f) => ({
                     value: f.id,
                     label: f.label,
-                    count: filteredBase.filter((r) => matchTodoFilter(f.id, r)).length,
+                    count: filteredBase.filter((r) => dansFiltre(f.id, r)).length,
                   })),
                 }]
               : []),

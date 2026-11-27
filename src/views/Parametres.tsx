@@ -2,6 +2,7 @@ import { fmtDayTime } from "@/lib/dates";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SIGNATURE_KEY, scribble, validSig, type SignatureData } from "@/lib/agencySignature";
 import { SignaturePad } from "@/components/signature-pad";
+import { PasswordSettings } from "@/components/password-form";
 import {
   BellRing, Smartphone, Sunrise, History, LogOut, Palette, MessageCircle, Bot, Copy, Unplug, PenLine, Sparkles,
   Search, ChevronRight, ChevronDown, X, type LucideIcon,
@@ -141,9 +142,9 @@ const ENTRIES: Entry[] = [
   },
   {
     id: "compte", label: "Compte", group: "Compte", icon: LogOut, tile: TONE_SOLID.closed,
-    hint: "Se déconnecter de cet appareil.",
-    keywords: ["déconnexion"],
-    sections: [{ title: "Compte", keywords: ["déconnecter", "déconnexion", "sortir"] }],
+    hint: "Changer ton mot de passe, ou te déconnecter de cet appareil.",
+    keywords: ["déconnexion", "mot de passe"],
+    sections: [{ title: "Compte", keywords: ["déconnecter", "déconnexion", "sortir", "mot de passe", "changer"] }],
   },
 ];
 const ENTRY_IDS = ENTRIES.map((e) => e.id);
@@ -1491,6 +1492,9 @@ export function Parametres() {
       case "compte":
         return (
           <Card anchor="Compte">
+            <div className="mb-4 border-b border-border pb-4">
+              <PasswordSettings />
+            </div>
             <button
               type="button"
               onClick={() => supabase.auth.signOut()}

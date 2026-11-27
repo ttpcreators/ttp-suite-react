@@ -14,6 +14,7 @@ import { readAppState } from "../_shared/appState.ts";
 import { reversementRows, reversementTotals, type Detail, type Payout } from "../_shared/reversements.ts";
 import { deepLinkUrl, loadAppBlob, makePayload, pushReady, sendTo, type Audience } from "../_shared/push.ts";
 import type { PushKind } from "../_shared/pushPayload.ts";
+import { factureEnRetard } from "../_shared/factureRetard.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
 
@@ -239,20 +240,29 @@ Deno.serve(async (req: Request) => {
     };
     // Page qui s'ouvre au toucher, sur l'objet quand il est connu (tâche supprimée : sans objet,
     // l'app n'envoie pas d'item puisque la tâche n'existe plus).
-    const VIEW: Record<string, string> = { tache: "todo", "tache-maj": "todo", "tache-faite": "todo", "tache-supprimee": "todo", idee: "ideas", "idee-maj": "ideas", "brief-maj": "briefs", evenement: "planning" };
+    // Dépôts du créateur : la page Documents, où le fichier est marqué « nouveau » (constat W5).
+    // Une facture n'arrive que par un dépôt. « contenu » et « stats » servent aussi au post publié,
+    // aux stats à 7 jours et à la cadence, où rien n'est nouveau dans Documents : Documents
+    // seulement avec l'id du document déposé (`item`), sinon l'accueil comme avant.
+    const VIEW: Record<string, string> = { tache: "todo", "tache-maj": "todo", "tache-faite": "todo", "tache-supprimee": "todo", idee: "ideas", "idee-maj": "ideas", "brief-maj": "briefs", evenement: "planning", facture: "documents" };
+    const DEPOT_SI_ITEM = new Set(["contenu", "stats"]);
     const item = String(body.item ?? "");
     const aKind = String(body.kind ?? "tache");
+    const vue = VIEW[aKind] ?? (DEPOT_SI_ITEM.has(aKind) && item ? "documents" : "");
     const activityTitle = customText(texts, KEYA[aKind] ?? "a_task", DEFA[aKind] ?? "{createur} · nouvelle activité")
       .replace(/\{createur\}/g, who)
       .slice(0, 120);
     // Tag STABLE par créateur (pas Date.now()) : deux notifs d'activité du même
     // créateur se REMPLACENT au lieu de s'empiler → borne le spam de notifications
     // qu'un compte créateur pourrait générer en boucle. (audit 2026-07-13)
+    // Dépôts (contenu, facture, stats) : un tag par créateur ET par type, pour qu'une facture
+    // déposée ne remplace pas le contenu envoyé juste avant (constat W5).
+    const DEPOTS = new Set(["contenu", "facture", "stats"]);
     const r = await sendToAll(sb, {
       title: activityTitle,
       body: what,
-      tag: `ttp-creator-${who}`,
-      ...(VIEW[aKind] ? { url: deepLinkUrl({ open: "view", view: VIEW[aKind], ...(item ? { item } : {}) }) } : {}),
+      tag: DEPOTS.has(aKind) ? `ttp-creator-${who}-${aKind}` : `ttp-creator-${who}`,
+      ...(vue ? { url: deepLinkUrl({ open: "view", view: vue, ...(item ? { item } : {}) }) } : {}),
     }, "all", "creator-activity");
     return jsonRes({ ok: true, creatorActivity: true, ...r });
   }
@@ -486,9 +496,10 @@ Deno.serve(async (req: Request) => {
   }
 
   // ─── QUOTIDIEN ───
-  // 1) Factures en retard
-  const { data: inv } = await sb.from("invoices").select("status").eq("status", "retard");
-  const overdue = (inv ?? []).length;
+  // 1) Factures en retard : statut « retard », ou « attente » dont l'échéance est passée (même
+  //    règle que Facturation et la cloche, _shared/factureRetard.ts ; constat W23).
+  const { data: inv } = await sb.from("invoices").select("status,date").in("status", ["retard", "attente"]);
+  const overdue = ((inv ?? []) as { status: string | null; date: string | null }[]).filter((iv) => factureEnRetard(iv, today)).length;
 
   // 2) Blob agence __app_state__ : contrats à surveiller, commissions (override), reversements payés.
   let contractsSoon = 0;

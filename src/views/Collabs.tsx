@@ -50,6 +50,7 @@ import { CachetField } from "@/components/cachet-field";
 import { CACHET_ILLISIBLE } from "../../supabase/functions/_shared/cachet.ts";
 import { createStepTask } from "@/lib/collabLinksDb";
 import { autoCollabSignee } from "@/lib/collabAutoDb";
+import { lireCollabPrefill } from "@/lib/quotes";
 import { gagneeHorsBilan } from "@/lib/collabAuto";
 import { autoTaskFor, cachetAmount, cachetCurrency } from "@/lib/collabLinks";
 import { dealKind } from "@/lib/dealKind";
@@ -189,11 +190,6 @@ export function Collabs() {
 
   // formulaire de création
   const [formOpen, setFormOpen] = useState(false);
-  // « Nouvelle collab » de la palette ⌘K : ouvre le formulaire de création.
-  useIntent("collab:new", () => {
-    setOnglet("payees");
-    setFormOpen(true);
-  });
   // « Ouvrir » d'une collab bloquée (Aujourd'hui) : affichage détail, filtres levés, fiche ouverte.
   useIntent("collab:open", (id) => {
     if (!id) return;
@@ -213,6 +209,19 @@ export function Collabs() {
   // Montant tapé illisible dans le champ Cachet : enregistrement bloqué (cachet jamais vidé).
   const [cachetBad, setCachetBad] = useState(false);
   const [note, setNote] = useState("");
+  // « Nouvelle collab » de la palette ⌘K : ouvre le formulaire de création. « Créer la collab »
+  // d'un devis accepté (Facturation › Devis) le préremplit : marque, créateur, livrables, cachet.
+  useIntent("collab:new", (data) => {
+    setOnglet("payees");
+    setFormOpen(true);
+    const p = lireCollabPrefill(data);
+    if (!p) return;
+    setBrand(p.brand);
+    setCreator(p.creator);
+    setDeliverables(p.deliverables);
+    setCachet(p.cachet);
+    setCachetBad(false);
+  });
 
   // édition
   const [editId, setEditId] = useState<string | null>(null);
@@ -546,6 +555,8 @@ export function Collabs() {
       if (autoTasks && autoTaskFor(clamped, row)) {
         void createStepTask({ id: row.id, brand: row.brand, creator: row.creator, step: clamped, status: row.status }, clamped).then((r) => {
           if (r === "created") toast(`Tâche ajoutée : ${autoTaskFor(clamped, row)?.text ?? ""}`);
+          // Après le SQL du 27/11, la base crée elle-même la tâche de l'étape : on la retrouve ici.
+          else if (r === "exists") toast(`Tâche de l'étape : ${autoTaskFor(clamped, row)?.text ?? ""}`);
           else if (r === "error") toast("Tâche de l'étape non créée");
         });
       }

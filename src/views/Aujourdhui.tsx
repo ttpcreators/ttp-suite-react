@@ -13,7 +13,11 @@ import { useSearch } from "@/lib/search";
 import { useCreators } from "@/lib/useCreators";
 import { commissionMap } from "@/lib/commission";
 import { notifyCreator } from "@/lib/push";
-import { visiblePourCreateur } from "@/lib/todoVisibility";
+import { pushFinTache } from "@/lib/todoDemande";
+import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
+import { collabIdMissing } from "@/lib/collabLinks";
+import { openLater } from "@/lib/openLater";
+import { depotsEnAttente, type Depot } from "../../supabase/functions/_shared/depots.ts";
 import { useNavActionSlot } from "@/lib/navAction";
 import { requestIntent } from "@/lib/openIntent";
 import { openCommandPalette } from "@/lib/commandPalette";
@@ -30,6 +34,8 @@ import {
   buildToday,
   commissionRateFor,
   creatorShare,
+  depotItems,
+  explainDepot,
   eventISO,
   eventTypeLabel,
   filterItems,
@@ -171,6 +177,8 @@ function primaryLabel(it: TodayItem): string {
       return "Ouvrir la collab";
     case "stats":
       return "Ouvrir le roster";
+    case "depot":
+      return (it.depot?.ids.length ?? 0) > 1 ? "Voir dans Documents" : "Ouvrir le fichier";
   }
 }
 
@@ -258,9 +266,11 @@ type InspectorProps = {
   onRappel?: () => void;
   onClose: () => void;
   onOpenSource: () => void;
+  /** Dépôt d'un créateur : ouvre un de ses fichiers (et le marque vu). */
+  onOpenFile?: (id: string) => void;
 };
 
-function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onPrimary, onSnooze, onHandled, onRappel, onClose, onOpenSource }: InspectorProps) {
+function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onPrimary, onSnooze, onHandled, onRappel, onClose, onOpenSource, onOpenFile }: InspectorProps) {
   const [editing, setEditing] = useState(false);
   useEffect(() => setEditing(false), [it.id]);
   const iv = it.invoice;
@@ -268,7 +278,7 @@ function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onP
   const mail = iv && it.kind === "relance" ? relanceEmail(iv, reminders[iv.id]?.count ?? 0) : null;
 
   // Ce que veut dire la ligne et quoi faire, en deux phrases (src/lib/todayExplain.ts).
-  const explain = explainItem(it);
+  const explain = it.depot ? explainDepot(it.depot) : explainItem(it);
   let eyebrow = "";
   let rows: [string, ReactNode][] = [];
   let pill: ReactNode = null;
@@ -347,6 +357,15 @@ function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onP
       ...(parseDueDate(b.due) ? [["Échéance", longDate(parseDueDate(b.due)!)] as [string, ReactNode]] : []),
     ];
     pill = <StatusPill tone="info" size="md">Échéance {it.metaSub}</StatusPill>;
+  } else if (it.depot) {
+    const g = it.depot;
+    eyebrow = "Envoyé par le créateur";
+    rows = [
+      ["Créateur", titleCase(g.creator) || "Créateur"],
+      ...(g.brand ? [["Collab", g.brand] as [string, ReactNode]] : []),
+      ["Envoyé le", longDate(new Date(g.dernier))],
+    ];
+    if ((it.lateDays ?? 0) >= 3) pill = <StatusPill tone="wait" size="md">Sans suite depuis {it.lateDays} j</StatusPill>;
   } else if (it.kind === "mails") {
     eyebrow = "Boîte de réception";
     rows = it.sub.split(" · ").map((s) => {
@@ -384,6 +403,18 @@ function Inspector({ it, reminders, details, rateFor, draft, setDraft, busy, onP
           </div>
         )}
         {rows.length > 0 && <div className="mt-5"><InfoRows rows={rows} /></div>}
+        {it.depot && onOpenFile && (
+          <ul className="mt-4 divide-y divide-border overflow-hidden rounded-[16px] bg-panel">
+            {it.depot.ids.map((id, i) => (
+              <li key={id}>
+                <button type="button" onClick={() => onOpenFile(id)} className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left text-[14px] transition-colors hover:bg-rowhover">
+                  <span className="min-w-0 truncate font-medium text-foreground">{it.depot?.noms[i] ?? "Fichier"}</span>
+                  <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
 
         {mail && (
           <div className="mt-4 rounded-[16px] border border-border p-4">
@@ -530,6 +561,30 @@ export function Aujourdhui() {
   }, [live]);
   const stepsByCollab = useMemo(() => groupSteps(collabSteps), [collabSteps]);
 
+  // « Les créateurs attendent » (constat W5) : dépôts des créateurs (contenu, facture, stats)
+  // dont le repère « document » n'est pas lu et que la collab n'a pas suivis
+  // (supabase/functions/_shared/depots.ts). Avec `collab_id` si la colonne existe (SQL 2026-11-27).
+  const [depots, setDepots] = useState<Depot[] | null>(() => getCache<Depot[]>("aujourdhui:depots"));
+  useEffect(() => {
+    let alive = true;
+    const cols = "id,name,type,creator,path,created_at";
+    const read = (c: string) =>
+      supabase.from("documents").select(c).like("path", "creator-uploads/%").in("type", ["contenu", "facture", "stats"]).order("created_at", { ascending: false }).limit(200);
+    void (async () => {
+      let r = await read(`${cols},collab_id`);
+      if (r.error && collabIdMissing(r.error)) r = await read(cols);
+      if (!alive || r.error) return;
+      const list = (r.data as unknown as Depot[]) ?? [];
+      setCache("aujourdhui:depots", list);
+      setDepots(list);
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [live]);
+  const activity = useActivityEvents("agency");
+  const docsNonLus = useMemo(() => new Set(activity.events.filter((e) => e.object_type === "document").map((e) => e.object_id)), [activity.events]);
+
   // Relances : copie locale après une relance, jusqu'au prochain blob live.
   const [localRem, setLocalRem] = useState<Reminders | null>(null);
   const liveRem = app?.invoiceReminders;
@@ -587,9 +642,25 @@ export function Aujourdhui() {
   // « À corriger » ne répète pas une collab déjà dans « Collabs à faire avancer ».
   const stuckCollabs = useMemo(() => new Set(ahead.flatMap((i) => (i.kind === "collab" && i.collab ? [i.collab.id] : []))), [ahead]);
 
+  const waiting = useMemo(
+    () =>
+      depotItems(
+        depotsEnAttente({
+          depots: depots ?? [],
+          nonLus: docsNonLus,
+          collabs,
+          steps: collabSteps,
+          payouts: money ? ((app?.creatorPayouts as Record<string, unknown> | undefined) ?? null) : null,
+        }),
+        snoozed,
+        now,
+      ),
+    [depots, docsNonLus, collabs, collabSteps, money, app, snoozed, now],
+  );
+
   const filters = money ? TODAY_FILTERS : TODAY_FILTERS.filter((f) => f !== "argent");
   const [filter, setFilter] = useStickyState<TodayFilter>("aujourdhui:filtre", filters, "tout");
-  const all = useMemo(() => [...items, ...ahead], [items, ahead]);
+  const all = useMemo(() => [...items, ...waiting, ...ahead], [items, waiting, ahead]);
   const visible = useMemo(() => filterItems(all, filter), [all, filter]);
   const sections = useMemo(() => sectionsOf(visible, now), [visible, now]);
   // « Cette semaine » et « À anticiper » : repliées par défaut quand elles sont longues.
@@ -718,15 +789,44 @@ export function Aujourdhui() {
       toast("Statut non enregistré, réessaie");
       return;
     }
-    // Comme la page To-do : le créateur est prévenu quand SA demande est faite (jamais pour
-    // une tâche interne de l'agence, qu'il ne voit pas).
-    if (t.creator && visiblePourCreateur(t as { source?: string | null; visible_createur?: boolean | null })) notifyCreator("task-done", t.creator, `✅ Ta demande est faite : « ${t.text} »`);
+    // Comme la page To-do (lib/todoDemande.ts) : « Ta demande est faite » pour SA tâche, « Tâche
+    // terminée » pour une tâche que l'agence lui demandait, rien pour une tâche interne ou
+    // suivie par l'agence. Tous les créateurs de la tâche sont prévenus.
+    const push = pushFinTache(t);
+    for (const name of push?.to ?? []) {
+      if (push?.kind === "task-done") notifyCreator("task-done", name, `« ${t.text} »`, t.id);
+      else notifyCreator("task-closed", name, `Tâche terminée : « ${t.text} »`, t.id, t.text);
+    }
     setTodos((prev) => (prev ?? []).map((x) => (x.id === t.id ? { ...x, ...saved } : x)));
     toast("Tâche terminée ✓");
   };
 
+  // Dépôt d'un créateur : ouvrir le fichier le marque vu (repère « document » lu), comme dans
+  // Documents ; « C'est vu » marque tout le groupe. L'onglet s'ouvre dans le clic (iPhone).
+  const openDepotFile = (id: string) => {
+    const path = (depots ?? []).find((d) => d.id === id)?.path;
+    if (!path) return toast("Fichier indisponible");
+    void openLater(async () => {
+      const { data, error } = await supabase.storage.from("documents").createSignedUrl(path, 3600);
+      return error || !data?.signedUrl ? null : data.signedUrl;
+    }).then((ok) => {
+      if (!ok) toast("Lien indisponible, réessaie");
+      else void markActivityRead("document", id);
+    });
+  };
+  const depotSeen = async (it: TodayItem) => {
+    const ids = it.depot?.ids ?? [];
+    await Promise.all(ids.map((id) => markActivityRead("document", id)));
+    toast("C'est vu ✓");
+  };
+
   /** Le verbe de la ligne : fait l'action, ou ouvre la page qui la fait. */
   const act = (it: TodayItem) => {
+    if (it.kind === "depot" && it.depot) {
+      if (it.depot.ids.length === 1) return openDepotFile(it.depot.ids[0]);
+      setQuery(it.depot.creator);
+      return go("documents");
+    }
     if (it.kind === "relance") return void sendRelance(it);
     if (it.kind === "todo") return void finishTodo(it);
     if (it.kind === "mails") return go("mails");
@@ -735,6 +835,14 @@ export function Aujourdhui() {
     return go("planning");
   };
   const openSource = (it: TodayItem) => {
+    if (it.kind === "depot") {
+      if (it.depot?.collabId) {
+        requestIntent("collab:open", it.depot.collabId);
+        return go("collabs");
+      }
+      setQuery(it.depot?.creator ?? "");
+      return go("documents");
+    }
     if (it.kind === "contrat") return go("echeances");
     if (it.kind === "stats") return go("roster");
     if (it.kind === "collab" && it.collab) {
@@ -863,13 +971,14 @@ export function Aujourdhui() {
       busy={busy}
       onPrimary={() => act(selected)}
       onSnooze={() => doSnooze(selected)}
-      onHandled={selected.kind === "todo" ? undefined : () => doHandled(selected)}
+      onHandled={selected.kind === "todo" ? undefined : selected.kind === "depot" ? () => void depotSeen(selected) : () => doHandled(selected)}
       onRappel={selected.kind === "echeance" && selected.invoice ? () => sendRappel(selected) : undefined}
       onClose={() => {
         setSelectedId(null);
         setSheetOpen(false);
       }}
       onOpenSource={() => openSource(selected)}
+      onOpenFile={selected.kind === "depot" ? openDepotFile : undefined}
     />
   ) : null;
 
