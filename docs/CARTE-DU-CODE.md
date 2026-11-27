@@ -203,7 +203,7 @@ Règle : la logique pure (sans React ni Supabase) vit dans `src/lib/<nom>.ts`, a
 | PDF | `pdfDoc.ts` (identité commune des documents), `printPdf.ts` (`printHtml`) |
 | Briefs, collabs, bilans | `briefResume.ts`, `collabs.ts` (11 étapes), `collabAuto.ts` + `collabAutoDb.ts` (étapes qui avancent toutes seules : facture payée → étape 9, versement qui solde la facture → étape 10, collab créée ou gagnée → prospect « Signé » ; règles et écritures dans `_shared/collabAuto.ts` et `_shared/collabAutoDb.ts`), `campaignRecap.ts`, `engagement.ts`, `objectivesTrend.ts`, `platform.ts` |
 | Contacts et prospection | `touches.ts` + `touchesDb.ts`, `contactRelance.ts` |
-| Scouting et sourcing | `scouting.ts`, `niche.ts`, `sourcingScore.ts`, `igRivals.ts`, `ttRadar.ts` |
+| Scouting et sourcing | `scouting.ts`, `niche.ts`, `sourcingScore.ts`, `igRivals.ts`, `ttRadar.ts`, `radarLoad.ts` (lecture du radar Instagram en deux temps, erreurs « absente », « lent », « autre ») |
 | Réseaux sociaux | `instagram.ts`, `igFeed.ts`, `igPlanner.ts`, `tiktok.ts`, `youtube.ts` |
 | Media kits | `mediakitSlug.ts` (même calcul que le site), `mediakitThemes.ts` (mêmes ids que le site), `mediakitBiosEn.ts` |
 | Équipe, agents, notifications | `team.ts`, `useMyName.ts`, `agentAvatars.ts`, `push.ts`, `appBadge.ts`, `useNotifications.ts`, `notifLocal.ts`, `notifTexts.ts` |
@@ -296,7 +296,9 @@ hiver : la fonction ne garde que le bon passage. Hors fonction : `ttp-app-state-
 | `pushPayload.ts` | Format unique des notifications, miroir de `src/lib/deepLink.ts` | `push.ts`, `mailNotif.ts`, `daily-digest` |
 | `mailNotif.ts` | Une notification par fil, résumé au-delà de 3 | `gmail-poll` |
 | `activityText.ts` | Phrase lisible du journal de l'équipe (aussi importé par l'app) | `team-notify`, `useNotifications.ts`, `Activite.tsx` |
-| `state.ts` | `state` OAuth signé (anti-CSRF, 10 min) | fonctions `*-connect`, `*-callback`, `google-*` |
+| `state.ts` | `state` OAuth signé (anti-CSRF, 10 min par défaut) | fonctions `*-connect`, `*-callback`, `google-*` |
+| `igRetour.ts` | Retour d'Instagram : 30 min pour un départ par lien (10 min depuis l'app), tâche interne « Aider … à connecter Instagram » après 2 essais ratés en 24 h | `ig-callback` |
+| `backupTables.ts` | Sauvegarde mensuelle : chaque table sauvegardée (lue page par page dans l'ordre de sa clé primaire, `lireTable`) ou exclue exprès (raison dans le LISEZMOI), contrôle des tables en base ; le test fait échouer le build si une table créée dans `supabase/` n'est pas classée | `monthly-backup` |
 | `instagram.ts`, `instagram-login.ts` | API de Meta (lecture des comptes pro, connexion d'un créateur, quota) | fonctions `ig-*` et radars |
 | `tiktok.ts` | TikTok Login Kit | `tt-*` |
 | `youtube.ts`, `youtube-login.ts` | YouTube Data API (quota) et connexion d'un créateur | `yt-*` |

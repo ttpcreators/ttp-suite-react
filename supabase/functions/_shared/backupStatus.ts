@@ -78,6 +78,10 @@ const ERRORS: Record<string, string> = {
   google_non_connecte: "Google n'est pas connecté",
   envoi_echoue: "le mail n'est pas parti",
   aucun_destinataire: "aucun fondateur avec une adresse mail",
+  // Liste backupRecipients réglée, mais aucune de ses adresses n'est un compte fondateur :
+  // le mail ne part chez personne (archive rangée quand même dans Storage et Drive).
+  destinataires_inconnus: "aucune adresse de la liste des destinataires n'est un compte fondateur",
+  reglages_illisibles: "réglages illisibles, destinataires inconnus",
   interrompue: "interrompue avant la fin",
 };
 
