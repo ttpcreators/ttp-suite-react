@@ -69,7 +69,10 @@ import { briefPdfDoc, type BriefPdfLink } from "@/lib/briefPdf";
 import { brandInitial, briefKey, buildMissions, CREATOR_STAGES, creatorStage, missionAction, missionState, type Mission, type MissionCollab } from "@/lib/creatorMissions";
 import { BriefBlocks, MissionCard, MissionStages } from "@/components/creator-missions";
 import { SkeletonCard, SkeletonFigure, SkeletonList } from "@/components/creator-skeleton";
-import { creatorSteps, whenLabel, type NextStep } from "@/lib/creatorNextStep";
+import { creatorSteps, monthlyStatsSent, whenLabel, type NextStep } from "@/lib/creatorNextStep";
+import { insertCreatorDoc } from "@/lib/creatorDocsDb";
+import { mailBadgeCount } from "@/lib/creatorMailBadge";
+import { collabIdMissing } from "@/lib/collabLinks";
 import { CreatorToday } from "@/components/CreatorToday";
 import { sharedWithText } from "@/lib/todoCreators";
 import { selectTodosFor } from "@/lib/todoCreatorsDb";
@@ -141,7 +144,8 @@ type Brief = { id: string; brand: string | null; deliverables: string | null; du
 type Ev = { id: string; date: string | null; day: number | null; time: string | null; title: string | null; type: string | null; who?: string | null; description?: string | null };
 // collab_id : collab du dépôt fait depuis une mission (SQL 2026-11-27 ; absente avant).
 type Doc = { id: string; name: string; type: string | null; size: string | null; path: string | null; created_at: string | null; collab_id?: string | null };
-type Invoice = { ref: string | null; party: string | null; amount: string | null; date: string | null; status: string | null };
+// collab_id : collab de la facture (relue sans la colonne si elle manque).
+type Invoice = { ref: string | null; party: string | null; amount: string | null; date: string | null; status: string | null; collab_id?: string | null };
 type Contact = { id: string; brand: string; person: string | null; role: string | null; email: string | null; phone: string | null; sort_order?: number };
 
 type Tab = CsTab;
@@ -151,8 +155,9 @@ type Tab = CsTab;
  * Alimente à la fois le menu desktop (SidebarNav, sections repliables), le rail
  * replié, la barre d'onglets du téléphone et la liste « Toutes les rubriques » de
  * Profil → ils ne peuvent plus diverger.
- * Premier groupe = les 5 onglets de la barre du bas (Accueil, Missions, Mail,
- * Gains, Profil) ; toutes les autres rubriques suivent, rien n'est retiré.
+ * Premier groupe = l'essentiel (Accueil, Collabs, Gains, Mes informations, Mail, Menu) ;
+ * toutes les autres rubriques suivent, rien n'est retiré. La barre du bas du téléphone,
+ * elle, vient de CS_BAR_TABS (src/lib/creatorTabs.ts) : Accueil, Collabs, To-do, Mail, Plus.
  * Les ids de groupe sont préfixés `cs-` pour ne pas partager l'état d'ouverture
  * (localStorage) avec les groupes de l'espace agence.
  */
@@ -540,17 +545,20 @@ export function CreatorSpace({
   // l'agence) depuis que le créateur les a ouverts. Calculée sur l'appareil ; le module
   // est chargé à la demande pour ne pas alourdir l'espace créateur.
   const mailBadgeOn = mailsOn && !preview;
-  const [mailBadge, setMailBadge] = useState(0);
+  const [mailUnseen, setMailUnseen] = useState<string[]>([]);
   useEffect(() => {
     if (!mailBadgeOn) {
-      setMailBadge(0);
+      setMailUnseen([]);
       return;
     }
     let alive = true;
     let unsub = () => {};
     void import("@/lib/creatorMail").then((m) => {
       if (!alive) return;
-      const update = () => setMailBadge(m.unseenMailIds(name).length);
+      const update = () => {
+        const next = m.unseenMailIds(name);
+        setMailUnseen((cur) => (cur.length === next.length && cur.every((id, i) => id === next[i]) ? cur : next));
+      };
       unsub = m.subscribeSeen(update);
       update();
     });
@@ -559,6 +567,10 @@ export function CreatorSpace({
       unsub();
     };
   }, [name, mailBadgeOn]);
+  // Chiffre de la pastille Mail (menu, rail, barre du bas, « On t'attend ») : échanges non vus
+  // sur l'appareil OU avec un repère « nouveau » de l'agence, chacun compté une fois, et
+  // seulement quand la section Mail est active (avant : les deux s'additionnaient).
+  const mailBadge = mailBadgeOn ? mailBadgeCount(mailUnseen, activity.events) : 0;
   // Hors de l'onglet Mails : remarques et statuts de l'agence relus en base (léger, au plus
   // toutes les 2 min). Dans l'onglet, la boîte s'en charge (et relit aussi la liste Gmail).
   useEffect(() => {
@@ -568,7 +580,7 @@ export function CreatorSpace({
   // Pastille de l'icône de l'app = échanges non vus ; l'onglet Mail ouvert retire les
   // notifications de mails ; le service worker sait qu'on y est (pas de doublon à l'écran).
   // Jamais en visualisation agence (c'est alors l'app agence qui tient tout ça).
-  useAppBadge(mailBadge, !preview);
+  useAppBadge(mailUnseen.length, !preview);
   useCloseMailNotifications(!preview && tab === "mails");
   useEffect(() => {
     if (!preview) setCurrentPlace(`cs-${tab}`);
@@ -609,9 +621,9 @@ export function CreatorSpace({
     const base = CREATOR_GROUPS.map((g) => ({
       ...g,
       label: t(g.label),
-      // Pastille : échanges qui ont bougé (Mail) + objets avec du nouveau de l'agence.
+      // Pastille : objets avec du nouveau de l'agence ; Mail : son propre chiffre (mailBadge).
       items: g.items.map((i) => {
-        const n = (i.id === "mails" && mailsOn ? mailBadge : 0) + (activity.counts[i.id] ?? 0);
+        const n = i.id === "mails" ? mailBadge : (activity.counts[i.id] ?? 0);
         return { ...i, label: t(i.label), ...(n ? { badge: n } : {}) };
       }),
     }));
@@ -622,10 +634,10 @@ export function CreatorSpace({
     const moved = new Set(favItems.map((i) => i.id));
     const rest = base.map((g) => ({ ...g, items: g.items.filter((i) => !moved.has(i.id)) })).filter((g) => g.items.length > 0);
     return [{ id: "favoris", label: t("Favoris"), icon: TtpStar, fixed: true, items: favItems }, ...rest];
-  }, [mailsOn, mailBadge, t, shownFavs, activity.counts]);
+  }, [mailBadge, t, shownFavs, activity.counts]);
   const navTabs = useMemo(() => navGroups.flatMap((g) => g.items), [navGroups]);
 
-  // ── Affichage iPhone (téléphone) : 4 onglets en bas (Accueil, Missions, Gains, Messages), Menu sous l'avatar ──
+  // ── Affichage iPhone (téléphone) : barre du bas Accueil, Collabs, To-do, Mail et Plus (CS_BAR_TABS), Menu aussi sous l'avatar ──
   const iosPhone = useIsPhone();
   const [mailThreadOpen, setMailThreadOpen] = useState(false); // Mail : un échange est ouvert
   const [navSlot, setNavSlot] = useState<HTMLElement | null>(null); // « + » de l'onglet dans la barre de titre
@@ -744,7 +756,8 @@ export function CreatorSpace({
   // Collabs du créateur (lecture seule : RLS `collabs_scoped`, écriture réservée à l'agence).
   const [collabs, setCollabs] = useState<MissionCollab[]>([]);
   // Premier chargement terminé (squelettes en attendant, jamais d'écran vide trompeur).
-  const [ready, setReady] = useState({ collabs: false, briefs: false, invoices: false });
+  // `docs` : ses dépôts décident des cartes « stats du mois » et « facture » de l'Accueil.
+  const [ready, setReady] = useState({ collabs: false, briefs: false, invoices: false, docs: false });
   const markReady = (k: keyof typeof ready) => setReady((r) => (r[k] ? r : { ...r, [k]: true }));
 
 
@@ -886,13 +899,26 @@ export function CreatorSpace({
       const rows = (data as unknown as (Ev & { interne?: boolean | null })[]) ?? [];
       setEvents(rows.filter((e) => (e.who ?? "").split(", ").includes(name) && !evenementInterne(e)));
     });
-    supabase.from("documents").select("id,name,type,size,path,created_at").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => apply(error) && setDocs((data as Doc[]) ?? []));
+    // `collab_id` : dépôt fait depuis une mission (SQL 2026-11-27) ; colonne absente : relu sans.
+    const DOC_COLS = "id,name,type,size,path,created_at";
+    const docsQ = (cols: string) => supabase.from("documents").select(cols).eq("creator", name).order("created_at", { ascending: false });
+    void docsQ(`${DOC_COLS},collab_id`)
+      .then((r) => (r.error && collabIdMissing(r.error) ? docsQ(DOC_COLS) : r))
+      .then(({ data, error }) => {
+        if (alive) markReady("docs");
+        if (apply(error)) setDocs((data as unknown as Doc[]) ?? []);
+      });
     // Plus récente d'abord (« Dernière facture » = invoices[0]) ; `date` est un texte, on trie sur created_at.
-    // Nom sans tenir compte des majuscules ni des accents (« LÉNA PASQUALE » = « Léna Pasquale »).
-    supabase.from("invoices").select("ref,party,amount,date,status,creator").ilike("creator", namePattern(name)).order("created_at", { ascending: false }).then(({ data, error }) => {
-      if (alive) markReady("invoices");
-      if (apply(error)) setInvoices(((data as (Invoice & { creator: string | null })[]) ?? []).filter((i) => sameName(i.creator, name)));
-    });
+    // Nom sans tenir compte des majuscules ni des accents (« CRÉATRICE A » = « Créatrice A »).
+    // `collab_id` : la facture d'une collab se reconnaît d'abord par son lien (« Ta facture … n'apparaît pas »).
+    const INV_COLS = "ref,party,amount,date,status,creator";
+    const invoicesQ = (cols: string) => supabase.from("invoices").select(cols).ilike("creator", namePattern(name)).order("created_at", { ascending: false });
+    void invoicesQ(`${INV_COLS},collab_id`)
+      .then((r) => (r.error && collabIdMissing(r.error) ? invoicesQ(INV_COLS) : r))
+      .then(({ data, error }) => {
+        if (alive) markReady("invoices");
+        if (apply(error)) setInvoices(((data as unknown as (Invoice & { creator: string | null })[]) ?? []).filter((i) => sameName(i.creator, name)));
+      });
     supabase.functions
       .invoke("creator-report", { body: { creator: name } })
       .then(({ data, error }) => {
@@ -1073,8 +1099,8 @@ export function CreatorSpace({
     setStatsCapture(null);
     setStatsForm(Object.fromEntries(POST_METRICS.map(({ key }) => [key, p[key] == null ? "" : String(p[key])])) as Record<PostMetric, string>);
   };
-  /** Capture des stats : rangée dans SON dossier, comme « Envoyer mes stats ». */
-  const uploadCapture = async (file: File, brand: string): Promise<string | null> => {
+  /** Capture des stats : rangée dans SON dossier, comme « Envoyer mes stats », reliée à sa collab. */
+  const uploadCapture = async (file: File, brand: string, collabId: string | null): Promise<string | null> => {
     if (file.size > 15 * 1024 * 1024) {
       toast(t("Fichier trop lourd (max 15 Mo)"));
       return null;
@@ -1092,14 +1118,14 @@ export function CreatorSpace({
       toast(t("Envoi interrompu. Vérifie ta connexion et réessaie."));
       return null;
     }
-    const created = await dbInsert("documents", {
+    const created = await insertCreatorDoc({
       creator: name,
       name: `Stats ${brand} · ${titleCase(name)} · ${fmtDay(new Date())}`,
       type: "stats",
       size: `${Math.max(1, Math.round(file.size / 1024))} Ko`,
       path,
       sort_order: 0,
-    });
+    }, collabId);
     if (!created) {
       await supabase.storage.from("documents").remove([path]).catch(() => {});
       toast(t("Envoi interrompu. Réessaie dans un instant."));
@@ -1122,7 +1148,7 @@ export function CreatorSpace({
     try {
       let capture: string | undefined;
       if (statsCapture) {
-        const path = await uploadCapture(statsCapture, m.brand);
+        const path = await uploadCapture(statsCapture, m.brand, m.collab?.id ?? p.collab_id ?? null);
         if (!path) return;
         capture = path;
       }
@@ -1204,7 +1230,17 @@ export function CreatorSpace({
   // fichier d'une autre créatrice.
   const invFileRef = useRef<HTMLInputElement>(null);
   const [invUploading, setInvUploading] = useState(false);
+  // Collab de la facture : posée au clic depuis une mission ou la carte « Ta facture … n'apparaît
+  // pas » (le dépôt garde alors le lien et le nom de la marque), null depuis Gains.
+  const invoiceFor = useRef<{ id: string; brand: string } | null>(null);
+  const pickInvoice = (collab: { id: string; brand: string } | null) => {
+    invoiceFor.current = collab;
+    invFileRef.current?.click(); // dans le clic (sinon le téléphone bloque le sélecteur)
+  };
   const sendInvoiceFile = async (file: File) => {
+    const target = invoiceFor.current;
+    invoiceFor.current = null;
+    const brand = target?.brand.trim() ?? "";
     if (file.size > 15 * 1024 * 1024) {
       toast(t("Fichier trop lourd (max 15 Mo)"));
       return;
@@ -1227,14 +1263,14 @@ export function CreatorSpace({
         toast(t("Envoi interrompu. Vérifie ta connexion et réessaie."));
         return;
       }
-      const created = await dbInsert("documents", {
+      const created = await insertCreatorDoc({
         creator: name,
-        name: `Facture · ${titleCase(name)} · ${fmtDay(new Date())}`,
+        name: brand ? `Facture ${brand} · ${titleCase(name)} · ${fmtDay(new Date())}` : `Facture · ${titleCase(name)} · ${fmtDay(new Date())}`,
         type: "facture",
         size: `${Math.max(1, Math.round(file.size / 1024))} Ko`,
         path,
         sort_order: 0,
-      });
+      }, target?.id);
       if (!created) {
         // Ligne refusée → on ne laisse pas un fichier orphelin dans le bucket.
         await supabase.storage.from("documents").remove([path]).catch(() => {});
@@ -1242,7 +1278,7 @@ export function CreatorSpace({
         return;
       }
       setDocs((prev) => [created as unknown as Doc, ...prev]);
-      pingAgency("facture", `Facture déposée · ${titleCase(name)}`);
+      pingAgency("facture", brand ? `Facture ${brand} déposée · ${titleCase(name)}` : `Facture déposée · ${titleCase(name)}`);
       toast(t("Facture envoyée à ton agence ✓"));
     } finally {
       setInvUploading(false);
@@ -1302,14 +1338,14 @@ export function CreatorSpace({
         return;
       }
       sent += file.size;
-      const created = await dbInsert("documents", {
+      const created = await insertCreatorDoc({
         creator: name,
         name: `${t("Contenu")} ${m.brand} · ${fmtDay(new Date(), locale)}${files.length > 1 ? ` (${i + 1})` : ""}`,
         type: "contenu",
         size: `${Math.max(1, Math.round(file.size / 1024))} Ko`,
         path,
         sort_order: 0,
-      });
+      }, m.collab?.id);
       if (!created) {
         await supabase.storage.from("documents").remove([path]).catch(() => {});
         setContentUp(null);
@@ -2287,23 +2323,29 @@ export function CreatorSpace({
   // « Stats du mois » : même indicateur que le Roster et la notification du matin
   // (creators.stats_month), coché par l'agence ou tout seul par les synchros TikTok /
   // Instagram quand le réseau principal est couvert. Repli : dernière mesure de plus de 35 j.
+  // Captures du mois déjà envoyées depuis l'espace : elles attendent l'agence, on ne les
+  // redemande pas (seule l'agence coche stats_month, jamais l'espace créateur). Rien tant
+  // que ses dépôts ne sont pas lus (sinon la demande s'affiche puis disparaît).
   const nowD = new Date();
   const thisMonth = `${nowD.getFullYear()}-${String(nowD.getMonth() + 1).padStart(2, "0")}`;
   const lastMeasure = Math.max(0, ...(mySuivi ?? []).map((e) => frTime(e.date) || 0));
-  const statsStale = creator
+  const statsStale = ready.docs && (creator
     ? (creator.stats_month ?? "") !== thisMonth
-    : mySuivi !== null && (!lastMeasure || Date.now() - lastMeasure > 35 * 86400000);
+    : mySuivi !== null && (!lastMeasure || Date.now() - lastMeasure > 35 * 86400000)) && !monthlyStatsSent(docs, nowD);
   const todayIso = todayISO();
   const missions = useMemo(() => buildMissions(collabs, briefs), [collabs, briefs]);
+  // « J'ai lu » déjà touché pour le brief de la mission (colonnes absentes : non).
+  const briefRead = (m: Mission) => !!(m.brief && concepts?.[m.brief.id]?.read_at);
   const openMission = missionId ? missions.find((m) => m.id === missionId) ?? null : null;
   // Ouvrir une mission efface le repère « nouveau » de son brief.
   const openBriefId = openMission?.brief?.id;
   useEffect(() => {
     if (!preview && openBriefId) void markActivityRead("brief", openBriefId);
   }, [preview, openBriefId]);
+  // concepts : « J'ai lu » et concept (carte « Lire le brief ») ; docs : factures déjà déposées.
   const steps = useMemo(
-    () => creatorSteps({ briefs, collabs, todos, events, invoices, statsStale, now: new Date() }),
-    [briefs, collabs, todos, events, invoices, statsStale],
+    () => creatorSteps({ briefs, collabs, todos, events, invoices, statsStale, concepts, docs, now: new Date() }),
+    [briefs, collabs, todos, events, invoices, statsStale, concepts, docs],
   );
   // Ce qu'elle touche vraiment : brut moins la commission de SA fiche (src/lib/creatorGains.ts).
   const rate = parseCommissionPct(creator?.commission) ?? DEFAULT_COMMISSION;
@@ -2376,7 +2418,8 @@ export function CreatorSpace({
       return;
     }
     if (tg.tab === "gains") {
-      invFileRef.current?.click();
+      const c = tg.collabId ? collabs.find((x) => x.id === tg.collabId) : undefined;
+      pickInvoice(c ? { id: c.id, brand: c.brand } : null);
       return;
     }
     setTab(tg.tab);
@@ -2667,7 +2710,7 @@ export function CreatorSpace({
             />
           )}
           <NavActionSlotContext.Provider value={iosPhone ? navSlot : null}>
-          {/* En-tête de l'accueil (maquette « Bonjour Léna ») : date du jour, salutation
+          {/* En-tête de l'accueil (maquette « Bonjour {prénom} ») : date du jour, salutation
               selon l'heure + photo. Les autres onglets affichent leur propre titre (TabFrame). */}
           {tab === "accueil" && (
             <div className="mb-5 flex items-center justify-between gap-3">
@@ -2723,7 +2766,7 @@ export function CreatorSpace({
           {/* Aujourd'hui : les actions rangées par moment (src/components/CreatorToday.tsx) */}
           {tab === "aujourdhui" && (
             <CreatorToday
-              data={{ briefs, collabs, todos, events, invoices, statsStale }}
+              data={{ briefs, collabs, todos, events, invoices, statsStale, concepts, docs }}
               onOpen={openStep}
               onDoneTodo={async (id) => {
                 const td = todos.find((x) => x.id === id);
@@ -2796,7 +2839,8 @@ export function CreatorSpace({
               { label: t("CA encaissé HT"), value: formatEuro(caEncaisse), foot: t("sur {amount} facturés", { amount: formatEuro(totalFacture) }) },
               { label: t("To-do"), value: String(openTodos.length), foot: `${plural(briefs.length, "{n} brief", "{n} briefs")} · ${plural(ideas.length, "{n} idée", "{n} idées")}` },
             ];
-            if (!(ready.collabs && ready.briefs && ready.invoices)) {
+            // Ses dépôts aussi : sinon « Envoyer tes stats du mois » s'affiche un instant puis disparaît.
+            if (!(ready.collabs && ready.briefs && ready.invoices && ready.docs)) {
               return (
                 <div role="status" aria-label={t("Chargement de ton accueil")} className="flex flex-col gap-4">
                   <SkeletonCard action className="min-h-[200px]" />
@@ -2883,14 +2927,15 @@ export function CreatorSpace({
                   const waits: Wait[] = [];
                   for (const m of missions) {
                     if (m.done) continue;
-                    const a = missionAction(m);
+                    const a = missionAction(m, briefRead(m));
+                    // « Lire le brief » : seulement quand le brief a quelque chose à lire et tant
+                    // que « J'ai lu » n'est pas touché (missionAction).
                     if (a?.key === "brief") waits.push({ id: `b-${m.id}`, icon: FileText, text: t("Brief {brand} à lire", { brand: m.brand }), run: () => goMission(m) });
-                    else if (a?.key === "feedback") waits.push({ id: `f-${m.id}`, icon: MessageSquare, text: t("{brand} attend ta validation", { brand: m.brand }), run: () => goMission(m) });
                   }
                   for (const td of todos) {
                     if (!td.done && agencyAwaits(td.progress)) waits.push({ id: `t-${td.id}`, icon: MessageSquare, text: t("Ton agence t'a écrit : {task}", { task: td.text }), run: () => setTab("todo") });
                   }
-                  if (mailsOn && mailBadge > 0) {
+                  if (mailBadge > 0) {
                     waits.push({ id: "mail", icon: Mail, text: plural(mailBadge, "{n} message de marque", "{n} messages de marque"), run: () => setTab("mails") });
                   }
                   return (
@@ -3655,10 +3700,11 @@ export function CreatorSpace({
                           dateText={m.due ? shortDay(m.due) : ""}
                           whenText={m.due && !m.done ? whenText(daysBetweenIso(todayIso, m.due)) : null}
                           late={!m.done && !!m.due && m.due < todayIso}
+                          briefRead={briefRead(m)}
                           onOpen={() => goMission(m)}
                           onAction={(key) => {
                             // Facture et contenu : le sélecteur de fichier s'ouvre dans le clic (sinon bloqué).
-                            if (key === "invoice") invFileRef.current?.click();
+                            if (key === "invoice") pickInvoice(m.collab ? { id: m.collab.id, brand: m.brand } : null);
                             else if (key === "content") pickContent(m);
                             else goMission(m);
                           }}
@@ -4080,7 +4126,7 @@ export function CreatorSpace({
                   <div className="flex flex-col items-center gap-2 pt-1">
                     <button
                       type="button"
-                      onClick={() => invFileRef.current?.click()}
+                      onClick={() => pickInvoice(m.collab ? { id: m.collab.id, brand: m.brand } : null)}
                       disabled={invUploading}
                       className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-primary px-5 text-[16px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
                     >
@@ -4693,7 +4739,7 @@ export function CreatorSpace({
                   </div>
                   <button
                     type="button"
-                    onClick={() => invFileRef.current?.click()}
+                    onClick={() => pickInvoice(null)}
                     disabled={invUploading}
                     className="flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-full bg-primary px-4 text-[14px] font-semibold text-primary-foreground shadow-sm transition-opacity hover:opacity-90 disabled:opacity-50"
                   >
@@ -4752,7 +4798,7 @@ export function CreatorSpace({
             const act = id === "profil"
               ? Object.entries(activity.counts).reduce((s, [k, n]) => (CS_BAR_TABS.includes(k as CsTab) ? s : s + n), 0)
               : activity.counts[id] ?? 0;
-            const n = (id === "mails" && mailsOn ? mailBadge : 0) + act;
+            const n = id === "mails" ? mailBadge : act;
             return { id, label, icon: tb?.icon ?? LayoutDashboard, badge: n || null };
           })}
           active={ownerTab(tab)}

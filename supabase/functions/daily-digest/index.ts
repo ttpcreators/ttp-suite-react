@@ -365,7 +365,8 @@ Deno.serve(async (req: Request) => {
       ? (objTitle ? `${label} · « ${objTitle} »` : label)
       : tpl && objTitle ? tpl.replace("{objet}", () => objTitle) : what;
     // Onglet ouvert au toucher (sur l'objet quand il est connu) ; statut de mail : onglet Mail.
-    const TAB: Record<string, string> = { task: "todo", "task-update": "todo", "task-done": "todo", "task-closed": "todo", idea: "ideas", "idea-update": "ideas", brief: "missions", "brief-update": "missions", event: "planning", document: "documents", gift: "gifting", "gift-update": "gifting", invoice: "gains", payout: "gains", "brand-paid": "gains", mediakit: "mediakit" };
+    // Bilan de campagne : Mes stats › Bilans ; feuille de route : sa page (avant : l'Accueil).
+    const TAB: Record<string, string> = { task: "todo", "task-update": "todo", "task-done": "todo", "task-closed": "todo", idea: "ideas", "idea-update": "ideas", brief: "missions", "brief-update": "missions", event: "planning", document: "documents", gift: "gifting", "gift-update": "gifting", invoice: "gains", payout: "gains", "brand-paid": "gains", mediakit: "mediakit", debrief: "debrief", roadmap: "roadmap" };
     const item = String(body.item ?? "");
     const url = kind === "mail"
       ? deepLinkUrl({ open: "cs-mails" })

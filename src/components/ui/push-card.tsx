@@ -13,6 +13,8 @@ import { useT } from "@/lib/i18n";
  * préservée via usePush.
  * `mails` : le Mail du créateur est activé → ses nouveaux mails sont notifiés aussi
  * (gmail-poll ; pas de réglage à part pour l'instant, activé par défaut).
+ * Ne promettre que les push que l'app envoie vraiment : jamais pour le brief créé avec la
+ * collab, ni pour ce qu'écrit Alfred. Même phrase que le guide (CreatorGuide.tsx).
  */
 export function PushCard({ mails = false }: { mails?: boolean }) {
   const { state, busy, enable, disable, sendTest } = usePush();
@@ -73,13 +75,13 @@ export function PushCard({ mails = false }: { mails?: boolean }) {
         onClose={() => setActOpen(false)}
         icon={<BellRing className="h-5 w-5 text-primary" />}
         title={t("Reste au courant en temps réel")}
-        description={t("Reçois une alerte sur ton téléphone dès que ton agence t'ajoute une tâche, un brief, un gifting ou un document.")}
+        description={t("Tu reçois une alerte quand ton agence te confie une tâche, ajoute un rendez-vous ou un document.")}
         primaryLabel={primaryLabel}
         onPrimary={onPrimary}
         primaryDisabled={busy || testing}
       >
         <ul className="flex flex-col gap-2">
-          {[...(mails ? ["Nouveaux mails des marques"] : []), "Nouveaux briefs & deals", "Cadeaux / gifting reçus", "Tâches et documents ajoutés"].map((line) => (
+          {[...(mails ? ["Nouveaux mails des marques"] : []), "Tâches et documents ajoutés", "Rendez-vous ajoutés", "Cadeaux / gifting reçus"].map((line) => (
             <li key={line} className="flex items-center gap-2 text-[13px] text-muted-foreground">
               <Check className="h-4 w-4 shrink-0 text-signaltext" /> {t(line)}
             </li>
