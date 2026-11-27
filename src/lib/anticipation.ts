@@ -127,7 +127,7 @@ export function groupSteps(rows: AujCollabStep[] | null): Record<string, AujColl
   return map;
 }
 
-/** « Nike × Léna Pasquale » (sans doubler le créateur déjà cité dans la marque). */
+/** « Nike × Léna Morel » (sans doubler le créateur déjà cité dans la marque). */
 export function collabTitle(c: Pick<AujCollab, "brand" | "creator">): string {
   const brand = (c.brand ?? "").trim();
   const who = titleCase(c.creator ?? "");

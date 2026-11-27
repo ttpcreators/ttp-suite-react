@@ -4,8 +4,9 @@ Point d'entrée pour toute IA ou tout développeur qui reprend le projet. À lir
 avant de toucher au code. Les autres outils d'IA lisent [`AGENTS.md`](AGENTS.md), qui renvoie
 ici.
 
-**En production sur https://app.ttpcreators.pro.** Tout push sur `main` met l'app à jour en
-1 à 2 minutes pour toute l'agence et tous les créateurs. Agir en conséquence.
+**En production sur https://app.ttpcreators.pro.** Chaque PR fusionnée dans `main` met l'app à
+jour en 1 à 2 minutes pour toute l'agence et tous les créateurs. Agir en conséquence. `main` est
+protégée : on n'y pousse jamais directement (voir « Travailler à deux »).
 
 ## À lire selon le besoin
 
@@ -53,22 +54,26 @@ npm run build   # PORTE DE QUALITÉ : oxlint && vitest run && tsc -b && vite bui
 ```
 
 **Toujours faire passer `npm run build` avant de commit.** Pas de commit d'un code qui ne
-compile pas ou d'une tâche à moitié faite.
+compile pas ou d'une tâche à moitié faite. La session en ligne de Gianni ne peut pas le lancer :
+pour elle, le contrôle « build » de la PR fait foi (voir « Travailler à deux »).
 
 ## Déploiement
 
-- **Production = branche `main`.** `.github/workflows/deploy.yml` : `npm ci && npm run build`,
-  puis `upload-pages-artifact` et `deploy-pages`. Domaine `app.ttpcreators.pro`
-  (`public/CNAME`).
-- **Edge Functions** : **jamais déployées par une fusion.** Deux façons, toujours depuis
-  `main` à jour :
+- **Production = branche `main`**, protégée : PR obligatoire et contrôle « build » vert (voir
+  « Travailler à deux »). À chaque fusion, `.github/workflows/deploy.yml` lance
+  `npm ci && npm run build`, puis `upload-pages-artifact` et `deploy-pages`. Domaine
+  `app.ttpcreators.pro` (`public/CNAME`).
+- **Edge Functions** : **jamais déployées par une fusion.** Toujours depuis `main` à jour. Une
+  session ne déploie qu'après le « oui » de Marc ou de Gianni pour ce déploiement précis (voir
+  « Règle prod »). Deux façons :
+  - par GitHub : « Déploiement des fonctions » (`.github/workflows/deploy-fonctions.yml`), lancé
+    exprès en nommant les fonctions (onglet Actions › Run workflow, ou par une session). Il part
+    seulement de `main`, refuse un nom inconnu, prend 12 fonctions au plus, lit `verify_jwt` dans
+    `supabase/config.toml` et a besoin du secret GitHub `SUPABASE_ACCESS_TOKEN` ;
   - à la main, par Marc : `supabase functions deploy <noms> --project-ref zizvggziggswhrbuyhuo`
-    (`ttp-mcp` : ajouter `--no-verify-jwt`) ;
-  - à la demande, par GitHub : « Déploiement des fonctions »
-    (`.github/workflows/deploy-fonctions.yml`), lancé exprès en nommant les fonctions (onglet
-    Actions › Run workflow). Il lit `verify_jwt` dans `supabase/config.toml` et a besoin du
-    secret GitHub `SUPABASE_ACCESS_TOKEN`.
-- **SQL** : lancé à la main par Marc dans le SQL Editor de Supabase.
+    (`ttp-mcp` : ajouter `--no-verify-jwt`).
+- **SQL** : dans le SQL Editor de Supabase par Marc, ou par une session (connecteur Supabase)
+  après le « oui » de Marc ou de Gianni pour ce SQL précis (voir « Règle prod »).
 - Vérifier une mise en ligne : `https://app.ttpcreators.pro/version.json` affiche les 12
   premiers caractères du commit déployé.
 
@@ -87,18 +92,30 @@ compile pas ou d'une tâche à moitié faite.
   un webhook ou un retour OAuth doit être en `verify_jwt = false` et s'authentifier dans son
   code (`CRON_SECRET`, signature, `state` signé).
 
-## ⚠️ Règle prod : « l'assistant prépare, l'utilisateur applique »
+## ⚠️ Règle prod : « la session prépare, la personne décide »
 
-L'assistant n'a que la **clé anon** : il **ne peut PAS** faire de DDL, changer les réglages
-Auth, ni déployer les Edge Functions (le harnais bloque à raison l'usage de credentials de
-prod). Donc, pour tout changement de base / auth / fonction :
+Une session Claude (de Marc ou de Gianni) prépare tout changement de base, de réglage ou de
+fonction. Elle ne l'applique qu'avec un « oui » explicite, donné pour ce SQL ou ce déploiement
+précis :
 
-1. l'assistant **écrit** le SQL (foldé dans `SETUP.sql` **et** déposé dans `supabase/sql/`
-   comme fichier daté) ou le code de fonction, **commit + push** ;
-2. l'assistant **donne à l'utilisateur** le SQL à lancer / le toggle dashboard / la commande
-   `supabase functions deploy` ;
-3. après application, l'assistant **vérifie** avec la clé anon (comptes de test `ZZZ-*`
-   uniquement, jamais de vraie donnée) et **met à jour le tableau d'état** du runbook.
+1. **Préparer** : le SQL (fichier daté dans `supabase/sql/` **et** foldé dans `SETUP.sql`) ou le
+   code de la fonction, par une PR, avec une ligne `⏳` dans le tableau d'état
+   (`supabase/sql/README.md`).
+2. **Appliquer après le « oui »** de la personne pour qui elle travaille, Marc ou Gianni : le SQL
+   par le connecteur Supabase, la fonction par « Déploiement des fonctions » (depuis `main`, donc
+   après la fusion). Avant un déploiement, vérifier que la version en ligne ne vient pas d'une
+   branche pas encore fusionnée (date du dernier déploiement, PR ouvertes qui touchent la
+   fonction) : dans le doute, s'arrêter et le dire. Respecter l'ordre noté dans le tableau (SQL
+   puis fusion, ou l'inverse).
+3. **Une seule personne à la fois** touche la prod : si Marc et Gianni ont chacun un SQL ou un
+   déploiement prêt, ils se préviennent et passent l'un après l'autre. Un SQL et un déploiement
+   liés passent aussi l'un après l'autre, chacun avec son « oui ».
+4. **Vérifier** : lancer la requête de contrôle, essayer avec les comptes de test `ZZZ-*`
+   seulement (jamais une vraie donnée), puis passer la ligne en `✅`.
+
+Restent à Marc : les secrets (`supabase secrets set`), les réglages Auth et ceux des tableaux de
+bord (Supabase, Google, Meta…). Ni Alfred ni un agent du connecteur n'appliquent de SQL ni ne
+déploient.
 
 Ce cycle est la raison d'être du runbook : il rend la reprise possible d'une session à
 l'autre. **Mettre le tableau à jour à CHAQUE changement.** Comme l'app part en ligne avant le
@@ -114,9 +131,31 @@ Plusieurs audits adversariaux menés (identité et privilège, OWASP). Détail d
 - Inscription publique **désactivée** : les comptes se créent via la fonction `create-access`
   (fondateurs).
 - `handle_new_user` ne fait **jamais** confiance au `creator_name` envoyé par le client.
-- Le trigger `creators_guard` empêche un créateur d'écrire les colonnes sensibles de sa fiche.
+- Le trigger `creators_guard` empêche un créateur d'écrire les colonnes sensibles de sa fiche et
+  les tarifs de son media kit (`hideRates`, `rates`, `ratesNote`, `ratesNoteEn`). Le déclencheur
+  `todos_a_creators_guard` (fonction `todos_creators_guard`) bride ses tâches : il ne choisit ni
+  l'origine (`source`) ni la liste des créateurs, et le « fait par » (`done_by`) est toujours le
+  nom du compte connecté.
 - Un créateur ne lit jamais le blob agence : ce qu'il doit voir passe par une fonction qui
   filtre sur son nom (`creator-history`, `debrief-history`, `creator-report`, `creator-mail`).
+- **Tâches et rendez-vous internes** (24/11) : une tâche de l'agence (`source = 'agency'`) est
+  interne, sauf si elle est cochée « Visible par le créateur » (`visible_createur`). Visibles par
+  défaut : les tâches écrites à la main pour un créateur et celles d'Alfred ou du connecteur
+  (`creer_tache`). Internes : les rappels automatiques des collabs et les rendez-vous
+  « Tâche : … » (`events.interne`, déclencheur `events_interne_auto`). Toute nouvelle lecture
+  côté créateur applique la même règle : RLS en base, `visiblePourCreateur`
+  (`src/lib/todoVisibility.ts`) dans l'app.
+- **Storage** : bucket `avatars` limité aux photos (pas de SVG) et à 25 Mo ; bucket `documents`
+  limité à 25 Mo par fichier. Pages publiques plafonnées : `rdv` (table `rdv_journal` : 10
+  réservations par heure, 2 par jour et par adresse) et `site-lead` (30 demandes par heure).
+- **OAuth** : chaque `state` signé porte son usage (`via`, `_shared/state.ts`), et un retour
+  refuse un jeton émis pour un autre usage. Les adresses de retour du connecteur sont fermées
+  (`_shared/oauthRetour.ts`).
+- **Réservé aux fondateurs** côté serveur : `create-access`, `google-disconnect`,
+  `creator-box-mail`, le lien de connexion Instagram (`ig-connect`, action `lien`) et les outils
+  `founder: true` du connecteur.
+- **Agents du connecteur** : une connexion « agent autonome » (Alfred) fait valider ses envois et
+  ses actions irréversibles dans la page Agents (voir « Mécanismes à connaître »).
 
 ## Secrets et données personnelles
 
@@ -227,18 +266,57 @@ Plusieurs audits adversariaux menés (identité et privilège, OWASP). Détail d
 
 - **Connecteur Claude** (`supabase/functions/ttp-mcp`) : serveur MCP + OAuth 2.1 (PKCE).
   - Page d'accord : `/connecteur/` (`src/connecteur/main.tsx`).
-  - Jetons hachés, révocables dans Paramètres → Claude ; chaque appel est journalisé
-    (`mcp_log`).
-  - Outils dans `tools.ts`. Un outil qui écrit porte `write: true`, ce qui fait demander
-    l'accord de l'utilisateur à Claude avant chaque appel.
+  - Jetons hachés, révocables dans Paramètres › Assistants IA ; chaque appel est journalisé
+    (`mcp_log`, avec la raison d'un échec dans `error`).
+  - Outils dans `tools.ts` (pour tous), `admin.ts` (fondateurs), `autonomie.ts` (prospection
+    autonome), `envois.ts` (file d'envoi) et `prospection.ts` (séquences), réunis dans le tableau
+    `TOOLS` de `tools.ts`. Un outil qui écrit porte `write: true`, ce qui fait demander l'accord
+    de l'utilisateur à Claude avant chaque appel. Tout nouvel outil se classe aussi pour Alfred
+    (voir **Alfred** ci-dessous).
   - Connexion marquée « agent autonome » (case de la page d'accord, `mcp_grants.agent`, pour
     Alfred) : ses envois et ses actions irréversibles exigent une validation faite dans la
     page Agents (`ttp-mcp/verrou.ts`, règles `_shared/verrouAgent.ts`). Un nouvel outil qui
-    envoie ou agit sans retour possible s'ajoute à `besoinValidation`.
+    envoie ou agit sans retour possible s'ajoute à `besoinValidation`. Pas encore activé pour
+    Alfred : l'étape sur l'iMac reste à faire par Marc (`agents/alfred/LISEZ-MOI.md`).
   - Pour un membre, un mail n'est jamais envoyé : brouillon seulement. Les fondateurs ont
     en plus des outils qui envoient vraiment (`envoyer_mail`, `envoyer_brouillon`,
-    `envoyer_dm`, depuis le 2026-10-28, `ttp-mcp/admin.ts`). Les outils `founder: true` sont
-    cachés aux membres.
+    `envoyer_dm` depuis le 2026-10-28, puis `envoyer_brouillons_valides` et `programmer_envoi` ;
+    `ttp-mcp/admin.ts` et `envois.ts`). Les outils `founder: true` sont cachés aux membres.
+  - **Prospection** : un lot de mails de prospection passe toujours par la file d'envoi
+    (`programmer_envoi`, après le « oui » de Gianni pour cette liste de brouillons), jamais par
+    `envoyer_brouillons_valides`. La tâche `envoi-file-minute` appelle `ttp-mcp/file-envoi`
+    chaque minute : un mail par boîte au plus, en semaine aux heures de bureau, avec un écart et
+    un plafond par jour. Juste avant chaque envoi : liste « ne plus contacter »
+    (`ne_plus_contacter`), adresse en erreur, domaine sans serveur mail, premier mail déjà parti
+    à la même société depuis 30 jours, media kit ; la file s'arrête si les rebonds montent. Règles
+    dans `_shared/fileEnvoi.ts`. Un nouvel outil qui envoie de la prospection passe par ces
+    contrôles.
+  - **Anti-doublon d'équipe** : `creer_brouillon_mail` refuse un nouveau mail à une personne à
+    qui un autre membre de l'équipe a écrit par son propre Claude depuis 15 jours, ou une réponse
+    dans un fil où il a répondu depuis 2 jours (lu dans `mcp_log`, `_shared/equipeClaude.ts`) ;
+    `forcer` seulement si Marc le demande.
+  - **FullEnrich** (`trouver_emails_marque`, `trouver_email_personne`, page Contacts) consomme
+    des crédits mensuels limités : annoncer le coût et attendre l'accord de l'utilisateur, jamais
+    d'appel en boucle ni de tâche planifiée sans décision de Marc. Hunter est mis de côté depuis
+    le 24/11 : ne pas créer de compte.
+- **Alfred** (`agents/alfred/`, voir son `LISEZ-MOI.md`) : l'agent autonome de l'agence. Il
+  tourne sur l'iMac avec l'abonnement Claude de Marc et agit dans l'app par le connecteur.
+  - Il ne reçoit que le dossier `agents/alfred` de `main` : `mise-a-jour.sh` le télécharge
+    chaque nuit à 4 h (et au démarrage de l'iMac). Une PR fusionnée qui touche ce dossier
+    arrive donc chez lui la nuit suivante, sans passer par l'iMac. Un changement fait ailleurs
+    (connecteur, app) ne lui arrive que par les outils et leurs descriptions.
+  - Ses droits sont dans `alfred.sh` : chaque outil du connecteur est dans une seule des listes
+    `lire`, `agir`, `sur_oui` ou `interdits` (plus `valides_app`, les actions validées dans
+    l'app, à garder égale à `OUTILS_A_VALIDER` de `_shared/verrouAgent.ts`). Quand Marc n'a pas
+    écrit, seuls `lire` et `agir` sont ouverts, plus une partie de `sur_oui` selon le passage
+    (délégation, envoi validé dans la page Agents, revue du 1er du mois) : un outil absent des
+    listes lui est refusé. Quand Marc écrit, tous les outils sont ouverts. Le test
+    `agents/alfred/tests/outils.test.ts` (contrôle « build ») exige que chaque outil soit
+    classé : voir `docs/RECETTES.md`, recette 5.
+  - Ses consignes : un tronc, `agents/alfred/CLAUDE.md`, qui doit rester sous 40 000 caractères
+    (test `agents/alfred/tests/consignes.test.ts`, contrôle « build »), et des fiches par sujet
+    (`agents/alfred/fiches/`). Un nouveau savoir va dans la fiche du sujet, jamais dans le tronc,
+    déjà presque plein.
 - **« Rédiger avec Claude » / « Résumer avec Claude »** : aucune clé API, on passe par
   l'abonnement Claude et le connecteur.
   1. L'app ouvre claude.ai avec la demande écrite.
@@ -284,19 +362,23 @@ Tous les PDF de l'app partagent UNE identité, celle des media kits du site (dir
 
 ## Git et GitHub
 
-- `main` = production. Chaque chantier se fait sur une branche courte, fusionnée dans `main`
-  puis supprimée.
+- `main` = production, protégée. Chaque chantier se fait sur une branche courte, partie de
+  `origin/main` à jour, fusionnée dans `main` par une PR (squash) puis supprimée. Recette pas à
+  pas : `docs/RECETTES.md`, section 7.
 - Commits en français, une phrase « Zone : ce qui change » (ex. « Mails : filtre « Non lus »
   côté agence et côté créateur »). Ils se terminent par la ligne `Co-Authored-By` de
   l'assistant.
-- Commit seulement en fin de tâche, build vert. Le push se fait avec le compte du projet
-  (alias SSH du dépôt, jamais `gh auth switch`).
+- Commit seulement en fin de tâche, build vert. Chacun pousse avec son propre compte : Marc avec
+  le compte `ttpcreators` (alias SSH `github-ttp` du dépôt), Gianni avec le sien. Jamais
+  `gh auth login` ni `gh auth switch` pour pousser ; le compte `ttpcreators` n'est jamais prêté
+  (voir « Travailler à deux »).
 - Tags :
   - `sauvegarde-AAAA-MM-JJ` (suffixe possible) avant un gros changement ;
   - `archive/…` pour garder une piste abandonnée.
 
-  Retour arrière : `git revert`, jamais de `push --force` sur `main` (voir
-  `docs/RECETTES.md`, section 8).
+  Retour arrière : `git revert` sur une branche, puis PR et contrôle vert comme tout
+  changement ; jamais de `push --force` sur `main` (GitHub le refuse). Voir `docs/RECETTES.md`,
+  section 8.
 - Pull requests et tickets : modèles dans `.github/` (checklist build, SQL et fonctions à
   appliquer, tableau d'état, captures).
 
@@ -304,17 +386,17 @@ Tous les PDF de l'app partagent UNE identité, celle des media kits du site (dir
 
 Depuis le 24 novembre 2026, Marc et Gianni (son associé) développent l'app tous les deux, chacun avec son propre compte GitHub et ses propres sessions Claude. Les règles :
 
-- **`main` est protégée** : on ne pousse jamais dessus directement. Tout passe par une PR, et le contrôle « Vérification des PR » (`.github/workflows/verif-pr.yml` : lint, tests, types, build) doit être vert avant la fusion. Pas de force-push, pas de suppression de `main`. Chacun peut fusionner ses propres PR, sans relecture obligatoire.
+- **`main` est protégée** : on ne pousse jamais dessus directement. Tout passe par une PR, et le contrôle « build » du workflow « Vérification des PR » (`.github/workflows/verif-pr.yml` : lint, tests, types, build) doit être vert avant la fusion. Le même workflow lance un second contrôle, « fonctions » (`deno check` de toutes les Edge Functions) : GitHub ne l'exige pas encore, mais on l'attend vert lui aussi quand la PR touche `supabase/functions`. Pas de force-push, pas de suppression de `main`. Chacun peut fusionner ses propres PR (`gh pr merge <n> --squash --delete-branch`), sans relecture obligatoire.
 - **Une branche par modification**, au nom parlant. Les copies de travail locales vont dans `~/Code/TTP Suite/_ateliers/<nom>`, et on les efface après la fusion.
 - **Avant de commencer** : `git fetch` et partir de `origin/main` à jour. Regarder les PR ouvertes (`gh pr list`) pour ne pas toucher aux mêmes fichiers que l'autre. Si c'est le cas, on se prévient.
-- **SQL et déploiements Supabase** (`supabase functions deploy …`) : un seul des deux à la fois. Chaque SQL est daté dans `supabase/sql/` et noté dans `supabase/sql/README.md` (⏳ puis ✅), pour que l'autre sache ce qui est en prod.
-- **Les accès** : chacun pousse avec son compte. Le compte `ttpcreators` (propriétaire du dépôt) n'est jamais partagé, et les clés restent dans les secrets Supabase.
+- **SQL et déploiements Supabase** : la session prépare, la personne décide (voir « Règle prod ») : un « oui » de Marc ou de Gianni pour ce SQL ou ce déploiement précis, et une seule personne à la fois touche la prod (on se prévient). Chaque SQL est daté dans `supabase/sql/` et noté dans `supabase/sql/README.md` (⏳ puis ✅), pour que l'autre sache ce qui est en prod.
+- **Les accès** : chacun pousse avec son propre compte GitHub, jamais avec `gh auth login` ni `gh auth switch`. Le compte `ttpcreators` (propriétaire du dépôt) n'est jamais partagé, et les clés restent dans les secrets Supabase.
 - **En cas de doute** sur le contexte (ce qui est en ligne, ce qui reste à faire) : `supabase/sql/README.md` d'abord, puis les PR fusionnées récentes (`gh pr list --state merged`), et le journal des agents dans l'app.
 - **Session Claude en ligne de Gianni** (décisions de Gianni du 24 novembre 2026, à la suite de l'audit du même jour) :
   - elle ne peut pas lancer `npm run build` (les paquets npm ne se téléchargent pas dans cette session) : pour ses PR, le contrôle « Vérification des PR » fait foi, et elle fusionne elle-même dès qu'il est vert ;
   - elle applique le SQL elle-même, par le connecteur Supabase de Gianni, après le « oui » de Gianni pour ce SQL précis. Le fichier daté est quand même déposé dans `supabase/sql/` et le tableau d'état mis à jour (⏳ puis ✅), comme pour tout SQL ;
   - elle déploie les Edge Functions elle-même par « Déploiement des fonctions » (voir Déploiement), après le « oui » de Gianni pour ce déploiement précis (décision de Gianni du 24 novembre 2026 au soir). Avant de lancer, elle vérifie que la fonction en ligne n'a pas été déployée depuis une branche pas encore fusionnée (date du dernier déploiement, PR ouvertes qui touchent la fonction) : dans le doute, elle s'arrête et le dit. Après, elle met le tableau d'état à jour ;
-  - la liste des modifications en cours est dans l'audit du 24 novembre 2026 (points M1 à M30), cité dans les PR.
+  - ses modifications venaient de l'audit du 24 novembre 2026 (points M1 à M30). L'audit lui-même n'est pas dans le dépôt : les points déjà faits sont cités dans les PR et dans le tableau d'état.
 
 ## Pièges connus
 
@@ -358,7 +440,10 @@ Depuis le 24 novembre 2026, Marc et Gianni (son associé) développent l'app tou
 - **Meta retire les @** des textes de posts : la détection des comptes cités se fait sans @
   (`_shared/mentions.ts`).
 - **Quotas** :
-  - Meta, par heure glissante : les scans s'arrêtent à 80 % (`ig_quota`) ;
+  - Meta, par heure glissante et pour toute l'app (dernier relevé dans `ig_quota`) : chaque
+    tâche s'arrête à son plafond, `PLAFONDS` de `_shared/quotaMeta.ts` (lecture des profils
+    85 %, import de l'historique des DM 75 %, radar de fond 60 %), et 80 % pour le sourcing
+    lancé à la main (`ig-sourcing`) ;
   - YouTube, 10 000 unités par jour (`yt_quota`).
 - **Traductions** : changer un texte français fait perdre sa traduction anglaise (la clé ne
   correspond plus). Aucun test ne le voit : mettre à jour la clé dans `src/lib/i18n/` en même

@@ -1,6 +1,6 @@
 /**
  * Adresses « Envoyer en tant que » d'une boîte Gmail (users.settings.sendAs), pour que
- * Claude envoie depuis l'alias d'une créatrice (ex. anamilanovic@ttpcreators.pro) comme on
+ * Claude envoie depuis l'alias d'une créatrice (ex. prenomnom@ttpcreators.pro) comme on
  * le fait à la main dans Gmail. Règles PURES, testées par sendAs.test.ts.
  *
  * Seules les adresses DÉJÀ réglées dans Gmail sont acceptées : l'adresse principale de la

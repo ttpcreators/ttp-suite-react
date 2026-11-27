@@ -163,7 +163,7 @@ function displayName(from: string): string {
   const m = /^\s*"?([^"<]+?)"?\s*</.exec(from);
   return (m ? m[1] : from.replace(/[<>]/g, "")).trim();
 }
-/** « CLARA FRECHIN » → « Clara Frechin » (noms d'expéditeur tout en majuscules). */
+/** « JULIE MERCIER » → « Julie Mercier » (noms d'expéditeur tout en majuscules). */
 function prettyName(n: string): string {
   if (!n || n !== n.toUpperCase() || !/[A-Z]/.test(n)) return n;
   return n.toLowerCase().replace(/\p{L}[\p{L}'’-]*/gu, (w) => (w.length <= 3 ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1)));

@@ -167,7 +167,7 @@ const cleanHandle = (h: unknown): string | null => {
   const t = String(h ?? "").trim().replace(/^https?:\/\/(www\.)?(instagram|tiktok)\.com\/@?/i, "").replace(/[/?#].*$/, "").replace(/^@/, "").toLowerCase();
   return /^[a-z0-9._]{1,30}$/.test(t) ? t : null;
 };
-/** « LÉNA PASQUALE » → « Léna Pasquale ». */
+/** « LÉNA MOREL » → « Léna Morel ». */
 export const nomPropre = (s: string | null | undefined) =>
   (s ?? "").trim().toLocaleLowerCase("fr-FR").replace(/(^|[^\p{L}])(\p{L})/gu, (_m, p: string, c: string) => p + c.toLocaleUpperCase("fr-FR"));
 const arrondi = (n: number | null, d = 2) => (n === null ? null : Math.round(n * 10 ** d) / 10 ** d);

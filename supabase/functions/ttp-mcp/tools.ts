@@ -7,7 +7,7 @@
 // Accès complet des fondateurs (admin.ts) : lire / créer / modifier / supprimer (Corbeille) partout,
 // réglages, factures, envoi de mails et de DM Instagram.
 // Prospection autonome (autonomie.ts) : historique des DM, profils Instagram et agence,
-// scan de la Base créateurs, e-mails pro des marques (Hunter, FullEnrich).
+// scan de la Base créateurs, e-mails pro des marques (FullEnrich ; Hunter mis de côté le 24/11/2026).
 // Jamais exposés : coffre des mots de passe, IBAN, jetons de connexion.
 // Connexion d'un agent autonome (Alfred) : envois et actions irréversibles validés dans l'app
 // avant de partir (verrou.ts, appelé par callTool).
@@ -128,7 +128,7 @@ const orLike = (cols: string[], q: string) => cols.map((c) => `${c}.ilike.${JSON
 const ok = (text: string): ToolResult => ({ text });
 const fail = (text: string): ToolResult => ({ text, isError: true });
 const lines = (xs: string[], empty: string) => (xs.length ? xs.join("\n") : empty);
-// « LÉNA PASQUALE » → « Léna Pasquale » (\b ignore les lettres accentuées : « LÉNa » avant).
+// « MÉLANIE EXEMPLE » → « Mélanie Exemple » (\b ignore les lettres accentuées : « MéLanie » avant).
 const titleCase = (s: string | null | undefined) =>
   (s ?? "").toLocaleLowerCase("fr-FR").replace(/(^|[^\p{L}])(\p{L})/gu, (_m, p: string, c: string) => p + c.toLocaleUpperCase("fr-FR"));
 
@@ -256,7 +256,7 @@ const rechercher: Tool = {
   description: "Recherche un nom, une marque, un @ ou un email partout : créateurs du roster, contacts marques, pipeline, collabs, scouting (créateurs et sportifs), DM Instagram, factures (fondateurs). Pour les mails, utiliser rechercher_mails.",
   inputSchema: { type: "object", properties: { requete: { type: "string", description: "Texte cherché (nom, marque, @, email)" } }, required: ["requete"], additionalProperties: false },
   run: async (sb, ctx, a) => {
-    // « @lenaa.psl » : les @ des DM sont enregistrés sans « @ ».
+    // « @prenom.exemple » : les @ des DM sont enregistrés sans « @ ».
     const q = str(a.requete, 80).replace(/^@+/, "");
     if (q.length < 2) return fail("Donne au moins 2 caractères.");
     const [cr, ct, pr, co, sp, ap, ig, inv] = await Promise.all([
@@ -484,7 +484,7 @@ const noterReversement: Tool = {
       createur: { type: "string", description: "Nom du créateur, comme dans le roster" },
       montant: { type: "number", description: "Montant viré en euros" },
       date: { type: "string", description: "AAAA-MM-JJ, jour du virement (défaut : aujourd'hui)" },
-      note: { type: "string", description: "D'où vient la preuve (« Telegram de Marc 16/11 », « facture JNPR 2026-186 »)" },
+      note: { type: "string", description: "D'où vient la preuve (« Telegram de Marc 16/11 », « facture Marque Exemple 2026-001 »)" },
       forcer: { type: "boolean", description: "true : noter même si un versement du même montant existe déjà à 5 jours près (deux virements réels)" },
       retirer: { type: "string", description: "Annuler : l'id d'un versement noté par erreur (donné quand il a été noté) ; il est retiré, montant et date ignorés" },
       collab: { type: "string", description: "Facultatif : id de la collab que ce versement paie (outil collabs), si la preuve la désigne. Elle passe à l'étape 10 « Créateur payé ». Sans lui, seules les collabs dont la facture est soldée par ce versement avancent." },
@@ -655,7 +655,7 @@ const tableauLundiTool: Tool = {
   name: "tableau_lundi",
   title: "Tableau de bord du lundi",
   description:
-    "Le tableau de bord du lundi de la stratégie, en deux parties : Gianni (contacts touchés par canal d'après le journal de contact des fiches, taux de réponse, contacts passés à Marc = tâches « Visio : … », créatrices approchées) et Marc (visios faites, devis envoyés, deals signés, montant moyen), pour la semaine dernière et la semaine en cours, puis le mois face aux cibles (montant HT signé, deal moyen, part de Léna, carnet traité, agences actives, incidents de conformité relevés par ig-sync : mention « Collaboration commerciale » manquante ou marque concurrente pendant une exclusivité). À lire pour le point du lundi ; un chiffre « non mesuré » ne s'estime pas.",
+    "Le tableau de bord du lundi de la stratégie, en deux parties : Gianni (contacts touchés par canal d'après le journal de contact des fiches, taux de réponse, contacts passés à Marc = tâches « Visio : … », créatrices approchées) et Marc (visios faites, devis envoyés, deals signés, montant moyen), pour la semaine dernière et la semaine en cours, puis le mois face aux cibles (montant HT signé, deal moyen, part du créateur principal, carnet traité, agences actives, incidents de conformité relevés par ig-sync : mention « Collaboration commerciale » manquante ou marque concurrente pendant une exclusivité). À lire pour le point du lundi ; un chiffre « non mesuré » ne s'estime pas.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   founder: true,
   run: async (sb) => {
@@ -1167,7 +1167,7 @@ const planning: Tool = {
 const taches: Tool = {
   name: "taches",
   title: "Tâches",
-  description: "To-do de l'agence : tâches ouvertes (par défaut) ou faites, avec échéance, priorité, créateurs concernés (une tâche peut en avoir plusieurs) et id (pour cocher_tache).",
+  description: "To-do de l'agence : tâches ouvertes (par défaut) ou faites, avec échéance, priorité, créateurs concernés (une tâche peut en avoir plusieurs), qui la voit (« visible par » le créateur, titre et détails compris, ou « interne ») et id (pour cocher_tache). Avant d'ajouter un détail à une tâche visible, vérifier que le créateur peut le lire.",
   inputSchema: { type: "object", properties: { faites: { type: "boolean" }, createur: { type: "string" } }, additionalProperties: false },
   run: async (sb, _c, a) => {
     const who = str(a.createur);
@@ -1179,7 +1179,9 @@ const taches: Tool = {
       if (who) q = multi && named ? q.or(`creator.ilike.${JSON.stringify(like(who))},creators.cs.{${JSON.stringify(named)}}`) : q.ilike("creator", like(who));
       return q;
     };
-    let res = await query("id, text, descr, due, creator, creators, priority, status, done_at", true);
+    let res = await query("id, text, descr, due, creator, creators, priority, status, done_at, source, visible_createur", true);
+    // Colonne `visible_createur` absente (SQL 2026-11-24 pas encore lancé) : lecture sans la visibilité.
+    if (res.error && /visible_createur|source/i.test(res.error.message)) res = await query("id, text, descr, due, creator, creators, priority, status, done_at", true);
     // Colonne `creators` absente (SQL pas encore lancé) : ancienne lecture.
     if (res.error && /creators/i.test(res.error.message)) res = await query("id, text, descr, due, creator, priority, status, done_at", false);
     if (res.error) return fail(`Lecture des tâches impossible : ${res.error.message}`);
@@ -1187,9 +1189,15 @@ const taches: Tool = {
       const list = Array.isArray(t.creators) ? (t.creators as unknown[]).map((x) => String(x ?? "").trim()).filter(Boolean) : [];
       return list.length ? list : t.creator ? [String(t.creator)] : [];
     };
+    // Qui voit la tâche (même règle que la base, todos_read) : le créateur cité lit sa propre tâche,
+    // et une tâche de l'agence seulement si elle est cochée « Visible par le créateur ».
+    const vue = (t: Json, names: string[]) => {
+      if (!("visible_createur" in t)) return "";
+      return names.length && (t.source !== "agency" || t.visible_createur === true) ? ` · visible par ${names.map((n) => titleCase(n)).join(", ")}` : " · interne";
+    };
     return ok([`# Tâches ${a.faites === true ? "faites" : "ouvertes"}`, lines(((res.data as unknown as Json[] | null) ?? []).map((t) => {
       const names = namesOf(t);
-      return `- ${t.text}${names.length ? ` (${names.map((n) => titleCase(n)).join(", ")})` : ""}${t.due ? ` · échéance ${t.due}` : ""}${t.priority ? ` · ${t.priority}` : ""} · id ${t.id}${t.descr ? `\n  ${String(t.descr).slice(0, 160)}` : ""}`;
+      return `- ${t.text}${names.length ? ` (${names.map((n) => titleCase(n)).join(", ")})` : ""}${t.due ? ` · échéance ${t.due}` : ""}${t.priority ? ` · ${t.priority}` : ""}${vue(t, names)} · id ${t.id}${t.descr ? `\n  ${String(t.descr).slice(0, 160)}` : ""}`;
     }), "Aucune.")].join("\n"));
   },
 };
@@ -1393,7 +1401,7 @@ const creerTache: Tool = {
       echeance: { type: "string", description: "AAAA-MM-JJ (facultatif)" },
       createur: { type: "string", description: "Créateur concerné (facultatif)" },
       createurs: { type: "array", items: { type: "string" }, maxItems: 20, description: "Plusieurs créateurs concernés (facultatif)" },
-      visible_createur: { type: "boolean", description: "Par défaut true : le créateur voit la tâche dans son espace, titre et détails compris (Marc veut qu'il voie tout le travail fait pour lui). false SEULEMENT si la tâche cite une info qu'il ne doit pas lire : commission ou décision de l'agence à son sujet, un autre créateur, un conflit ou une personne à écarter." },
+      visible_createur: { type: "boolean", description: "Par défaut true : le créateur voit la tâche dans son espace, titre et détails compris (Marc veut qu'il voie tout le travail fait pour lui). false SEULEMENT si la tâche cite une info qu'il ne doit pas lire : commission ou décision de l'agence à son sujet, prix ou négociation avec une marque, un autre créateur, un conflit ou une personne à écarter." },
       priorite: { type: "string", enum: ["haute", "moyenne", "basse"] },
       forcer: { type: "boolean", description: "true seulement si une tâche proche existe mais que c'est vraiment une autre tâche" },
     },
@@ -1515,7 +1523,7 @@ const creerEvenement: Tool = {
 const creerMeet: Tool = {
   name: "creer_meet",
   title: "Rendez-vous avec lien Google Meet",
-  description: "Crée un rendez-vous dans l'agenda de l'agence (Google Agenda, puis le Planning de l'app) avec un lien Google Meet, et renvoie le lien. Par défaut, AUCUNE invitation n'est envoyée : le lien sert à le donner dans une réponse. `inviter` = true : Google envoie l'invitation aux adresses de `invites` (seulement après un « oui » explicite de l'utilisateur).",
+  description: "Crée un rendez-vous dans l'agenda de l'agence (Google Agenda, puis le Planning de l'app) avec un lien Google Meet, et renvoie le lien. Par défaut, AUCUNE invitation n'est envoyée : le lien sert à le donner dans une réponse. `inviter` = true : Google envoie l'invitation aux adresses de `invites` (seulement après un « oui » explicite de l'utilisateur). Pas d'option interne : avec `createur`, le créateur voit le rendez-vous dans son planning (titre, note et lien Meet compris).",
   write: true,
   inputSchema: {
     type: "object",
@@ -1527,7 +1535,7 @@ const creerMeet: Tool = {
       invites: { type: "array", items: { type: "string" }, description: "Adresses mail des invités" },
       inviter: { type: "boolean", description: "true : Google envoie l'invitation (défaut : non)" },
       note: { type: "string", description: "Description du rendez-vous" },
-      createur: { type: "string", description: "Créateur concerné (facultatif)" },
+      createur: { type: "string", description: "Facultatif, seulement si le créateur doit voir ce rendez-vous dans son planning (un call avec lui, par exemple). Jamais pour une visio de l'agence avec une marque ou une agence, ni pour un point interne à son sujet : les créer sans createur (son nom peut aller dans le titre)." },
       forcer: FORCER,
     },
     required: ["titre", "date", "heure"],
@@ -1675,7 +1683,7 @@ const inviterRdv: Tool = {
 const aliasCreateurs: Tool = {
   name: "alias_createurs",
   title: "Alias mail des créatrices",
-  description: "Donne l'alias mail de chaque créatrice (section « Mails » de sa fiche, ex. anamilanovic@ttpcreators.pro) et la boîte où il est réglé en « Envoyer en tant que » dans Gmail. À utiliser AVANT d'écrire au nom d'une créatrice (envoyer_en_tant_que dans creer_brouillon_mail, envoyer_mail, envoyer_brouillon) pour prendre le bon alias et la bonne boîte. `createur` (facultatif) : un nom pour filtrer.",
+  description: "Donne l'alias mail de chaque créateur (section « Mails » de sa fiche, ex. prenomnom@ttpcreators.pro) et la boîte où il est réglé en « Envoyer en tant que » dans Gmail. À utiliser AVANT d'écrire au nom d'un créateur (envoyer_en_tant_que dans creer_brouillon_mail, envoyer_mail, envoyer_brouillon) pour prendre le bon alias et la bonne boîte. `createur` (facultatif) : un nom pour filtrer.",
   inputSchema: { type: "object", properties: { createur: { type: "string", description: "Nom (ou début du nom) de la créatrice" } }, additionalProperties: false },
   run: async (sb, _c, a) => {
     const who = str(a.createur, 80).toLowerCase();
@@ -1816,7 +1824,7 @@ const statsCollab: Tool = {
 const brouillonMail: Tool = {
   name: "creer_brouillon_mail",
   title: "Préparer un brouillon de mail",
-  description: "Prépare un BROUILLON dans Gmail (partnerships@, talent@, ou la boîte connectée d'un créateur, voir boites_createurs : le brouillon part alors de SA boîte, avec SA signature Gmail), en nouveau mail ou en réponse dans un fil existant, avec la signature de l'agence (Réglages Mails). Avec `envoyer_en_tant_que` (alias d'une créatrice, via alias_createurs), le brouillon part DE cet alias, avec son nom affiché et la signature Gmail de l'alias. Rien n'est envoyé : Marc relit et envoie depuis Gmail ou l'app. Un seul brouillon par destinataire et par objet : rappeler l'outil avec le même destinataire et le même objet MET À JOUR le brouillon existant (jamais de doublon).",
+  description: "Prépare un BROUILLON dans Gmail (partnerships@, talent@, ou la boîte connectée d'un créateur, voir boites_createurs : le brouillon part alors de SA boîte, avec SA signature Gmail), en nouveau mail ou en réponse dans un fil existant, avec la signature de l'agence (Réglages Mails). Avec `envoyer_en_tant_que` (alias d'un créateur, via alias_createurs), le brouillon part DE cet alias, avec son nom affiché et la signature Gmail de l'alias. Rien n'est envoyé : l'utilisateur relit, puis envoyer_brouillon (programmer_envoi pour la prospection), Gmail ou l'app. Un seul brouillon par destinataire et par objet : rappeler l'outil avec le même destinataire et le même objet MET À JOUR le brouillon existant (jamais de doublon).",
   write: true,
   inputSchema: {
     type: "object",
@@ -1834,7 +1842,7 @@ const brouillonMail: Tool = {
         description: "Facultatif : fichiers à joindre (PDF surtout), 20 Mo en tout. Chacun : { document } (le chemin ou le nom d'un fichier de la page Documents, ou un fichier déposé par Alfred avec « node telegram.mjs deposer »), ou { fil, nom, boite } (une pièce jointe d'un mail reçu, retrouvée par son nom dans ce fil ; boite par défaut : celle du brouillon), ou { url } (un PDF public de ttpcreators.pro, comme un media kit).",
         items: { type: "object", properties: { document: { type: "string" }, fil: { type: "string" }, nom: { type: "string" }, boite: { type: "string" }, url: { type: "string" } }, additionalProperties: false },
       },
-      envoyer_en_tant_que: { type: "string", description: "Facultatif : alias mail d'une créatrice (ex. anamilanovic@ttpcreators.pro, via alias_createurs ou fiche_createur) pour écrire EN SON NOM. Accepté seulement s'il est réglé dans « Envoyer en tant que » de la boîte dans Gmail ; les réponses de la marque reviennent sur l'alias." },
+      envoyer_en_tant_que: { type: "string", description: "Facultatif : alias mail d'un créateur (ex. prenomnom@ttpcreators.pro, via alias_createurs ou fiche_createur) pour écrire EN SON NOM. Accepté seulement s'il est réglé dans « Envoyer en tant que » de la boîte dans Gmail ; les réponses de la marque reviennent sur l'alias." },
       createur: { type: "string", description: "Le créateur proposé dans ce mail de prospection (nom du roster). Son media kit est comparé aux chiffres réels : un kit faux bloque le brouillon. Reconnu aussi par son @, son adresse en cci, son alias ou son kit joint." },
       forcer: { type: "boolean", description: "true seulement si Marc l'a demandé pour CE mail : un autre membre de l'équipe (Gianni, Marc) a déjà préparé ou envoyé un mail à ce destinataire, ou une réponse dans ce fil, et l'outil a refusé pour éviter un doublon." },
       chiffres_kit: {
@@ -1907,7 +1915,7 @@ const brouillonMail: Tool = {
         }
         if (sig.trim()) html = mailHtml(str(a.message, 20000), sig);
       }
-      // Garde-fou anti doublon (cas Prison Island, 17/11/2026) : derniers échanges avec ce destinataire
+      // Garde-fou anti doublon (cas du 17/11/2026) : derniers échanges avec ce destinataire
       // dans TOUTES les boîtes, celles des créateurs comprises, cherchés AVANT le brouillon.
       const cibles = ciblesEchange(to);
       const dejaVu = cibles.length
@@ -2230,9 +2238,11 @@ async function findAgent(sb: SupabaseClient, key: string): Promise<AgentRow | nu
   const db = sb.schema("agent");
   const k = key.trim();
   if (!k) return null;
+  // Le slug s'écrit avec des tirets : « Talent manager » (ancien nom) retrouve encore Alfred (talent-manager).
+  const slug = k.toLowerCase().replace(/\s+/g, "-");
   const { data } = /^[0-9a-f-]{36}$/i.test(k)
     ? await db.from("agents").select("*").eq("id", k).limit(1)
-    : await db.from("agents").select("*").or(`slug.eq.${JSON.stringify(k.toLowerCase())},nom.ilike.${JSON.stringify(like(k))}`).order("sort_order").limit(1);
+    : await db.from("agents").select("*").or(`slug.eq.${JSON.stringify(slug)},nom.ilike.${JSON.stringify(like(k))}`).order("sort_order").limit(1);
   return ((data as AgentRow[] | null) ?? [])[0] ?? null;
 }
 const agentJournal = (sb: SupabaseClient, agentId: string | null, action: string, detail: string) =>
@@ -2306,6 +2316,8 @@ const journalAgents: Tool = {
   inputSchema: { type: "object", properties: { jours: { type: "number", description: "Nombre de jours (défaut 2, 30 au plus)" }, agent: { type: "string", description: "Un seul agent (facultatif)" } }, additionalProperties: false },
   run: async (sb, ctx, a) => {
     const jours = Math.min(30, Math.max(1, Math.round(Number(a.jours ?? 2)) || 2));
+    // Un nom d'agent inconnu ne doit pas répondre « Rien de noté ».
+    if (str(a.agent, 80) && !(await findAgent(sb, str(a.agent, 80)))) return fail(`Agent inconnu « ${str(a.agent, 80)} » (voir mes_agents). Sans agent, journal_agents montre aussi ce que l'équipe a fait par son propre Claude.`);
     const rows = await agentJournalSince(sb, jours, str(a.agent, 80) || null);
     const out = [`# Journal des agents · ${jours} jour(s) · ${rows.length} entrée(s)`, lines(rows.map((e) => `- ${e.quand} · ${e.agent} · ${e.action}${e.detail ? `\n  ${e.detail.replace(/\n/g, "\n  ")}` : ""}`), "Rien de noté.")];
     // L'équipe par son propre Claude (mcp_log), sauf celui qui demande : Alfred (compte de Marc) voit Gianni.
@@ -2340,8 +2352,8 @@ const mesAgents: Tool = {
 const lireAgent: Tool = {
   name: "lire_agent",
   title: "Consignes d'un agent",
-  description: "À appeler EN PREMIER quand tu joues un agent de TTP (ex. « Talent manager ») : renvoie ses consignes à jour (rôle, ton, règles), ses routines et les leçons apprises (corrections de Marc). Applique-les pendant toute la conversation.",
-  inputSchema: { type: "object", properties: { agent: { type: "string", description: "Nom de l'agent (ex. Talent manager)" } }, required: ["agent"], additionalProperties: false },
+  description: "À appeler EN PREMIER quand tu joues un agent de TTP (ex. « Alfred ») : renvoie ses consignes à jour (rôle, ton, règles), ses routines et les leçons apprises (corrections de Marc). Applique-les pendant toute la conversation. Seulement pour jouer l'agent (l'appel est noté dans son journal) : pour savoir ce qu'il a fait, journal_agents.",
+  inputSchema: { type: "object", properties: { agent: { type: "string", description: "Nom de l'agent (ex. Alfred)" } }, required: ["agent"], additionalProperties: false },
   founder: true,
   run: async (sb, _c, a) => {
     const ag = await findAgent(sb, str(a.agent, 80));
@@ -2371,13 +2383,13 @@ const ACTION_TYPES = ["whatsapp", "instagram", "linkedin", "brouillon_mail", "al
 const proposerAction: Tool = {
   name: "proposer_action",
   title: "Proposer une action à valider",
-  description: "Dépose une proposition dans la file « À valider » de l'app (section Agents) : message WhatsApp, DM Instagram, message LinkedIn, alerte, ou mail (préférer creer_brouillon_mail pour un mail). Marc la copie, l'ouvre et l'envoie lui-même, ou l'écarte. Type « avancer_collab » : proposer de passer une collab à une étape (donner « collab », l'id de l'outil collabs, et « etape », 1 à 11, plus loin que l'étape actuelle ; « contenu » = la preuve, par exemple la phrase du mail de la marque) ; quand Marc clique Valider, l'app fait avancer la collab elle même, rien d'autre ne part. Une même collab à la même étape n'est proposée qu'une fois. `outil` (connexion d'un agent dont le serveur exige une validation : le message de refus donne l'appel exact) : { nom, arguments } d'un outil à valider ; la proposition montre à Marc cet appel exact, et après sa validation dans la page Agents l'agent rappelle l'outil avec exactement les mêmes arguments, une seule fois.",
+  description: "Dépose une proposition dans la file « À valider » de l'app (section Agents) : message WhatsApp, DM Instagram, message LinkedIn, alerte, ou mail (préférer creer_brouillon_mail pour un mail). Marc la valide ou l'écarte (Gianni valide un mail de prospection, contexte « Prospection · ») ; un message WhatsApp, Instagram ou LinkedIn validé se copie et s'envoie à la main. Type « avancer_collab » : proposer de passer une collab à une étape (donner « collab », l'id de l'outil collabs, et « etape », 1 à 11, plus loin que l'étape actuelle ; « contenu » = la preuve, par exemple la phrase du mail de la marque) ; quand elle est validée dans l'app, l'app fait avancer la collab elle même, rien d'autre ne part. Une même collab à la même étape n'est proposée qu'une fois. `outil` (connexion d'un agent dont le serveur exige une validation : le message de refus donne l'appel exact) : { nom, arguments } d'un outil à valider ; la proposition montre cet appel exact, et après sa validation dans la page Agents l'agent rappelle l'outil avec exactement les mêmes arguments, une seule fois.",
   write: true,
   founder: true,
   inputSchema: {
     type: "object",
     properties: {
-      agent: { type: "string", description: "Nom de l'agent qui propose (ex. Talent manager)" },
+      agent: { type: "string", description: "Nom de l'agent qui propose (ex. Alfred)" },
       type: { type: "string", enum: ACTION_TYPES },
       cible: { type: "string", description: "À qui (marque, créateur, @, numéro) ; pour avancer_collab, rempli d'office (Marque × Créateur)" },
       contexte: { type: "string", description: "Pourquoi, en une ou deux phrases" },
@@ -2451,14 +2463,14 @@ const proposerAction: Tool = {
     }
     if (error) return fail(`Proposition non déposée : ${error.message}`);
     await agentJournal(sb, ag?.id ?? null, "proposition", `${type} · ${cible ?? ""}`.slice(0, 160));
-    return ok(`Déposé dans « À valider » (${outil ? `appel ${outil.nom}` : type === "alerte" && lien?.includes("avancer=1") ? "avancer_collab" : type}${cible ? ` pour ${cible.slice(0, 120)}` : ""}) [proposition ${(data as Json)?.id}]. Marc le verra dans l'app, section Agents, et dans la liste de 17 h.${outil ? " Après sa validation, rappelle l'outil avec exactement les mêmes arguments." : ""}`);
+    return ok(`Déposé dans « À valider » (${outil ? `appel ${outil.nom}` : type === "alerte" && lien?.includes("avancer=1") ? "avancer_collab" : type}${cible ? ` pour ${cible.slice(0, 120)}` : ""}) [proposition ${(data as Json)?.id}]. Marc le verra dans l'app, section Agents, et dans la liste de 17 h.${outil ? " Après sa validation, rappelle l'outil avec exactement les mêmes arguments." : ""}${ag ? "" : ` Agent « ${str(a.agent, 80)} » inconnu (voir mes_agents) : proposition rangée sans agent.`}`);
   },
 };
 
 const noterLecon: Tool = {
   name: "noter_lecon",
   title: "Retenir une leçon",
-  description: "Enregistre une correction ou une préférence de Marc pour qu'un agent (ou tous) ne refasse pas l'erreur. Ex. « Jamais de reel de Léa sous 800 € ».",
+  description: "Enregistre une correction ou une préférence de Marc pour qu'un agent (ou tous) ne refasse pas l'erreur. Ex. « Toujours vouvoyer une marque dans un premier mail ».",
   write: true,
   founder: true,
   inputSchema: {
@@ -2473,7 +2485,7 @@ const noterLecon: Tool = {
     const { error } = await sb.schema("agent").from("lecons").insert({ module: str(a.sujet, 60) || null, lecon: str(a.lecon, 1000), agent_id: ag?.id ?? null });
     if (error) return fail(`Leçon non enregistrée : ${error.message}`);
     await agentJournal(sb, ag?.id ?? null, "lecon", str(a.lecon, 120));
-    return ok(`Leçon retenue${ag ? ` pour ${ag.nom}` : " pour tous les agents"} : « ${str(a.lecon, 200)} ».`);
+    return ok(`Leçon retenue${ag ? ` pour ${ag.nom}` : " pour tous les agents"} : « ${str(a.lecon, 200)} ».${!ag && key && key.toLowerCase() !== "tous" ? ` (Agent « ${key} » inconnu, voir mes_agents.)` : ""}`);
   },
 };
 

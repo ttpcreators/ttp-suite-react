@@ -41,11 +41,11 @@ const base: TodayInput = {
 const inv = (id: string, over: Partial<{ amount: string; date: string; status: string; creator: string | null; party: string }> = {}) => ({
   id,
   ref: `2026-${id}`,
-  party: over.party ?? "JNPR",
-  amount: over.amount ?? "600",
+  party: over.party ?? "Nova",
+  amount: over.amount ?? "450",
   date: over.date ?? "2026-09-17",
   status: over.status ?? "attente",
-  creator: over.creator === undefined ? "LÉNA PASQUALE" : over.creator,
+  creator: over.creator === undefined ? "LÉNA MOREL" : over.creator,
 });
 
 describe("factures en retard", () => {
@@ -59,21 +59,21 @@ describe("factures en retard", () => {
   });
 
   it("ligne argent : titre marque × créateur, montant et jours de retard", () => {
-    const { items } = buildToday({ ...base, invoices: [inv("186")] });
+    const { items } = buildToday({ ...base, invoices: [inv("101")] });
     expect(items).toHaveLength(1);
     const it0 = items[0];
     expect(it0.section).toBe("argent");
-    expect(it0.title).toBe("JNPR × Léna Pasquale");
-    expect(it0.sub).toBe("Facture #2026-186 · relance prête");
+    expect(it0.title).toBe("Nova × Léna Morel");
+    expect(it0.sub).toBe("Facture #2026-101 · relance prête");
     expect(it0.metaSub).toBe("33 j");
     expect(it0.tone).toBe("late");
     expect(it0.verb).toBe("Relancer");
   });
 
   it("relancée aujourd'hui : sort de la liste et compte comme traitée", () => {
-    const r = buildToday({ ...base, invoices: [inv("186")], reminders: { "186": { last: "2026-10-20", count: 1 } } });
+    const r = buildToday({ ...base, invoices: [inv("101")], reminders: { "101": { last: "2026-10-20", count: 1 } } });
     expect(r.items).toHaveLength(0);
-    expect(r.done).toEqual([{ id: "inv:186", label: "Relance JNPR × Léna Pasquale", kind: "relance" }]);
+    expect(r.done).toEqual([{ id: "inv:101", label: "Relance Nova × Léna Morel", kind: "relance" }]);
   });
 
   it("sans accès Finance : aucune ligne argent", () => {
@@ -83,7 +83,7 @@ describe("factures en retard", () => {
   it("titre sans créateur", () => {
     expect(invoiceTitle({ party: "Sanytol", creator: null })).toBe("Sanytol");
     expect(invoiceTitle({ party: "Nike x Sarah", creator: "sarah benali" })).toBe("Nike x Sarah");
-    expect(invoiceTitle({ party: "JNPR", creator: "léna pasquale" })).toBe("JNPR × Léna Pasquale");
+    expect(invoiceTitle({ party: "Nova", creator: "léna morel" })).toBe("Nova × Léna Morel");
   });
 });
 
@@ -92,13 +92,13 @@ describe("to-do, agenda, briefs, mails", () => {
     const { items } = buildToday({
       ...base,
       todos: [
-        { id: "a", text: "Monte une vidéo", due: "14/10/2026", done: false, priority: "haute", creator: "ANA MILANOVIC", subtasks: [{ done: false }, { done: false }] },
+        { id: "a", text: "Monte une vidéo", due: "14/10/2026", done: false, priority: "haute", creator: "ANA VIDAL", subtasks: [{ done: false }, { done: false }] },
         { id: "b", text: "Plus tard", due: "2026-10-30", done: false, priority: null, creator: null },
         { id: "c", text: "Sans date", due: "—", done: false, priority: null, creator: null },
       ],
     });
     expect(items.map((i) => i.id)).toEqual(["todo:a"]);
-    expect(items[0].sub).toBe("Ana Milanovic · priorité haute");
+    expect(items[0].sub).toBe("Ana Vidal · priorité haute");
     expect(items[0].meta).toBe("0 / 2");
     expect(items[0].metaSub).toBe("6 j de retard");
     expect(items[0].metaTone).toBe("wait");
@@ -116,14 +116,14 @@ describe("to-do, agenda, briefs, mails", () => {
         { id: "1", date: "2026-10-20", day: null, time: "14:30", title: "Call avec Pauline", type: "call", who: null },
         { id: "2", date: "2026-10-20", day: null, time: "07:00", title: "Petit déj", type: "reunion", who: null },
         { id: "3", date: "2026-10-20", day: null, time: "10h", title: "Shoot", type: "shoot", who: "léna" },
-        { id: "4", date: "2026-10-21", day: null, time: null, title: "Event Zeina", type: "event", who: "LÉNA PASQUALE" },
+        { id: "4", date: "2026-10-21", day: null, time: null, title: "Event Kora", type: "event", who: "LÉNA MOREL" },
       ],
     });
     expect(items.map((i) => i.id)).toEqual(["ev:3", "ev:1", "ev:4"]);
     expect(items[1].meta).toBe("14:30");
     expect(items[1].metaSub).toBe("dans 5 h");
     expect(items[2].section).toBe("tomorrow");
-    expect(items[2].sub).toBe("Léna Pasquale · Event");
+    expect(items[2].sub).toBe("Léna Morel · Event");
   });
 
   it("briefs : échéance aujourd'hui ou demain, hors terminés", () => {
@@ -170,7 +170,7 @@ describe("estimation, filtres, sections", () => {
   it("sections non vides, total € à droite de l'argent, date à droite de demain", () => {
     const s = sectionsOf(r.items, NOW);
     expect(s.map((x) => x.id)).toEqual(["argent", "today", "tomorrow"]);
-    expect(s[0].right.replace(/\s/g, " ")).toBe("700 €");
+    expect(s[0].right.replace(/\s/g, " ")).toBe("550 €");
     expect(s[2].right).toMatch(/^21 oct\.?( 2026)?$/);
     expect(sectionsOf([], NOW)).toEqual([]);
   });
@@ -213,21 +213,21 @@ describe("heures, commission, email", () => {
   });
 
   it("email de relance : ton qui monte, sans tiret long", () => {
-    const first = relanceEmail({ ref: "2026-186", party: "JNPR", amount: "600" }, 0);
+    const first = relanceEmail({ ref: "2026-101", party: "Nova", amount: "450" }, 0);
     expect(first.subject).not.toMatch(/[—–]/);
     expect(first.body).toContain("Je me permets de revenir vers vous");
-    expect(relanceEmail({ ref: "2026-186", party: "JNPR", amount: "600" }, 2).body).toContain("Malgré nos précédentes relances");
+    expect(relanceEmail({ ref: "2026-101", party: "Nova", amount: "450" }, 2).body).toContain("Malgré nos précédentes relances");
   });
 });
 
 describe("« C'est fait » (Aujourd'hui)", () => {
   it("marque pour la journée, oublie les jours passés, se retire", async () => {
     const { markHandled, unmarkHandled, isHandled, handledToday, parseHandled } = await import("./aujourdhui");
-    let m = markHandled({ old: { day: "2026-10-20", label: "Vieux" } }, "ev1", "Event Zeina", "2026-10-21");
+    let m = markHandled({ old: { day: "2026-10-20", label: "Vieux" } }, "ev1", "Event Kora", "2026-10-21");
     expect(m.old).toBeUndefined();
     expect(isHandled(m, "ev1", "2026-10-21")).toBe(true);
     expect(isHandled(m, "ev1", "2026-10-22")).toBe(false);
-    expect(handledToday(m, "2026-10-21")).toEqual([{ id: "ev1", label: "Event Zeina", kind: "fait" }]);
+    expect(handledToday(m, "2026-10-21")).toEqual([{ id: "ev1", label: "Event Kora", kind: "fait" }]);
     m = unmarkHandled(m, "ev1");
     expect(handledToday(m, "2026-10-21")).toEqual([]);
     expect(parseHandled("pas du json")).toEqual({});

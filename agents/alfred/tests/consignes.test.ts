@@ -47,7 +47,7 @@ describe("Alfred : le tronc et les fiches", () => {
     const titres = (t: string) => [...t.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
     expect(titres(q).length).toBeGreaterThanOrEqual(8);
     expect(titres(r)).toEqual(titres(q));
-    for (const t of [q, r]) expect(t).not.toMatch(/[—–]|Prison Island|Fitaya|Léna|Pasquale/);
+    for (const t of [q, r]) expect(t).not.toMatch(/[—–]|Prison Island|Fitaya|Léna/);
   });
 });
 

@@ -23,21 +23,21 @@ beforeEach(() => {
 
 describe("fileContractDoc", () => {
   it("range un nouveau contrat dans Documents, au nom de la créatrice", async () => {
-    expect(await fileContractDoc({ creator: "Justine Gentet", brand: "Vaillant Parfums", docPath: "contrats/v.pdf" })).toBe(true);
-    expect(db.inserted).toEqual([{ creator: "Justine Gentet", name: "Contrat · Vaillant Parfums · Justine Gentet", type: "contract", size: null, path: "contrats/v.pdf", sort_order: 0 }]);
+    expect(await fileContractDoc({ creator: "Justine Faure", brand: "Marque Exemple", docPath: "contrats/v.pdf" })).toBe(true);
+    expect(db.inserted).toEqual([{ creator: "Justine Faure", name: "Contrat · Marque Exemple · Justine Faure", type: "contract", size: null, path: "contrats/v.pdf", sort_order: 0 }]);
   });
 
   it("ne touche pas un fichier déjà rangé comme brief", async () => {
-    db.found = [{ id: "d1", creator: "LÉNA PASQUALE", name: "Brief · Nutripure", type: "brief" }];
-    expect(await fileContractDoc({ creator: "LÉNA PASQUALE", brand: "Nutripure", docPath: "briefs/n.pdf" })).toBe(true);
+    db.found = [{ id: "d1", creator: "LÉNA MOREL", name: "Brief · Solvi", type: "brief" }];
+    expect(await fileContractDoc({ creator: "LÉNA MOREL", brand: "Solvi", docPath: "briefs/n.pdf" })).toBe(true);
     expect(db.inserted).toEqual([]);
     expect(db.updated).toEqual([]);
   });
 
   it("corrige la créatrice d'un contrat déjà rangé", async () => {
-    db.found = [{ id: "d2", creator: null, name: "Contrat · Vaillant Parfums", type: "contract" }];
-    await fileContractDoc({ creator: "Justine Gentet", brand: "Vaillant Parfums", docPath: "contrats/v.pdf" });
-    expect(db.updated).toEqual([{ creator: "Justine Gentet", name: contractDocName("Vaillant Parfums", "Justine Gentet") }]);
+    db.found = [{ id: "d2", creator: null, name: "Contrat · Marque Exemple", type: "contract" }];
+    await fileContractDoc({ creator: "Justine Faure", brand: "Marque Exemple", docPath: "contrats/v.pdf" });
+    expect(db.updated).toEqual([{ creator: "Justine Faure", name: contractDocName("Marque Exemple", "Justine Faure") }]);
   });
 
   it("ne fait rien sans fichier", async () => {

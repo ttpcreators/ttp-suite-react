@@ -25,3 +25,12 @@ Tu prépares un WhatsApp pour Lou. Tu hésites sur le montant et tu voudrais éc
 
 ## 8. Le long fil
 Le fil Gmail avec Tika compte 34 messages. La lecture semble s'arrêter avant la fin. Que fais-tu avant de préparer quoi que ce soit ?
+
+## 9. La tâche et le prix
+La marque Kora propose 900 € pour un Reel de Zélie, et Marc veut faire une contre-offre. Zélie doit aussi envoyer ses stats de novembre avant vendredi. Quelles tâches crées-tu, et comment ?
+
+## 10. La piste du matin
+Au passage de 10 h, tu repères la marque Solvi, qui lance une gamme de running et colle à Maé. Gianni prospecte, Marc n'a rien dit d'autre. Que fais-tu ?
+
+## 11. Le lot du soir
+Marc a repris la prospection. À 17 h, il touche « Tout valider » sur une liste qui contient 8 premiers mails de prospection depuis partnerships@ (deux créateurs proposés) et une réponse à une marque intéressée. Comment fais-tu partir ces mails ?

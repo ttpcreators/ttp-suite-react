@@ -28,9 +28,9 @@ describe("Alfred : discussions WhatsApp", () => {
     expect(contientMots("ok", ["de", "a"])).toBe(false);
   });
   it("ne cherche qu'avec des mots de 3 lettres ou plus", () => {
-    expect(correspond("Léna PSL", ["lena"])).toBe(true);
-    expect(correspond("Léna PSL", ["le"])).toBe(false);
-    expect(correspond("Maman", ["lena", "pasquale"])).toBe(false);
+    expect(correspond("Léna Morel", ["lena"])).toBe(true);
+    expect(correspond("Léna Morel", ["le"])).toBe(false);
+    expect(correspond("Maman", ["lena", "morel"])).toBe(false);
   });
 
   it("montre les médias et cache les évènements système", () => {

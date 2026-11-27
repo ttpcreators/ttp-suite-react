@@ -12,7 +12,7 @@ export type PickCreator = { name: string; photo_url?: string | null };
 
 /**
  * Choix d'UN créateur : un champ de recherche puis le roster avec les photos, noms lisibles
- * (« Candice Maissa »), « Aucun » en dernier. La valeur reste le nom tel qu'il est enregistré.
+ * (« Romane Lefort »), « Aucun » en dernier. La valeur reste le nom tel qu'il est enregistré.
  * `extraNames` : noms déjà utilisés qui ne sont plus dans le roster (gardés pour ne rien perdre).
  * `blocked` : créateurs en exclusivité avec un concurrent de la marque (nom en minuscules →
  * « Exclu Nike · 12 déc. ») : jamais suggérés en premier, signalés, et prévenus si on les choisit.

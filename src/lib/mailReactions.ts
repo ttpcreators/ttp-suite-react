@@ -26,7 +26,7 @@ const ADDR_RE = /[^\s<>"',;:()]+@[^\s<>"',;:()]+\.[^\s<>"',;:()]+/g;
 const addrs = (v?: string | null) => (v?.match(ADDR_RE) ?? []).map((a) => a.toLowerCase());
 const firstId = (v?: string | null) => (v ?? "").match(/<[^<>\s]+>/)?.[0] ?? (v ?? "").trim();
 
-/** « Marc Maher <marc@…> » → « Marc » ; une adresse seule → la partie avant @. */
+/** « Julie Martin <julie@…> » → « Julie » ; une adresse seule → la partie avant @. */
 export function reactorName(from: string): string {
   const name = from.replace(/<[^>]*>/g, "").replace(/"/g, "").trim();
   const base = name && !name.includes("@") ? name : (addrs(from)[0] ?? "").split("@")[0];

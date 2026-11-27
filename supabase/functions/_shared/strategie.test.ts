@@ -40,6 +40,13 @@ describe("strategieTexte", () => {
     expect(t).toMatch(/Saint-Valentin/);
     expect(t).toContain(REGLES_OFFRE);
   });
+  it("qui valide : Gianni pour la prospection, Marc pour le reste ; Alfred en soutien de Gianni", () => {
+    expect(t).toMatch(/la prospection \([^)]*\) sur le oui de Gianni/);
+    expect(t).toMatch(/tout le reste \([^)]*\) sur le oui de Marc/);
+    expect(t).not.toMatch(/Rien ne part sans le oui de Marc/);
+    expect(t).toMatch(/Alfred ne prépare plus de mails de prospection/);
+    expect(t).not.toMatch(/Séquence multicanal|marques neuves par jour/);
+  });
   it("reste lisible par un agent (taille raisonnable)", () => {
     expect(t.length).toBeLessThan(16000);
     expect(t).not.toMatch(/undefined|NaN/);

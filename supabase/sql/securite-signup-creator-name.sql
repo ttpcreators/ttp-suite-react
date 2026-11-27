@@ -4,9 +4,9 @@
 -- est activée, et le trigger handle_new_user recopiait le `creator_name` fourni
 -- dans les métadonnées du signup — une valeur 100 % contrôlée par le client.
 -- Comme les noms des créatrices sont publics (vue public_roster / roster du site),
--- n'IMPORTE qui pouvait s'inscrire en se déclarant « CANDICE MAISSA », obtenir
--- my_creator() = « CANDICE MAISSA », et donc — via la policy RLS
--- `using (is_agency() or name = my_creator())` — accéder à SA fiche et à toutes
+-- n'IMPORTE qui pouvait s'inscrire en se déclarant « ROMANE LEFORT » (exemple fictif),
+-- obtenir my_creator() = « ROMANE LEFORT », et donc, via la policy RLS
+-- `using (is_agency() or name = my_creator())`, accéder à SA fiche et à toutes
 -- ses données cloisonnées (coordonnées, SIREN, CA, factures, briefs, messages,
 -- media kit…). Usurpation d'identité + fuite de données privées.
 --

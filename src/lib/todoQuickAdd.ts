@@ -1,6 +1,6 @@
 /*
  * To-do « ajout rapide » : lecture légère d'une phrase tapée dans la barre du bas
- * (règles pures, testées). Ex. « Relancer Nutripure demain @Léna !haute » :
+ * (règles pures, testées). Ex. « Relancer Solvi demain @Léna !haute » :
  *   @Prénom ou @Prénom Nom  → créateur (s'il existe, sans tenir compte des accents) ;
  *                             plusieurs « @Léna @Justine » = tâche partagée
  *   !haute / !moyenne / !basse → priorité

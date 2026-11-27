@@ -3,8 +3,9 @@
 // ----------------------------------------------------------------------------
 //   1. séquence sur chaque fiche contact + outil `contacts_a_relancer` ;
 //      l'étape avance toute seule quand un mail part (envoyer_mail, envoyer_brouillon,
-//      envoyer_brouillons_valides) ; les autres canaux : `sequence_contact` ;
-//   3. `envoyer_brouillons_valides` (dans admin.ts) : la liste validée par Marc, en une fois ;
+//      envoyer_brouillons_valides, file d'envoi) ; les autres canaux : `sequence_contact` ;
+//   3. une liste validée part par `programmer_envoi` (envois.ts : file étalée, plafond, 30 jours
+//      par société), jamais par `envoyer_brouillons_valides` pour un lot de prospection ;
 //   7. domaine vérifié avant d'envoyer (MX), adresse marquée « en erreur » sur la fiche.
 // La détection des réponses et des rebonds est dans gmail-poll (sequences.ts).
 // Règles : _shared/sequence.ts et _shared/mxCheck.ts. Colonnes : SQL 2026-11-20-sequences-contacts.

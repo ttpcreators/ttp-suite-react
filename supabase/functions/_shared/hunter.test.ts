@@ -51,6 +51,12 @@ describe("Hunter", () => {
     expect(erreurHunter(400, { errors: [{ details: "You are limited to 10 email addresses" }] })).toContain("Demande refusée");
     expect(limiteDeLOffre(400, { errors: [{ details: "You are limited to 10 email addresses" }] })).toBe(true);
     expect(limiteDeLOffre(401, {})).toBe(false);
-    expect(CLE_MANQUANTE).toContain("Clé Hunter manquante : Marc doit créer un compte Hunter et enregistrer HUNTER_API_KEY");
+  });
+
+  it("mis de côté le 24/11 : le repli renvoie vers le site de la marque, jamais vers un compte Hunter", () => {
+    expect(CLE_MANQUANTE).toContain("Pas trouvé par FullEnrich");
+    expect(CLE_MANQUANTE).toContain("Hunter est mis de côté");
+    expect(CLE_MANQUANTE).toContain("lire_site_marque");
+    expect(CLE_MANQUANTE).not.toMatch(/créer un compte|HUNTER_API_KEY|adresse générale/);
   });
 });

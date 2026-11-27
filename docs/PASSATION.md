@@ -1,7 +1,10 @@
-# 🤝 PASSATION — Projet TTP Creators
+# 🤝 PASSATION : projet TTP Creators
 
-> **Octobre 2026** : ce socle date de juillet. L'état courant est dans [`../CLAUDE.md`](../CLAUDE.md)
-> et dans le tableau d'état [`../supabase/sql/README.md`](../supabase/sql/README.md).
+> ⚠️ **Périmé depuis le 24/11/2026 pour les accès, le déploiement et le travail à deux :
+> suivre [`../CLAUDE.md`](../CLAUDE.md)** (« Travailler à deux », « Règle prod », « Déploiement »).
+> Ce socle date de juillet 2026 ; les sections 2, 4, 5, 8, 10 et 11 ont été remises à jour le
+> 27/11/2026. L'état courant est dans [`../CLAUDE.md`](../CLAUDE.md) et dans le tableau d'état
+> [`../supabase/sql/README.md`](../supabase/sql/README.md).
 
 > **But de ce document** : permettre à n'importe qui (toi sur un autre compte, un futur
 > dev, ou une nouvelle session Claude) de **reprendre le projet entièrement**, sans rien
@@ -16,7 +19,8 @@
 > créateur enrichi, PDF refondus…). Tout est décrit — avec **les décisions de sécurité à
 > ne pas défaire** et les **points restés ouverts** — dans :
 > **[`docs/archives/HANDOFF-2026-07-18.md`](archives/HANDOFF-2026-07-18.md)**.
-> Le présent fichier reste valable pour le socle ; le handoff fait foi pour l'état courant.
+> Le présent fichier reste valable pour le produit, la base et les pièges ; pour les accès et le
+> déploiement, `CLAUDE.md` fait foi.
 
 ---
 
@@ -28,7 +32,7 @@ qui partagent **une seule base de données** :
 | Produit | Rôle | En ligne | Dossier local | Repo GitHub |
 |---|---|---|---|---|
 | **L'app** (TTP Suite) | Outil interne : côté **agence** (roster, factures, contrats, planning, contacts, stats, mails, media kits) + **espace créateur** | https://app.ttpcreators.pro | `ttp-suite-react/` | `ttpcreators/ttp-suite-react` |
-| **Le site vitrine** | Site public de l'agence + **media kits** publics des créatrices | https://ttpcreators.pro | `websitettpcreators/` | `ttpcreators/websitettpcreators` |
+| **Le site vitrine** | Site public de l'agence + **media kits** publics des créateurs | https://ttpcreators.pro | `websitettpcreators/` | `ttpcreators/websitettpcreators` |
 
 Base de données commune = **Supabase**, projet `zizvggziggswhrbuyhuo`.
 
@@ -39,15 +43,19 @@ GitHub Pages, domaine déjà payé). Ne rien introduire qui coûte.
 
 ## 2. Ce qu'il faut pour reprendre la main (accès)
 
-1. **GitHub** : être membre de l'org `ttpcreators` (les 2 repos y sont). Se connecter avec
-   `gh auth login` sur la machine.
+1. **GitHub** : les 2 repos appartiennent au compte GitHub `ttpcreators` (un compte, pas une
+   organisation). Chacun travaille avec **son propre compte** : Marc avec `ttpcreators` (alias
+   SSH `github-ttp` du dépôt), Gianni avec le sien, qui a le droit d'écriture. Jamais
+   `gh auth login` ni `gh auth switch` pour pousser, et le compte `ttpcreators` n'est jamais
+   prêté. `main` est protégée : tout passe par une PR (voir `CLAUDE.md`, « Travailler à deux »).
 2. **Supabase** : accès au compte qui possède le projet `zizvggziggswhrbuyhuo` (dashboard).
-   Le **CLI Supabase** doit être connecté (`supabase login`) pour déployer les fonctions.
+   Les fonctions se déploient par « Déploiement des fonctions » (GitHub Actions) ; le **CLI
+   Supabase** (`supabase login`) ne sert qu'à Marc, pour déployer à la main.
 3. **Domaine** : `ttpcreators.pro` est chez **OVH** (DNS). ⚠️ Ne JAMAIS toucher aux
    enregistrements **MX / SPF / DMARC** (emails Google `partnerships@…`).
-4. **Machine** : le plus simple = **le Mac de Marc** (`marcmaher`), où `gh` + `supabase`
-   sont déjà connectés et où vit la mémoire locale de Claude. Sur une autre machine, il faut
-   re-faire `gh auth login` + `supabase login` (2 min) ; tout le reste est dans Git.
+4. **Machine** : sur le Mac de Marc, `gh` et `supabase` sont déjà connectés, et le dépôt pousse
+   par l'alias SSH du compte `ttpcreators`. Sur une autre machine : son propre compte GitHub
+   (clé SSH), et `supabase login` seulement pour déployer à la main ; tout le reste est dans Git.
 
 L'app **ne dépend d'aucun compte Claude** : elle tourne seule sur Supabase + GitHub Pages.
 Claude est juste l'assistant qui aide à la faire évoluer.
@@ -64,19 +72,22 @@ Claude est juste l'assistant qui aide à la faire évoluer.
   Sections dans `src/components/`, données éditoriales dans `src/data.js`.
 - **Media kits** : dans le repo vitrine, dossier `mediakit/`. Un **moteur JS générique**
   (`_assets/mediakit.js`) lit la vue Supabase `public_mediakit` et génère **1 page par
-  créatrice** (`/mediakit/<slug>/`) + un **PDF paysage 16:9**. 100 % automatique (voir §6).
+  créateur** (`/mediakit/<slug>/`) + un **PDF paysage 16:9**. 100 % automatique (voir §6).
 
 ---
 
 ## 4. Déploiement (comment mettre en ligne)
 
-**Règle : pousser sur `main` = déployer.** Les deux repos ont un GitHub Actions.
+**Règle : une PR fusionnée dans `main` = mise en ligne.** Les deux repos ont un GitHub Actions.
+Sur l'app, `main` est protégée : jamais de push direct, une PR et le contrôle « build » vert.
 
-- **App** → push `main` → build (`npm run build`) → **GitHub Pages** (`app.ttpcreators.pro`).
+- **App** → fusion d'une PR dans `main` → build (`npm run build`) → **GitHub Pages**
+  (`app.ttpcreators.pro`).
 - **Vitrine** → push `main` → build React + génération des media kits + rendu des PDF →
   **GitHub Pages** (`ttpcreators.pro`). Un **cron horaire** régénère aussi les media kits.
-- **Edge Functions Supabase** (`ttp-suite-react/supabase/functions/`) → **PAS** automatiques.
-  Déploiement **manuel** :
+- **Edge Functions Supabase** (`ttp-suite-react/supabase/functions/`) → **jamais** par une
+  fusion. « Déploiement des fonctions » (onglet Actions de GitHub, depuis `main`), ou Marc à la
+  main, après le « oui » de Marc ou de Gianni pour ce déploiement :
   ```
   supabase functions deploy <noms> --project-ref zizvggziggswhrbuyhuo
   ```
@@ -101,15 +112,16 @@ Si elle échoue, ne pas commit. (La vitrine, elle, fait juste `vite build`.)
   **RLS** (Row Level Security). Modèle : **lecture large, écriture stricte**
   (`is_agency() or <colonne> = my_creator()`).
 
-### ⚠️ Règle d'or : « l'assistant prépare, l'utilisateur applique »
-Une session Claude n'a que la **clé anon** : elle **ne peut PAS** faire de DDL, changer les
-réglages Auth, ni déployer les fonctions (le harnais bloque l'usage de credentials de prod —
-c'est voulu). Donc le cycle pour tout changement base/auth/fonction est :
-1. l'assistant **écrit** le SQL (foldé dans `SETUP.sql` **et** déposé dans `supabase/sql/`) et
-   **commit** ;
-2. il **donne** à l'utilisateur le SQL à coller dans le **SQL Editor**, ou la commande à lancer ;
-3. l'utilisateur **applique**, puis l'assistant **vérifie** (clé anon, comptes de test `ZZZ-*`
-   uniquement) et **met à jour le tableau de bord** `supabase/sql/README.md`.
+### ⚠️ Règle d'or : « la session prépare, la personne décide »
+Le détail est dans [`../CLAUDE.md`](../CLAUDE.md), « Règle prod ». En bref, pour tout
+changement de base, de réglage ou de fonction :
+1. la session **écrit** le SQL (foldé dans `SETUP.sql` **et** déposé dans `supabase/sql/`) ou
+   la fonction, par une PR, avec une ligne ⏳ au tableau de bord ;
+2. elle **applique** le SQL (connecteur Supabase) ou lance « Déploiement des fonctions »
+   seulement après le « oui » de Marc ou de Gianni pour ce changement précis, une seule
+   personne à la fois ; les secrets et les réglages Auth restent à Marc ;
+3. elle **vérifie** (requête de contrôle, comptes de test `ZZZ-*` uniquement) et **met à jour le
+   tableau de bord** `supabase/sql/README.md`.
 
 C'est CE cycle qui rend la reprise possible d'une session à l'autre. **Tenir le tableau à jour.**
 
@@ -117,11 +129,11 @@ C'est CE cycle qui rend la reprise possible d'une session à l'autre. **Tenir le
 
 ## 6. Media kits — comment ça marche
 
-- Chaque créatrice remplit ses données dans l'app (onglet **Media kit** → `MediakitEditor`)
+- Chaque créateur remplit ses données dans l'app (onglet **Media kit** → `MediakitEditor`)
   → écrit dans la colonne `creators.mediakit` (jsonb) → exposée par la vue anon
   `public_mediakit`.
 - Au déploiement de la vitrine (+ cron horaire), `mediakit/_build_mediakits.py` génère **1
-  page par créatrice** et `_render_pdfs.py` rend le **PDF 16:9**. **Ajouter une créatrice =
+  page par créateur** et `_render_pdfs.py` rend le **PDF 16:9**. **Ajouter un créateur =
   100 % auto** : sa page `/mediakit/<slug>/` apparaît toute seule dans l'heure.
 - Le slug = champ « Lien » de l'app, sinon le prénom (sans accent). L'espace créateur affiche
   le lien seulement si la page répond vraiment (vérif HEAD).
@@ -134,7 +146,7 @@ C'est CE cycle qui rend la reprise possible d'une session à l'autre. **Tenir le
 Plusieurs **audits adversariaux** menés et corrigés (identité/privilège, OWASP). Points clés :
 - **Inscription publique DÉSACTIVÉE** (dashboard). Les comptes se créent via la fonction
   admin `create-access`. `handle_new_user` ne fait **jamais** confiance au `creator_name`
-  envoyé par le client (sinon usurpation d'une créatrice).
+  envoyé par le client (sinon usurpation d'un créateur).
 - **RLS durcie** : `contacts` / `messages` / `creators` / `events` séparés lecture/écriture ;
   colonnes sensibles de `creators` (ca, commission, status, exclu, sort_order) verrouillées
   par le trigger `creators_guard` ; factures en écriture agence uniquement.
@@ -151,12 +163,12 @@ Plusieurs **audits adversariaux** menés et corrigés (identité/privilège, OWA
 
 | Je veux… | Où |
 |---|---|
-| Ajouter/modifier une créatrice | App côté agence → Roster (écrit dans `creators`) |
+| Ajouter/modifier un créateur | App côté agence → Roster (écrit dans `creators`) |
 | Changer une vue de l'app | `ttp-suite-react/src/views/<Vue>.tsx` |
 | Changer le site vitrine | `websitettpcreators/src/components/` + `src/data.js` |
 | Changer le design d'un media kit | `websitettpcreators/mediakit/_assets/mediakit.css` (+ `.js`) |
-| Ajouter une colonne / changer la RLS | écrire le SQL, le donner à l'utilisateur (voir §5) |
-| Déployer une fonction edge | `supabase functions deploy <nom> --project-ref zizvggziggswhrbuyhuo` |
+| Ajouter une colonne / changer la RLS | écrire le SQL (fichier daté + `SETUP.sql`), PR, puis l'appliquer après le « oui » (voir §5) |
+| Déployer une fonction edge | « Déploiement des fonctions » (onglet Actions de GitHub, depuis `main`) après le « oui », ou Marc à la main (voir `CLAUDE.md`, « Déploiement ») |
 
 ---
 
@@ -178,16 +190,17 @@ Plusieurs **audits adversariaux** menés et corrigés (identité/privilège, OWA
 
 Ouvre le dossier `ttp-suite-react/` avec Claude Code et dis simplement :
 
-> « Lis `docs/PASSATION.md`, `CLAUDE.md` et `supabase/sql/README.md`, puis dis-moi l'état actuel
->   du projet et ce qui reste à faire. »
+> « Lis `CLAUDE.md` puis `supabase/sql/README.md`, et dis-moi l'état actuel du projet et ce
+>   qui reste à faire. »
 
-Tu seras opérationnel en une minute.
+Tu seras opérationnel en une minute. Pour un changement, la session travaille dans un atelier
+(`~/Code/TTP Suite/_ateliers/<nom>`, sur une branche partie de `origin/main` à jour) et finit par
+une PR : voir `docs/RECETTES.md`, recette 7.
 
 ---
 
 ## 11. Ce qui reste (backlog léger, non urgent)
 
-- Remplacer les **données de test** (« test ») dans le media kit de Candice par les vrais chiffres.
-- Optionnel LOW : limite de taille/type sur le bucket Storage `avatars` (anti-abus hébergement).
+- Remplacer les **données de test** (« test ») restées dans le media kit d'un créateur par les vrais chiffres.
 - Purger les **comptes de test `ZZZ-*`** dans Supabase Auth (créés pendant les audits).
-- Remplir les vraies données/images des autres créatrices dans l'app.
+- Remplir les vraies données/images des autres créateurs dans l'app.

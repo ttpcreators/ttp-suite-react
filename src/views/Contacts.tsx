@@ -139,7 +139,7 @@ const clean = (x?: string | null) => {
 const NO_COMPANY = /^(freelance|ind[ée]pendante?|auto[- ]?entrepreneu[rs]e?)$/i;
 /**
  * Titre et ligne du dessous d'un contact : « Marque » puis « Personne · rôle » ;
- * sans société, la personne passe en titre : « Camille Tilak » puis « Freelance · rôle ».
+ * sans société, la personne passe en titre : « Camille Renaud » puis « Freelance · rôle ».
  */
 function contactTitle(r: { brand?: string | null; person?: string | null; role?: string | null }): { title: string; sub: string } {
   const brand = clean(r.brand);

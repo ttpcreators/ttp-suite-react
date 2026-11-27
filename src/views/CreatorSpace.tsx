@@ -865,7 +865,7 @@ export function CreatorSpace({
     });
     supabase.from("documents").select("id,name,type,size,path,created_at").eq("creator", name).order("created_at", { ascending: false }).then(({ data, error }) => apply(error) && setDocs((data as Doc[]) ?? []));
     // Plus récente d'abord (« Dernière facture » = invoices[0]) ; `date` est un texte, on trie sur created_at.
-    // Nom sans tenir compte des majuscules ni des accents (« LÉNA PASQUALE » = « Léna Pasquale »).
+    // Nom sans tenir compte des majuscules ni des accents (« LÉNA MOREL » = « Léna Morel »).
     supabase.from("invoices").select("ref,party,amount,date,status,creator").ilike("creator", namePattern(name)).order("created_at", { ascending: false }).then(({ data, error }) => {
       if (alive) markReady("invoices");
       if (apply(error)) setInvoices(((data as (Invoice & { creator: string | null })[]) ?? []).filter((i) => sameName(i.creator, name)));

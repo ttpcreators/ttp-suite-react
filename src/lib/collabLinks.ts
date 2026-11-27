@@ -19,13 +19,13 @@ export function collabIdMissing(e: { code?: string | null; message?: string | nu
 const fold = (s: string | null | undefined) =>
   (s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
 
-/** Prénom affiché (« LÉNA PASQUALE » → « Léna »). */
+/** Prénom affiché (« LÉNA MOREL » → « Léna »). */
 export function firstNameOf(creator: string | null | undefined): string {
   const w = (creator ?? "").trim().split(/\s+/)[0] ?? "";
   return w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : "";
 }
 
-/** « Nutripure × Léna ». */
+/** « Nova × Léna ». */
 export function collabLabel(c: Pick<CollabLite, "brand" | "creator">): string {
   const who = firstNameOf(c.creator);
   return [c.brand.trim(), who].filter(Boolean).join(" × ") || "Collab";
@@ -45,7 +45,7 @@ export function concernsCreator(names: string | string[] | null | undefined, cre
   const me = fold(creator);
   const first = fold(firstNameOf(creator));
   const list = Array.isArray(names) ? names : (names ?? "").split(",");
-  // « Léna » (prénom seul, anciennes saisies) désigne aussi « LÉNA PASQUALE ».
+  // « Léna » (prénom seul, anciennes saisies) désigne aussi « LÉNA MOREL ».
   return list.some((n) => fold(n) === me || (!!first && fold(n) === first));
 }
 
