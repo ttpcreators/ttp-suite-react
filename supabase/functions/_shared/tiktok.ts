@@ -15,6 +15,7 @@
 import { erSurVues } from "./engagementRate.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { tidySecret } from "./instagram.ts";
+import { couper, texteSur } from "./texteSur.ts";
 
 export const TT_CLIENT_KEY = tidySecret(Deno.env.get("TT_CLIENT_KEY"));
 export const TT_CLIENT_SECRET = tidySecret(Deno.env.get("TT_CLIENT_SECRET"));
@@ -110,8 +111,8 @@ export async function ttUser(token: string): Promise<TtUser | { error: string }>
     const u = ((b.data as { user?: Record<string, unknown> } | undefined)?.user ?? {}) as Record<string, unknown>;
     const n = (k: string) => (typeof u[k] === "number" ? (u[k] as number) : null);
     return {
-      openId: String(u.open_id ?? ""), username: String(u.username ?? ""), name: String(u.display_name ?? ""),
-      avatar: String(u.avatar_url ?? ""), bio: String(u.bio_description ?? "").slice(0, 300), url: String(u.profile_deep_link ?? ""),
+      openId: String(u.open_id ?? ""), username: String(u.username ?? ""), name: texteSur(String(u.display_name ?? "")),
+      avatar: String(u.avatar_url ?? ""), bio: couper(String(u.bio_description ?? ""), 300), url: String(u.profile_deep_link ?? ""),
       verified: u.is_verified === true, followers: n("follower_count"), following: n("following_count"), likes: n("likes_count"), videos: n("video_count"),
     };
   } catch {
@@ -136,7 +137,7 @@ export async function ttVideos(token: string, max = 20): Promise<TtVideo[] | { e
     const n = (v: Record<string, unknown>, k: string) => (typeof v[k] === "number" ? (v[k] as number) : null);
     return list.map((v) => ({
       id: String(v.id ?? ""), url: String(v.share_url ?? ""), cover: String(v.cover_image_url ?? ""),
-      title: String(v.video_description || v.title || "").slice(0, 500),
+      title: couper(String(v.video_description || v.title || ""), 500), // sans casser d'emoji (_shared/texteSur.ts)
       at: v.create_time ? new Date(Number(v.create_time) * 1000).toISOString() : "",
       duration: n(v, "duration"), views: n(v, "view_count"), likes: n(v, "like_count"), comments: n(v, "comment_count"), shares: n(v, "share_count"),
     }));

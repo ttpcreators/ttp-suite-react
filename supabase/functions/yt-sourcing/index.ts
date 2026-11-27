@@ -19,6 +19,8 @@ import { erSurVues } from "../_shared/engagementRate.ts";
 import { corsHeaders, getServiceClient } from "../_shared/google.ts";
 import { tidySecret } from "../_shared/instagram.ts";
 import { agencyHint, emailsIn, isPaid } from "../_shared/signals.ts";
+import { couper, texteSur } from "../_shared/texteSur.ts";
+import { ecrireParLots } from "../_shared/ecritureLot.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 type Json = Record<string, unknown>;
@@ -105,8 +107,8 @@ async function readChannels(ids: string[]): Promise<Channel[]> {
       out.push({
         id: String(c.id ?? ""),
         data: {
-          v: 1, platform: "youtube", name: String(sn.title ?? ""), handle, country: String(sn.country ?? ""),
-          bio: String(sn.description ?? "").slice(0, 300), picture: String(((sn.thumbnails as Json | undefined)?.default as Json | undefined)?.url ?? ""),
+          v: 1, platform: "youtube", name: texteSur(String(sn.title ?? "")), handle, country: String(sn.country ?? ""),
+          bio: couper(String(sn.description ?? ""), 300), picture: String(((sn.thumbnails as Json | undefined)?.default as Json | undefined)?.url ?? ""),
           followers: subs, views: Number(st.viewCount ?? 0) || 0, videos: Number(st.videoCount ?? 0) || 0,
           avgViews, er, perWeek, lastPost: videos[0]?.at ?? null, email, emailFrom: email ? "bio" : "",
           agency: agencyHint(about, email), deals,
@@ -128,7 +130,12 @@ async function channels(sb: SupabaseClient, ids: string[]): Promise<Channel[]> {
     .filter((r) => Date.now() - Date.parse(r.at) < 7 * DAY).map((r) => [r.id, r.data]));
   const todo = uniq.filter((id) => !fresh.has(id));
   const read = todo.length && !quotaHit ? await readChannels(todo) : [];
-  if (read.length) await sb.from("yt_channels").upsert(read.map((c) => ({ id: c.id, data: c.data, at: new Date().toISOString() })));
+  if (read.length) {
+    // Une seule requête, comme avant ; refusée, elle est refaite chaîne par chaîne (_shared/ecritureLot.ts).
+    const lignes = read.map((c) => ({ id: c.id, data: c.data, at: new Date().toISOString() }));
+    const r = await ecrireParLots(lignes, lignes.length, (lot) => sb.from("yt_channels").upsert(lot));
+    if (r.refusees.length) console.warn("yt-sourcing yt_channels", `${r.refusees.length}/${lignes.length} chaîne(s) refusée(s)`, r.erreur);
+  }
   // Règle YouTube : rien de plus de 30 jours sans être relu (le cache n'en sert que 7).
   await sb.from("yt_channels").delete().lt("at", new Date(Date.now() - 30 * DAY).toISOString());
   const byId = new Map<string, Json>([...fresh, ...read.map((c) => [c.id, c.data] as [string, Json])]);

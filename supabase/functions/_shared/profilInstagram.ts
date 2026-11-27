@@ -11,6 +11,7 @@
 
 import { detecterAgence, texteAgence, type AgenceConnue, type AgenceDetection } from "./agenceDetection.ts";
 import { emailsIn } from "./signals.ts";
+import { couper, texteSur } from "./texteSur.ts";
 
 type Json = Record<string, unknown>;
 
@@ -86,8 +87,8 @@ export function donneesBase(prev: Json | null | undefined, r: ProfilResume, luLe
   const p = prev ?? {};
   const out: Json = {
     ...p,
-    name: r.nom, followers: r.abonnes, following: r.abonnements, posts: r.posts,
-    bio: r.bio.slice(0, 300), website: r.site,
+    name: texteSur(r.nom), followers: r.abonnes, following: r.abonnements, posts: r.posts,
+    bio: couper(r.bio, 300), website: r.site,
     email: r.email || (typeof p.email === "string" ? p.email : ""),
     emailFrom: r.email ? "bio" : (p.emailFrom ?? ""),
     er: r.engagement, perWeek: r.parSemaine, lastPost: r.dernierPost,

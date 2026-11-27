@@ -17,6 +17,7 @@ import { creatorsForMail, type CreatorMailSetting } from "../_shared/mailNotif.t
 import { brandFromEmail } from "../_shared/mailTasks.ts";
 import { looksLikeContract, proposalFromMail, readContract } from "../_shared/exclusivites.ts";
 import type { TaskMail } from "./tasks.ts";
+import { couper, texteSur } from "../_shared/texteSur.ts";
 
 type Sb = ReturnType<typeof getServiceClient>;
 type Box = TaskMail["box"];
@@ -47,11 +48,12 @@ function fromB64Url(data: string): Uint8Array {
   return Uint8Array.from(bin, (c) => c.charCodeAt(0));
 }
 
+/** Texte du PDF, sans caractère nul (fréquent dans les PDF) ni moitié d'emoji seule (couper). */
 async function pdfText(bytes: Uint8Array): Promise<string> {
   const { extractText, getDocumentProxy } = await import("npm:unpdf@1.8.1");
   const doc = await getDocumentProxy(bytes);
   const { text } = await extractText(doc, { mergePages: true });
-  return String(Array.isArray(text) ? text.join("\n") : text).replace(/[ \t]+/g, " ").trim().slice(0, 60000);
+  return couper(String(Array.isArray(text) ? text.join("\n") : text).replace(/[ \t]+/g, " ").trim(), 60000);
 }
 
 export async function excluFromMails(
@@ -142,8 +144,8 @@ export async function excluFromMails(
 
       const who = [firstName(proposal.creator), proposal.brand].filter(Boolean).join(" × ") || name;
       await sb.from("todos").insert({
-        text: `Vérifier l'exclu ${who}`.slice(0, 60),
-        descr: `Contrat reçu par mail (« ${name} ») : exclusivité lue toute seule, à confirmer dans Exclusivités.\n\n« ${proposal.quote ?? ""} »`,
+        text: couper(`Vérifier l'exclu ${who}`, 60),
+        descr: texteSur(`Contrat reçu par mail (« ${name} ») : exclusivité lue toute seule, à confirmer dans Exclusivités.\n\n« ${proposal.quote ?? ""} »`),
         due: today,
         priority: "haute",
         tag: "Mail",

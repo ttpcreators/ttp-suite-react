@@ -19,6 +19,7 @@ import { useVisitedTabs } from "@/lib/useVisitedTabs";
 import { AgencyAvatar } from "@/components/ui/agency-avatar";
 import { guessName, saveAgencyName } from "@/lib/team";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
+import { couper } from "../../supabase/functions/_shared/texteSur.ts";
 
 type AccessAccount = {
   email: string;
@@ -91,7 +92,7 @@ function AgencyAccountEditor({ a, onSaved, onClose }: { a: AgencyAccount; onSave
         <span className="text-[11px] font-medium text-muted-foreground">Nom affiché</span>
         <input
           value={name}
-          onChange={(e) => setName(e.target.value.slice(0, 40))}
+          onChange={(e) => setName(couper(e.target.value, 40))}
           onKeyDown={(e) => {
             if (e.key === "Enter") void save();
             if (e.key === "Escape") onClose();

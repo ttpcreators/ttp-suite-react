@@ -10,6 +10,8 @@
 // reste du mail, sinon 2 jours après la réception. Utilisé par gmail-poll.
 // ============================================================================
 
+import { couper, texteSur } from "./texteSur.ts";
+
 export type MailTaskKind =
   | "stats" | "facture" | "contrat" | "brief" | "retours" | "adresse"
   | "tarifs" | "call" | "publication" | "paiement";
@@ -202,7 +204,7 @@ function fitTitle(rule: Rule, who: string): string {
   let w = who.trim() || "la marque";
   let title = rule.title(w);
   while (title.length > 45 && w.length > 8) {
-    w = `${w.slice(0, w.length - 2).trimEnd()}…`;
+    w = `${couper(w, w.length - 2).trimEnd()}…`; // sans casser d'emoji (_shared/texteSur.ts)
     title = rule.title(w);
   }
   return title;
@@ -230,7 +232,7 @@ export function mailTasks(input: { subject: string; body: string; who: string; r
       title: fitTitle(rule, input.who),
       due: due?.due ?? iso(addDays(day, 2)),
       priority: due?.urgent ? "haute" : "moyenne",
-      quote: hit.length > 280 ? `${hit.slice(0, 279).trimEnd()}…` : hit,
+      quote: hit.length > 280 ? `${couper(hit, 279).trimEnd()}…` : texteSur(hit),
     });
   }
   return out;

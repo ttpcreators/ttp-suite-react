@@ -35,4 +35,9 @@ describe("feed Instagram (Mes stats)", () => {
     expect(publicFeed([{ id: "p0", likes: 3, views: 10, reach: 8, saves: 1, shares: 2, thumb: "t" }])).toEqual([{ id: "p0", likes: 3, thumb: "t" }]);
     expect(publicFeed(null)).toEqual([]);
   });
+  it("légende coupée sans casser d'emoji (la base refuserait tout le patch)", () => {
+    const [p] = buildFeed([post("p0", { caption: `${"a".repeat(138)}😀 suite` })], null, new Map(), new Map());
+    expect(p.caption).toBe(`${"a".repeat(138)}…`);
+    expect(buildFeed([post("p1", { caption: "court \u0000😀" })], null, new Map(), new Map())[0].caption).toBe("court 😀");
+  });
 });

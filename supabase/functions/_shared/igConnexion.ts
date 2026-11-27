@@ -12,6 +12,8 @@
 // (src/lib/instagram.ts) ; testé par igConnexion.test.ts.
 // ============================================================================
 
+import { couper } from "./texteSur.ts";
+
 /** Où la tentative s'est arrêtée (colonne ig_connexions.etape). */
 export type Etape =
   | "lien" // lien WhatsApp illisible, expiré ou créatrice inconnue
@@ -197,7 +199,10 @@ export async function lireLien(secret: string, jeton: string, now = Date.now()):
   return { ok: true, creatorId: p.c, iat: p.iat };
 }
 
-/** Message brut de Meta, sur une ligne, sans jeton ni clé (400 caractères au plus). */
+/**
+ * Message brut de Meta, sur une ligne, sans jeton ni clé (400 caractères au plus, coupé sans
+ * casser d'emoji : il est gardé dans ig_connexions, voir _shared/texteSur.ts).
+ */
 export function messageBrut(v: unknown): string {
   const s = typeof v === "string" ? v : (() => {
     try {
@@ -206,9 +211,11 @@ export function messageBrut(v: unknown): string {
       return String(v);
     }
   })();
-  return s
-    .replace(/(access_token|client_secret|code)=([^&\s"]+)/gi, "$1=…")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 400);
+  return couper(
+    s
+      .replace(/(access_token|client_secret|code)=([^&\s"]+)/gi, "$1=…")
+      .replace(/\s+/g, " ")
+      .trim(),
+    400,
+  );
 }

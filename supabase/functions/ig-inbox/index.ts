@@ -40,6 +40,8 @@ import { emailsIn } from "../_shared/signals.ts";
 import { loadNotifPrefs, pushReady, sendTo } from "../_shared/push.ts";
 import { deepLinkUrl, makePayload, type PushPayload } from "../_shared/pushPayload.ts";
 import { trancheHistorique } from "../_shared/igHistoriqueDb.ts";
+import { couper, texteSur } from "../_shared/texteSur.ts";
+import { ecrireParLots } from "../_shared/ecritureLot.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 /** Lit TOUTES les lignes par pages de 1 000 (au-delà, Supabase coupe sans prévenir). */
@@ -264,6 +266,7 @@ Deno.serve(async (req: Request) => {
   // 3. Enregistre conversations et messages.
   const now = new Date().toISOString();
   let saved = 0;
+  let refus = 0; // conversations, messages et fiches contact refusés par la base (relevé du passage)
   // Nouveaux DM reçus (pour la notification) : messages de l'interlocuteur pas encore
   // enregistrés et récents (une première lecture d'anciennes conversations ne sonne pas).
   const incoming: { conv: string; who: string; text: string; count: number }[] = [];
@@ -281,7 +284,7 @@ Deno.serve(async (req: Request) => {
       ...(unhide ? { hidden: false } : {}),
       id: conv.id, username, igsid: other.id ?? null,
       updated_at: conv.updated_time ? new Date(conv.updated_time).toISOString() : last?.at ?? now,
-      last_text: last ? last.text.slice(0, 300) : null, last_from_me: last ? last.me : null,
+      last_text: last ? couper(last.text, 300) : null, last_from_me: last ? last.me : null,
       emails, synced_at: now,
     };
     // Messages déjà connus (avant l'enregistrement) : seuls les autres peuvent notifier.
@@ -291,8 +294,21 @@ Deno.serve(async (req: Request) => {
       : { data: [] };
     const seen = new Set(((seenRows as { id: string }[] | null) ?? []).map((r) => r.id));
     const { error } = await sb.from("ig_threads").upsert(row);
-    if (error) continue;
-    if (msgs.length) await sb.from("ig_messages").upsert(msgs.map((m) => ({ id: m.id, thread_id: conv.id, at: m.at, me: m.me, text: m.text.slice(0, 4000) })));
+    if (error) {
+      // Relue au passage suivant si son dernier message change ; l'id dit laquelle (pas son texte).
+      refus++;
+      console.warn("ig-inbox conversation refusée", conv.id, error.message);
+      continue;
+    }
+    if (msgs.length) {
+      // Les 20 messages en une requête ; refusée, elle est refaite message par message (_shared/ecritureLot.ts).
+      const lignes = msgs.map((m) => ({ id: m.id, thread_id: conv.id, at: m.at, me: m.me, text: couper(m.text, 4000) }));
+      const r = await ecrireParLots(lignes, lignes.length, (lot) => sb.from("ig_messages").upsert(lot));
+      if (r.refusees.length) {
+        refus += r.refusees.length;
+        console.warn("ig-inbox messages refusés", conv.id, `${r.refusees.length}/${lignes.length}`, r.erreur);
+      }
+    }
     // Envoyés depuis l'app (ig-send) : la version Meta est là, on retire la copie provisoire.
     const mine = new Set(msgs.filter((m) => m.me).map((m) => m.text.trim()));
     if (mine.size) {
@@ -315,7 +331,7 @@ Deno.serve(async (req: Request) => {
     if (p.error) return;
     const user = igUser(String(p.username ?? "")).toLowerCase() || known.get(conv.id)?.username || "";
     const pic = user && p.profile_pic ? await storePicture(sb, user, String(p.profile_pic)) : { url: null };
-    const patch: Record<string, unknown> = { name: p.name ? String(p.name) : null, followers: typeof p.follower_count === "number" ? p.follower_count : null };
+    const patch: Record<string, unknown> = { name: p.name ? texteSur(String(p.name)) : null, followers: typeof p.follower_count === "number" ? p.follower_count : null };
     if (user) patch.username = user;
     if (pic.url) patch.picture = pic.url;
     await sb.from("ig_threads").update(patch).eq("id", conv.id);
@@ -390,7 +406,11 @@ Deno.serve(async (req: Request) => {
       if (!c.email?.trim() && t.emails?.length) patch.email = t.emails[0];
       if (!Object.keys(patch).length) continue;
       const { error } = await sb.from("contacts").update(patch).eq("id", c.id);
-      if (error) continue;
+      if (error) {
+        refus++;
+        console.warn("ig-inbox fiche contact refusée", c.id, error.message);
+        continue;
+      }
       if (patch.touches) {
         c.touches = patch.touches;
         touchesAdded += add.length;
@@ -430,7 +450,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const out = { ok: true, threads: changed.length, left: skipped, saved, linked, touches: touchesAdded, emails: emailsAdded, notified, me: meUser || null, ms: Date.now() - t0 };
+  const out = { ok: true, threads: changed.length, left: skipped, saved, linked, touches: touchesAdded, emails: emailsAdded, notified, refus, me: meUser || null, ms: Date.now() - t0 };
   await saveState(sb, stateKey, out);
   console.log("ig-inbox", JSON.stringify(out));
   // Il en reste : le passage suivant est lancé tout de suite, en arrière-plan (8 au plus).

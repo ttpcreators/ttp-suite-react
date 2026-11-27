@@ -20,6 +20,7 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { adresseRetourAutorisee } from "../_shared/oauthRetour.ts";
+import { couper } from "../_shared/texteSur.ts";
 
 export const FN_URL = "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ttp-mcp";
 export const ISSUER = "https://app.ttpcreators.pro";
@@ -99,7 +100,8 @@ export async function register(sb: SupabaseClient, body: Json): Promise<Out> {
   const method = ["client_secret_post", "client_secret_basic"].includes(String(body.token_endpoint_auth_method)) ? String(body.token_endpoint_auth_method) : "none";
   const clientId = "ttpc_" + b64url(crypto.getRandomValues(new Uint8Array(16)));
   const secret = method === "none" ? null : randomToken("ttps_");
-  const name = String(body.client_name ?? "Claude").slice(0, 80);
+  // Coupé sans casser d'emoji : une moitié seule ferait refuser l'inscription (_shared/texteSur.ts).
+  const name = couper(String(body.client_name ?? "Claude"), 80);
   const { error } = await sb.from("mcp_clients").insert({ client_id: clientId, client_name: name, redirect_uris: uris, secret_hash: secret ? await sha256hex(secret) : null });
   if (error) return oauthErr("server_error", "Enregistrement impossible.", 500);
   return {

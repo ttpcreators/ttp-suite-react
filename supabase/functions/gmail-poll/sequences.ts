@@ -82,7 +82,10 @@ export async function suivreReponses(sb: Sb, mails: Mail[], domaineAgence: strin
       }
       if (Object.keys(patch).length) {
         const { error } = await sb.from("contacts").update(patch).eq("id", c.id);
-        if (error) continue;
+        if (error) {
+          console.warn("gmail-poll réponse : fiche contact refusée", c.id, error.message);
+          continue;
+        }
       }
     }
     reponses++;
@@ -93,7 +96,9 @@ export async function suivreReponses(sb: Sb, mails: Mail[], domaineAgence: strin
     });
     const { data: deja } = await sb.from("todos").select("id").eq("text", t.text).or("done.is.null,done.eq.false").limit(1);
     if (!(deja ?? []).length) {
-      await sb.from("todos").insert({ text: t.text, descr: t.descr, priority: t.priority, due: t.due, done: false }).then(() => {}, () => {});
+      await sb.from("todos").insert({ text: t.text, descr: t.descr, priority: t.priority, due: t.due, done: false }).then(({ error }: { error: { message: string } | null }) => {
+        if (error) console.warn("gmail-poll réponse : tâche refusée", error.message);
+      }, () => {});
     }
   }
   return { reponses, rebonds };

@@ -15,11 +15,11 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4
 import type { AdminTool } from "./admin.ts";
 import { ETAPES, aRelancer, apresMail, arreter, demarrerSequence, etapeFaite, lireEmailCheck, lireSequence, type Sequence } from "../_shared/sequence.ts";
 import { verifierDomaines } from "../_shared/mxCheck.ts";
+import { str } from "../_shared/texteSur.ts";
 
 type Json = Record<string, unknown>;
 const ok = (text: string) => ({ text });
 const fail = (text: string) => ({ text, isError: true });
-const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const today = () => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 const frDay = (iso: string) => new Date(iso + "T12:00:00Z").toLocaleDateString("fr-FR", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
 const colonneAbsente = (e: { code?: string; message?: string } | null) => !!e && (e.code === "42703" || e.code === "PGRST204" || /sequence|email_check/.test(e.message ?? ""));

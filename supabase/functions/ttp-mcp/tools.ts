@@ -41,6 +41,7 @@ import { droitsTexte, etatDroit, lireDroits, noterPosts, postLigne, postsQuiCart
 import { problemeTexteDestinataire } from "../_shared/texteDestinataire.ts";
 import { ciblesEchange, requeteEchange, texteEchanges } from "../_shared/dejaEchange.ts";
 import { colonneErreurAbsente, ligneJournal, sansErreur } from "../_shared/mcpJournal.ts";
+import { couper, str } from "../_shared/texteSur.ts";
 import { MAX_LOT_CONTACTS, alerteMemeMarque, chercherDoublon, citerContact, lireContact, trierContacts, type ContactExistant } from "../_shared/contactAjout.ts";
 import { cleDuCreateur, dateVersement, versementEnDouble } from "../_shared/versement.ts";
 import { apresVersement } from "../_shared/collabAutoDb.ts";
@@ -104,7 +105,6 @@ const dueIso = (v: unknown) => {
   const y = fr[3] ? (fr[3].length === 2 ? "20" + fr[3] : fr[3]) : isoDay().slice(0, 4);
   return `${y}-${fr[2].padStart(2, "0")}-${fr[1].padStart(2, "0")}`;
 };
-const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const int = (v: unknown, def: number, min: number, max: number) => {
   const n = Number(v);
   return Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : def;
@@ -2246,7 +2246,9 @@ async function findAgent(sb: SupabaseClient, key: string): Promise<AgentRow | nu
   return ((data as AgentRow[] | null) ?? [])[0] ?? null;
 }
 const agentJournal = (sb: SupabaseClient, agentId: string | null, action: string, detail: string) =>
-  sb.schema("agent").from("journal").insert({ action, detail: detail.slice(0, 300), agent_id: agentId }).then(() => {}, () => {});
+  sb.schema("agent").from("journal").insert({ action, detail: couper(detail, 300), agent_id: agentId }).then(({ error }) => {
+    if (error) console.warn("ttp-mcp journal des agents refusé", action, error.message);
+  }, () => {});
 
 type JournalLine = { quand: string; agent: string; action: string; detail: string };
 /** Journal des agents depuis `jours` jours (le plus récent d'abord), pour un agent ou tous. */
@@ -2426,8 +2428,8 @@ const proposerAction: Tool = {
       const { data: deja } = await sb.schema("agent").from("actions").select("id").eq("statut", "a_valider").eq("lien_spark", lien).limit(1);
       const dejaId = ((deja as Json[] | null) ?? [])[0]?.id;
       if (dejaId) return fail(`Déjà proposé (proposition ${dejaId}) : Marc ne l'a pas encore validé.`);
-      cible = `${col.brand} × ${titleCase(col.creator)}`.slice(0, 200);
-      contexte = `Étape ${col.step} → ${etape} « ${COLLAB_STEPS[etape - 1]} »${contexte ? ` · ${contexte}` : ""}`.slice(0, 1000);
+      cible = couper(`${col.brand} × ${titleCase(col.creator)}`, 200);
+      contexte = couper(`Étape ${col.step} → ${etape} « ${COLLAB_STEPS[etape - 1]} »${contexte ? ` · ${contexte}` : ""}`, 1000);
     }
     // Appel d'outil à valider (verrou des agents) : le texte que Marc lit est écrit ici, d'après
     // l'appel exact, jamais par l'agent ; l'outil et ses paramètres ne changent plus ensuite (SQL).
@@ -2462,7 +2464,7 @@ const proposerAction: Tool = {
       ({ data, error } = await sb.schema("agent").from("actions").insert({ ...row, type }).select("id").single());
     }
     if (error) return fail(`Proposition non déposée : ${error.message}`);
-    await agentJournal(sb, ag?.id ?? null, "proposition", `${type} · ${cible ?? ""}`.slice(0, 160));
+    await agentJournal(sb, ag?.id ?? null, "proposition", couper(`${type} · ${cible ?? ""}`, 160));
     return ok(`Déposé dans « À valider » (${outil ? `appel ${outil.nom}` : type === "alerte" && lien?.includes("avancer=1") ? "avancer_collab" : type}${cible ? ` pour ${cible.slice(0, 120)}` : ""}) [proposition ${(data as Json)?.id}]. Marc le verra dans l'app, section Agents, et dans la liste de 17 h.${outil ? " Après sa validation, rappelle l'outil avec exactement les mêmes arguments." : ""}${ag ? "" : ` Agent « ${str(a.agent, 80)} » inconnu (voir mes_agents) : proposition rangée sans agent.`}`);
   },
 };
@@ -2632,7 +2634,7 @@ const lireBrief: Tool = {
 
 const listArg = (v: unknown) =>
   (Array.isArray(v) ? v : [])
-    .map((x) => String(x ?? "").replace(/^\s*(?:[-•*·]|\d+[.)])\s*/, "").replace(/\s*[—–]\s*/g, ", ").replace(/\s+/g, " ").trim().slice(0, 280))
+    .map((x) => couper(String(x ?? "").replace(/^\s*(?:[-•*·]|\d+[.)])\s*/, "").replace(/\s*[—–]\s*/g, ", ").replace(/\s+/g, " ").trim(), 280))
     .filter(Boolean)
     .slice(0, 10);
 const listSchema = (d: string) => ({ type: "array", items: { type: "string" }, description: d });
@@ -3259,8 +3261,10 @@ const notifications: Tool = {
     for (const r of (inv.data as Json[] | null) ?? []) if (invoiceLate(r, today)) out.push([`inv:${r.id}`, `Facture en retard · ${r.ref} · ${r.party} · ${money(r.amount)}`]);
     for (const r of (br.data as Json[] | null) ?? []) out.push([`brief:${r.id}`, `Brief à valider · ${r.brand}${r.creator ? ` × ${titleCase(String(r.creator))}` : ""}`]);
     for (const r of (ev.data as Json[] | null) ?? []) out.push([`ev:${r.id}`, `Rendez-vous · ${frDay(String(r.date))}${r.time && r.time !== "—" ? ` ${r.time}` : ""} · ${r.title}`]);
-    for (const r of (td.data as Json[] | null) ?? []) out.push([`ctd:${r.created_at}:${String(r.text).slice(0, 40)}`, `Nouvelle tâche d'un créateur · ${titleCase(String(r.creator ?? ""))} · ${r.text}`]);
-    for (const r of (idc.data as Json[] | null) ?? []) out.push([`cid:${r.created_at}:${String(r.text).slice(0, 40)}`, `Nouvelle idée d'un créateur · ${titleCase(String(r.creator ?? ""))} · ${r.text}`]);
+    // Même clé que la cloche de l'app (src/lib/useNotifications.ts : couper, jamais slice), sinon
+    // les effacements faits dans l'app ne sont plus reconnus ici.
+    for (const r of (td.data as Json[] | null) ?? []) out.push([`ctd:${r.created_at}:${couper(String(r.text), 40)}`, `Nouvelle tâche d'un créateur · ${titleCase(String(r.creator ?? ""))} · ${r.text}`]);
+    for (const r of (idc.data as Json[] | null) ?? []) out.push([`cid:${r.created_at}:${couper(String(r.text), 40)}`, `Nouvelle idée d'un créateur · ${titleCase(String(r.creator ?? ""))} · ${r.text}`]);
     for (const r of (mail.data as Json[] | null) ?? []) out.push([`mail:${r.gmail_message_id ?? r.created_at}`, `Mail reçu · ${r.contact_name || r.contact_email || "Contact"} · ${r.subject || "(sans objet)"}`]);
     const openBugs = ((bugs.data as Json[] | null) ?? []).filter((b) => !b.resolved_at);
     if (openBugs.length) out.push([`bug:${openBugs[0].id}`, `${openBugs.length} bug(s) à regarder · ${String(openBugs[0].message ?? "").slice(0, 90)}`]);
@@ -3417,9 +3421,11 @@ export async function callTool(sb: SupabaseClient, ctx: Ctx, name: string, args:
   // (colonne `error`, SQL 2026-11-24-mcp-log-erreur). Le journal ne bloque jamais l'outil.
   try {
     const ligne = ligneJournal({ userId: ctx.userId, grantId: ctx.grantId, tool: name, args, res });
-    const { error } = await sb.from("mcp_log").insert(ligne);
+    let { error } = await sb.from("mcp_log").insert(ligne);
     // Avant le SQL : la colonne n'existe pas, on écrit la ligne comme avant.
-    if (error && ligne.error && colonneErreurAbsente(error)) await sb.from("mcp_log").insert(sansErreur(ligne));
+    if (error && ligne.error && colonneErreurAbsente(error)) ({ error } = await sb.from("mcp_log").insert(sansErreur(ligne)));
+    // Journal d'audit des agents : une ligne perdue se voit au moins dans les journaux de la fonction.
+    if (error) console.warn("ttp-mcp mcp_log refusé", name, error.message);
   } catch {
     // rien : un journal en panne ne fait pas échouer l'appel
   }

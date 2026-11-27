@@ -11,7 +11,10 @@
 //     Rien n'est ajouté tout seul : c'est Gianni ou Marc qui décide ;
 //   - « a_lire » : rien de clair → tâche « Réponse à lire : [marque] » (pas « Visio »).
 // Aucun mail n'est jamais envoyé ici. Règles PURES, testées par reponseProspect.test.ts.
+// Les textes gardés (note, tâche) sont coupés sans casser d'emoji (couper, _shared/texteSur.ts).
 // ============================================================================
+
+import { couper } from "./texteSur.ts";
 
 export type ClasseReponse = "interesse" | "plus_tard" | "refus" | "a_lire";
 
@@ -69,7 +72,7 @@ export function reponseSequence(c: ClasseReponse): "positive" | "negative" | "a_
 const ETIQUETTE: Record<ClasseReponse, string> = { interesse: "Intéressé", plus_tard: "Plus tard", refus: "Refus", a_lire: "Réponse" };
 
 /** Début de la note du journal du contact : « Intéressé : Re: … ». */
-export const noteReponse = (c: ClasseReponse, objet: string) => `${ETIQUETTE[c]} : ${objet}`.slice(0, 140);
+export const noteReponse = (c: ClasseReponse, objet: string) => couper(`${ETIQUETTE[c]} : ${objet}`, 140);
 
 function addDays(jour: string, n: number): string {
   const d = new Date(`${jour}T12:00:00Z`);
@@ -79,7 +82,7 @@ function addDays(jour: string, n: number): string {
 
 /** Les textes possibles d'une tâche de réponse pour cette marque (pour ne pas en refaire une). */
 export const textesTaches = (marque: string) => {
-  const m = marque.slice(0, 80);
+  const m = couper(marque, 80);
   return [`Visio : ${m}`, `Refus : ${m}`, `Recontacter : ${m}`, `Réponse à lire : ${m}`];
 };
 
@@ -93,9 +96,9 @@ export function tacheReponse(
   classe: ClasseReponse,
   p: { marque: string; email: string; personne?: string; objet: string; extrait: string; jour: string; visio?: { text: string; descr: string } | null },
 ): TacheReponse {
-  const marque = (p.marque || p.email).slice(0, 80); // même découpe que textesTaches
+  const marque = couper(p.marque || p.email, 80); // même découpe que textesTaches
   const contact = `Contact : ${p.personne?.trim() || "—"} · ${p.email}`;
-  const reponse = `Sa réponse : « ${p.objet.slice(0, 140)} » ${p.extrait.slice(0, 280)}`;
+  const reponse = `Sa réponse : « ${couper(p.objet, 140)} » ${couper(p.extrait, 280)}`;
   const avant = "Avant d'écrire : relire tout l'historique (mails, DM, fiche, collabs, devis).";
   if (classe === "refus") {
     return {

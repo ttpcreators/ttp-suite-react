@@ -7,9 +7,12 @@
 // téléphone 10 crédits, seulement s'ils sont trouvés.
 // ============================================================================
 
+import { texteSur } from "./texteSur.ts";
+
 type J = Record<string, unknown>;
 const o = (v: unknown): J => (v && typeof v === "object" && !Array.isArray(v) ? (v as J) : {});
-const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+// Textes de FullEnrich (souvent avec des emojis LinkedIn) gardés en base : nettoyés (_shared/texteSur.ts).
+const s = (v: unknown) => (typeof v === "string" ? texteSur(v.trim()) : "");
 const f = (value: string, exact = false) => ({ value, exact_match: exact, exclude: false });
 
 /** Postes cherchés par défaut chez une marque (influence, partenariats, marketing…). */

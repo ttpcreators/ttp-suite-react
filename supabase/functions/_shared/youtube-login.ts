@@ -19,6 +19,7 @@
 import { erSurVues } from "./engagementRate.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { tidySecret } from "./instagram.ts";
+import { couper, texteSur } from "./texteSur.ts";
 
 // Motif ilike EXACT : « _ » et « % » d'un nom ne servent pas de jokers.
 const exactName = (s: string) => s.replace(/[\\%_]/g, (m) => `\\${m}`);
@@ -132,7 +133,7 @@ export async function ytMyChannel(token: string): Promise<YtChannel | { error: s
   const th = (sn.thumbnails ?? {}) as Record<string, { url?: string }>;
   const handle = String(sn.customUrl ?? "").replace(/^@/, "");
   return {
-    id: String(c.id ?? ""), title: String(sn.title ?? ""), handle,
+    id: String(c.id ?? ""), title: texteSur(String(sn.title ?? "")), handle, // gardé en base (_shared/texteSur.ts)
     avatar: th.medium?.url ?? th.default?.url ?? "",
     url: handle ? `https://www.youtube.com/@${handle}` : `https://www.youtube.com/channel/${c.id}`,
     country: sn.country ? String(sn.country) : null,
@@ -168,7 +169,7 @@ export async function ytMyVideos(token: string, uploads: string, max = 25): Prom
     const id = String(v.id ?? "");
     return {
       id, url: short ? `https://www.youtube.com/shorts/${id}` : `https://www.youtube.com/watch?v=${id}`,
-      cover: th.medium?.url ?? th.default?.url ?? "", title: String(sn.title ?? "").slice(0, 200),
+      cover: th.medium?.url ?? th.default?.url ?? "", title: couper(String(sn.title ?? ""), 200), // sans casser d'emoji (_shared/texteSur.ts)
       at: String(sn.publishedAt ?? ""), seconds, short,
       paid: ((v.paidProductPlacementDetails as Json | undefined)?.hasPaidProductPlacement) === true, // « Inclut une communication commerciale »
       views: num(st.viewCount), likes: num(st.likeCount), comments: num(st.commentCount),

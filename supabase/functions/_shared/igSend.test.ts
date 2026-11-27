@@ -20,4 +20,7 @@ describe("envoi d'un DM Instagram", () => {
     expect(cleanDm("   ")).toBeNull();
     expect(cleanDm("x".repeat(DM_MAX + 1))).toBeNull();
   });
+  it("retire le caractère nul et les moitiés d'emoji seules", () => {
+    expect(cleanDm("salut\u0000 😀\ud83d")).toBe("salut 😀");
+  });
 });

@@ -351,6 +351,8 @@ commandes en base contiennent le secret des crons : ne jamais les recopier dans 
 | Fichier | Fournit | Utilisé par |
 |---|---|---|
 | `google.ts` | Client service, CORS, jetons Google, synchro Agenda, `CRON_SECRET`, comparaison à temps constant | presque toutes les fonctions |
+| `texteSur.ts` | Textes que Postgres accepte toujours : `texteSur` retire le caractère nul et les moitiés d'emoji seules, `couper` coupe à une longueur sans casser d'emoji, `str` lit un texte reçu par un outil du connecteur (une seule définition) | fonctions qui écrivent des textes venus de l'extérieur (radars, DM, mails, journal des bugs, pont d'Alfred, rendez-vous, leads, `ttp-mcp`), app (réponse en DM, PDF de contrat, import CSV, Scouting, ids de la cloche) |
+| `ecritureLot.ts` | Écriture par paquets : un paquet refusé pour ses données est réécrit ligne par ligne, seule la mauvaise ligne est perdue (et comptée) ; si les 10 premières lignes réessayées sont toutes refusées, le reste du paquet est compté refusé sans autre requête | `ig-sourcing`, `yt-sourcing`, `yt-radar`, `tt-radar`, `ig-inbox`, `igHistoriqueDb.ts`, app (import CSV des contacts) |
 | `gmailBox.ts` | Les deux boîtes : partnerships@ (OAuth de l'app) et talent@ (compte de service) | fonctions `gmail-*`, `creator-mail`, `ttp-mcp` |
 | `gfetch.ts` | Appels Gmail avec délai et nouvelles tentatives | mêmes fonctions |
 | `push.ts` | Envoi Web Push (VAPID), cibles, purge des abonnements morts | `daily-digest`, `gmail-poll`, `report-error`, `team-notify` |
