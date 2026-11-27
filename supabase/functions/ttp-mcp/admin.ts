@@ -37,6 +37,7 @@ import { bloquant, journaliserEnvoi, verifierAvantEnvoi } from "./envois.ts";
 import { nomAuteur } from "../_shared/auteurEnvoi.ts";
 import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
 import { couper, str } from "../_shared/texteSur.ts";
+import { triggerSync } from "../_shared/google.ts";
 
 type Json = Record<string, unknown>;
 type Args = Record<string, unknown>;
@@ -57,6 +58,18 @@ const TABLE_ENUM = Object.keys(TABLES);
 const ORDER: Record<string, string | null> = { collab_steps: "reached_at", creator_roadmap: "updated_at", creator_mail_settings: "updated_at", agency_mediakit: "updated_at", ig_threads: "updated_at" };
 const like = (s: string) => `%${s.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
 const keyOf = (table: string) => TABLES[table]?.key ?? "id";
+/**
+ * Rendez-vous écrit (créé, modifié, mis à la Corbeille) : la synchro Google Agenda part tout de suite,
+ * comme après creer_evenement (tools.ts). Sinon il attendrait le passage horaire (jusqu'à 1 h).
+ */
+function relancerAgenda(table: string): void {
+  if (table !== "events") return;
+  try {
+    triggerSync("cron");
+  } catch {
+    /* la synchro horaire le poussera vers Google */
+  }
+}
 const todayIso = () => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
 function tableOf(a: Args): { table: string } | { error: string } {
@@ -177,6 +190,7 @@ const creerElement: AdminTool = {
     }
     const { data, error } = await sb.from(t.table).insert(fields).select("*").single();
     if (error) return fail(`Création refusée : ${error.message}`);
+    relancerAgenda(t.table);
     // Collab créée : le prospect ouvert de la marque passe « Signé » (étapes automatiques).
     const signe = t.table === "collabs" && (data as Json).status !== "perdue" ? await apresCollabSignee(sb, String((data as Json).id)) : null;
     const exclu = t.table === "creators" && "exclu" in fields ? await copierExclu(sb, data as Json) : "";
@@ -223,6 +237,7 @@ const modifierElement: AdminTool = {
     const patch = t.table === "events" ? { ...fields, sync_source: "agence" } : fields;
     const { data: after, error } = await sb.from(t.table).update(patch).eq(key, id).select("*").maybeSingle();
     if (error) return fail(`Modification refusée : ${error.message}`);
+    relancerAgenda(t.table);
     const changes = Object.keys(fields).map((k) => `- ${k} : ${JSON.stringify((before as Json)[k] ?? null)} → ${JSON.stringify((after as Json | null)?.[k] ?? null)}`);
     // Étapes automatiques : facture passée « payée » → sa collab ; collab gagnée → prospect « Signé ».
     const devient = (v: string) => (after as Json | null)?.status === v && (before as Json).status !== v;
@@ -273,7 +288,9 @@ const supprimerElement: AdminTool = {
     }
     if (rule.remove === "tombstone") {
       const { error } = await sb.from(t.table).update({ deleted: true, deleted_at: new Date().toISOString(), sync_source: "agence" }).eq("id", id);
-      return error ? fail(`Suppression refusée : ${error.message}`) : ok(`✓ Rendez-vous « ${name} » supprimé (et retiré de Google Agenda).`);
+      if (error) return fail(`Suppression refusée : ${error.message}`);
+      relancerAgenda(t.table);
+      return ok(`✓ Rendez-vous « ${name} » supprimé (et retiré de Google Agenda).`);
     }
     // Copie complète dans la Corbeille AVANT de supprimer (même règle que l'app : src/lib/trash.ts).
     const entry = { id: `tr${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`, table: t.table, label: name, sub: rule.search[1] ? String(r[rule.search[1]] ?? "") || undefined : undefined, data: r, deletedAt: new Date().toISOString() };

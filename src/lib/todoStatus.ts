@@ -1,6 +1,7 @@
 import { dbUpdate } from "./db";
 import { myDisplayName, pokeTeam } from "./team";
 import { supabase } from "./supabase";
+import { synchroAgendaApresEcriture } from "./googleCalendar";
 import { todayISO } from "./dates";
 import { taskEventTitles } from "../../supabase/functions/_shared/taskEvent.ts";
 
@@ -44,7 +45,10 @@ async function clearTaskEvents(id: string): Promise<void> {
       .gte("date", todayISO())
       .eq("deleted", false)
       .select("id");
-    if (gone?.length) pokeTeam("events", { deleted: true });
+    if (gone?.length) {
+      pokeTeam("events", { deleted: true });
+      synchroAgendaApresEcriture(); // retiré aussi de Google Agenda dans les secondes qui suivent
+    }
   } catch {
     /* best-effort */
   }
