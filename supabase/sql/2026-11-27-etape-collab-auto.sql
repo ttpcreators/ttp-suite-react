@@ -28,11 +28,19 @@
 --      Quand l'étape change dans la session d'un créateur (ses posts), le drapeau de
 --      transaction ttp.auto_step fait passer la tâche sans la garde ni les repères du
 --      créateur : elle reste interne et à l'agence.
---      Une erreur pendant la création de la tâche ne bloque jamais le changement d'étape.
+--      Une erreur pendant la création de la tâche ne bloque jamais le changement d'étape :
+--      elle laisse un avertissement dans le journal de Postgres (« collabs_step_task : … »),
+--      pour qu'une panne qui revient se voie.
 --   L'app garde createStepTask comme repli : après ce SQL, elle trouve la tâche de la base
 --   et ne la double pas. Le contrôle du versement reste dans l'écran Collabs.
 --   Attention : un rattrapage en SQL qui fait monter des étapes crée aussi leurs tâches.
 --   Pour l'éviter, couper le réglage « une tâche à chaque étape » le temps du rattrapage.
+--   Attention aussi, Alfred : sa fiche (agents/alfred/fiches/app.md, « Chaque avancée met
+--   aussi la to-do à jour… ») lui dit encore de créer lui-même la tâche de l'étape. Tant
+--   qu'elle n'est pas mise à jour (vague suivante), chaque avancer_collab peut donner deux
+--   tâches pour la même étape : celle de la base et la sienne, au texte différent, que
+--   l'anti-doublon ne rapproche pas. Mettre la fiche à jour juste après ce SQL (elle se
+--   recharge seule la nuit), ou supprimer les doublons d'ici là.
 --
 -- Contrôle : la requête à la fin. Attendu : true · true · false
 -- Relançable sans risque (create or replace, drop puis create des déclencheurs).
@@ -123,7 +131,9 @@ begin
             floor(extract(epoch from now()))::int, new.id, false, false);
     perform set_config('ttp.auto_step', '', true);
   exception when others then
-    perform set_config('ttp.auto_step', '', true); -- pas de tâche, l'étape passe quand même
+    perform set_config('ttp.auto_step', '', true);
+    -- Pas de tâche, l'étape passe quand même ; la raison reste dans le journal de Postgres.
+    raise warning 'collabs_step_task : tâche de l''étape % non créée pour la collab % (%)', new.step, new.id, sqlerrm;
   end;
   return new;
 end $$;

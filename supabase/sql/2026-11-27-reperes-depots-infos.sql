@@ -33,6 +33,9 @@
 -- Contrôle : la requête à la fin. Attendu : true · true · 1 · 3 · false · false
 -- Relançable sans risque (if not exists, drop puis create, create or replace).
 -- Pas encore dans SETUP.sql (à replier après la réécriture de SETUP.sql en cours).
+-- Après ce SQL, ne plus relancer 2026-10-23-notifications-nouveautes.sql ni
+-- 2026-11-24-reperes-taches-internes.sql : ils remettraient l'ancienne règle
+-- activity_events_read sans aucune erreur (leur en-tête le dit).
 -- ============================================================================
 
 -- 1) Deux types d'objets de plus ------------------------------------------------------

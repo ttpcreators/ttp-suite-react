@@ -29,6 +29,8 @@
 -- la requête à la fin. Attendu : true · true · true · true · false
 -- Relançable sans risque (create or replace, aucune donnée touchée).
 -- Pas encore dans SETUP.sql (à replier après la réécriture de SETUP.sql en cours).
+-- Après ce SQL, ne plus relancer 2026-10-23-notifications-nouveautes.sql : il remettrait
+-- l'ancienne activity_actor sans aucune erreur (son en-tête le dit).
 -- ============================================================================
 
 -- Valeur de l'en-tête du connecteur (« alfred:<id> », « claude:<id> », sans l'id parfois),

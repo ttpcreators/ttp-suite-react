@@ -3,6 +3,12 @@
 -- par les créateurs.
 -- Titre Supabase : « Tâches internes privées »
 -- ----------------------------------------------------------------------------
+-- NE PLUS RELANCER APRÈS LA VAGUE 1 (SQL du 27/11) : sa règle todos_delete est remplacée
+-- par 2026-11-27-taches-pour-createur.sql (un créateur ne supprime plus une tâche de
+-- l'agence). Relancé, ce fichier la remettrait dans sa version du 24/11, sans aucune
+-- erreur : un créateur pourrait de nouveau supprimer pour de bon une tâche de l'agence
+-- visible par lui (relance, suivi), sans Corbeille.
+--
 -- Avant : un créateur lisait TOUTE tâche où il figure (creator / creators), donc
 -- aussi les tâches internes de l'agence et d'Alfred à son sujet (relances de
 -- marques, négociations, notes). Même chose pour les rendez-vous « Tâche : … ».
@@ -14,7 +20,8 @@
 -- 2) events.interne (défaut false) : un rendez-vous interne n'est plus lu par le
 --    créateur. Reprise : les rendez-vous « Tâche : … » deviennent internes.
 -- 3) Pièces jointes des tâches : même règle.
--- Aucune ligne n'est supprimée. Peut être relancé sans risque.
+-- Aucune ligne n'est supprimée. Était relançable sans risque avant la vague 1 (voir plus
+-- haut).
 -- ============================================================================
 
 alter table public.todos  add column if not exists visible_createur boolean not null default false;

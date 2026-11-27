@@ -1,7 +1,13 @@
 -- ============================================================================
 -- 2026-11-27 · Sécurité : audit « 14 attaques »
 -- ----------------------------------------------------------------------------
--- Relançable sans risque (create or replace, update idempotent, create table if not exists).
+-- NE PLUS RELANCER APRÈS LA VAGUE 1 (SQL du 27/11) : la garde todos_creators_guard de la
+-- partie 1 est remplacée par 2026-11-27-taches-pour-createur.sql. Relancé, ce fichier la
+-- remettrait dans sa version d'avant, sans aucune erreur : un créateur pourrait de nouveau
+-- cocher ou réécrire une tâche suivie par l'agence, et la tâche d'étape posée par la base
+-- pendant sa session (« Créer la facture … ») deviendrait la sienne, visible et supprimable.
+-- Avant la vague 1, il était relançable sans risque (create or replace, update idempotent,
+-- create table if not exists).
 -- Aucun changement pour l'agence. Pour un compte créateur connecté :
 --
 -- 1. Tâches : « fait par » est le nom de son compte (plus un texte libre), une tâche créée

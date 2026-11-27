@@ -29,7 +29,9 @@
 --
 -- Contrôle : la requête à la fin. Attendu : 1 · 0 · 0
 -- Relançable sans risque : le job de purge est remplacé par son nom, la pause et les
--- délais ne touchent que les jobs qui ne les ont pas encore.
+-- délais ne touchent que les jobs qui ne les ont pas encore. Un ancien SQL de crons
+-- relancé (par exemple pour changer le secret) remet la commande de son job sans délai :
+-- relancer ce fichier juste après (le contrôle le montre : appels sans délai au-dessus de 0).
 -- Pas dans SETUP.sql (réglage des tâches planifiées de la prod).
 -- ============================================================================
 

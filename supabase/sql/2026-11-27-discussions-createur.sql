@@ -22,6 +22,8 @@
 -- Contrôle : la requête à la fin. Attendu : 1 · true · true · false
 -- Relançable sans risque : la reprise ne se refait pas, le reste est create or replace.
 -- Pas encore dans SETUP.sql (à replier après la réécriture de SETUP.sql en cours).
+-- Après ce SQL, ne plus relancer 2026-10-23-negociations-createur.sql : il remettrait
+-- l'ancienne creator_discussions sans aucune erreur (son en-tête le dit).
 -- ============================================================================
 
 -- 1) Date de la dernière modification -------------------------------------------------
