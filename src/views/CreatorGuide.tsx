@@ -5,15 +5,16 @@ import {
   BarChart3,
   Bell,
   Lightbulb,
-  FileText,
   Target,
   TrendingUp,
   Image as ImageIcon,
   Files,
   Receipt,
-  Gift,
   CalendarDays,
   Contact as ContactIcon,
+  Handshake,
+  Mail,
+  UserRound,
   Share2,
   Check,
   type LucideIcon,
@@ -23,7 +24,9 @@ import { useT } from "@/lib/i18n";
 
 /**
  * Page GUIDE de l'espace créateur : comment utiliser l'app (mobile + ordi),
- * et surtout le réflexe « je note mes tâches / mes demandes dans À faire ».
+ * et surtout le réflexe « je note mes tâches / mes demandes dans To-do ».
+ * Les noms des pages sont ceux du menu (CREATOR_GROUPS de CreatorSpace.tsx) : un
+ * changement de menu se reporte ici, avec sa traduction (src/lib/i18n/en-creatorPages.ts).
  * Sert de mode d'emploi pour couper court aux questions récurrentes.
  * Mise en page façon Aperçu : chapeau en texte simple, puis tableau de bord
  * 2 colonnes (l'essentiel à gauche, les réglages pratiques à droite).
@@ -55,15 +58,16 @@ function Rich({ text }: { text: string }) {
 
 const PAGES: { icon: LucideIcon; label: string; desc: string }[] = [
   { icon: BarChart3, label: "Accueil", desc: "Vue d'ensemble, envoi de tes stats et raccourcis rapides." },
-  { icon: ListChecks, label: "À faire", desc: "Tes tâches, et tout ce que tu as besoin de demander à l'agence." },
+  { icon: ListChecks, label: "To-do", desc: "Tes tâches, et tout ce que tu as besoin de demander à l'agence." },
   { icon: Lightbulb, label: "Idées", desc: "Note tes idées de contenu\u00A0: l'agence les voit et rebondit." },
-  { icon: FileText, label: "Missions", desc: "Les campagnes des marques\u00A0: livrables, budget, script, PDF joint." },
+  { icon: Handshake, label: "Collabs", desc: "Tes collabs\u00A0: le brief («\u00A0J'ai lu\u00A0», ton concept), ton script, ton contenu, le lien de ton post et tes stats à 7 jours. Tes cadeaux sont dans Gifting." },
+  { icon: Mail, label: "Mail", desc: "Tes échanges avec les marques, quand ton agence a activé ta boîte." },
+  { icon: UserRound, label: "Mes informations", desc: "Tes coordonnées et tes comptes (Instagram, TikTok)\u00A0: garde-les à jour, ton agence s'en sert." },
   { icon: Target, label: "Ma feuille de route", desc: "Ta stratégie (niche, piliers, objectifs) et ta cadence du mois." },
-  { icon: TrendingUp, label: "Évolution", desc: "Tes courbes d'abonnés et de taux d'engagement dans le temps." },
+  { icon: TrendingUp, label: "Mes stats", desc: "Tes réseaux (connecte ton TikTok, tes chiffres arrivent seuls), le rapport du mois et les bilans de tes campagnes." },
   { icon: ImageIcon, label: "Media kit", desc: "Ta page pro à partager aux marques, mise à jour par l'agence." },
   { icon: Files, label: "Documents", desc: "Tes fichiers\u00A0: factures, media kits, briefs, stats." },
   { icon: Receipt, label: "Gains", desc: "Tes factures et leur statut ; dépose une facture si besoin." },
-  { icon: Gift, label: "Gifting", desc: "Le suivi des cadeaux et dotations reçus des marques." },
   { icon: CalendarDays, label: "Planning", desc: "Le calendrier partagé\u00A0: rendez-vous, échéances, tournages." },
   { icon: ContactIcon, label: "Contacts", desc: "Tes contacts de marques\u00A0: ajoute-les ici, ton agence les voit aussi." },
 ];
@@ -91,9 +95,9 @@ export function CreatorGuide({
           {/* Le réflexe n°1 : les tâches */}
           <DashPanel className="p-5">
             <DashSectionTitle icon={ListChecks}>{t("Le réflexe le plus important")}</DashSectionTitle>
-            <div className="text-[20px] font-semibold leading-tight tracking-tight text-foreground">{t("Note tout dans «\u00A0À faire\u00A0»")}</div>
+            <div className="text-[20px] font-semibold leading-tight tracking-tight text-foreground">{t("Note tout dans «\u00A0To-do\u00A0»")}</div>
             <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-muted-foreground">
-              <Rich text={t("Besoin de l'agence ? **Ajoute-le dans «\u00A0À faire\u00A0»**, pas par message.")} />
+              <Rich text={t("Besoin de l'agence ? **Ajoute-le dans «\u00A0To-do\u00A0»**, pas par message.")} />
             </p>
             <ul className="mt-4 divide-y divide-border border-y border-border text-[13px] text-foreground">
               {["On le voit en direct, rien ne se perd.", "Tu suis l'avancement\u00A0: À faire, En cours, Fait.", "Tu peux découper en sous-tâches et joindre le contexte."].map((line) => (
@@ -103,7 +107,7 @@ export function CreatorGuide({
               ))}
             </ul>
             <button type="button" onClick={() => onGoto("todo")} className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2.5 text-[13px] font-medium text-primary-foreground transition-opacity hover:opacity-90">
-              <ListChecks className="h-4 w-4" /> {t("Ouvrir «\u00A0À faire\u00A0»")}
+              <ListChecks className="h-4 w-4" /> {t("Ouvrir «\u00A0To-do\u00A0»")}
             </button>
           </DashPanel>
 
@@ -166,7 +170,7 @@ export function CreatorGuide({
           <DashPanel className="p-5">
             <DashSectionTitle icon={Bell}>{t("Active les notifications")}</DashSectionTitle>
             <p className="-mt-1 text-[12px] leading-relaxed text-muted-foreground">
-              <Rich text={t("Sur l'Accueil, touche **Activer**. Tu sauras quand un brief arrive.")} />
+              <Rich text={t("Sur l'Accueil, touche **Activer**. Tu es prévenu quand ton agence te confie une tâche, ajoute un rendez-vous ou un document.")} />
             </p>
           </DashPanel>
 

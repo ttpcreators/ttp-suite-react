@@ -1,4 +1,4 @@
-import type { BriefResume } from "@/lib/briefResume";
+import { hasResume, type BriefResume } from "@/lib/briefResume";
 import type { StatusTone } from "./statusTone";
 import { STEP_COUNT, isDone, stepDef } from "./collabs";
 import { toISODate } from "./dates";
@@ -69,15 +69,35 @@ export function creatorPhaseIndex(step: number): number {
 const norm = (s: string | null | undefined) => String(s ?? "").trim().toLowerCase();
 
 /** Collabs visibles par le créateur : en cours ou gagnées (pas les pistes perdues ou archivées). */
-const visibleCollab = (c: MissionCollab) => c.status !== "perdue" && c.status !== "archivee";
+const visibleCollab = (c: Pick<MissionCollab, "status">) => c.status !== "perdue" && c.status !== "archivee";
 
-export function buildMissions(collabs: MissionCollab[], briefs: MissionBrief[]): Mission[] {
+/**
+ * Brief de chaque collab visible (clé : id de la collab) : celui que la collab désigne
+ * (`brief_id`), sinon le premier brief libre de la même marque. Un brief ne sert qu'une
+ * fois. Même rapprochement pour les missions et pour « Ta prochaine étape ».
+ */
+export function pairCollabBriefs<B extends Pick<MissionBrief, "id" | "brand">>(
+  collabs: readonly Pick<MissionCollab, "id" | "brand" | "status" | "brief_id">[],
+  briefs: readonly B[],
+): Map<string, B> {
   const used = new Set<string>();
-  const out: Mission[] = [];
+  const out = new Map<string, B>();
   for (const c of collabs.filter(visibleCollab)) {
     let brief = c.brief_id ? briefs.find((b) => b.id === c.brief_id && !used.has(b.id)) ?? null : null;
     if (!brief) brief = briefs.find((b) => !used.has(b.id) && norm(b.brand) === norm(c.brand) && norm(b.brand) !== "") ?? null;
-    if (brief) used.add(brief.id);
+    if (!brief) continue;
+    used.add(brief.id);
+    out.set(c.id, brief);
+  }
+  return out;
+}
+
+export function buildMissions(collabs: MissionCollab[], briefs: MissionBrief[]): Mission[] {
+  const paired = pairCollabBriefs(collabs, briefs);
+  const used = new Set([...paired.values()].map((b) => b.id));
+  const out: Mission[] = [];
+  for (const c of collabs.filter(visibleCollab)) {
+    const brief = paired.get(c.id) ?? null;
     out.push({
       id: `c:${c.id}`,
       brand: c.brand || brief?.brand || "",
@@ -87,7 +107,9 @@ export function buildMissions(collabs: MissionCollab[], briefs: MissionBrief[]):
       collab: c,
       brief,
       due: toISODate(brief?.due),
-      done: c.status === "gagnee" || isDone(c.step),
+      // Terminée à la dernière étape seulement, qu'elle soit en cours ou gagnée : une collab
+      // gagnée tôt a encore des étapes devant elle (même règle que isInProgress, collabs.ts).
+      done: isDone(c.step),
     });
   }
   for (const b of briefs) {
@@ -144,11 +166,11 @@ export const CREATOR_STAGES = ["Brief reçu", "Contenu envoyé", "Validé", "Pub
  * 1 Signature → aucune ; 2-3 Brief transmis, Concept validé → Brief reçu ; 4 Tournage →
  * Contenu envoyé ; 5 Validation marque → Validé ; 6-9 Publication à Paiement marque → Publié ;
  * 10-11 Créateur payé, Bilan → Payé. Brief seul : attente ou en cours → Brief reçu,
- * à valider → Contenu envoyé, terminé → Validé.
+ * à valider → Contenu envoyé, terminé → Validé. Une collab gagnée suit son étape, comme
+ * une collab en cours (gagnée à la signature : rien n'est encore fait).
  */
 export function creatorStage(m: Pick<Mission, "step" | "brief" | "collab" | "done">): number {
   if (m.collab) {
-    if (m.collab.status === "gagnee") return 4;
     const s = m.step ?? 1;
     return s >= 10 ? 4 : s >= 6 ? 3 : s >= 5 ? 2 : s >= 4 ? 1 : s >= 2 ? 0 : -1;
   }
@@ -156,21 +178,28 @@ export function creatorStage(m: Pick<Mission, "step" | "brief" | "collab" | "don
   return k === "terminé" ? 2 : k === "valider" ? 1 : 0;
 }
 
-export type MissionActionKey = "brief" | "content" | "feedback" | "invoice" | "open";
+/** Le brief a-t-il quelque chose à lire (résumé ou PDF de la marque) ? Les livrables recopiés de la collab ne comptent pas. */
+export function briefHasContent(b: Pick<MissionBrief, "resume" | "pdf"> | null | undefined): boolean {
+  return !!b && (hasResume(b.resume) || !!(b.pdf && (b.pdf.path || b.pdf.docId)));
+}
+
+export type MissionActionKey = "brief" | "content" | "invoice" | "open";
 
 /**
  * LE bouton principal d'une mission selon où elle en est (null quand tout est fini).
  * Libellé français (clé de traduction) : un verbe, deux ou trois mots.
+ * À la signature, le brief créé avec la collab est souvent vide : « Lire le brief »
+ * seulement s'il a un résumé ou un PDF. À l'étape « Contenu envoyé », aucun retour de la
+ * marque n'est affiché dans l'app : le bouton ouvre simplement la fiche.
  */
 export function missionAction(m: Pick<Mission, "step" | "brief" | "collab" | "done">): { key: MissionActionKey; label: string } | null {
   const stage = creatorStage(m);
   if (stage >= 4) return null;
   if (stage <= 0) {
     const fresh = m.collab ? (m.step ?? 1) <= 2 : briefKey(m.brief?.status ?? "attente") === "attente";
-    if (m.brief && (stage < 0 || fresh)) return { key: "brief", label: "Lire le brief" };
+    if (m.brief && (stage < 0 ? briefHasContent(m.brief) : fresh)) return { key: "brief", label: "Lire le brief" };
     return stage < 0 ? { key: "open", label: "Ouvrir" } : { key: "content", label: "Envoyer mon contenu" };
   }
-  if (stage === 1) return { key: "feedback", label: "Voir les retours" };
   if (m.collab && (m.step ?? 0) >= 8) return { key: "invoice", label: "Déposer ma facture" };
   return { key: "open", label: "Ouvrir" };
 }
