@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { Check, LogOut, ShieldCheck, X } from "@/components/icons";
 import "@/index.css";
 import { supabase } from "@/lib/supabase";
+import { destinationRetour } from "../../supabase/functions/_shared/oauthRetour.ts";
 
 /**
  * Page « Autoriser Claude » (app.ttpcreators.pro/connecteur/) : étape d'accord du
@@ -12,9 +13,14 @@ import { supabase } from "@/lib/supabase";
  * (même navigateur que l'app), on montre l'accord ; sinon, on se connecte ici.
  * « Autoriser » : la fonction ttp-mcp crée la connexion et renvoie vers Claude avec un
  * code à usage unique. « Refuser » : retour vers Claude avec error=access_denied.
+ * Le nom de l'application est celui qu'elle s'est donné : la page montre surtout où le code
+ * repart vraiment (adresse de retour, _shared/oauthRetour.ts), pour qu'une application ne
+ * puisse pas se faire passer pour Claude. Case « agent autonome » (Alfred) : ses envois et ses
+ * actions irréversibles attendront une validation dans la page Agents.
  */
 const FN = "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ttp-mcp";
 const P = new URLSearchParams(location.search);
+const dest = destinationRetour(P.get("redirect_uri") ?? "");
 const req = {
   client_id: P.get("client_id") ?? "",
   redirect_uri: P.get("redirect_uri") ?? "",
@@ -31,9 +37,10 @@ async function post(path: string, body: unknown, jwt?: string) {
     headers: { "Content-Type": "application/json", ...(jwt ? { Authorization: `Bearer ${jwt}` } : {}) },
     body: JSON.stringify(body),
   });
-  const data = (await res.json().catch(() => ({}))) as Record<string, string>;
+  const data = (await res.json().catch(() => ({}))) as Record<string, string | boolean | undefined>;
   return { ok: res.ok, data };
 }
+const texte = (v: string | boolean | undefined) => (typeof v === "string" ? v : "");
 
 const CAN = [
   "Lire les mails de partnerships@ et talent@, et les DM Instagram",
@@ -46,7 +53,9 @@ const NEVER = ["Agir sans ton accord", "Effacer définitivement (tout passe par 
 function App() {
   const [step, setStep] = useState<"check" | "login" | "consent" | "busy" | "error">("check");
   const [err, setErr] = useState("");
-  const [client, setClient] = useState("ton assistant IA");
+  const [client, setClient] = useState("");
+  const [agentPossible, setAgentPossible] = useState(false);
+  const [agent, setAgent] = useState(false);
   const [email, setEmail] = useState("");
   const [who, setWho] = useState("");
   const [password, setPassword] = useState("");
@@ -57,12 +66,17 @@ function App() {
         setErr("Lien incomplet : relance la connexion depuis ton assistant (Claude, ChatGPT…).");
         return setStep("error");
       }
-      const c = await post("/authorize/check", { client_id: req.client_id, redirect_uri: req.redirect_uri });
-      if (!c.ok) {
-        setErr(c.data.error_description ?? "Connexion inconnue : relance-la depuis ton assistant.");
+      if (!dest) {
+        setErr("Adresse de retour non autorisée : cette connexion est refusée.");
         return setStep("error");
       }
-      setClient(c.data.client_name || "ton assistant IA");
+      const c = await post("/authorize/check", { client_id: req.client_id, redirect_uri: req.redirect_uri });
+      if (!c.ok) {
+        setErr(texte(c.data.error_description) || "Connexion inconnue : relance-la depuis ton assistant.");
+        return setStep("error");
+      }
+      setClient(texte(c.data.client_name).slice(0, 80));
+      setAgentPossible(c.data.agent_possible === true);
       const { data } = await supabase.auth.getSession();
       if (data.session) {
         setWho(data.session.user.email ?? "");
@@ -89,12 +103,16 @@ function App() {
     const { data } = await supabase.auth.getSession();
     const jwt = data.session?.access_token;
     if (!jwt) return setStep("login");
-    const r = await post("/authorize/approve", req, jwt);
-    if (!r.ok || !r.data.redirect) {
-      setErr(r.data.error_description ?? "Autorisation impossible, réessaie.");
+    const r = await post("/authorize/approve", { ...req, ...(agent ? { agent: true } : {}) }, jwt);
+    if (!r.ok || !texte(r.data.redirect)) {
+      setErr(texte(r.data.error_description) || "Autorisation impossible, réessaie.");
       return setStep("consent");
     }
-    location.replace(r.data.redirect);
+    if (agent && r.data.agent !== true) {
+      setErr("La connexion a été créée sans le verrou d'agent : coupe-la dans Paramètres › Assistants IA, puis recommence.");
+      return setStep("consent");
+    }
+    location.replace(texte(r.data.redirect));
   };
 
   const deny = () => {
@@ -117,7 +135,7 @@ function App() {
           <img src="/logo.png?v=3" alt="" className="h-10 w-10 rounded-xl" />
           <div>
             <div className="text-[15px] font-semibold">TTP Suite</div>
-            <div className="text-[12px] text-muted-foreground">Connexion de {client}</div>
+            <div className="text-[12px] text-muted-foreground">Connexion d'une application</div>
           </div>
         </div>
 
@@ -128,7 +146,7 @@ function App() {
         ) : step === "login" ? (
           <form onSubmit={(e) => { e.preventDefault(); void login(); }} className="flex flex-col gap-3">
             <h1 className="text-[22px] font-semibold tracking-tight">Connecte-toi à TTP Suite</h1>
-            <p className="text-[13px] text-muted-foreground">Avec ton compte de l'agence, pour autoriser {client}.</p>
+            <p className="text-[13px] text-muted-foreground">Avec ton compte de l'agence, pour autoriser la connexion de {dest?.texte ?? "cette application"}.</p>
             <input type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email"
               className="h-11 rounded-[10px] border border-input bg-surface px-3 text-[16px] outline-none focus:border-foreground" />
             <input type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Mot de passe"
@@ -138,9 +156,14 @@ function App() {
           </form>
         ) : (
           <div className="flex flex-col gap-4">
-            <h1 className="text-[22px] font-semibold leading-snug tracking-tight">Autoriser {client} à accéder à TTP Suite ?</h1>
+            <h1 className="text-[22px] font-semibold leading-snug tracking-tight">Autoriser cette connexion à TTP Suite ?</h1>
+            <div className="rounded-xl border border-border px-4 py-3 text-[13px] leading-snug">
+              <div><span className="text-muted-foreground">Retour vers : </span><span className="font-semibold">{dest?.texte}</span></div>
+              {client && <div className="mt-1 text-muted-foreground">Nom donné par l'application : « {client} » (choisi par elle, non vérifié)</div>}
+              {dest?.locale && <div className="mt-1 text-muted-foreground">Si tu n'as rien lancé toi même sur cet ordinateur, refuse.</div>}
+            </div>
             <div className="rounded-xl bg-muted/60 p-4">
-              <div className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold"><ShieldCheck className="h-4 w-4" /> {client} pourra</div>
+              <div className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold"><ShieldCheck className="h-4 w-4" /> Cette connexion pourra</div>
               <ul className="flex flex-col gap-1.5">
                 {CAN.map((t) => <li key={t} className="flex gap-2 text-[13px] leading-snug"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-signaltext" />{t}</li>)}
               </ul>
@@ -149,6 +172,15 @@ function App() {
                 {NEVER.map((t) => <li key={t} className="flex gap-2 text-[13px] leading-snug"><X className="mt-0.5 h-3.5 w-3.5 shrink-0 text-dangertext" />{t}</li>)}
               </ul>
             </div>
+            {agentPossible && (
+              <label className="flex cursor-pointer gap-2.5 rounded-xl border border-border px-4 py-3 text-[13px] leading-snug">
+                <input type="checkbox" checked={agent} onChange={(e) => setAgent(e.target.checked)} className="mt-0.5 size-4 shrink-0 accent-[var(--primary)]" />
+                <span>
+                  <span className="font-semibold">Agent autonome (Alfred)</span>
+                  <span className="block text-muted-foreground">Ses envois et ses actions irréversibles attendront ta validation dans la page Agents.</span>
+                </span>
+              </label>
+            )}
             <p className="text-[12px] leading-relaxed text-muted-foreground">
               Chaque consultation et chaque action sont notées. Tu peux couper cet accès à tout moment dans Paramètres → Assistants IA.
             </p>

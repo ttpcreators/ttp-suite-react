@@ -63,7 +63,12 @@ if grep -q '^PISTE_CLIENT_ID=.' "$DEST/config.env" 2>/dev/null && grep -q '^PIST
     echo "Légifrance : installation des dépendances ratée, pas branché." >&2
   fi
 fi
-export ALFRED_LEGIFRANCE=$legifrance ALFRED_DEST=$DEST
+# Le connecteur TTP Suite propre à Alfred (sécurité, 27 novembre 2026, voir LISEZ-MOI.md) : branché
+# seulement si ALFRED_CONNECTEUR est dans config.env. Il s'autorise une fois à la main (claude, /mcp)
+# avec la case « Agent autonome » cochée ; alfred.sh l'utilise alors à la place de celui de Marc.
+connecteur=$(grep -m1 '^ALFRED_CONNECTEUR=' "$DEST/config.env" 2>/dev/null | cut -d= -f2- | tr -d "\"' ")
+[[ "$connecteur" =~ '^[A-Za-z0-9_-]+$' ]] || connecteur=""
+export ALFRED_LEGIFRANCE=$legifrance ALFRED_DEST=$DEST ALFRED_CONNECTEUR=$connecteur
 /usr/bin/python3 - "$DEST/.mcp.json" <<'PY'
 import json, os, sys
 p = sys.argv[1]
@@ -76,6 +81,12 @@ if os.environ.get("ALFRED_LEGIFRANCE") == "1":
     s["legifrance"] = {"command": os.environ["ALFRED_DEST"] + "/legifrance/lancer.sh", "args": []}
 else:
     s.pop("legifrance", None)
+TTP = "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ttp-mcp"
+nom = os.environ.get("ALFRED_CONNECTEUR", "")
+for k in [k for k, v in s.items() if isinstance(v, dict) and v.get("url") == TTP and k != nom]:
+    s.pop(k)
+if nom:
+    s[nom] = {"type": "http", "url": TTP}
 json.dump(d, open(p, "w"), indent=2, ensure_ascii=False)
 PY
 # Le dossier reste propre (demande de Marc le 2026-11-24) : ce qui traîne à la racine et n'est plus
@@ -117,6 +128,10 @@ for ev, matcher in (("PostToolUse", "*"), ("UserPromptSubmit", None), ("Notifica
 servers = [x for x in d.get("enabledMcpjsonServers", []) if x != "legifrance"]
 if os.environ.get("ALFRED_LEGIFRANCE") == "1":
     servers.append("legifrance")
+# Le connecteur TTP Suite propre à Alfred, s'il est réglé dans config.env.
+nom = os.environ.get("ALFRED_CONNECTEUR", "")
+if nom and nom not in servers:
+    servers.append(nom)
 d["enabledMcpjsonServers"] = servers
 json.dump(d, open(p, "w"), indent=2, ensure_ascii=False)
 PY

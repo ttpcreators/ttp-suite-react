@@ -51,6 +51,12 @@ describe("gesteValider : même statut qu'avant", () => {
     expect(gesteValider(p({ type: "avancer_collab", lien_spark: lien(5) }), ALFRED)).toBe("avancer_collab");
     expect(statutApresValidation("avancer_collab")).toBe("envoye");
   });
+  it("un appel d'outil proposé par un agent passe en « valide » (l'agent le fait)", () => {
+    const g = gesteValider(p({ type: "alerte", contenu: "Action demandée : …", outil: { nom: "noter_reversement", arguments: { montant: 400 } } }), ALFRED);
+    expect(g).toBe("alfred_fait");
+    expect(statutApresValidation(g)).toBe("valide");
+    expect(gesteValider(p({ type: "alerte", outil: null }), ALFRED)).toBe("marquer_envoye");
+  });
   it("sans Alfred connu, un mail est marqué envoyé", () => {
     expect(gesteValider(p({ type: "brouillon_mail", agent_id: ALFRED }), null)).toBe("marquer_envoye");
   });

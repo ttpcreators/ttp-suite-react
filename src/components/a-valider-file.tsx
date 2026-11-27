@@ -189,6 +189,7 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, copied, onCopi
         const mode = modeModifier(a);
         const busy = occupe.has(a.id);
         const titreValider = geste === "alfred_envoie" ? "Alfred l'envoie dans la minute (V)"
+          : geste === "alfred_fait" ? "Alfred fait exactement cette action (V)"
           : geste === "avancer_collab" ? "La collab avance à cette étape (V)"
           : geste === "copier_envoye" ? "Copie le message et le marque envoyé (V)"
           : "Marque comme fait (V)";

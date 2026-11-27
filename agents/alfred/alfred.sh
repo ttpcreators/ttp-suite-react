@@ -274,11 +274,26 @@ done < etat/delegations.md
 # Sans message de Marc : jamais supprimer, régler l'app, toucher aux factures, ni envoyer.
 # Quand Marc écrit : tous les outils de TTP Suite, pour faire ce qu'il demande. Envoyer un brouillon et retenir une leçon :
 # seulement quand Marc vient d'écrire, ou pendant une délégation avec envoi autorisé.
-ttp="mcp__claude_ai_TTP_Suite__"
+# Le connecteur TTP Suite. Par défaut, celui du compte Claude de Marc (« TTP Suite » sur claude.ai),
+# comme les sessions de Marc. Avec ALFRED_CONNECTEUR dans config.env (le
+# nom du connecteur propre à Alfred sur l'iMac, branché par installer.sh et autorisé une fois avec
+# la case « Agent autonome » cochée, voir LISEZ-MOI.md), Alfred n'utilise plus que celui-là : le
+# serveur exige alors une validation faite dans l'app (page Agents) avant tout envoi et toute action
+# irréversible (ttp-mcp/verrou.ts), et le connecteur de Marc lui est fermé.
+connecteur=$(reglage ALFRED_CONNECTEUR)
+[[ "$connecteur" =~ '^[A-Za-z0-9_-]+$' ]] || connecteur=""
+if [[ -n "$connecteur" ]]; then
+  ttp_tout="mcp__${connecteur}"
+else
+  ttp_tout="mcp__claude_ai_TTP_Suite"
+fi
+ttp="${ttp_tout}__"
 lire="scouting posts_instagram alias_createurs lire_contrat mes_agents corbeille devis_a_relancer dispos_du_mois tableau_lundi contacts_a_relancer strategie objectifs modeles_mails base_createurs boites_createurs lien_boite_createur lien_connexion_instagram droits_usage posts_createur brouillons_claude journal_agents stats_collab compta lire_agent point_du_jour rechercher lister_createurs fiche_createur contrats verifier_exclusivite rechercher_mails lire_mail dm_instagram contacts pipeline collabs planning taches factures reversements methode_tarif memoire_createur lire_brief notifications checklist bilans sourcing stats journal_activite lire_donnees a_valider"
 agir="preparer_contrat sequence_contact marquer_lu ajouter_modele proposer_action ecarter_proposition noter_reversement brouillon_post_instagram noter_droits noter_journal creer_meet ajouter_au_scouting changer_statut_scouting creer_brouillon_mail supprimer_brouillon preparer_devis creer_tache cocher_tache avancer_collab creer_element modifier_element ajouter_contact noter_echange_contact creer_evenement"
 sur_oui="envoyer_brouillon envoyer_brouillons_valides noter_lecon maj_chiffres_mediakit inviter_rdv"
 interdits="envoyer_mail envoyer_dm supprimer_element reglages_app preparer_facture preparer_reponse_mail resumer_brief"
+# Les actions que le serveur ne laisse passer qu'avec une validation faite dans l'app (connecteur propre à Alfred).
+valides_app="noter_reversement modifier_element supprimer_element reglages_app preparer_facture creer_meet inviter_rdv"
 # Seule commande permise : télécharger et découper une vidéo dont le lien est dans un mail.
 # Skill : ses skills (.claude/skills, voir skills/LISEZ-MOI.md du dépôt), des consignes à lire.
 # WhatsApp (choix de Marc le 2026-11-10, élargi au pro le 2026-11-15) : lecture des discussions de
@@ -304,6 +319,8 @@ allowed=("Read($ici/**)" "Edit($ici/etat/**)" "WebFetch" "WebSearch" "Skill" "Ba
 # ffmpeg-skill (demande de Marc le 2026-11-27) : seulement les outils qui MESURENT une vidéo (check, probe ; loudness.py écrit une copie, exclu).
 denied=("mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash(spark:*)"
   "Edit($ici/etat/whatsapp-autorises.txt)" "Edit($ici/etat/whatsapp-a-envoyer/**)" "Edit($ici/etat/whatsapp-envoyes/**)")
+# Connecteur propre à Alfred : celui de Marc (sans verrou) lui est fermé, dans tous les passages.
+[[ -n "$connecteur" ]] && denied+=("mcp__claude_ai_TTP_Suite")
 # Envoi WhatsApp (choix de Marc le 2026-11-15) : `whatsapp.mjs envoyer` ne fait partir que le texte
 # gardé par telegram.mjs quand Marc l'a reçu (Alfred ne peut pas écrire dans etat/whatsapp-a-envoyer/),
 # et seulement pendant un passage où Marc a écrit : ses consignes exigent son « oui » pour CE texte.
@@ -328,7 +345,7 @@ envoi_valide=0
 if (( recus > 0 )); then
   # Marc vient d'écrire : Alfred gère toute l'app sur sa demande (choix de Marc le 2026-11-06).
   # Ses consignes gardent la règle : un mail ou un DM ne part que sur un « oui » explicite.
-  allowed+=("mcp__claude_ai_TTP_Suite")
+  allowed+=("$ttp_tout")
 else
   for t in ${=lire} ${=agir}; do allowed+=("$ttp$t"); done
   for t in ${=interdits}; do denied+=("$ttp$t"); done
@@ -341,6 +358,15 @@ else
     for t in ${=sur_oui}; do
       [[ "$t" == envoyer_brouillon || "$t" == envoyer_brouillons_valides ]] && allowed+=("$ttp$t") || denied+=("$ttp$t")
     done
+    # Avec son propre connecteur, le serveur ne laisse passer que ce qui a été validé dans l'app :
+    # Alfred peut donc faire aussi les actions validées (versement, facture, suppression, réglage,
+    # invitation), avec exactement l'appel que Marc a vu.
+    if [[ -n "$connecteur" ]]; then
+      for t in ${=valides_app}; do
+        denied=("${(@)denied:#$ttp$t}")
+        allowed+=("$ttp$t")
+      done
+    fi
   else
     for t in ${=sur_oui}; do denied+=("$ttp$t"); done
   fi
@@ -355,7 +381,7 @@ fi
 # commande ; les réponses attendues (examen/attendu.md) ne sont lisibles qu'à la correction.
 if [[ "$mode" == "l'examen de la semaine" || "$mode" == "la correction de l'examen" ]]; then
   allowed=("Read($ici/**)" "Edit($ici/etat/examen/**)" "Skill")
-  denied=("mcp__claude_ai_TTP_Suite" "mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash" "WebFetch" "WebSearch")
+  denied=("mcp__claude_ai_TTP_Suite" "$ttp_tout" "mcp__claude_ai_Gmail" "mcp__plugin_telegram_telegram" "Bash" "WebFetch" "WebSearch")
   [[ "$mode" == "l'examen de la semaine" ]] && denied+=("Read($ici/examen/attendu.md)" "Read($ici/etat/examen/resultats.md)")
   [[ "$mode" == "la correction de l'examen" ]] && allowed+=("Edit($ici/$ENVOI/**)")
 fi

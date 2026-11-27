@@ -3,18 +3,23 @@
 // ----------------------------------------------------------------------------
 //   • L'assistant s'enregistre tout seul (/register, enregistrement dynamique RFC 7591),
 //     uniquement avec des adresses de retour connues : Claude (claude.ai / claude.com),
-//     ChatGPT (chatgpt.com, depuis le 2026-10-28) ou locales (Claude Code, agents sur
-//     l'ordinateur). Chaque membre de l'agence se connecte avec SON compte : ses droits
-//     s'appliquent (fondateur = accès complet).
+//     ChatGPT (ses deux rappels officiels de connecteur seulement, depuis le 2026-11-27) ou
+//     locales (Claude Code, agents sur l'ordinateur) : _shared/oauthRetour.ts. Chaque membre
+//     de l'agence se connecte avec SON compte : ses droits s'appliquent (fondateur = accès complet).
 //   • La page « Autoriser Claude » (app.ttpcreators.pro/connecteur/) envoie le compte
 //     TTP Suite connecté (/authorize/approve) : on crée une connexion (mcp_grants) et un
-//     code à usage unique (10 min).
+//     code à usage unique (10 min). La page montre l'adresse de retour réelle, pas
+//     seulement le nom que l'application se donne.
+//   • Connexion « agent autonome » (case cochée sur la page, colonne mcp_grants.agent,
+//     SQL 2026-11-27-securite-alfred) : ses envois et ses actions irréversibles attendent une
+//     validation faite dans l'app (verrou.ts). Les autres connexions ne changent pas.
 //   • /token échange le code (vérification PKCE) contre un jeton d'accès (1 h) et un
 //     jeton de renouvellement (60 j, remplacé à chaque usage). Tout est stocké haché.
 //   • Une connexion coupée dans Paramètres (revoked_at) invalide tous ses jetons.
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { adresseRetourAutorisee } from "../_shared/oauthRetour.ts";
 
 export const FN_URL = "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ttp-mcp";
 export const ISSUER = "https://app.ttpcreators.pro";
@@ -23,7 +28,13 @@ const ACCESS_TTL = 3600; // s
 const REFRESH_TTL = 60 * 86400; // s
 const CODE_TTL = 10 * 60; // s
 
-export type Ctx = { userId: string; grantId: string; founder: boolean; name: string };
+export type Ctx = {
+  userId: string; grantId: string; founder: boolean; name: string;
+  /** Connexion d'un agent autonome (Alfred) : envois et actions irréversibles validés dans l'app (verrou.ts). */
+  agent: boolean;
+  /** Pour un agent : brouillon → date de sa validation dans la page Agents (posé par verrou.ts). */
+  validations?: Record<string, string>;
+};
 
 const enc = new TextEncoder();
 const b64url = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -37,17 +48,8 @@ async function sha256b64url(s: string): Promise<string> {
 const randomToken = (prefix: string) => prefix + b64url(crypto.getRandomValues(new Uint8Array(32)));
 const inSeconds = (s: number) => new Date(Date.now() + s * 1000).toISOString();
 
-/** Adresses de retour acceptées : Claude (web, ordinateur, téléphone), ChatGPT, et les agents en local. */
-export function allowedRedirect(u: string): boolean {
-  try {
-    const x = new URL(u);
-    if (x.protocol === "https:" && ["claude.ai", "claude.com", "www.claude.ai", "www.claude.com", "chatgpt.com", "chat.openai.com"].includes(x.hostname)) return true;
-    if (x.protocol === "http:" && ["localhost", "127.0.0.1"].includes(x.hostname)) return true;
-    return false;
-  } catch {
-    return false;
-  }
-}
+/** Adresses de retour acceptées : Claude (web, ordinateur, téléphone), ChatGPT (rappels officiels), et les agents en local. */
+export const allowedRedirect = adresseRetourAutorisee;
 
 export function asMetadata() {
   return {
@@ -83,7 +85,7 @@ const oauthErr = (error: string, description: string, status = 400): Out => ({ s
 export async function register(sb: SupabaseClient, body: Json): Promise<Out> {
   const uris = Array.isArray(body.redirect_uris) ? body.redirect_uris.map(String) : [];
   if (!uris.length || uris.length > 10 || !uris.every(allowedRedirect)) {
-    return oauthErr("invalid_redirect_uri", "Adresse de retour non autorisée (Claude, ChatGPT ou agent sur l'ordinateur uniquement).");
+    return oauthErr("invalid_redirect_uri", "Adresse de retour non autorisée (Claude, rappel officiel de ChatGPT ou agent sur l'ordinateur uniquement).");
   }
   // Ménage : les enregistrements de plus de 24 h jamais utilisés (aucune connexion)
   // ne doivent pas remplir le plafond et bloquer les vraies connexions.
@@ -122,12 +124,23 @@ async function clientOf(sb: SupabaseClient, id: string): Promise<ClientRow | nul
   return data ?? null;
 }
 
-/** Page « Autoriser » : le client et son adresse de retour sont-ils valides ? */
+/** La colonne mcp_grants.agent existe (SQL 2026-11-27-securite-alfred lancé). */
+async function agentPossible(sb: SupabaseClient): Promise<boolean> {
+  const { error } = await sb.from("mcp_grants").select("agent").limit(1);
+  return !error;
+}
+
+/**
+ * Page « Autoriser » : le client et son adresse de retour sont-ils valides ? L'adresse est
+ * revérifiée avec les règles du jour (un client enregistré avant un durcissement n'y échappe pas).
+ * `client_name` est le nom que l'application s'est donné : la page affiche aussi l'adresse de retour.
+ */
 export async function check(sb: SupabaseClient, body: Json): Promise<Out> {
   const c = await clientOf(sb, String(body.client_id ?? ""));
   if (!c) return oauthErr("invalid_client", "Connexion inconnue : relance la connexion depuis Claude.");
-  if (!c.redirect_uris.includes(String(body.redirect_uri ?? ""))) return oauthErr("invalid_request", "Adresse de retour inattendue.");
-  return { status: 200, body: { ok: true, client_name: c.client_name ?? "Claude" } };
+  const redirect = String(body.redirect_uri ?? "");
+  if (!c.redirect_uris.includes(redirect) || !allowedRedirect(redirect)) return oauthErr("invalid_request", "Adresse de retour inattendue.");
+  return { status: 200, body: { ok: true, client_name: c.client_name ?? "Claude", agent_possible: await agentPossible(sb) } };
 }
 
 /** Accord donné par un compte agence connecté (jeton de session Supabase). */
@@ -139,13 +152,20 @@ export async function approve(sb: SupabaseClient, jwt: string, body: Json): Prom
   const c = await clientOf(sb, String(body.client_id ?? ""));
   const redirect = String(body.redirect_uri ?? "");
   if (!c) return oauthErr("invalid_client", "Connexion inconnue : relance la connexion depuis Claude.");
-  if (!c.redirect_uris.includes(redirect)) return oauthErr("invalid_request", "Adresse de retour inattendue.");
+  if (!c.redirect_uris.includes(redirect) || !allowedRedirect(redirect)) return oauthErr("invalid_request", "Adresse de retour inattendue.");
   const challenge = String(body.code_challenge ?? "");
   if (String(body.code_challenge_method ?? "") !== "S256" || !/^[A-Za-z0-9_-]{43,128}$/.test(challenge)) {
     return oauthErr("invalid_request", "PKCE S256 obligatoire.");
   }
-  const { data: grant, error: ge } = await sb.from("mcp_grants").insert({ user_id: u.user.id, client_id: c.client_id, client_name: c.client_name ?? "Claude" }).select("id").single<{ id: string }>();
-  if (ge || !grant) return oauthErr("server_error", "Connexion impossible, réessaie.", 500);
+  // Connexion d'un agent autonome (case cochée sur la page d'accord) : jamais créée sans la
+  // colonne qui la marque, sinon l'agent aurait un accès sans verrou en croyant en avoir un.
+  const agent = body.agent === true;
+  const { data: grant, error: ge } = await sb.from("mcp_grants").insert({ user_id: u.user.id, client_id: c.client_id, client_name: c.client_name ?? "Claude", ...(agent ? { agent: true } : {}) }).select("id").single<{ id: string }>();
+  if (ge || !grant) {
+    return agent
+      ? oauthErr("server_error", "Connexion d'agent impossible pour l'instant (SQL 2026-11-27-securite-alfred pas encore lancé) : rien n'a été créé.", 500)
+      : oauthErr("server_error", "Connexion impossible, réessaie.", 500);
+  }
   const code = randomToken("ttpcode_");
   const { error: ce } = await sb.from("mcp_codes").insert({
     code_hash: await sha256hex(code), grant_id: grant.id, client_id: c.client_id, redirect_uri: redirect, code_challenge: challenge, expires_at: inSeconds(CODE_TTL),
@@ -155,7 +175,7 @@ export async function approve(sb: SupabaseClient, jwt: string, body: Json): Prom
   url.searchParams.set("code", code);
   if (body.state) url.searchParams.set("state", String(body.state));
   url.searchParams.set("iss", ISSUER);
-  return { status: 200, body: { redirect: url.toString() } };
+  return { status: 200, body: { redirect: url.toString(), agent } };
 }
 
 async function issue(sb: SupabaseClient, grantId: string, clientId: string): Promise<Json | null> {
@@ -243,12 +263,13 @@ export async function authenticate(sb: SupabaseClient, bearer: string): Promise<
   const { data: tok } = await sb.from("mcp_tokens").select("grant_id, expires_at, revoked_at")
     .eq("token_hash", await sha256hex(bearer)).eq("kind", "access").maybeSingle<{ grant_id: string; expires_at: string; revoked_at: string | null }>();
   if (!tok || tok.revoked_at || Date.parse(tok.expires_at) < Date.now()) return null;
-  const { data: g } = await sb.from("mcp_grants").select("user_id, revoked_at, last_used_at").eq("id", tok.grant_id).maybeSingle<{ user_id: string; revoked_at: string | null; last_used_at: string | null }>();
+  // « * » : la colonne `agent` n'existe qu'après le SQL 2026-11-27-securite-alfred ; avant, rien ne change.
+  const { data: g } = await sb.from("mcp_grants").select("*").eq("id", tok.grant_id).maybeSingle<{ user_id: string; revoked_at: string | null; last_used_at: string | null; agent?: boolean | null }>();
   if (!g || g.revoked_at) return null;
   const { data: prof } = await sb.from("profiles").select("role, agency_role, display_name").eq("user_id", g.user_id).maybeSingle<{ role: string; agency_role: string | null; display_name: string | null }>();
   if (prof?.role !== "agency") return null;
   if (!g.last_used_at || Date.now() - Date.parse(g.last_used_at) > 5 * 60_000) {
     await sb.from("mcp_grants").update({ last_used_at: new Date().toISOString() }).eq("id", tok.grant_id);
   }
-  return { userId: g.user_id, grantId: tok.grant_id, founder: prof.agency_role === "founder", name: prof.display_name ?? "" };
+  return { userId: g.user_id, grantId: tok.grant_id, founder: prof.agency_role === "founder", name: prof.display_name ?? "", agent: g.agent === true };
 }
