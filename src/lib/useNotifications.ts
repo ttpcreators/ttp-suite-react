@@ -10,6 +10,7 @@ import { teamNames } from "./team";
 import { closeMailThreadNotifications } from "./appBadge";
 import { activityText } from "../../supabase/functions/_shared/activityText";
 import { upcomingBirthdays } from "../../supabase/functions/_shared/birthdays";
+import { couper } from "../../supabase/functions/_shared/texteSur.ts";
 
 type Deadline = { creator: string; type: string; start: string; months: number };
 function ctEnd(start: string, months: number): Date | null {
@@ -138,7 +139,9 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       if (bellCreator && !tdC.error) {
         ((tdC.data as { text: string; creator: string | null; created_at: string | null }[]) ?? []).forEach((t) =>
           out.push({
-            id: `ctd:${t.created_at}:${t.text.slice(0, 40)}`,
+            // Texte coupé sans séparer un emoji (couper) : l'id effacé est écrit en base, et une
+            // moitié d'emoji y serait refusée. Même clé dans l'outil notifications (ttp-mcp/tools.ts).
+            id: `ctd:${t.created_at}:${couper(t.text, 40)}`,
             title: "Nouvelle tâche d'un créateur",
             page: "todo",
             description: `${t.creator ? titleCase(t.creator) : "Créateur"} · ${t.text}`,
@@ -150,7 +153,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       if (bellCreator && !idC.error) {
         ((idC.data as { text: string; creator: string | null; created_at: string | null }[]) ?? []).forEach((i) =>
           out.push({
-            id: `cid:${i.created_at}:${i.text.slice(0, 40)}`,
+            id: `cid:${i.created_at}:${couper(i.text, 40)}`,
             title: "Nouvelle idée d'un créateur",
             page: "ideas",
             description: `${i.creator ? titleCase(i.creator) : "Créateur"} · ${i.text}`,
@@ -162,7 +165,7 @@ export function useNotifications(): { items: NotificationItem[]; dismiss: (ids: 
       if (bellCreator && evC && !evC.error) {
         ((evC.data as { title: string | null; who: string | null; created_at: string | null }[]) ?? []).forEach((e) =>
           out.push({
-            id: `cev:${e.created_at}:${(e.title ?? "").slice(0, 40)}`,
+            id: `cev:${e.created_at}:${couper(e.title ?? "", 40)}`,
             title: "Nouvel évènement d'un créateur",
             page: "planning",
             description: `${e.who ? titleCase(e.who) : "Créateur"} · ${e.title ?? ""}`,

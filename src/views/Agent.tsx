@@ -24,6 +24,7 @@ import { mergeAppStateKey, useAppState as useAgentAppState } from "@/lib/appStat
 import { AValiderFile } from "@/components/a-valider-file";
 import { avanceCollabOf, gesteValider, statutApresValidation, texteModifie, typeAffiche } from "@/lib/aValider";
 import { avancerCollabDepuisFile, noterModification } from "@/lib/aValiderDb";
+import { couper } from "../../supabase/functions/_shared/texteSur.ts";
 
 /**
  * Section « Agents » (Espace Agence, fondateurs) : les agents de TTP, créés et réglés
@@ -449,7 +450,7 @@ export function AgentView() {
     setLeconBusy(false);
     if (error || !data?.[0]) return toast("Erreur, réessaie");
     setLecons((xs) => [data[0] as Lecon, ...xs]);
-    log("marc_lecon", row.lecon.slice(0, 80));
+    log("marc_lecon", couper(row.lecon, 80)); // sans casser d'emoji (_shared/texteSur.ts)
     setLeconModule(""); setLeconTexte(""); setLeconOpen(false);
     toast("Leçon enregistrée ✓");
   };

@@ -32,6 +32,8 @@ import { brandAccountOk, handleCandidates, isCommonWord, isPlainWord, proseWords
 import { agencyHint, emailsIn, isPaid } from "../_shared/signals.ts";
 import { MAX_OCTETS, adressesDans, genreEmail } from "../_shared/siteMarque.ts";
 import { brandSummary, postEr, postKind, type CollabPost } from "../_shared/creatorCollabs.ts";
+import { couper, texteSur } from "../_shared/texteSur.ts";
+import { ecrireParLots } from "../_shared/ecritureLot.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 type Json = Record<string, unknown>;
@@ -49,6 +51,10 @@ const DISCOVER_PER_SCAN = 40; // créatrices hors agence lues par passage (déco
 const DM_PER_SCAN = 30; // comptes des DM Instagram jamais lus, pris en tête de ces 40
 const VERIFY_PER_RUN = 150; // marques en attente vérifiées par passage, dans la limite de MAX_LUS
 const age = (iso: string | null | undefined) => (iso ? Date.now() - Date.parse(iso) : Infinity);
+/** Écriture refusée par la base : une ligne courte dans les journaux (la table, jamais le contenu). */
+const refus = (table: string, e: { message: string } | null) => {
+  if (e) console.warn("ig-sourcing écriture refusée", table, e.message);
+};
 
 
 /**
@@ -166,12 +172,12 @@ async function toData(p: IgProfile): Promise<Json> {
     }
   }
   return {
-    v: DATA_V, name: p.name, followers: p.followers, following: p.following, posts: p.posts,
+    v: DATA_V, name: texteSur(p.name), followers: p.followers, following: p.following, posts: p.posts,
     deals: [...deals].slice(0, 8), cites: [...cites].slice(0, 15),
     er: engagementRate(p.media, p.followers),
     perWeek: last12.length ? postsPerWeek(last12) : null,
     lastPost: p.media[0]?.at ?? null,
-    bio: p.bio.slice(0, 300), website: p.website, email, emailFrom, agency,
+    bio: couper(p.bio, 300), website: p.website, email, emailFrom, agency,
     // Une marque : bio, site et abonnés le disent (brandScore), et un @ fait d'un simple
     // mot (« every », « attention ») doit en plus porter ce nom (voir brandAccountOk).
     picture: p.picture, brandScore: score, isBrand: score >= 2 && brandAccountOk(p.username, p),
@@ -205,13 +211,13 @@ async function profile(ctx: Ctx, user: string, mediaLimit: number, force = false
     const row: ProfileRow = { username: u, data: known?.data ?? null, why: r.why, scanned_at: known?.scanned_at ?? null, at: now };
     if (!r.stop && r.why !== "reseau") {
       ctx.cache.set(u, row);
-      await ctx.sb.from("ig_profiles").upsert({ username: u, data: row.data, why: row.why, at: now });
+      refus("ig_profiles", (await ctx.sb.from("ig_profiles").upsert({ username: u, data: row.data, why: row.why, at: now })).error);
     }
     return { row };
   }
   const row: ProfileRow = { username: u, data: await toData(r.profile), why: null, scanned_at: known?.scanned_at ?? null, at: now };
   ctx.cache.set(u, row);
-  await ctx.sb.from("ig_profiles").upsert({ username: u, data: row.data, why: null, at: now });
+  refus("ig_profiles", (await ctx.sb.from("ig_profiles").upsert({ username: u, data: row.data, why: null, at: now })).error);
   return { row, media: r.profile.media };
 }
 
@@ -289,7 +295,7 @@ async function fromBrand(ctx: Ctx, brand: string) {
   if (!r.ok) return { error: r.why };
   const now = new Date().toISOString();
   const brandData = await toData(r.profile);
-  await ctx.sb.from("ig_profiles").upsert({ username: b, data: brandData, why: null, at: now });
+  refus("ig_profiles", (await ctx.sb.from("ig_profiles").upsert({ username: b, data: brandData, why: null, at: now })).error);
   // Qui la marque cite (sans @ : voir cited), combien de fois, et quand pour la dernière fois.
   const seen = tally(r.profile.media.map((p) => ({ text: p.caption, at: p.at, url: p.url })), new Set([b]));
   const users = [...seen.entries()].sort((x, y) => y[1].weight - x[1].weight || y[1].count - x[1].count).slice(0, 30).map(([u]) => u);
@@ -389,10 +395,10 @@ async function verifyBrand(ctx: Ctx, b: string) {
   await loadCache(ctx, cited);
   const fresh = cited.filter((u) => !ctx.cache.has(u)).slice(0, 15);
   if (fresh.length) {
-    await ctx.sb.from("ig_profiles").upsert(
+    refus("ig_profiles", (await ctx.sb.from("ig_profiles").upsert(
       fresh.map((u) => ({ username: u, data: { pending: true, from: b }, why: null, at: new Date(0).toISOString() })),
       { onConflict: "username", ignoreDuplicates: true },
-    );
+    )).error);
   }
 }
 
@@ -453,7 +459,7 @@ async function refreshRival(ctx: Ctx, u: string, self: boolean) {
   const p = r.profile;
   const data = await toData(p);
   ctx.cache.set(u, { username: u, data, why: null, scanned_at: null, at: now });
-  await ctx.sb.from("ig_profiles").upsert({ username: u, data, why: null, at: now });
+  refus("ig_profiles", (await ctx.sb.from("ig_profiles").upsert({ username: u, data, why: null, at: now })).error);
   const { data: cur } = await ctx.sb.from("ig_rivals").select("history").eq("username", u).maybeSingle<{ history: unknown }>();
   const history = pushDay(cur?.history, p.followers, p.posts);
   const paidOf = new Map<string, number>();
@@ -517,11 +523,12 @@ async function refreshRival(ctx: Ctx, u: string, self: boolean) {
     })
     .sort((a, b) => Number(b.sure) - Number(a.sure) || (b.n + b.paid + b.via.length) - (a.n + a.paid + a.via.length))
     .slice(0, 60);
-  await ctx.sb.from("ig_rivals").upsert({
+  const { error: rivalErr } = await ctx.sb.from("ig_rivals").upsert({
     username: u, self, data: { ...data, picture: p.picture }, history,
     creators: creators.sort((a, b) => (b.src === "bio" ? 1 : 0) - (a.src === "bio" ? 1 : 0) || b.n - a.n || (b.followers ?? 0) - (a.followers ?? 0)).slice(0, 60).map(({ deals: _d, ...c }) => c),
     brands, why: null, read_at: now,
   });
+  refus("ig_rivals", rivalErr);
 }
 
 /**
@@ -615,7 +622,8 @@ async function scan(ctx: Ctx) {
   const found = new Map<string, RadarPost[]>();
   const scanned: string[] = [];
   // Compteurs pour comprendre un radar vide : posts reçus, avec texte, avec un @.
-  const diag = { posts: 0, withText: 0, withAt: 0, withName: 0 };
+  // radarRefus : marques du radar refusées par la base (reviennent seules au passage suivant).
+  const diag = { posts: 0, withText: 0, withAt: 0, withName: 0, radarRefus: 0 };
   const weightOf = new Map<string, number>();
   const strongOf = new Map<string, number>(); // meilleur poids dans un seul post
   const citedBy = new Map<string, Set<string>>(); // créatrices qui citent ce nom
@@ -650,7 +658,7 @@ async function scan(ctx: Ctx) {
         by.add(u);
         citedBy.set(m, by);
         const list = found.get(m) ?? [];
-        list.push({ c: u, roster: rosterSet.has(u), url: p.url, at: p.at, paid: isPaid(p.caption), likes: p.likes, comments: p.comments, cap: p.caption.slice(0, 300) });
+        list.push({ c: u, roster: rosterSet.has(u), url: p.url, at: p.at, paid: isPaid(p.caption), likes: p.likes, comments: p.comments, cap: couper(p.caption, 300) });
         found.set(m, list);
       }
     }
@@ -678,7 +686,11 @@ async function scan(ctx: Ctx) {
     const posts = [...byUrl.values()].sort((x, y) => y.at.localeCompare(x.at)).slice(0, 40);
     return { brand: b, posts, last_seen: now };
   });
-  for (let i = 0; i < rows.length; i += 200) await ctx.sb.from("ig_radar").upsert(rows.slice(i, i + 200));
+  // Par paquets de 200 ; un paquet refusé est réécrit marque par marque (_shared/ecritureLot.ts) :
+  // seule la marque fautive est perdue, et elle revient au passage suivant (recalculée).
+  const radar = await ecrireParLots(rows, 200, (lot) => ctx.sb.from("ig_radar").upsert(lot));
+  diag.radarRefus = radar.refusees.length;
+  if (radar.refusees.length) console.warn("ig-sourcing ig_radar", `${radar.refusees.length}/${rows.length} marque(s) refusée(s)`, radar.erreur);
 
   // Profil des marques (est-ce vraiment une marque ?), les plus citées d'abord.
   await loadCache(ctx, brands);

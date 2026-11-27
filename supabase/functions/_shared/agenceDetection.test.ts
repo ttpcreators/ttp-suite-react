@@ -43,4 +43,9 @@ describe("détection d'agence", () => {
     expect(texteAgence({ agence: "non", agence_nom: null, indices: [] })).toBe("non");
     expect(comptesCites("Mgmt @Orbit_Mgmt. et @zoe.test, mail a@b.fr")).toEqual(["orbit_mgmt", "zoe.test"]);
   });
+  it("nom d'agence coupé à 50 sans casser d'emoji (il va en base)", () => {
+    const d = detecterAgence({ username: "zoe", name: "Zoé", bio: `Représentée par ${"N".repeat(49)}😀 et plus` });
+    expect(d.agence).toBe("oui");
+    expect(d.agence_nom).toBe("N".repeat(49));
+  });
 });

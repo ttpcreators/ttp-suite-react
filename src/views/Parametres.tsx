@@ -33,6 +33,7 @@ import { resetPageTones, saveFrameColor, saveTabTone, useFolderFrames, useFolder
 import { ALL_FRAMES, FRAME_PRESETS, frameColorFor } from "@/lib/folderTabs";
 import { useNavSub } from "@/lib/navSub";
 import { bestHit, entriesOfTab, entryAnchor, groupHits, pagesVisibility, searchSettings, sectionAnchor, settingsTabs, settingsTarget, settingsTargetFor, type SettingsEntry } from "@/lib/settingsSearch";
+import { couper } from "../../supabase/functions/_shared/texteSur.ts";
 
 /**
  * Préférences de notifications (agence) — stockées dans le blob `notifPrefs`.
@@ -475,7 +476,7 @@ function TeamNameField() {
       <div className="flex shrink-0 gap-2">
         <input
           value={name}
-          onChange={(e) => setName(e.target.value.slice(0, 40))}
+          onChange={(e) => setName(couper(e.target.value, 40))}
           onKeyDown={(e) => e.key === "Enter" && void save()}
           className="h-9 w-40 min-w-0 rounded-[10px] bg-field px-3 text-[13px] text-foreground outline-none focus:ring-2 focus:ring-primary/30"
           placeholder="Ton prénom"

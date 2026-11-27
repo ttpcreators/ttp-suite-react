@@ -22,6 +22,7 @@ import { makePayload, pushReady, sendTo } from "../_shared/push.ts";
 import { arreter, lireSequence } from "../_shared/sequence.ts";
 import { LEAD_TAG } from "../_shared/siteLead.ts";
 import { RDV_KEY, RDV_ORIGINS, creneauOk, creneauxLibres, lireRdv, lireReservation, mailRdv, occupeDepuisEvenements, quandFr, texteTelegramRdv, type EvenementAgenda, type Occupe, type RdvConfig } from "../_shared/rdv.ts";
+import { couper } from "../_shared/texteSur.ts";
 
 type Sb = ReturnType<typeof getServiceClient>;
 
@@ -169,17 +170,21 @@ Deno.serve(async (req: Request) => {
   let historique = "";
   if (contact) {
     const touches = Array.isArray(contact.touches) ? (contact.touches as Record<string, unknown>[]) : [];
-    historique = touches.slice(0, 6).map((t) => `- ${String(t.date ?? "").slice(0, 10)} · ${t.canal ?? ""} · ${t.kind ?? ""}${t.note ? ` · ${String(t.note).slice(0, 120)}` : ""}`).join("\n");
+    historique = touches.slice(0, 6).map((t) => `- ${String(t.date ?? "").slice(0, 10)} · ${t.canal ?? ""} · ${t.kind ?? ""}${t.note ? ` · ${couper(String(t.note), 120)}` : ""}`).join("\n");
     const patch: Record<string, unknown> = { touches: [touche, ...touches] };
     const seq = lireSequence(contact.sequence);
     if (seq && seq.statut === "en_cours") patch.sequence = arreter(seq, "visio réservée", now, "positive");
-    await sb.from("contacts").update(patch).eq("id", contact.id).then(() => {}, () => {});
+    await sb.from("contacts").update(patch).eq("id", contact.id).then(({ error }) => {
+      if (error) console.warn("rdv fiche contact refusée", error.message);
+    }, () => {});
   } else {
-    await sb.from("contacts").insert({ brand: r.marque, person: r.nom, email: r.email, tag: LEAD_TAG, touches: [touche] }).then(() => {}, () => {});
+    await sb.from("contacts").insert({ brand: r.marque, person: r.nom, email: r.email, tag: LEAD_TAG, touches: [touche] }).then(({ error }) => {
+      if (error) console.warn("rdv nouveau contact refusé", error.message);
+    }, () => {});
   }
 
   // Tâche « Visio : marque » avec la fiche avant l'appel (une seule ouverte par marque).
-  const text = `Visio : ${r.marque.slice(0, 80)}`;
+  const text = `Visio : ${couper(r.marque, 80)}`;
   const descr = [
     `Visio réservée par ${r.nom} (${r.email}) pour le ${quandFr(r.jour, r.heure)} (${c.duree} min).`,
     meet ? `Lien Meet : ${meet}` : "",
@@ -189,8 +194,10 @@ Deno.serve(async (req: Request) => {
     "La visio en 5 points : le besoin, le budget, qui décide, notre proposition orale, et un devis envoyé le jour même.",
   ].filter(Boolean).join("\n");
   const { data: deja } = await sb.from("todos").select("id").eq("text", text).or("done.is.null,done.eq.false").limit(1);
-  if ((deja ?? []).length) await sb.from("todos").update({ descr, due: jour, priority: "haute" }).eq("id", (deja as { id: string }[])[0].id).then(() => {}, () => {});
-  else await sb.from("todos").insert({ text, descr, priority: "haute", due: jour, done: false }).then(() => {}, () => {});
+  const tache = (deja ?? []).length
+    ? await sb.from("todos").update({ descr, due: jour, priority: "haute" }).eq("id", (deja as { id: string }[])[0].id).then((x) => x.error, () => null)
+    : await sb.from("todos").insert({ text, descr, priority: "haute", due: jour, done: false }).then((x) => x.error, () => null);
+  if (tache) console.warn("rdv tâche Visio refusée", tache.message);
 
   if (pushReady()) {
     await sendTo(sb, { agency: true }, makePayload({ kind: "team", title: "Visio réservée", body: "Un contact a réservé une visio. Détail dans la to-do et le planning.", url: "/?open=view&view=todo", tag: "ttp-rdv" })).catch(() => {});

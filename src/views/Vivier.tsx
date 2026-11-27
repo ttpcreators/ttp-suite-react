@@ -38,6 +38,7 @@ import { createPortal } from "react-dom";
 import { useIosPhone } from "@/components/mobile/ios-sheet";
 import { useNavActionSlot } from "@/lib/navAction";
 import { FilterPanel } from "@/components/ui/filter-panel";
+import { texteSur } from "../../supabase/functions/_shared/texteSur.ts";
 import { PhonePills } from "@/components/ui/phone-bar";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { DateInput } from "@/components/ui/date-range-picker";
@@ -403,7 +404,12 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
           next[x.id] = set[x.id] = { ...cur, ...figures, snaps, igPhoto: photos[x.h], igFor: x.h, igAt: at, igWhy: res?.why?.[x.h], igV: IG_V };
         }
         setLocalTrack(next);
-        await mergeAppStateKey(K.track, set);
+        // Écriture refusée (une fiche que la base n'accepte pas) : réécrite fiche par fiche, seule la mauvaise est perdue.
+        if (!(await mergeAppStateKey(K.track, set))) {
+          for (const [id, v] of Object.entries(set)) {
+            if (!(await mergeAppStateKey(K.track, { [id]: v }))) console.warn("Scouting : fiche Instagram refusée", id);
+          }
+        }
       } catch {
         /* les initiales restent */
       }
@@ -920,7 +926,7 @@ function ScoutingList({ kind, active, onCount }: { kind: Kind; active: boolean; 
           inScouting={new Set(rows.map((r) => cleanHandle(r.handle ?? "")).filter(Boolean))}
           onAdd={async (u, st) => {
             const note = [st.followers != null ? `${fmtCompact(st.followers)} abonnés` : "", st.er != null ? `engagement ${fmtEr(st.er)}` : "", st.agency ? `agence : ${st.agency}` : ""].filter(Boolean).join(" · ");
-            const created = await dbInsert(K.table, { name: st.name?.trim() || `@${u}`, handle: `@${u}`, email: st.email || null, tag: null, note: note ? `Analysé le ${new Date().toLocaleDateString("fr-FR")} : ${note}` : null, sort_order: nextOrder(rows) });
+            const created = await dbInsert(K.table, { name: st.name?.trim() || `@${u}`, handle: `@${u}`, email: st.email || null, tag: null, note: note ? texteSur(`Analysé le ${new Date().toLocaleDateString("fr-FR")} : ${note}`) : null, sort_order: nextOrder(rows) });
             if (!created) {
               toast("Erreur, réessaie");
               return false;

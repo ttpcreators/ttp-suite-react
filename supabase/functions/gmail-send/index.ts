@@ -40,6 +40,7 @@ import { gfetch, classifyGmail, gmailMessage, GfetchError } from "../_shared/gfe
 import { isSingleEmoji, reactionBody, reactionFallback, reactionSubject } from "../_shared/emailReaction.ts";
 import { fromHeader, pickSender, usableSendAs, type RawSendAs, type SendAs } from "../_shared/sendAs.ts";
 import { colonneAuteurAbsente, nomAuteur } from "../_shared/auteurEnvoi.ts";
+import { couper, texteSur } from "../_shared/texteSur.ts";
 
 const GMAIL_SEND = "https://gmail.googleapis.com/gmail/v1/users/me/messages/send";
 const GMAIL_UPLOAD = "https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=multipart";
@@ -389,12 +390,13 @@ Deno.serve(async (req: Request) => {
   // envoye_par / envoye_par_nom : qui de l'équipe a envoyé (mention « Envoyé par » de la page
   // Mails). SQL du 25/11 pas encore lancé : on journalise sans (_shared/auteurEnvoi.ts).
   try {
+    // Textes du journal sans caractère nul ni moitié d'emoji seule (_shared/texteSur.ts).
     const row: Record<string, unknown> = {
       contact_email: to,
-      contact_name: body.contactName ?? null,
+      contact_name: typeof body.contactName === "string" ? texteSur(body.contactName) : body.contactName ?? null,
       direction: "out",
-      subject,
-      snippet: (reaction != null ? `Réaction ${reaction}` : html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim()).slice(0, 180),
+      subject: texteSur(subject),
+      snippet: couper(reaction != null ? `Réaction ${reaction}` : html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(), 180),
       source: body.source ?? "manual",
       thread_id: threadId,
       gmail_message_id: id,

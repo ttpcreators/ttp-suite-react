@@ -16,6 +16,7 @@
 import { corsHeaders, getServiceClient } from "../_shared/google.ts";
 import { metaReady, pageAccess, postGraph, saveUsage } from "../_shared/instagram.ts";
 import { cleanDm, sendWhy } from "../_shared/igSend.ts";
+import { couper } from "../_shared/texteSur.ts";
 
 Deno.serve(async (req: Request) => {
   const cors = corsHeaders(req.headers.get("Origin"));
@@ -59,7 +60,10 @@ Deno.serve(async (req: Request) => {
 
   const at = new Date().toISOString();
   const id = `sent:${String(r.message_id ?? crypto.randomUUID())}`;
-  await sb.from("ig_messages").upsert({ id, thread_id: th.id, at, me: true, text });
-  await sb.from("ig_threads").update({ updated_at: at, last_text: text.slice(0, 300), last_from_me: true }).eq("id", th.id);
+  // Le DM est parti : une écriture refusée n'est que notée (ig-inbox relira la conversation).
+  const { error: msgErr } = await sb.from("ig_messages").upsert({ id, thread_id: th.id, at, me: true, text });
+  if (msgErr) console.warn("ig-send message refusé", th.id, msgErr.message);
+  const { error: thErr } = await sb.from("ig_threads").update({ updated_at: at, last_text: couper(text, 300), last_from_me: true }).eq("id", th.id);
+  if (thErr) console.warn("ig-send conversation refusée", th.id, thErr.message);
   return res({ ok: true, id, at });
 });

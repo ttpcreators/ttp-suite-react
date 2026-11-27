@@ -13,11 +13,13 @@
 // ============================================================================
 
 import { normaliserTag } from "./contactTags.ts";
+import { couper } from "./texteSur.ts";
 
 /** Fiches par appel de l'outil ajouter_contacts. */
 export const MAX_LOT_CONTACTS = 50;
 
-const txt = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : "");
+// Coupé sans casser d'emoji, sans caractère nul (couper, _shared/texteSur.ts) : sinon la base refuse la fiche.
+const txt = (v: unknown, max: number) => (typeof v === "string" ? couper(v.replace(/\s+/g, " ").trim(), max) : "");
 const fold = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const EMAIL = /^[^@\s<>,;"']+@[^@\s<>,;"']+\.[a-z]{2,}$/;
 

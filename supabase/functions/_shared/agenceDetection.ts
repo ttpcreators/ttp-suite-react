@@ -16,6 +16,7 @@
 // ============================================================================
 
 import { FREE_MAIL, emailsIn } from "./signals.ts";
+import { couper } from "./texteSur.ts";
 
 export type AgenceStatut = "oui" | "non" | "a_verifier";
 export type AgenceConnue = { nom: string; comptes?: string[]; domaines?: string[] };
@@ -75,9 +76,9 @@ export function comptesCites(text: string): string[] {
   return [...new Set([...text.matchAll(/(?<![\w.])@([a-z0-9._]{2,30})/gi)].map((m) => m[1].replace(/\.+$/, "").toLowerCase()))];
 }
 
-/** Nom propre d'une suite de texte après « représentée par » : sans @, sans espace final. */
+/** Nom propre d'une suite de texte après « représentée par » : sans @, sans espace final, coupé sans casser d'emoji (gardé en base). */
 function nomApres(s: string): string {
-  return s.replace(/^[\s:–—-]+/, "").replace(/\s+/g, " ").trim().replace(/^@/, "").slice(0, 50).trim();
+  return couper(s.replace(/^[\s:–—-]+/, "").replace(/\s+/g, " ").trim().replace(/^@/, ""), 50).trim();
 }
 
 /** Détecte l'agence d'un créateur d'après sa bio, son email, son site et ses @ cités. */

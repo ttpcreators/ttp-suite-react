@@ -21,6 +21,7 @@ import { adressesInvalides, suiviApresEnvoi } from "./prospection.ts";
 import { instantParis } from "../_shared/rdv.ts";
 import { modifieApres } from "../_shared/verrouAgent.ts";
 import { colonneAuteurAbsente, idDejaJournalise, lignesEnvoi, nomAuteur, sansAuteur, sansIdGmail, type Auteur } from "../_shared/auteurEnvoi.ts";
+import { couper, str, texteSur } from "../_shared/texteSur.ts";
 import {
   MAX_PROGRAMMES, REGLES, adresses, cleSociete, coupeCircuit, dansLaFenetre, jourParis, ligneFile, planifier, quandCourt, raisonDeBloquer,
   type EnvoiRecent, type LigneFile, type NePlusContacter,
@@ -29,7 +30,6 @@ import {
 type Json = Record<string, unknown>;
 const ok = (text: string) => ({ text });
 const fail = (text: string) => ({ text, isError: true });
-const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const AGENCE = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
 const SQL_MANQUANT = "La file d'envoi n'est pas encore installée (SQL 2026-11-25-file-envoi à lancer).";
 
@@ -198,7 +198,7 @@ const programmerEnvoi: AdminTool = {
     const heures = planifier(bons.length, maintenant, deja);
     const lot = str(a.lot, 60) || `lot du ${new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "Europe/Paris" })}`;
     const lignes = bons.map((b, i) => ({
-      boite: String(box), brouillon: b.id, destinataires: b.to.slice(0, 500), objet: b.subject.slice(0, 300), reponse: b.reponse,
+      boite: String(box), brouillon: b.id, destinataires: couper(b.to, 500), objet: couper(b.subject, 300), reponse: b.reponse,
       createur: str(a.createur, 80) || null, demarrer_sequence: a.demarrer_sequence === true, lot, statut: "en_attente",
       prevu_a: heures[i].toISOString(), cree_par: ctx.userId,
       // Programmé par un agent (verrou.ts) : la date de validation, revérifiée juste avant l'envoi.
@@ -364,8 +364,11 @@ type Ligne = { id: string; boite: string; brouillon: string; destinataires: stri
 /** Un envoi de la file : vérifications, envoi, suivi. Renvoie ce qui s'est passé. */
 async function envoyerUne(sb: SupabaseClient, row: Ligne): Promise<string> {
   const fin = async (statut: string, patch: Json = {}) => {
-    await sb.from("envoi_file").update({ statut, ...patch }).eq("id", row.id);
-    return `${row.id.slice(0, 8)} ${statut}${patch.erreur ? ` : ${patch.erreur}` : ""}`;
+    // Les messages d'erreur sont coupés avec slice plus bas : nettoyés ici une fois pour toutes.
+    const p = typeof patch.erreur === "string" ? { ...patch, erreur: texteSur(patch.erreur) } : patch;
+    const { error } = await sb.from("envoi_file").update({ statut, ...p }).eq("id", row.id);
+    if (error) console.warn("ttp-mcp envoi_file : statut refusé", row.id.slice(0, 8), statut, error.message);
+    return `${row.id.slice(0, 8)} ${statut}${p.erreur ? ` : ${p.erreur}` : ""}`;
   };
   const pb = await parseMailBox(sb, row.boite);
   if ("error" in pb) return await fin("annule", { erreur: pb.error.slice(0, 300) });
@@ -382,7 +385,15 @@ async function envoyerUne(sb: SupabaseClient, row: Ligne): Promise<string> {
     const invalide = await adressesInvalides(sb, dest);
     if (invalide) return await fin("annule", { erreur: invalide.slice(0, 300) });
     const r = await sendDraft(sb, box, row.brouillon, undefined, verifierAvantEnvoi(sb, row.createur || undefined, true));
-    await sb.from("envoi_file").update({ statut: "envoye", envoye_at: new Date().toISOString(), destinataires: r.to.slice(0, 500), objet: r.subject.slice(0, 300), erreur: null }).eq("id", row.id);
+    // Le mail est parti : le statut « envoyé » doit être écrit, même si les textes relus chez
+    // Gmail sont refusés (sinon la ligne finirait en « échec » et le mail pourrait repartir).
+    const envoyeAt = new Date().toISOString();
+    const { error: majErr } = await sb.from("envoi_file").update({ statut: "envoye", envoye_at: envoyeAt, destinataires: couper(r.to, 500), objet: couper(r.subject, 300), erreur: null }).eq("id", row.id);
+    if (majErr) {
+      console.warn("ttp-mcp envoi_file : ligne envoyée refusée", row.id.slice(0, 8), majErr.message);
+      const { error: e2 } = await sb.from("envoi_file").update({ statut: "envoye", envoye_at: envoyeAt, erreur: null }).eq("id", row.id);
+      if (e2) console.warn("ttp-mcp envoi_file : statut envoyé refusé", row.id.slice(0, 8), e2.message);
+    }
     // Auteur : la personne qui a programmé l'envoi (après son « oui »).
     await journaliserEnvoi(sb, { box: String(box), to: r.to, subject: r.subject, threadId: r.threadId, source: "claude-file", messageId: r.id, auteur: await nomAuteur(sb, row.cree_par) });
     await suiviApresEnvoi(sb, adresses(r.to), { demarrer: row.demarrer_sequence, createur: row.createur || undefined }).catch(() => "");

@@ -36,6 +36,7 @@ import { Overlay } from "@/components/mobile/ios-sheet";
 import { reactionOf, splitThreadReactions } from "@/lib/mailThreadReactions";
 import { Tabs } from "@/components/ui/animated-tabs";
 import { useLocale, useT, type Vars } from "@/lib/i18n";
+import { couper } from "../../supabase/functions/_shared/texteSur.ts";
 
 type T = (fr: string, vars?: Vars) => string;
 
@@ -760,7 +761,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
   const choose = async (threadId: string, choice: MailChoice, comment: string): Promise<boolean> => {
     if (deciding) return false;
     setDeciding(true);
-    const word = comment.trim().slice(0, 1000);
+    const word = couper(comment.trim(), 1000); // sans casser d'emoji (_shared/texteSur.ts)
     const open = thread && thread.id === threadId ? thread : null;
     const lite = threads?.find((x) => x.id === threadId);
     const what = prettyName(lite?.brand || open?.brand || "") || lite?.subject || open?.subject || "un échange";
@@ -1531,7 +1532,7 @@ export function CreatorMailbox({ creator, mode, creatorSees = true, initialThrea
             <textarea
               ref={noteRef}
               value={note}
-              onChange={(e) => setNote(e.target.value.slice(0, 4000))}
+              onChange={(e) => setNote(couper(e.target.value, 4000))}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submitNote();
               }}

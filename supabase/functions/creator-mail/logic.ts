@@ -10,6 +10,8 @@
 // Dans un fil, la créatrice ne voit que les messages qui la concernent (concernedMessages).
 // ============================================================================
 
+import { texteSur } from "../_shared/texteSur.ts";
+
 export type GHeader = { name: string; value: string };
 export type GMessageLite = { labelIds?: string[]; headers: GHeader[] };
 
@@ -277,6 +279,7 @@ export function parseChoice(raw: unknown): MailChoice | null {
 export function cleanComment(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
   // Découpe par caractère (pas par unité UTF-16) : un émoji n'est jamais coupé en deux.
-  const t = Array.from(raw.trim()).slice(0, 1000).join("").trim();
+  // Sans caractère nul ni moitié d'emoji déjà seule (texteSur), que la base refuse.
+  const t = Array.from(texteSur(raw.trim())).slice(0, 1000).join("").trim();
   return t || null;
 }

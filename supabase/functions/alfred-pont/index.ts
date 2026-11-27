@@ -31,6 +31,7 @@ import { getServiceClient, timingSafeEqualStr } from "../_shared/google.ts";
 import { cibleDePhoto, commandesGagnantes, reglagesPropres, typePhoto } from "../_shared/alfredPont.ts";
 import { attachmentFromThread } from "../ttp-mcp/gmail.ts";
 import { nomPropre, tailleBase64, typeAccepte, typeDuNom } from "../_shared/piecesJointes.ts";
+import { couper, texteSur } from "../_shared/texteSur.ts";
 
 const SECRET = Deno.env.get("ALFRED_PONT_SECRET") ?? "";
 const BOT = Deno.env.get("ALFRED_BOT_TOKEN") ?? "";
@@ -62,14 +63,16 @@ Deno.serve(async (req: Request) => {
   }
 
   if (body.action === "passage") {
-    await db.from("agents").update({ vu_le: maintenant, passage: String(body.passage ?? "").slice(0, 80), passage_le: maintenant }).eq("id", alfred.id);
+    await db.from("agents").update({ vu_le: maintenant, passage: couper(String(body.passage ?? ""), 80), passage_le: maintenant }).eq("id", alfred.id);
     return json({ ok: true });
   }
 
   if (body.action === "reponse") {
     const ids = (Array.isArray(body.demandes) ? body.demandes : []).map(String).filter((x: string) => /^[0-9a-f-]{36}$/.test(x)).slice(0, 20);
     if (!ids.length) return json({ ok: true, n: 0 });
-    const { error } = await db.from("demandes").update({ statut: "repondue", reponse: String(body.texte ?? "").slice(0, 8000) || "(réponse envoyée sur Telegram)", repondu_le: maintenant }).in("id", ids);
+    // Réponse coupée sans séparer un emoji (_shared/texteSur.ts) : sinon la base refuse la mise
+    // à jour, la demande reste « reçue » et la réponse n'apparaît jamais dans l'app.
+    const { error } = await db.from("demandes").update({ statut: "repondue", reponse: couper(String(body.texte ?? ""), 8000) || "(réponse envoyée sur Telegram)", repondu_le: maintenant }).in("id", ids);
     return error ? json({ error: error.message }, 500) : json({ ok: true, n: ids.length });
   }
 
@@ -157,8 +160,16 @@ Deno.serve(async (req: Request) => {
   // Réglages d'Alfred (colonne reglages, page Agents) : { heures, sonner, commandes: { texte, maj_le } }.
   const reglages = (alfred.reglages && typeof alfred.reglages === "object" && !Array.isArray(alfred.reglages) ? alfred.reglages : {}) as Record<string, any>;
   const cmd = commandesGagnantes(body.commandes, reglages.commandes);
-  const nouveaux = cmd.source === "imac" && cmd.texte !== reglages.commandes?.texte ? { ...reglages, commandes: { texte: cmd.texte, maj_le: cmd.maj_le } } : null;
-  await db.from("agents").update({ vu_le: maintenant, ...(nouveaux ? { reglages: nouveaux } : {}) }).eq("id", alfred.id);
+  // Texte de l'iMac sans caractère nul ni moitié d'emoji seule (_shared/texteSur.ts), comparé une
+  // fois nettoyé : sinon un texte à nettoyer serait réécrit à chaque pouls.
+  const texteImac = texteSur(cmd.texte);
+  const nouveaux = cmd.source === "imac" && texteImac !== reglages.commandes?.texte ? { ...reglages, commandes: { texte: texteImac, maj_le: cmd.maj_le } } : null;
+  const { error: ePouls } = await db.from("agents").update({ vu_le: maintenant, ...(nouveaux ? { reglages: nouveaux } : {}) }).eq("id", alfred.id);
+  if (ePouls) {
+    console.warn("alfred-pont pouls refusé", ePouls.message);
+    // Les réglages refusés n'empêchent pas de voir l'iMac : sinon fausse alerte « Alfred hors ligne ».
+    if (nouveaux) await db.from("agents").update({ vu_le: maintenant }).eq("id", alfred.id);
+  }
 
   // Les nouvelles de l'app et les demandes : remises une seule fois.
   // Une lecture refusée n'est plus jamais silencieuse (droits manquants découverts le 22/11) :

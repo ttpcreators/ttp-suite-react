@@ -38,6 +38,7 @@ import { brandMatcher } from "../_shared/collabPosts.ts";
 import { isMain, markStatsMonth, recordAutoMeasure } from "../_shared/autoStats.ts";
 import { readAppState } from "../_shared/appState.ts";
 import { readExclusivites } from "../_shared/exclusivites.ts";
+import { couper, texteSur } from "../_shared/texteSur.ts";
 import { incidentsConformite, journalEntry, journalStale, readJournal, tacheBloc, tacheTitre, JOURNAL_KEY, type Incident, type JournalEntry, type MarqueConnue } from "../_shared/conformite.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
@@ -308,7 +309,7 @@ async function syncCollab(ctx: Ctx, col: CollabRow, creator: CreatorRow | undefi
         posts.set(p.id, {
           ...(posts.get(p.id) ?? {}),
           id: p.id, url: p.url, at: p.at, type: p.type, product: p.product,
-          likes: p.likes, comments: p.comments, caption: p.caption.slice(0, 160),
+          likes: p.likes, comments: p.comments, caption: couper(p.caption, 160), // sans casser d'emoji (_shared/texteSur.ts)
         });
       }
       const list = [...posts.values()].sort((a, b) => String(a.at).localeCompare(String(b.at)));
@@ -351,7 +352,7 @@ async function syncContact(ctx: Ctx, ct: ContactRow): Promise<Json> {
       const p = r.profile;
       const last12 = p.media.slice(0, 12);
       next = {
-        at: now, ok: now, why: null, username: p.username, name: p.name, website: p.website,
+        at: now, ok: now, why: null, username: p.username, name: texteSur(p.name), website: p.website,
         followers: p.followers, posts: p.posts, er: engagementRate(p.media, p.followers), perWeek: postsPerWeek(last12),
         lastPost: p.media[0] ? { at: p.media[0].at, url: p.media[0].url } : null,
       };

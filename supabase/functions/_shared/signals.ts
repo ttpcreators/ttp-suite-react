@@ -5,6 +5,8 @@
 // (YouTube).
 // ============================================================================
 
+import { couper } from "./texteSur.ts";
+
 /** Mots qui signalent un partenariat payé dans une légende. */
 export const PAID = /#(ad|ads|pub|publicite|publicité|sponsor|sponsorise|sponsorisé|sponsored|partenariat|partenariatremunere|partenariatrémunéré|partnership|collab|collaboration|gifted|ambassador|ambassadrice)(?![\p{L}\p{N}_])|(?<![\p{L}\p{N}])publicit[ée](?![\p{L}\p{N}])|collaboration commerciale|partenariat commercial|code promo|avec le code|code\s*:|-\s?\d{1,2}\s?%|en partenariat|partenariat r[ée]mun[ée]r[ée]|paid partnership|sponsoris[ée] par|offert par/iu;
 // Cadeau ou code promo : « (produit offert) », « 10 % de réduction », « avec MARGOT10 ».
@@ -18,7 +20,12 @@ export const AGENCY = /(management|mgmt|managed by|g[ée]r[ée]e? par|repr[ée]s
 /** Indice « déjà en agence » (le passage trouvé), ou null. */
 export function agencyHint(text: string, email: string): string | null {
   const m = AGENCY.exec(text);
-  if (m) return text.slice(Math.max(0, m.index - 25), m.index + m[0].length + 25).replace(/\s+/g, " ").trim();
+  if (m) {
+    // Passage coupé des deux côtés sans casser d'emoji (texte gardé en base, voir _shared/texteSur.ts).
+    const debut = Math.max(0, m.index - 25);
+    const fin = m.index + m[0].length + 25;
+    return couper(text.slice(debut, fin + 1), fin - debut).replace(/\s+/g, " ").trim();
+  }
   const domain = email.split("@")[1] ?? "";
   if (email && !FREE_MAIL.test(email) && /(agency|agence|mgmt|management|talent|booking)/i.test(domain)) return email;
   return null;

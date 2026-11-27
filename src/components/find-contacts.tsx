@@ -72,7 +72,9 @@ export function FindContactsDialog({ initialCompany = "", knownEmails, knownPeop
   }, [histData, histLocal]);
   const remember = (entries: Record<string, Seen>) => {
     setHistLocal((cur) => ({ ...cur, ...entries }));
-    void mergeAppStateKey("feHistory", entries);
+    void mergeAppStateKey("feHistory", entries).then((ok) => {
+      if (!ok) toast("Historique non enregistré, réessaie");
+    });
   };
   const seenOf = (id: string) => histLocal[id] ?? histData?.[id];
   const inContacts = (p: FePerson) => {

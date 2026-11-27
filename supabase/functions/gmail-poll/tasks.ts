@@ -17,6 +17,7 @@ import { brandMatcher, norm } from "../_shared/brandmatch.ts";
 import { creatorsForMail, type CreatorMailSetting, type NewMail } from "../_shared/mailNotif.ts";
 import { brandFromEmail, ignoredSender, kindOfTitle, mailTasks, replyThatDoes, taskKey } from "../_shared/mailTasks.ts";
 import { IGNORED_SENDERS_KEY, isIgnoredSender, readIgnoredSenders } from "../_shared/mailIgnore.ts";
+import { couper } from "../_shared/texteSur.ts";
 
 type Sb = ReturnType<typeof getServiceClient>;
 type Box = NewMail["box"];
@@ -32,7 +33,10 @@ const addr = (from: string) => ((/<([^>]+)>/.exec(from)?.[1] ?? from).trim().toL
 const displayName = (from: string) => (/^\s*"?([^"<]+?)"?\s*</.exec(from)?.[1] ?? "").trim();
 const frDay = (ts: number) => new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "Europe/Paris" });
 
-/** Texte d'un message Gmail (format full) : text/plain, sinon text/html sans balises. */
+/**
+ * Texte d'un message Gmail (format full) : text/plain, sinon text/html sans balises. Coupé sans
+ * casser d'emoji et sans caractère nul (couper) : ses phrases vont dans les tâches (base).
+ */
 function bodyText(payload: Record<string, unknown> | undefined): string {
   const decode = (data: string) => {
     try {
@@ -53,13 +57,12 @@ function bodyText(payload: Record<string, unknown> | undefined): string {
     for (const part of (p.parts as Record<string, unknown>[] | undefined) ?? []) walk(part);
   };
   walk(payload);
-  if (plain) return plain.slice(0, 8000);
-  return html
+  if (plain) return couper(plain, 8000);
+  return couper(html
     .replace(/<(br|\/p|\/div|\/li|\/tr)[^>]*>/gi, "\n")
     .replace(/<blockquote[\s\S]*$/i, "") // la suite = message cité
     .replace(/<[^>]+>/g, " ")
-    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#39;|&rsquo;/g, "'").replace(/&quot;/g, '"')
-    .slice(0, 8000);
+    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#39;|&rsquo;/g, "'").replace(/&quot;/g, '"'), 8000);
 }
 
 async function readBody(token: string, id: string): Promise<string | null> {

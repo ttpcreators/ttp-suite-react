@@ -1,7 +1,10 @@
+import { texteSur } from "../../supabase/functions/_shared/texteSur.ts";
+
 /**
  * Texte d'un PDF, lu dans le navigateur (pdf.js, chargé à la demande : rien n'est envoyé
  * nulle part pour la lecture). Sert à « Lire un contrat » (page Exclusivités).
- * Un PDF scanné (image sans texte) renvoie un texte vide.
+ * Un PDF scanné (image sans texte) renvoie un texte vide. Sans caractère nul (fréquent dans
+ * les PDF) ni moitié d'emoji seule (texteSur) : la base refuserait l'exclusivité.
  */
 export async function pdfText(file: Blob, maxPages = 40): Promise<string> {
   const pdfjs = await import("pdfjs-dist");
@@ -15,5 +18,5 @@ export async function pdfText(file: Blob, maxPages = 40): Promise<string> {
     pages.push(content.items.map((it) => ("str" in it ? it.str : "")).join(" "));
   }
   await doc.destroy();
-  return pages.join("\n");
+  return texteSur(pages.join("\n"));
 }

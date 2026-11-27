@@ -1,3 +1,5 @@
+import { couper } from "../../supabase/functions/_shared/texteSur.ts";
+
 /**
  * Résumé d'un brief pour le créateur (colonne `briefs.resume`, jsonb) : ce qu'il doit
  * savoir en 30 secondes, en 4 listes. Écrit par Claude (bouton « Résumer avec Claude »
@@ -24,17 +26,22 @@ export const RESUME_BLOCKS: { key: ResumeKey; label: string }[] = [
 const MAX_ITEMS = 10;
 const MAX_LEN = 280;
 
-/** Une liste propre : textes non vides, puces retirées, pas de tiret long, bornée. */
+/**
+ * Une liste propre : textes non vides, puces retirées, pas de tiret long, bornée (coupe sans
+ * casser d'emoji, sinon la base refuse tout le brief : voir _shared/texteSur.ts).
+ */
 export function cleanList(v: unknown): string[] {
   if (!Array.isArray(v)) return [];
   return v
     .map((x) =>
-      String(x ?? "")
-        .replace(/^\s*(?:[-•*·]|\d+[.)])\s*/, "")
-        .replace(/\s*[—–]\s*/g, ", ")
-        .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, MAX_LEN),
+      couper(
+        String(x ?? "")
+          .replace(/^\s*(?:[-•*·]|\d+[.)])\s*/, "")
+          .replace(/\s*[—–]\s*/g, ", ")
+          .replace(/\s+/g, " ")
+          .trim(),
+        MAX_LEN,
+      ),
     )
     .filter(Boolean)
     .slice(0, MAX_ITEMS);

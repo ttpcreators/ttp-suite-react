@@ -14,6 +14,7 @@
  *   l'agent relit (outil `a_valider` avec `modifications`).
  */
 import { STEP_COUNT } from "./collabs";
+import { couper } from "../../supabase/functions/_shared/texteSur.ts";
 
 export type PropositionLite = {
   id: string;
@@ -106,7 +107,8 @@ export function texteModifie(avant: string | null | undefined, apres: string | n
   return norm(avant) !== norm(apres);
 }
 
-const coupe = (s: string, max: number) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
+// Coupe sans casser d'emoji : la trace va dans agent.journal, qui refuse une moitié seule (_shared/texteSur.ts).
+const coupe = (s: string, max: number) => (s.length > max ? `${couper(s, max - 1)}…` : s);
 
 /**
  * Entrée du journal des agents (`marc_modifie`) : ce que l'agent avait écrit et ce que Marc a

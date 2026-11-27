@@ -8,7 +8,10 @@
 //    (creator_pool), avec une tâche de tri.
 // Règles PURES, testées par siteLead.test.ts. Endpoint public : rien de ce que tape le
 // visiteur ne part dans une notification (même règle que report-error).
+// Textes coupés sans casser d'emoji (couper, _shared/texteSur.ts) : ils vont en base.
 // ============================================================================
+
+import { couper } from "./texteSur.ts";
 
 export const LEAD_TAG = "Lead site";
 export const ROSTER_URL = "https://ttpcreators.pro/mediakit/agence/";
@@ -22,9 +25,9 @@ export type Lead = { email: string; marque: string; nom: string; message: string
 const EMAIL_RE = /^[^@\s<>"',;:*]{1,64}@[^@\s<>"',;:*]{1,190}\.[a-z]{2,24}$/i;
 /** Texte d'une ligne, sans caractères de contrôle ni balises. */
 const propre = (v: unknown, max: number) =>
-  String(v ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+  couper(String(v ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim(), max);
 /** Message libre : retours à la ligne gardés, sans caractères de contrôle ni balises. */
-const texte = (v: unknown) => String(v ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, " ").trim().slice(0, 1500);
+const texte = (v: unknown) => couper(String(v ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, " ").trim(), 1500);
 
 /** Demande lue et nettoyée, ou la raison du refus. `piege` rempli = robot. */
 export function lireLead(body: unknown): { lead: Lead } | { robot: true } | { erreur: string } {
@@ -50,13 +53,13 @@ export function toucheLead(lead: Lead, now: Date) {
     date: now.toISOString(),
     canal: "email",
     kind: "reponse",
-    note: `Demande du roster via le site${lead.message ? ` : ${lead.message.slice(0, 300)}` : ""}`,
+    note: `Demande du roster via le site${lead.message ? ` : ${couper(lead.message, 300)}` : ""}`,
   };
 }
 
 /** La tâche de tri : format fixe, la marque seule vient du visiteur (nettoyée, courte). */
 export function tacheLead(lead: Lead): string {
-  return `Lead site : ${lead.marque.slice(0, 60)} demande le roster (tri : question du budget)`;
+  return `Lead site : ${couper(lead.marque, 60)} demande le roster (tri : question du budget)`;
 }
 
 // ── Candidature d'un créateur : POST { type: "createur", nom, email, compte, reseau?, niche?, message?, site? } ──
@@ -142,5 +145,5 @@ export function ligneScouting(c: Candidature, now: Date) {
 
 /** La tâche de tri : format fixe, le nom et le compte viennent du visiteur (nettoyés, courts). */
 export function tacheCandidature(c: Candidature): string {
-  return `${CANDIDATURE_TACHE}${c.nom.slice(0, 60)} (${c.compte}, ${nomReseau(c)}) veut rejoindre l'agence`;
+  return `${CANDIDATURE_TACHE}${couper(c.nom, 60)} (${c.compte}, ${nomReseau(c)}) veut rejoindre l'agence`;
 }

@@ -8,6 +8,8 @@
 // vues, couverture, enregistrements et partages de chaque post.
 // ============================================================================
 
+import { couper, texteSur } from "./texteSur.ts";
+
 export const FEED_SIZE = 12;
 const CAPTION_MAX = 140;
 
@@ -36,9 +38,11 @@ export function feedDir(creatorId: string): string {
   return feedThumbPath(creatorId, "x").replace(/\/x\.jpg$/, "");
 }
 
+// Coupée sans casser d'emoji (_shared/texteSur.ts) : une moitié d'emoji seule faisait refuser
+// tout le patch du créateur (abonnés, statistiques, media kit compris).
 function shortCaption(s: string): string {
   const one = (s ?? "").replace(/\s+/g, " ").trim();
-  return one.length > CAPTION_MAX ? `${one.slice(0, CAPTION_MAX - 1).trimEnd()}…` : one;
+  return one.length > CAPTION_MAX ? `${couper(one, CAPTION_MAX - 1).trimEnd()}…` : texteSur(one);
 }
 
 /** Ancien feed (colonne jsonb) → posts par id, sans planter sur une valeur bizarre. */

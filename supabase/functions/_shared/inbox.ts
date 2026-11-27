@@ -3,12 +3,15 @@
 // Logique pure (sans réseau), utilisée par ig-inbox.
 // ============================================================================
 
+import { couper, texteSur } from "./texteSur.ts";
+
 export type DmMsg = { id: string; at: string; me: boolean; text: string };
 export type Touch = { id: string; date: string; canal: string; kind: string; note?: string };
 
+// Extrait gardé dans le journal du contact (jsonb) : coupé sans casser d'emoji (_shared/texteSur.ts).
 const excerpt = (t: string, n: number) => {
   const s = t.replace(/\s+/g, " ").trim();
-  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+  return s.length > n ? `${couper(s, n - 1)}…` : texteSur(s);
 };
 
 /**
