@@ -3,7 +3,7 @@ import { firstNameOf, giftCounts, giftObjet } from "./gifting";
 
 describe("gifting : onglet de Collabs", () => {
   it("prénom lisible et compteurs", () => {
-    expect(firstNameOf("LÉNA PASQUALE")).toBe("Léna");
+    expect(firstNameOf("LÉNA MOREL")).toBe("Léna");
     expect(giftCounts([
       { status: "recu", content_expected: true },
       { status: "publie", content_expected: true },

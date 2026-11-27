@@ -7,7 +7,7 @@ describe("guessEventKind", () => {
     expect(guessEventKind("Event Intersport × Under Armour")).toBe("event");
     expect(guessEventKind("Tournage Gymshark")).toBe("shoot");
     expect(guessEventKind("Call brief Alo Yoga")).toBe("call");
-    expect(guessEventKind("Ivana")).toBe("call");
+    expect(guessEventKind("Nina")).toBe("call");
   });
 });
 

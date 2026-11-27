@@ -11,6 +11,7 @@
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
 import { loadNotifPrefs, makePayload, pushReady, sendTo } from "../_shared/push.ts";
+import { couper } from "../_shared/texteSur.ts";
 
 /** notifPrefs depuis le blob agence (tout activé par défaut). */
 async function pushErrorsEnabled(sb: ReturnType<typeof getServiceClient>): Promise<boolean> {
@@ -30,14 +31,16 @@ Deno.serve(async (req: Request) => {
   } catch {
     return jsonRes({ error: "bad_request" }, 400);
   }
-  const message = String(body.message ?? "").slice(0, 500).trim();
+  // Coupés sans séparer un emoji, sans caractère nul (_shared/texteSur.ts) : sinon la base
+  // refuse la ligne, et le bug disparaît sans trace (ni Diagnostic, ni cloche).
+  const message = couper(String(body.message ?? ""), 500).trim();
   if (!message) return jsonRes({ error: "empty" }, 400);
-  const page = String(body.page ?? "").slice(0, 80);
-  const stack = String(body.stack ?? "").slice(0, 4000);
-  const componentStack = String(body.componentStack ?? "").slice(0, 4000);
-  const url = String(body.url ?? "").slice(0, 300);
-  const userAgent = String(body.userAgent ?? "").slice(0, 300);
-  const role = String(body.role ?? "").slice(0, 20);
+  const page = couper(String(body.page ?? ""), 80);
+  const stack = couper(String(body.stack ?? ""), 4000);
+  const componentStack = couper(String(body.componentStack ?? ""), 4000);
+  const url = couper(String(body.url ?? ""), 300);
+  const userAgent = couper(String(body.userAgent ?? ""), 300);
+  const role = couper(String(body.role ?? ""), 20);
 
   const sb = getServiceClient();
 
@@ -58,7 +61,9 @@ Deno.serve(async (req: Request) => {
   if (!flooding) {
     await sb.from("error_log").insert({
       message, page, stack, component_stack: componentStack, url, user_agent: userAgent, role,
-    }).then(() => {}, () => {});
+    }).then(({ error }) => {
+      if (error) console.warn("report-error journal refusé", error.message);
+    }, () => {});
   }
 
   // 2) Push agence — seulement la 1re occurrence de ce message sur 30 min, ET au plus une

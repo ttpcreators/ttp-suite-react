@@ -79,7 +79,7 @@ export function jourCourt(iso: string): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString("fr-FR", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
 }
 
-/** Nom lisible : « LÉNA PASQUALE » → « Léna Pasquale ». */
+/** Nom lisible : « LÉNA MOREL » → « Léna Morel ». */
 const titleCase = (s: string) => s.toLowerCase().replace(/(^|[\s'-])(\p{L})/gu, (_m, a: string, b: string) => a + b.toUpperCase());
 
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1).trimEnd() + "…" : s);

@@ -3,19 +3,19 @@ import { upcomingBirthdays } from "../../supabase/functions/_shared/birthdays";
 
 describe("upcomingBirthdays", () => {
   const creators = [
-    { name: "Ivana", birth: "1999-11-05", status: "actif" },
+    { name: "Nina", birth: "2000-11-05", status: "actif" },
     { name: "Léa", birth: "05/11/1994", status: "inactif" },
     { name: "Ana", birth: "1996-11-04" },
-    { name: "Beverly", birth: "" },
+    { name: "Jade", birth: "" },
     { name: "Chloé", birth: null },
   ];
 
   it("annonce la veille et le jour J, avec l'âge", () => {
     expect(upcomingBirthdays(creators, "2026-11-04")).toEqual([
-      { name: "Ivana", when: "tomorrow", date: "2026-11-05", age: 27 },
+      { name: "Nina", when: "tomorrow", date: "2026-11-05", age: 26 },
       { name: "Ana", when: "today", date: "2026-11-04", age: 30 },
     ]);
-    expect(upcomingBirthdays(creators, "2026-11-05")).toEqual([{ name: "Ivana", when: "today", date: "2026-11-05", age: 27 }]);
+    expect(upcomingBirthdays(creators, "2026-11-05")).toEqual([{ name: "Nina", when: "today", date: "2026-11-05", age: 26 }]);
   });
 
   it("passe le changement d'année et fête un 29 février le 28", () => {

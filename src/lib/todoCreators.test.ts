@@ -15,7 +15,7 @@ import {
 
 describe("todoCreators", () => {
   it("normalise : rogne, retire les vides et les doublons (casse ignorée), garde l'ordre", () => {
-    expect(normalizeCreators([" JUSTINE GENTET ", "", null, "Léna", "justine gentet", undefined, "LÉNA"])).toEqual(["JUSTINE GENTET", "Léna"]);
+    expect(normalizeCreators([" JUSTINE FAURE ", "", null, "Léna", "justine faure", undefined, "LÉNA"])).toEqual(["JUSTINE FAURE", "Léna"]);
     expect(normalizeCreators(null)).toEqual([]);
   });
 
@@ -37,9 +37,9 @@ describe("todoCreators", () => {
   it("libellé du choix : rien, un nom, « Justine + 2 »", () => {
     expect(creatorsLabel([])).toBe("Sélectionner…");
     expect(creatorsLabel([], "L'agence")).toBe("L'agence");
-    expect(creatorsLabel(["JUSTINE GENTET"])).toBe("Justine Gentet");
-    expect(creatorsLabel(["JUSTINE GENTET", "LÉNA MARTIN", "Inès"])).toBe("Justine + 2");
-    expect(creatorsLabel(["JUSTINE GENTET", "justine gentet"])).toBe("Justine Gentet");
+    expect(creatorsLabel(["JUSTINE FAURE"])).toBe("Justine Faure");
+    expect(creatorsLabel(["JUSTINE FAURE", "LÉNA MARTIN", "Inès"])).toBe("Justine + 2");
+    expect(creatorsLabel(["JUSTINE FAURE", "justine faure"])).toBe("Justine Faure");
   });
 
   it("noms à la suite", () => {
@@ -50,8 +50,8 @@ describe("todoCreators", () => {
 
   it("espace créateur : les autres créateurs, discrètement", () => {
     expect(sharedWithLabel({ creator: "LÉNA MARTIN" }, "LÉNA MARTIN")).toBeNull();
-    expect(sharedWithLabel({ creator: "LÉNA MARTIN", creators: ["LÉNA MARTIN", "JUSTINE GENTET"] }, "léna martin")).toBe("Avec Justine");
-    expect(sharedWithLabel({ creator: "JUSTINE GENTET", creators: ["JUSTINE GENTET", "LÉNA MARTIN", "Inès"] }, "LÉNA MARTIN")).toBe("Avec Justine et Inès");
+    expect(sharedWithLabel({ creator: "LÉNA MARTIN", creators: ["LÉNA MARTIN", "JUSTINE FAURE"] }, "léna martin")).toBe("Avec Justine");
+    expect(sharedWithLabel({ creator: "JUSTINE FAURE", creators: ["JUSTINE FAURE", "LÉNA MARTIN", "Inès"] }, "LÉNA MARTIN")).toBe("Avec Justine et Inès");
     expect(sharedWithLabel({ creators: ["A", "B", "C", "D"] }, "A")).toBe("Avec B, C et 1 autre");
     expect(sharedWithLabel({ creators: ["A", "B", "C", "D", "E"] }, "A")).toBe("Avec B, C et 2 autres");
   });

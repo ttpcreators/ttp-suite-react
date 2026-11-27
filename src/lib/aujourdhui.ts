@@ -245,7 +245,7 @@ export function handledToday(map: HandledMap, today: string): DoneEntry[] {
 // ── Commission : même logique que Facturation / Reversements ─────────────────
 export type InvDetailsLite = InvoiceDetailLike & { kind?: string };
 /** Taux : fiche roster d'abord, puis l'ancien blob `creatorCommission`, puis le défaut. */
-// Nom comparé sans casse (« LÉNA PASQUALE » = « Léna Pasquale »), comme Facturation (rateFor).
+// Nom comparé sans casse (« LÉNA MOREL » = « Léna Morel »), comme Facturation (rateFor).
 export function commissionRateFor(creator: string | null, roster: Record<string, number>, legacy: Record<string, number>): number {
   return rateFor(creator, roster, legacy, DEFAULT_COMMISSION);
 }

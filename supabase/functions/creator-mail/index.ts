@@ -51,6 +51,7 @@ import {
   maskAgencyAddresses, normEmail, parseChoice, threadMatches, writesOutside,
   type GHeader, type GMessageLite,
 } from "./logic.ts";
+import { couper, texteSur } from "../_shared/texteSur.ts";
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
@@ -574,7 +575,7 @@ Deno.serve(async (req: Request) => {
     const threadId = String(body.threadId ?? "");
     if (action === "note") {
       if (me.agency) return res({ error: "non_autorise" }, 403);
-      const text = String(body.body ?? "").trim();
+      const text = texteSur(String(body.body ?? "")).trim(); // sans caractère nul ni moitié d'emoji seule
       if (!text || text.length > 4000) return res({ error: "note_invalide" }, 400);
       await ownedOrKnown(sb, s, threadId);
       const { data, error } = await sb.from("creator_mail_notes")
@@ -658,7 +659,7 @@ Deno.serve(async (req: Request) => {
       cache.delete(`t:${threadId}`);
       for (const k of [...cache.keys()]) if (k.startsWith("l:")) cache.delete(k);
       // L'agence est prévenue dans le suivi de l'échange (remarque non lue).
-      const extract = text.replace(/\s+/g, " ").slice(0, 300);
+      const extract = couper(text.replace(/\s+/g, " "), 300); // sans casser d'emoji (_shared/texteSur.ts)
       const { error: noteError } = await sb.from("creator_mail_notes").insert({
         creator, thread_id: threadId, author_user_id: me.userId, body: `J'ai répondu à la marque (${to}) : « ${extract}${text.length > 300 ? "…" : ""} »`,
       });

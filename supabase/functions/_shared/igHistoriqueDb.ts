@@ -22,6 +22,8 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4
 import { GRAPH, META_IG_ID, getJson, graphWhy, igUser, metaReady, ownAccount, pageAccess, quotaAuDepart, quotaPct, saveState, saveUsage, storePicture } from "./instagram.ts";
 import { PLAFONDS } from "./quotaMeta.ts";
 import { ETAT_VIDE, curseurSuivant, ligneConversation, lireEtat, messagesDe, texteTranche, trancheEnCours, tropAncienne, type ConvMeta, type EtatHistorique, type MessageMeta, type Personne, type Tranche } from "./igHistorique.ts";
+import { couper, texteSur } from "./texteSur.ts";
+import { ecrireParLots } from "./ecritureLot.ts";
 
 export const ETAT_HISTORIQUE = "inbox_historique";
 /** Conversations annoncées par l'app Instagram de TTP (novembre 2026) : sert seulement à estimer le reste. */
@@ -99,6 +101,7 @@ export async function trancheHistorique(sb: SupabaseClient, o: { pages?: number;
   const extra: string[] = [];
   let premierApproche = false;
   let sansColonne = false;
+  let messagesRefuses = 0; // messages refusés par la base (texte illisible…), dits dans le compte rendu
 
   // Une demande à la fois, avec un écart minimum ; pause avant le plafond de l'import.
   // Avant la première : le dernier relevé (ig_quota) dit si Meta bloque ou si le quota est déjà haut.
@@ -204,7 +207,7 @@ export async function trancheHistorique(sb: SupabaseClient, o: { pages?: number;
           if (!f.error) {
             const user = igUser(String(f.username ?? "")).toLowerCase();
             if (user) row.username = user;
-            if (f.name) row.name = String(f.name);
+            if (f.name) row.name = texteSur(String(f.name));
             if (typeof f.follower_count === "number") row.followers = f.follower_count;
             if (!p?.picture && f.profile_pic && (user || row.username)) {
               const pic = await storePicture(sb, String(user || row.username), String(f.profile_pic));
@@ -222,9 +225,19 @@ export async function trancheHistorique(sb: SupabaseClient, o: { pages?: number;
         }
         if (error) {
           tranche.erreurs++;
+          // La vraie raison, pour Claude (chaque message d'erreur n'est dit qu'une fois).
+          extra.push(`Conversation refusée par la base : ${couper(error.message ?? "erreur", 200)}.`);
           continue;
         }
-        if (msgs.length) await sb.from("ig_messages").upsert(msgs.map((m) => ({ id: m.id, thread_id: conv.id, at: m.at, me: m.me, text: m.text.slice(0, 4000) })));
+        if (msgs.length) {
+          // Les 20 messages en une requête ; refusée, elle est refaite message par message (_shared/ecritureLot.ts).
+          const lignes = msgs.map((m) => ({ id: m.id, thread_id: conv.id, at: m.at, me: m.me, text: couper(m.text, 4000) }));
+          const r = await ecrireParLots(lignes, lignes.length, (lot) => sb.from("ig_messages").upsert(lot));
+          if (r.refusees.length) {
+            messagesRefuses += r.refusees.length;
+            extra.push(`Messages refusés par la base : ${couper(r.erreur ?? "erreur", 200)}.`);
+          }
+        }
         if (p) tranche.maj++;
         else tranche.importees++;
       }
@@ -255,7 +268,8 @@ export async function trancheHistorique(sb: SupabaseClient, o: { pages?: number;
   if (etat.arret === "meta_limite" && quota?.blockedUntil) extra.push(`Reprise possible vers ${new Date(String(quota.blockedUntil)).toLocaleTimeString("fr-FR", { timeZone: "Europe/Paris", hour: "2-digit", minute: "2-digit" })}.`);
   if (sansColonne) extra.push("⚠ Date du premier message pas enregistrée : le SQL 2026-11-24-dm-historique.sql (colonne ig_threads.first_at) n'est pas encore lancé. En attendant, le plus ancien des 20 derniers messages est dans ig_messages.");
   if (premierApproche) extra.push("Très longues conversations (plus de 320 messages) : la date du premier message est la plus ancienne trouvée, pas forcément la vraie.");
+  if (messagesRefuses) extra.push(`${messagesRefuses} message(s) pas enregistré(s) (refusés par la base), les autres messages de leurs conversations le sont.`);
   const texte = texteTranche(etat, tranche, await compterConversations(sb), TOTAL_ANNONCE, [...new Set(extra.filter(Boolean))]);
-  console.log("ig-historique", JSON.stringify({ tranche, arret: etat.arret, ms: Date.now() - t0 }));
+  console.log("ig-historique", JSON.stringify({ tranche, messagesRefuses, arret: etat.arret, ms: Date.now() - t0 }));
   return { ok: !etat.arret || etat.arret === "quota_proche", texte, etat, tranche, quota, why: etat.arret ?? undefined };
 }

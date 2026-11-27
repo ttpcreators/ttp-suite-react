@@ -45,8 +45,17 @@ export async function suivreReponses(sb: Sb, mails: Mail[], domaineAgence: strin
     const jour = new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
     const rebond = adresseEnRebond(m, domaineAgence);
     if (rebond) {
+      // Coupe-circuit de la file d'envoi (décision de Gianni du 27/11) : le rebond est noté sur
+      // le mail parti par la file, créateurs compris (ils ne sont pas au carnet de contacts).
+      const depuis = new Date(now.getTime() - 3 * 86_400_000).toISOString();
+      const { data: file } = await sb.from("envoi_file").update({ erreur: `rebond : adresse refusée par le serveur (${rebond})` })
+        .eq("statut", "envoye").gte("envoye_at", depuis).ilike("destinataires", `%${echappe(rebond)}%`).select("id");
+      const noteFile = Array.isArray(file) && file.length > 0;
       const c = await contact(sb, rebond);
-      if (!c || !("email_check" in c)) continue;
+      if (!c || !("email_check" in c)) {
+        if (noteFile) rebonds++;
+        continue;
+      }
       const seq = lireSequence(c.sequence);
       const patch: Record<string, unknown> = { email_check: { statut: "erreur", raison: "rebond : adresse refusée par le serveur", le: now.toISOString() } };
       if (seq && seq.statut === "en_cours") patch.sequence = arreter(seq, "rebond", now);
@@ -82,7 +91,10 @@ export async function suivreReponses(sb: Sb, mails: Mail[], domaineAgence: strin
       }
       if (Object.keys(patch).length) {
         const { error } = await sb.from("contacts").update(patch).eq("id", c.id);
-        if (error) continue;
+        if (error) {
+          console.warn("gmail-poll réponse : fiche contact refusée", c.id, error.message);
+          continue;
+        }
       }
     }
     reponses++;
@@ -93,7 +105,9 @@ export async function suivreReponses(sb: Sb, mails: Mail[], domaineAgence: strin
     });
     const { data: deja } = await sb.from("todos").select("id").eq("text", t.text).or("done.is.null,done.eq.false").limit(1);
     if (!(deja ?? []).length) {
-      await sb.from("todos").insert({ text: t.text, descr: t.descr, priority: t.priority, due: t.due, done: false }).then(() => {}, () => {});
+      await sb.from("todos").insert({ text: t.text, descr: t.descr, priority: t.priority, due: t.due, done: false }).then(({ error }: { error: { message: string } | null }) => {
+        if (error) console.warn("gmail-poll réponse : tâche refusée", error.message);
+      }, () => {});
     }
   }
   return { reponses, rebonds };

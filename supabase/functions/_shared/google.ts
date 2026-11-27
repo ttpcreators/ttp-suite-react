@@ -21,6 +21,7 @@
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import { guessEventKind } from "./eventKind.ts";
+import { texteSur } from "./texteSur.ts";
 
 // ----------------------------------------------------------------------------
 // Constantes & environnement
@@ -563,15 +564,17 @@ export function googleToEvent(g: GoogleEvent): {
   const day = Number(date.split("-")[2]) || 1;
   const parsedSort = Number.parseInt(priv.ttp_sort ?? "", 10);
 
+  // Titre et description recopiés de Google : sans caractère nul ni moitié d'emoji seule
+  // (texteSur), sinon la base refuse le rendez-vous et il manque au Planning.
   return {
-    title: g.summary && g.summary.trim() ? g.summary : "(sans titre)",
+    title: g.summary && g.summary.trim() ? texteSur(g.summary) : "(sans titre)",
     date,
     time,
     day,
     // Sans type choisi dans l'app : deviné d'après le titre (« Poster pour Nakd » = deadline).
     type: priv.ttp_type && priv.ttp_type.length > 0 ? priv.ttp_type : guessEventKind(g.summary),
     who: priv.ttp_who && priv.ttp_who.length > 0 ? priv.ttp_who : null,
-    description: g.description && g.description.trim() ? g.description : null,
+    description: g.description && g.description.trim() ? texteSur(g.description) : null,
     sort_order: Number.isFinite(parsedSort) ? parsedSort : 0,
   };
 }
@@ -758,7 +761,7 @@ async function applyGoogleItem(sb: SupabaseClient, g: GoogleEvent): Promise<"pul
 
     // Dernier modifié gagne.
     if (new Date(gUpdated).getTime() > new Date(existing.updated_at).getTime()) {
-      await sb.from("events").update({
+      const { error } = await sb.from("events").update({
         ...fields,
         google_etag: g.etag ?? existing.google_etag,
         sync_source: "google",
@@ -767,13 +770,17 @@ async function applyGoogleItem(sb: SupabaseClient, g: GoogleEvent): Promise<"pul
         deleted: false,
         deleted_at: null,
       }).eq("id", existing.id);
+      if (error) {
+        console.warn("google-sync rendez-vous refusé", g.id, error.message);
+        return null;
+      }
       return "pulled";
     }
     return null; // agence plus récent
   }
 
   // Nouvel event Google. upsert onConflict pour éviter un throw si course.
-  await sb.from("events").upsert({
+  const { error } = await sb.from("events").upsert({
     ...fields,
     google_event_id: g.id,
     google_etag: g.etag ?? null,
@@ -782,6 +789,10 @@ async function applyGoogleItem(sb: SupabaseClient, g: GoogleEvent): Promise<"pul
     last_synced_at: now,
     deleted: false,
   }, { onConflict: "google_event_id" });
+  if (error) {
+    console.warn("google-sync nouveau rendez-vous refusé", g.id, error.message);
+    return null;
+  }
   return "pulled";
 }
 

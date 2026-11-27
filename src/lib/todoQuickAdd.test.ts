@@ -6,8 +6,8 @@ const CREATORS = [{ name: "LÉNA MARTIN" }, { name: "Marc Dupont" }, { name: "In
 
 describe("todoQuickAdd", () => {
   it("l'exemple de la barre : créateur, priorité, échéance retirés du titre", () => {
-    expect(parseQuickAdd("Relancer Nutripure demain @Léna !haute", CREATORS, NOW)).toEqual({
-      title: "Relancer Nutripure",
+    expect(parseQuickAdd("Relancer Solvi demain @Léna !haute", CREATORS, NOW)).toEqual({
+      title: "Relancer Solvi",
       creator: "LÉNA MARTIN",
       creators: ["LÉNA MARTIN"],
       priority: "haute",
@@ -80,10 +80,10 @@ describe("todoQuickAdd", () => {
   });
 
   it("phrase complète de la barre, accents et inconnus", () => {
-    expect(parseQuickAdd("Relancer Nutripure demain @Lena @Justine !haute", [...CREATORS, { name: "JUSTINE GENTET" }], NOW)).toEqual({
-      title: "Relancer Nutripure",
+    expect(parseQuickAdd("Relancer Solvi demain @Lena @Justine !haute", [...CREATORS, { name: "JUSTINE FAURE" }], NOW)).toEqual({
+      title: "Relancer Solvi",
       creator: "LÉNA MARTIN",
-      creators: ["LÉNA MARTIN", "JUSTINE GENTET"],
+      creators: ["LÉNA MARTIN", "JUSTINE FAURE"],
       priority: "haute",
       due: "2026-10-21",
     });
@@ -104,7 +104,7 @@ describe("todoQuickAdd", () => {
 
 describe("liste des créateurs sous « @ »", async () => {
   const { mentionAt, mentionSuggestions, insertMention, parseQuickAdd } = await import("./todoQuickAdd");
-  const roster = [{ name: "léna pasquale" }, { name: "justine gentet" }, { name: "pierre gentet" }, { name: "léa berenger" }, { name: "lea martin" }];
+  const roster = [{ name: "léna morel" }, { name: "justine faure" }, { name: "pierre faure" }, { name: "léa fontaine" }, { name: "lea martin" }];
   it("repère le mot en cours qui commence par @", () => {
     expect(mentionAt("Relancer @lé", 12)).toEqual({ start: 9, query: "lé" });
     expect(mentionAt("Relancer @", 10)).toEqual({ start: 9, query: "" });
@@ -112,24 +112,24 @@ describe("liste des créateurs sous « @ »", async () => {
     expect(mentionAt("Relancer @Léna demain", 21)).toBeNull();
   });
   it("propose par prénom puis par nom, sans accents", () => {
-    expect(mentionSuggestions("le", roster).map((c) => c.name)).toEqual(["léa berenger", "lea martin", "léna pasquale"]);
-    expect(mentionSuggestions("gent", roster).map((c) => c.name)).toEqual(["justine gentet", "pierre gentet"]);
+    expect(mentionSuggestions("le", roster).map((c) => c.name)).toEqual(["léa fontaine", "lea martin", "léna morel"]);
+    expect(mentionSuggestions("fau", roster).map((c) => c.name)).toEqual(["justine faure", "pierre faure"]);
     expect(mentionSuggestions("", roster)).toHaveLength(5);
     // Une lettre : seulement les prénoms ou noms qui COMMENCENT par elle.
-    expect(mentionSuggestions("j", roster).map((c) => c.name)).toEqual(["justine gentet"]);
+    expect(mentionSuggestions("j", roster).map((c) => c.name)).toEqual(["justine faure"]);
   });
   it("insère @Prénom (ou le nom complet si le prénom est en double), relisible par l'ajout rapide", () => {
-    const a = insertMention("Relancer @ju demain", 9, 12, "justine gentet", roster);
+    const a = insertMention("Relancer @ju demain", 9, 12, "justine faure", roster);
     expect(a.text).toBe("Relancer @Justine demain");
     expect(a.caret).toBe(18);
     const b = insertMention("Appeler @le", 8, 11, "lea martin", [...roster, { name: "lea durand" }]);
     expect(b.text).toBe("Appeler @Lea Martin ");
-    expect(parseQuickAdd(a.text, roster).creators ?? [parseQuickAdd(a.text, roster).creator]).toContain("justine gentet");
+    expect(parseQuickAdd(a.text, roster).creators ?? [parseQuickAdd(a.text, roster).creator]).toContain("justine faure");
   });
   it("marche aussi dans un texte sur plusieurs lignes (notes, descriptions)", () => {
     const text = "Ordre du jour\n@pi";
     expect(mentionAt(text, text.length)).toEqual({ start: 14, query: "pi" });
-    const r = insertMention(text, 14, text.length, "pierre gentet", roster);
+    const r = insertMention(text, 14, text.length, "pierre faure", roster);
     expect(r.text).toBe("Ordre du jour\n@Pierre ");
     expect(r.caret).toBe(r.text.length);
   });

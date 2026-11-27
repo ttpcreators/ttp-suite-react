@@ -29,12 +29,14 @@ import { listSendAs, parseMailBox, resolveSender, sendDraft, sendMail, type Mail
 import { LIEN_TTL_MS, PROJECT_URL, creatorBoxReady, listCreatorBoxes, normEmail } from "../_shared/creatorBox.ts";
 import { genNonce, signState } from "../_shared/state.ts";
 import { etatConnexion, LIEN_IG_TTL_MS, MESSAGES_RAISON, essaisRates, lireRaison, RAISON_AGENCE, signerLien, urlLien, type EssaiIg } from "../_shared/igConnexion.ts";
-import { loginReady } from "../_shared/instagram-login.ts";
+import { loginReady, unifiee } from "../_shared/instagram-login.ts";
 import type { Ctx } from "./oauth.ts";
 import { PROSPECTION_TOOLS, adressesDe, adressesInvalides, suiviApresEnvoi } from "./prospection.ts";
 import { verifierKitsDuMail } from "./kitGarde.ts";
 import { bloquant, journaliserEnvoi, verifierAvantEnvoi } from "./envois.ts";
 import { nomAuteur } from "../_shared/auteurEnvoi.ts";
+import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
+import { couper, str } from "../_shared/texteSur.ts";
 
 type Json = Record<string, unknown>;
 type Args = Record<string, unknown>;
@@ -47,7 +49,6 @@ export type AdminTool = {
 
 const ok = (text: string): Result => ({ text });
 const fail = (text: string): Result => ({ text, isError: true });
-const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const obj = (v: unknown): Json | null => (v && typeof v === "object" && !Array.isArray(v) ? (v as Json) : null);
 const json = (v: unknown) => JSON.stringify(v, null, 1);
 const TABLE_ENUM = Object.keys(TABLES);
@@ -75,7 +76,7 @@ const lireDonnees: AdminTool = {
       table: { type: "string", enum: TABLE_ENUM },
       id: { type: "string", description: "Id de la ligne (ou nom du créateur pour creator_roadmap / creator_mail_settings)" },
       recherche: { type: "string", description: "Texte cherché dans les colonnes principales (nom, marque, email…)" },
-      filtres: { type: "object", description: "Égalités exactes, ex. { \"status\": \"en_cours\", \"creator\": \"Ana Milanovic\" }" },
+      filtres: { type: "object", description: "Égalités exactes, ex. { \"status\": \"en_cours\", \"creator\": \"Jeanne Exemple\" }" },
       limite: { type: "integer", minimum: 1, maximum: 100 },
     },
     required: ["table"],
@@ -115,12 +116,37 @@ async function copierExclu(sb: SupabaseClient, row: Json | null | undefined): Pr
   return error ? `\n⚠ Copie de l'exclusivité (réglage creatorExclusive) non faite : ${error.message}` : "";
 }
 
+// Une tâche créée par creer_element suit les règles de creer_tache (tools.ts) : étiquette
+// « Claude · nom » si aucune n'est donnée, visible par le créateur cité sauf visible_createur
+// false (choix de Marc du 24/11/2026), et pas de doublon d'une tâche ouverte. Renvoie le refus, ou null.
+async function reglesTache(sb: SupabaseClient, ctx: Ctx, f: Json): Promise<string | null> {
+  const texte = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  if (!texte(f.tag)) f.tag = ctx.name ? `Claude · ${ctx.name}` : "Claude";
+  const noms = [texte(f.creator), ...(Array.isArray(f.creators) ? f.creators.map(texte) : [])].filter(Boolean);
+  if (typeof f.visible_createur !== "boolean" && noms.length) f.visible_createur = true;
+  if (f.done === true) return null; // tâche notée déjà faite : rien à comparer
+  const lire = (cols: string) => sb.from("todos").select(cols).eq("done", false).limit(500);
+  let lu = await lire("id, text, creator, creators, due");
+  if (lu.error && /creators/i.test(lu.error.message)) lu = await lire("id, text, creator, due");
+  const double = tacheEnDouble(texte(f.text), noms, (lu.data as unknown as TacheOuverte[] | null) ?? []);
+  return double
+    ? `Une tâche ouverte dit déjà la même chose : « ${double.text} » (id ${double.id}). Mets-la à jour (modifier_element) ou coche-la (cocher_tache) au lieu d'en créer une autre ; si c'est vraiment une autre tâche : creer_tache avec forcer = true.`
+    : null;
+}
+
+/** Qui voit la tâche créée (même règle que la base, todos_read). */
+function vueTache(r: Json): string {
+  const cites = (Array.isArray(r.creators) && r.creators.length > 0) || !!r.creator;
+  if (!cites) return "";
+  return r.source !== "agency" || r.visible_createur === true ? "\nVisible dans l'espace du créateur (titre et détails)." : "\nInterne : le créateur ne la voit pas.";
+}
+
 // ── 2. Créer ────────────────────────────────────────────────────────────────
 const creerElement: AdminTool = {
   name: "creer_element",
   title: "Créer un élément",
   description:
-    "Crée une ligne dans une table de l'app (fondateurs) : contact, créateur, collab, brief, tâche, rendez-vous, gifting, idée, prospect, scouting… `champs` = colonnes de la table (lis d'abord une ligne existante avec lire_donnees pour connaître les colonnes et leur format ; une colonne JSON, comme un media kit, s'envoie en objet, pas en texte). Pour une facture, utilise preparer_facture. Demande l'accord de l'utilisateur avant.",
+    "Crée une ligne dans une table de l'app (fondateurs) : contact, créateur, collab, brief, tâche, rendez-vous, gifting, idée, prospect, scouting… `champs` = colonnes de la table (lis d'abord une ligne existante avec lire_donnees pour connaître les colonnes et leur format ; une colonne JSON, comme un media kit, s'envoie en objet, pas en texte). Pour une facture, utilise preparer_facture. Pour une tâche, préférer creer_tache ; une tâche créée ici suit les mêmes règles (étiquette « Claude », visible par le créateur cité sauf visible_createur false, refus d'un doublon). Demande l'accord de l'utilisateur avant.",
   inputSchema: {
     type: "object",
     properties: { table: { type: "string", enum: TABLE_ENUM }, champs: { type: "object" } },
@@ -129,7 +155,7 @@ const creerElement: AdminTool = {
   },
   write: true,
   founder: true,
-  run: async (sb, _c, a) => {
+  run: async (sb, ctx, a) => {
     const t = tableOf(a);
     if ("error" in t) return fail(t.error);
     const rule = TABLES[t.table];
@@ -137,6 +163,10 @@ const creerElement: AdminTool = {
     const { ok: fields, refused } = writableFields(t.table, obj(a.champs) ?? {});
     if (!Object.keys(fields).length) return fail("Aucun champ à enregistrer.");
     if (t.table === "events") fields.sync_source = "agence"; // poussé vers Google Agenda
+    if (t.table === "todos") {
+      const refus = await reglesTache(sb, ctx, fields);
+      if (refus) return fail(refus);
+    }
     // Cachet d'une collab : même forme que l'app (« 550 € », « 550 $ + affiliation »).
     if (t.table === "collabs" && "cachet" in fields) fields.cachet = normaliserCachet(fields.cachet);
     if (t.table === "contacts" && typeof fields.tag === "string") fields.tag = normaliserTag(fields.tag); // liste fermée
@@ -150,7 +180,8 @@ const creerElement: AdminTool = {
     // Collab créée : le prospect ouvert de la marque passe « Signé » (étapes automatiques).
     const signe = t.table === "collabs" && (data as Json).status !== "perdue" ? await apresCollabSignee(sb, String((data as Json).id)) : null;
     const exclu = t.table === "creators" && "exclu" in fields ? await copierExclu(sb, data as Json) : "";
-    return ok(`✓ ${rule.label} créé${refused.length ? ` (champs ignorés : ${refused.join(", ")})` : ""}.${signe ? `\n${ligneProspectSigne(signe.brand)}` : ""}\n${json(readableRow(data as Json))}${exclu}`);
+    const vue = t.table === "todos" ? vueTache(data as Json) : "";
+    return ok(`✓ ${rule.label} créé${refused.length ? ` (champs ignorés : ${refused.join(", ")})` : ""}.${signe ? `\n${ligneProspectSigne(signe.brand)}` : ""}${vue}\n${json(readableRow(data as Json))}${exclu}`);
   },
 };
 
@@ -532,7 +563,7 @@ const envoyerMail: AdminTool = {
       message: { type: "string", description: "Texte du mail (sans signature)" },
       fil: { type: "string", description: "Id du fil Gmail pour répondre dedans" },
       signature: { type: "boolean", description: "false pour ne pas ajouter la signature (par défaut : ajoutée)" },
-      envoyer_en_tant_que: { type: "string", description: "Facultatif : alias mail d'une créatrice (ex. anamilanovic@ttpcreators.pro, via alias_createurs ou fiche_createur) pour envoyer EN SON NOM. Accepté seulement s'il est réglé dans « Envoyer en tant que » de la boîte dans Gmail ; les réponses de la marque reviennent sur l'alias." },
+      envoyer_en_tant_que: { type: "string", description: "Facultatif : alias mail d'un créateur (ex. prenomnom@ttpcreators.pro, via alias_createurs ou fiche_createur) pour envoyer EN SON NOM. Accepté seulement s'il est réglé dans « Envoyer en tant que » de la boîte dans Gmail ; les réponses de la marque reviennent sur l'alias." },
       demarrer_sequence: { type: "boolean", description: "true : premier mail de prospection, la séquence du contact commence (J0). Sinon, la séquence avance toute seule si sa prochaine étape est un mail." },
       createur: { type: "string", description: "Le créateur proposé dans ce mail de prospection (son media kit est comparé aux chiffres réels ; un kit faux bloque l'envoi). Sert aussi à demarrer_sequence." },
     },
@@ -588,8 +619,8 @@ const envoyerMail: AdminTool = {
 };
 
 // ── 7 bis. Envoyer un brouillon préparé par Claude ─────────────────────────
-// Pour Alfred (talent manager) : Marc lit le brouillon, répond « oui » pour CE brouillon, et
-// il part tel quel (pas de mail retapé, pas de brouillon oublié qui ferait doublon).
+// Pour Alfred et les assistants : l'utilisateur lit le brouillon, répond « oui » pour CE brouillon,
+// et il part tel quel (pas de mail retapé, pas de brouillon oublié qui ferait doublon).
 const envoyerBrouillon: AdminTool = {
   name: "envoyer_brouillon",
   title: "Envoyer un brouillon",
@@ -600,7 +631,7 @@ const envoyerBrouillon: AdminTool = {
     properties: {
       boite: { type: "string", description: "partnerships, talent, ou l'adresse d'une boîte de créateur connectée (voir boites_createurs)" },
       brouillon: { type: "string", description: "Id du brouillon Gmail (donné par creer_brouillon_mail)" },
-      envoyer_en_tant_que: { type: "string", description: "Facultatif : alias mail d'une créatrice (ex. anamilanovic@ttpcreators.pro, via alias_createurs ou fiche_createur) pour envoyer EN SON NOM. Accepté seulement s'il est réglé dans « Envoyer en tant que » de la boîte dans Gmail ; les réponses de la marque reviennent sur l'alias." },
+      envoyer_en_tant_que: { type: "string", description: "Facultatif : alias mail d'un créateur (ex. prenomnom@ttpcreators.pro, via alias_createurs ou fiche_createur) pour envoyer EN SON NOM. Accepté seulement s'il est réglé dans « Envoyer en tant que » de la boîte dans Gmail ; les réponses de la marque reviennent sur l'alias." },
       demarrer_sequence: { type: "boolean", description: "true : premier mail de prospection, la séquence du contact commence (J0). Sinon, la séquence avance toute seule si sa prochaine étape est un mail." },
       createur: { type: "string", description: "Le créateur proposé (son media kit est revérifié avant l'envoi). Sert aussi à demarrer_sequence." },
     },
@@ -635,20 +666,21 @@ const envoyerBrouillon: AdminTool = {
 };
 
 // ── 7 bis. Envoi par lots (liste de Gianni, point 3) ─────────────────────────
-// Marc relit les brouillons préparés et répond « oui » pour une liste précise : elle part
-// en une fois, avec un compte rendu par brouillon. Même règle que envoyer_brouillon.
+// L'utilisateur relit les brouillons préparés et répond « oui » pour une liste précise : elle
+// part en une fois, avec un compte rendu par brouillon. Même règle que envoyer_brouillon.
+// Jamais pour un lot de prospection : programmer_envoi (file étalée, plafond, 30 jours par société).
 const envoyerBrouillonsValides: AdminTool = {
   name: "envoyer_brouillons_valides",
   title: "Envoyer des brouillons validés",
   description:
-    "ENVOIE en une fois une liste de brouillons Gmail préparés par Claude (ids de creer_brouillon_mail), chacun exactement tel qu'il est dans Gmail. À n'appeler qu'après le « oui » explicite de Marc pour CETTE liste d'ids (jamais « tout », jamais un id qu'il n'a pas vu). Un brouillon écrit à la main, introuvable ou refusé est sauté, les autres partent. La séquence de chaque destinataire avance (ou commence avec demarrer_sequence). Compte rendu brouillon par brouillon. 25 au plus.",
+    "ENVOIE en une fois une liste de brouillons Gmail préparés par Claude (ids de creer_brouillon_mail), chacun exactement tel qu'il est dans Gmail. Jamais pour un lot de prospection : programmer_envoi (envoi étalé, plafonné, revérifié). À n'appeler qu'après le « oui » explicite de l'utilisateur pour CETTE liste d'ids (jamais « tout », jamais un id qu'il n'a pas vu). Un brouillon écrit à la main, introuvable ou refusé est sauté, les autres partent. La séquence de chaque destinataire avance si elle existe déjà. Compte rendu brouillon par brouillon. 25 au plus.",
   inputSchema: {
     type: "object",
     properties: {
       boite: { type: "string", description: "partnerships, talent, ou l'adresse d'une boîte de créateur connectée" },
-      brouillons: { type: "array", items: { type: "string" }, description: "Ids des brouillons validés par Marc" },
-      envoyer_en_tant_que: { type: "string", description: "Facultatif : alias d'une créatrice, commun à toute la liste (vérifié dans « Envoyer en tant que »)" },
-      demarrer_sequence: { type: "boolean", description: "true : premiers mails de prospection, chaque séquence commence (J0)" },
+      brouillons: { type: "array", items: { type: "string" }, description: "Ids des brouillons validés par l'utilisateur" },
+      envoyer_en_tant_que: { type: "string", description: "Facultatif : alias d'un créateur, commun à toute la liste (vérifié dans « Envoyer en tant que »)" },
+      demarrer_sequence: { type: "boolean", description: "true : la séquence de chaque destinataire commence (J0). Jamais pour des premiers mails de prospection en lot : programmer_envoi, qui a aussi demarrer_sequence." },
     },
     required: ["boite", "brouillons"],
     additionalProperties: false,
@@ -723,9 +755,11 @@ const lienBoiteCreateur: AdminTool = {
 // ── 7 quater. Lien de connexion Instagram d'une créatrice (demande de Marc, 25 novembre 2026) ──
 const lienConnexionInstagram: AdminTool = {
   name: "lien_connexion_instagram",
-  title: "Lien pour connecter l'Instagram d'une créatrice",
+  title: "Lien pour connecter l'Instagram d'un créateur",
+  // Connexion unifiée (Facebook Login for Business, IG_CONFIG_ID posé) ou, en secours, l'ancienne
+  // connexion Instagram : le texte suit celle qui tourne (_shared/instagram-login.ts).
   description:
-    "Donne le lien (valable 7 jours, pour cette créatrice seulement) qui connecte son compte Instagram pro à TTP Suite sans qu'elle ait à se connecter à l'app : elle l'ouvre (WhatsApp, Safari), se connecte à Instagram et touche « Autoriser » ; ses stats privées (vues, couverture, audience) arrivent ensuite toutes seules. Donne aussi l'état actuel (connectée, échecs et leur raison). Le lien ne part jamais tout seul : il va à Marc, qui l'envoie.",
+    `Donne le lien (valable 7 jours, pour ce créateur seulement) qui connecte son compte Instagram pro à TTP Suite sans passer par l'app : le créateur l'ouvre sur son téléphone (WhatsApp, Safari), ${unifiee() ? "choisit « Instagram » (pas « Facebook ») sur la page de Meta, se connecte et accepte" : "se connecte à Instagram et touche « Autoriser »"} ; ses stats privées (vues, couverture, audience) arrivent ensuite toutes seules. Avant la validation de Meta (App Review), son compte doit avoir un rôle sur l'app ou être testeur. Donne aussi l'état actuel (connecté, échecs et leur raison). Le lien ne part jamais tout seul : il va à Marc, qui l'envoie.`,
   inputSchema: {
     type: "object",
     properties: { createur: { type: "string", description: "Nom du créateur, tel qu'au roster" } },
@@ -759,8 +793,11 @@ const lienConnexionInstagram: AdminTool = {
       `Lien de connexion Instagram de ${c.name}, valable ${jours} jours :`,
       urlLien(jeton),
       `État : ${ligneEtat}`,
-      "Elle l'ouvre sur son téléphone, se connecte à Instagram avec son compte pro (ou créateur) et touche « Autoriser ». Si ça coince, la page lui dit quoi faire (par exemple : " + MESSAGES_RAISON.pas_pro.texte + ")",
-      "Tant que Meta n'a pas validé l'app (App Review), son compte doit d'abord être « testeur Instagram » de l'app.",
+      (unifiee()
+        ? "Sur son téléphone, le créateur ouvre le lien, choisit « Instagram » (pas « Facebook ») sur la page de Meta, se connecte avec son compte pro (ou créateur) et accepte."
+        : "Sur son téléphone, le créateur ouvre le lien, se connecte à Instagram avec son compte pro (ou créateur) et touche « Autoriser ».") +
+        " Si ça coince, la page lui dit quoi faire (par exemple : " + MESSAGES_RAISON.pas_pro.texte + ")",
+      "Tant que Meta n'a pas validé l'app (App Review), son compte doit avoir un rôle sur l'app ou être testeur.",
     ].join("\n"));
   },
 };
@@ -810,8 +847,11 @@ const envoyerDm: AdminTool = {
       return fail(why === "hors_fenetre" ? "Plus de 24 h depuis son dernier message : Instagram oblige à répondre depuis l'app Instagram." : `DM non envoyé (${why}).`);
     }
     const at = new Date().toISOString();
-    await sb.from("ig_messages").upsert({ id: `sent:${String(r.message_id ?? crypto.randomUUID())}`, thread_id: th.id, at, me: true, text });
-    await sb.from("ig_threads").update({ updated_at: at, last_text: text.slice(0, 300), last_from_me: true }).eq("id", th.id);
+    // Le DM est parti : une écriture refusée n'est que notée (ig-inbox relira la conversation).
+    const { error: msgErr } = await sb.from("ig_messages").upsert({ id: `sent:${String(r.message_id ?? crypto.randomUUID())}`, thread_id: th.id, at, me: true, text });
+    if (msgErr) console.warn("ttp-mcp envoyer_dm message refusé", th.id, msgErr.message);
+    const { error: thErr } = await sb.from("ig_threads").update({ updated_at: at, last_text: couper(text, 300), last_from_me: true }).eq("id", th.id);
+    if (thErr) console.warn("ttp-mcp envoyer_dm conversation refusée", th.id, thErr.message);
     return ok(`✓ DM envoyé à @${th.username ?? who}.`);
   },
 };

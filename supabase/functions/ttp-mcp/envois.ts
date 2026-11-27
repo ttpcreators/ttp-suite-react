@@ -21,15 +21,15 @@ import { adressesInvalides, suiviApresEnvoi } from "./prospection.ts";
 import { instantParis } from "../_shared/rdv.ts";
 import { modifieApres } from "../_shared/verrouAgent.ts";
 import { colonneAuteurAbsente, idDejaJournalise, lignesEnvoi, nomAuteur, sansAuteur, sansIdGmail, type Auteur } from "../_shared/auteurEnvoi.ts";
+import { couper, str, texteSur } from "../_shared/texteSur.ts";
 import {
-  MAX_PROGRAMMES, REGLES, adresses, cleSociete, coupeCircuit, dansLaFenetre, jourParis, ligneFile, planifier, quandCourt, raisonDeBloquer,
-  type EnvoiRecent, type LigneFile, type NePlusContacter,
+  MAX_PROGRAMMES, REGLES, adresses, cleSociete, dansLaFenetre, etatPalier, jourParis, ligneFile, planifier, quandCourt, raisonDeBloquer,
+  type EnvoiRecent, type EtatPalier, type LigneFile, type NePlusContacter,
 } from "../_shared/fileEnvoi.ts";
 
 type Json = Record<string, unknown>;
 const ok = (text: string) => ({ text });
 const fail = (text: string) => ({ text, isError: true });
-const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const AGENCE = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
 const SQL_MANQUANT = "La file d'envoi n'est pas encore installée (SQL 2026-11-25-file-envoi à lancer).";
 
@@ -198,7 +198,7 @@ const programmerEnvoi: AdminTool = {
     const heures = planifier(bons.length, maintenant, deja);
     const lot = str(a.lot, 60) || `lot du ${new Date().toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "Europe/Paris" })}`;
     const lignes = bons.map((b, i) => ({
-      boite: String(box), brouillon: b.id, destinataires: b.to.slice(0, 500), objet: b.subject.slice(0, 300), reponse: b.reponse,
+      boite: String(box), brouillon: b.id, destinataires: couper(b.to, 500), objet: couper(b.subject, 300), reponse: b.reponse,
       createur: str(a.createur, 80) || null, demarrer_sequence: a.demarrer_sequence === true, lot, statut: "en_attente",
       prevu_a: heures[i].toISOString(), cree_par: ctx.userId,
       // Programmé par un agent (verrou.ts) : la date de validation, revérifiée juste avant l'envoi.
@@ -219,7 +219,7 @@ const programmerEnvoi: AdminTool = {
 const fileEnvoi: AdminTool = {
   name: "file_envoi",
   title: "File d'envoi des mails",
-  description: "La file d'envoi des mails de prospection : ce qui est prévu, ce qui est parti, ce qui a été annulé et pourquoi, le nombre de mails partis aujourd'hui par boîte, et si la file est en pause (trop de rebonds). Lecture seule.",
+  description: "La file d'envoi des mails de prospection : ce qui est prévu, ce qui est parti, ce qui a été annulé et pourquoi, le nombre de mails partis aujourd'hui par boîte, et le coupe-circuit (contrôle des rebonds au 30e mail du jour puis tous les 10 mails, pause pour la journée au-delà de 5 %). Lecture seule.",
   inputSchema: {
     type: "object",
     properties: {
@@ -242,12 +242,13 @@ const fileEnvoi: AdminTool = {
     const aujourdhui = new Date(instantParis(jourParis(new Date()), "00:00")).toISOString();
     const partisAuj = new Map<string, number>();
     for (const r of rows) if (r.statut === "envoye" && r.envoye_at && r.envoye_at >= aujourdhui) partisAuj.set(r.boite, (partisAuj.get(r.boite) ?? 0) + 1);
-    const pause = await etatCoupeCircuit(sb);
+    const palier = await etatCoupeCircuit(sb);
     const prevus = rows.filter((r) => r.statut === "en_attente" || r.statut === "en_cours");
     const autres = rows.filter((r) => r.statut !== "en_attente" && r.statut !== "en_cours").reverse();
     return ok([
       `# File d'envoi · ${prevus.length} prévu(s)`,
-      pause ? `⛔ ${pause}` : "",
+      palier.etat === "pause" ? `⛔ ${palier.message}` : palier.etat === "observation" ? `⏸️ ${palier.message}` : "",
+      `Coupe-circuit : ${palier.envoyes} mail(s) parti(s) aujourd'hui, ${palier.rebonds} rebond(s). Contrôle au ${palier.prochain}e mail du jour (pause au-delà de 5 % de rebonds).`,
       [...partisAuj].length ? `Partis aujourd'hui : ${[...partisAuj].map(([b, n]) => `${b.includes("@") ? b : `${b}@`} ${n}/${REGLES.parJour}`).join(" · ")}.` : "Aucun mail parti aujourd'hui.",
       dansLaFenetre(new Date()) ? "" : "Hors des heures d'envoi (semaine, 8 h 30 à 18 h 30) : la file reprendra au prochain créneau.",
       ...prevus.slice(0, 60).map(ligneFile),
@@ -346,17 +347,47 @@ export const ENVOI_TOOLS: AdminTool[] = [programmerEnvoi, fileEnvoi, annulerEnvo
 
 // ── Traitement de la file (pg_cron, chaque minute) ─────────────────────────────
 
-/** Coupe-circuit : rebonds des dernières 24 h parmi les mails partis par la file. null = tout va bien. */
-async function etatCoupeCircuit(sb: SupabaseClient): Promise<string | null> {
-  const depuis = new Date(Date.now() - 86_400_000).toISOString();
-  const { data, error } = await sb.from("envoi_file").select("destinataires, envoye_at").eq("statut", "envoye").gte("envoye_at", depuis).limit(500);
-  if (error) return null;
-  const partis = (data as Json[] | null) ?? [];
-  if (!partis.length) return null;
+/**
+ * Coupe-circuit par paliers (décision de Gianni du 27/11, règle dans _shared/fileEnvoi.ts) :
+ * mails partis par la file aujourd'hui (heure de Paris, les deux boîtes : même nom de domaine)
+ * et rebonds reçus pour ces mails. Un rebond est noté sur la ligne de la file par gmail-poll
+ * (erreur « rebond : … »), créateurs compris ; on garde aussi les adresses du carnet marquées
+ * en erreur aujourd'hui, au cas où gmail-poll tourne encore dans son ancienne version.
+ */
+async function etatCoupeCircuit(sb: SupabaseClient, now = new Date()): Promise<EtatPalier & { envoyes: number; rebonds: number }> {
+  const debutJour = new Date(instantParis(jourParis(now), "00:00")).toISOString();
+  const { data, error } = await sb.from("envoi_file").select("destinataires, envoye_at, erreur, statut")
+    .or(`and(statut.eq.envoye,envoye_at.gte.${debutJour}),statut.eq.en_cours`).limit(500);
+  const rows = error ? [] : ((data as Json[] | null) ?? []);
+  const partis = rows.filter((r) => r.statut === "envoye");
   const emails = [...new Set(partis.flatMap((r) => adresses(r.destinataires)))];
-  const { data: err } = await sb.from("contacts").select("email, email_check").eq("email_check->>statut", "erreur").gte("email_check->>le", depuis).limit(500);
-  const rebonds = new Set(((err as Json[] | null) ?? []).map((c) => String(c.email ?? "").toLowerCase()).filter((e) => emails.includes(e)));
-  return coupeCircuit(partis.length, rebonds.size);
+  const enRebond = new Set<string>();
+  for (const r of partis) if (/^rebond/i.test(String(r.erreur ?? ""))) for (const e of adresses(r.destinataires)) enRebond.add(e);
+  if (emails.length) {
+    const { data: err } = await sb.from("contacts").select("email").eq("email_check->>statut", "erreur").gte("email_check->>le", debutJour).limit(500);
+    for (const c of ((err as Json[] | null) ?? [])) {
+      const e = String(c.email ?? "").toLowerCase();
+      if (emails.includes(e)) enRebond.add(e);
+    }
+  }
+  const rebonds = partis.filter((r) => adresses(r.destinataires).some((e) => enRebond.has(e))).length;
+  const dernier = partis.reduce((m, r) => Math.max(m, Date.parse(String(r.envoye_at ?? "")) || 0), 0);
+  const minutes = dernier ? (now.getTime() - dernier) / 60_000 : Infinity;
+  // Un envoi « en cours » compte déjà : il partira avant le contrôle.
+  const envoyes = partis.length + rows.filter((r) => r.statut === "en_cours").length;
+  return { ...etatPalier(envoyes, rebonds, minutes), envoyes, rebonds };
+}
+
+/**
+ * Pause : la note « en pause le … » sur les mails en attente. Aucune alerte Telegram ni push
+ * (décision de Gianni du 27/11) : la pause se voit dans file_envoi, et Claude la dit dans la
+ * conversation.
+ */
+async function signalerPause(sb: SupabaseClient, message: string): Promise<void> {
+  const jour = jourParis(new Date());
+  const note = `en pause le ${jour} : ${message}`.slice(0, 300);
+  await sb.from("envoi_file").update({ erreur: note }).eq("statut", "en_attente")
+    .or(`erreur.is.null,erreur.not.ilike.en pause le ${jour}*`);
 }
 
 type Ligne = { id: string; boite: string; brouillon: string; destinataires: string; objet: string; createur: string | null; demarrer_sequence: boolean; essais: number; prevu_a: string; cree_par?: string | null; valide_le?: string | null };
@@ -364,8 +395,11 @@ type Ligne = { id: string; boite: string; brouillon: string; destinataires: stri
 /** Un envoi de la file : vérifications, envoi, suivi. Renvoie ce qui s'est passé. */
 async function envoyerUne(sb: SupabaseClient, row: Ligne): Promise<string> {
   const fin = async (statut: string, patch: Json = {}) => {
-    await sb.from("envoi_file").update({ statut, ...patch }).eq("id", row.id);
-    return `${row.id.slice(0, 8)} ${statut}${patch.erreur ? ` : ${patch.erreur}` : ""}`;
+    // Les messages d'erreur sont coupés avec slice plus bas : nettoyés ici une fois pour toutes.
+    const p = typeof patch.erreur === "string" ? { ...patch, erreur: texteSur(patch.erreur) } : patch;
+    const { error } = await sb.from("envoi_file").update({ statut, ...p }).eq("id", row.id);
+    if (error) console.warn("ttp-mcp envoi_file : statut refusé", row.id.slice(0, 8), statut, error.message);
+    return `${row.id.slice(0, 8)} ${statut}${p.erreur ? ` : ${p.erreur}` : ""}`;
   };
   const pb = await parseMailBox(sb, row.boite);
   if ("error" in pb) return await fin("annule", { erreur: pb.error.slice(0, 300) });
@@ -382,7 +416,15 @@ async function envoyerUne(sb: SupabaseClient, row: Ligne): Promise<string> {
     const invalide = await adressesInvalides(sb, dest);
     if (invalide) return await fin("annule", { erreur: invalide.slice(0, 300) });
     const r = await sendDraft(sb, box, row.brouillon, undefined, verifierAvantEnvoi(sb, row.createur || undefined, true));
-    await sb.from("envoi_file").update({ statut: "envoye", envoye_at: new Date().toISOString(), destinataires: r.to.slice(0, 500), objet: r.subject.slice(0, 300), erreur: null }).eq("id", row.id);
+    // Le mail est parti : le statut « envoyé » doit être écrit, même si les textes relus chez
+    // Gmail sont refusés (sinon la ligne finirait en « échec » et le mail pourrait repartir).
+    const envoyeAt = new Date().toISOString();
+    const { error: majErr } = await sb.from("envoi_file").update({ statut: "envoye", envoye_at: envoyeAt, destinataires: couper(r.to, 500), objet: couper(r.subject, 300), erreur: null }).eq("id", row.id);
+    if (majErr) {
+      console.warn("ttp-mcp envoi_file : ligne envoyée refusée", row.id.slice(0, 8), majErr.message);
+      const { error: e2 } = await sb.from("envoi_file").update({ statut: "envoye", envoye_at: envoyeAt, erreur: null }).eq("id", row.id);
+      if (e2) console.warn("ttp-mcp envoi_file : statut envoyé refusé", row.id.slice(0, 8), e2.message);
+    }
     // Auteur : la personne qui a programmé l'envoi (après son « oui »).
     await journaliserEnvoi(sb, { box: String(box), to: r.to, subject: r.subject, threadId: r.threadId, source: "claude-file", messageId: r.id, auteur: await nomAuteur(sb, row.cree_par) });
     await suiviApresEnvoi(sb, adresses(r.to), { demarrer: row.demarrer_sequence, createur: row.createur || undefined }).catch(() => "");
@@ -407,8 +449,13 @@ export async function traiterFile(sb: SupabaseClient): Promise<Json> {
     .eq("statut", "en_cours").lt("essai_at", new Date(now.getTime() - 10 * 60_000).toISOString());
   if (tableAbsente(e0)) return { ok: false, raison: "sql_manquant" };
   if (!dansLaFenetre(now)) return { ok: true, fenetre: false };
-  const pause = await etatCoupeCircuit(sb);
-  if (pause) return { ok: true, pause };
+  const palier = await etatCoupeCircuit(sb, now);
+  if (palier.etat === "pause") {
+    await signalerPause(sb, palier.message ?? "trop de rebonds aujourd'hui");
+    return { ok: true, pause: palier.message };
+  }
+  if (palier.etat === "observation") return { ok: true, observation: palier.message };
+  let restant = palier.restant;
   // « * » : la colonne valide_le n'existe qu'après le SQL 2026-11-27-securite-alfred.
   const { data, error } = await sb.from("envoi_file").select("*")
     .eq("statut", "en_attente").lte("prevu_a", now.toISOString()).order("prevu_a", { ascending: true }).limit(50);
@@ -418,6 +465,8 @@ export async function traiterFile(sb: SupabaseClient): Promise<Json> {
   const debutJour = new Date(instantParis(jourParis(now), "00:00")).toISOString();
   const faits: string[] = [];
   for (const boite of [...new Set(dus.map((r) => r.boite))]) {
+    // Jamais au-delà du prochain palier contrôlé, même avec deux boîtes dans le même passage.
+    if (restant <= 0) break;
     const { data: auj } = await sb.from("envoi_file").select("envoye_at").eq("boite", boite).eq("statut", "envoye").gte("envoye_at", debutJour).order("envoye_at", { ascending: false }).limit(REGLES.parJour + 1);
     const partis = (auj as Json[] | null) ?? [];
     if (partis.length >= REGLES.parJour) continue;
@@ -428,6 +477,7 @@ export async function traiterFile(sb: SupabaseClient): Promise<Json> {
     const { data: pris } = await sb.from("envoi_file").update({ statut: "en_cours", essais: row.essais + 1, essai_at: now.toISOString() })
       .eq("id", row.id).eq("statut", "en_attente").select("id");
     if (!(pris as Json[] | null)?.length) continue;
+    restant--;
     faits.push(await envoyerUne(sb, { ...row, essais: row.essais + 1 }));
   }
   return { ok: true, faits };

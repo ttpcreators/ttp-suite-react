@@ -2,10 +2,10 @@ import { describe, expect, it } from "vitest";
 import { addressParts, contactRecipient, insertRecipient, matchRecipients, recipientEmails, recipientToken, type Recipient } from "./mailRecipients";
 
 const list: Recipient[] = [
-  { name: "Léna Pasquale", hint: "Créateur", photo: null, emails: ["lena@ttpcreators.pro", "lena.pasquale@gmail.com"] },
-  { name: "Léa Berenger", hint: "Créateur", photo: null, emails: ["lea@ttpcreators.pro"] },
-  { name: "Justine Gentet", hint: "Créateur", photo: null, emails: ["justine@ttpcreators.pro"] },
-  { name: "Netty Baciu", hint: "Sephora", photo: null, emails: ["nbaciu@sephora.fr"] },
+  { name: "Léna Morel", hint: "Créateur", photo: null, emails: ["lena@ttpcreators.pro", "lena.morel@exemple.fr"] },
+  { name: "Léa Fontaine", hint: "Créateur", photo: null, emails: ["lea@ttpcreators.pro"] },
+  { name: "Justine Faure", hint: "Créateur", photo: null, emails: ["justine@ttpcreators.pro"] },
+  { name: "Nora Picard", hint: "Nova", photo: null, emails: ["npicard@nova.fr"] },
 ];
 
 describe("« @lena » dans les destinataires", () => {
@@ -18,12 +18,12 @@ describe("« @lena » dans les destinataires", () => {
     expect(recipientToken("").query).toBeNull();
   });
   it("cherche sans accents, par prénom, nom, marque ou adresse", () => {
-    expect(matchRecipients(list, "lena").map((o) => o.email)).toEqual(["lena@ttpcreators.pro", "lena.pasquale@gmail.com"]);
-    expect(matchRecipients(list, "le").map((o) => o.name)).toEqual(["Léna Pasquale", "Léna Pasquale", "Léa Berenger"]);
-    expect(matchRecipients(list, "gentet")[0].email).toBe("justine@ttpcreators.pro");
-    expect(matchRecipients(list, "sephora")[0]).toEqual({ name: "Netty Baciu", hint: "Sephora", photo: null, email: "nbaciu@sephora.fr" });
-    expect(matchRecipients(list, "netty")[0].email).toBe("nbaciu@sephora.fr");
-    expect(matchRecipients(list, "lena", "x@y.fr, lena@ttpcreators.pro").map((o) => o.email)).toEqual(["lena.pasquale@gmail.com"]);
+    expect(matchRecipients(list, "lena").map((o) => o.email)).toEqual(["lena@ttpcreators.pro", "lena.morel@exemple.fr"]);
+    expect(matchRecipients(list, "le").map((o) => o.name)).toEqual(["Léna Morel", "Léna Morel", "Léa Fontaine"]);
+    expect(matchRecipients(list, "faure")[0].email).toBe("justine@ttpcreators.pro");
+    expect(matchRecipients(list, "nova")[0]).toEqual({ name: "Nora Picard", hint: "Nova", photo: null, email: "npicard@nova.fr" });
+    expect(matchRecipients(list, "nora")[0].email).toBe("npicard@nova.fr");
+    expect(matchRecipients(list, "lena", "x@y.fr, lena@ttpcreators.pro").map((o) => o.email)).toEqual(["lena.morel@exemple.fr"]);
     expect(matchRecipients(list, "").length).toBe(5);
   });
   it("une même adresse n'apparaît qu'une fois", () => {
@@ -39,7 +39,7 @@ describe("« @lena » dans les destinataires", () => {
     expect(recipientEmails("talent@ttpcreators.pro", ["Lena@Gmail.com"], "lena@ttpcreators.pro")).toEqual(["lena@ttpcreators.pro", "lena@gmail.com"]);
   });
   it("contacts : personne et marque, sinon la marque seule", () => {
-    expect(contactRecipient({ brand: "Sephora", person: "Netty Baciu", email: " NBaciu@sephora.fr " })).toEqual({ name: "Netty Baciu", hint: "Sephora", photo: null, emails: ["nbaciu@sephora.fr"] });
+    expect(contactRecipient({ brand: "Nova", person: "Nora Picard", email: " NPicard@nova.fr " })).toEqual({ name: "Nora Picard", hint: "Nova", photo: null, emails: ["npicard@nova.fr"] });
     expect(contactRecipient({ brand: "Livy", person: "—", email: "hello@livy.fr" })?.name).toBe("Livy");
     expect(contactRecipient({ brand: "X", person: "Y", email: "pas-une-adresse" })).toBeNull();
   });
@@ -47,9 +47,9 @@ describe("« @lena » dans les destinataires", () => {
 
 describe("liste des destinataires d'un mail", () => {
   it("découpe Nom <adresse>, même avec une virgule dans le nom", () => {
-    expect(addressParts('"Garcia, Jennifer" <jennifer.garcia@aroma-zone.com>, anamilanovic@ttpcreators.pro')).toEqual([
-      { name: "Garcia, Jennifer", email: "jennifer.garcia@aroma-zone.com" },
-      { name: "", email: "anamilanovic@ttpcreators.pro" },
+    expect(addressParts('"Durand, Sophie" <sophie.durand@exemple.fr>, anavidal@ttpcreators.pro')).toEqual([
+      { name: "Durand, Sophie", email: "sophie.durand@exemple.fr" },
+      { name: "", email: "anavidal@ttpcreators.pro" },
     ]);
     expect(addressParts("")).toEqual([]);
   });

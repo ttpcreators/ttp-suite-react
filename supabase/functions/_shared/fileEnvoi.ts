@@ -11,7 +11,10 @@
 //     jour et par boîte ;
 //   - juste avant chaque envoi, on revérifie : liste « ne plus contacter », adresse en erreur,
 //     déjà écrit à cette société depuis 30 jours (premier mail seulement, pas une réponse) ;
-//   - coupe-circuit : trop de rebonds sur 24 h, la file s'arrête.
+//   - coupe-circuit par paliers (décision de Gianni du 27/11) : rien avant le 30e mail du
+//     jour ; au 30e, puis à chaque palier de 10 (40, 50…), la file attend un quart d'heure
+//     que les rebonds arrivent, puis calcule le taux de rebonds sur tous les mails du jour.
+//     Au-delà de 5 %, plus rien ne part de la journée ; sinon la file repart pour 10 mails.
 // Règles PURES (heure de Paris), testées par fileEnvoi.test.ts.
 // ============================================================================
 
@@ -29,9 +32,13 @@ export type Regles = {
   jours: number[];
   /** Jours sans nouveau premier mail à une même société. */
   doublonJours: number;
-  /** Coupe-circuit : rebonds sur 24 h (au moins `rebondsMin`, et plus de `rebondsPart` des envois). */
-  rebondsMin: number;
+  /** Coupe-circuit : premier contrôle au `premierPalier`-ième mail du jour, puis tous les `pasPalier` mails. */
+  premierPalier: number;
+  pasPalier: number;
+  /** Au-delà de cette part de rebonds parmi les mails du jour, la file s'arrête pour la journée. */
   rebondsPart: number;
+  /** À chaque palier, minutes d'attente après le dernier envoi pour laisser arriver les rebonds. */
+  observationMin: number;
 };
 
 export const REGLES: Regles = {
@@ -42,8 +49,10 @@ export const REGLES: Regles = {
   fin: "18:30",
   jours: [1, 2, 3, 4, 5],
   doublonJours: 30,
-  rebondsMin: 3,
+  premierPalier: 30,
+  pasPalier: 10,
   rebondsPart: 0.05,
+  observationMin: 15,
 };
 
 /** Brouillons au plus dans un appel de programmer_envoi. */
@@ -162,11 +171,50 @@ export function raisonDeBloquer(p: {
   return null;
 }
 
-/** Coupe-circuit : la file s'arrête si les rebonds des dernières 24 h dépassent le seuil. */
-export function coupeCircuit(envoyes24h: number, rebonds24h: number, r: Regles = REGLES): string | null {
-  if (rebonds24h < r.rebondsMin) return null;
-  if (envoyes24h > 0 && rebonds24h / envoyes24h <= r.rebondsPart) return null;
-  return `${rebonds24h} rebond(s) sur ${envoyes24h} mail(s) envoyé(s) en 24 h : la file est en pause. Vérifier les adresses, puis relancer avec reprendre_envois.`;
+export type EtatPalier = {
+  /** libre : la file envoie ; observation : on attend les rebonds avant de passer le palier ; pause : plus rien aujourd'hui. */
+  etat: "libre" | "observation" | "pause";
+  /** Mails qui peuvent encore partir avant le prochain contrôle (0 en observation ou en pause). */
+  restant: number;
+  /** Le prochain palier contrôlé (30, 40, 50…). */
+  prochain: number;
+  message: string | null;
+};
+
+const pourcent = (x: number) => `${(Math.round(x * 1000) / 10).toLocaleString("fr-FR")} %`;
+
+/**
+ * Coupe-circuit par paliers (décision de Gianni du 27/11). `envoyes` et `rebonds` : mails partis
+ * par la file aujourd'hui (heure de Paris, toutes boîtes : même nom de domaine) et rebonds reçus
+ * pour ces mails. `minutesDepuisDernier` : depuis le dernier mail parti.
+ *   - avant le premier palier (30) : la file envoie, sans dépasser le palier ;
+ *   - sur un palier (30, 40, 50…) : au-delà de 5 % de rebonds, pause pour la journée ; sinon,
+ *     un quart d'heure d'observation après le dernier envoi, puis 10 mails de plus ;
+ *   - entre deux paliers : la file envoie jusqu'au palier suivant.
+ */
+export function etatPalier(envoyes: number, rebonds: number, minutesDepuisDernier: number, r: Regles = REGLES): EtatPalier {
+  const n = Math.max(0, Math.floor(envoyes));
+  if (n < r.premierPalier) return { etat: "libre", restant: r.premierPalier - n, prochain: r.premierPalier, message: null };
+  const audela = (n - r.premierPalier) % r.pasPalier;
+  if (audela !== 0) {
+    const prochain = n - audela + r.pasPalier;
+    return { etat: "libre", restant: prochain - n, prochain, message: null };
+  }
+  const prochain = n + r.pasPalier;
+  const taux = rebonds / n;
+  if (taux > r.rebondsPart) {
+    return {
+      etat: "pause", restant: 0, prochain,
+      message: `${rebonds} rebond(s) sur les ${n} mails partis aujourd'hui (${pourcent(taux)}, au-delà de ${pourcent(r.rebondsPart)}) : plus aucun envoi aujourd'hui, pour protéger le nom de domaine. La file repart au prochain jour ouvré, compteur remis à zéro. D'ici là, retirer les adresses en erreur (ne_plus_contacter).`,
+    };
+  }
+  if (minutesDepuisDernier < r.observationMin) {
+    return {
+      etat: "observation", restant: 0, prochain,
+      message: `Palier de ${n} mails atteint : contrôle des rebonds dans ${Math.ceil(r.observationMin - minutesDepuisDernier)} min avant les ${r.pasPalier} suivants (${rebonds} rebond(s) pour l'instant, ${pourcent(taux)}).`,
+    };
+  }
+  return { etat: "libre", restant: r.pasPalier, prochain, message: null };
 }
 
 /** « mer. 25 nov. à 9 h 42 » à Paris. */

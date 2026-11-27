@@ -10,6 +10,7 @@
 
 import { NO_TEXT, type DmMsg } from "./inbox.ts";
 import { emailsIn } from "./signals.ts";
+import { couper } from "./texteSur.ts";
 
 export type Personne = { id?: string; username?: string; name?: string };
 export type MessageMeta = { id?: string; created_time?: string; message?: string; from?: Personne };
@@ -89,7 +90,7 @@ export function ligneConversation(conv: ConvMeta, autre: Personne, msgs: DmMsg[]
     username,
     igsid: autre.id ?? null,
     updated_at: conv.updated_time ? new Date(conv.updated_time).toISOString() : last?.at ?? now,
-    last_text: last ? last.text.slice(0, 300) : null,
+    last_text: last ? couper(last.text, 300) : null, // même coupe que ig-inbox, sans casser d'emoji
     last_from_me: last ? last.me : null,
     emails,
     synced_at: now,
@@ -110,7 +111,7 @@ export function texteTranche(e: EtatHistorique, t: Tranche | null, enBase: numbe
     t ? `Cette tranche : ${t.pages} page(s) de 25 conversations, ${fr(t.vues)} conversation(s) vues, ${fr(t.importees)} nouvelle(s), ${fr(t.maj)} mise(s) à jour, ${fr(t.dejaFaites)} déjà faite(s), ${fr(t.anciennes)} de plus de 3 ans laissée(s) de côté, ${fr(t.erreurs)} illisible(s).${t.coupee ? " Page coupée faute de temps : reprise au même endroit." : ""}` : "",
     `Depuis le début (${jour(e.debut)}) : ${fr(e.vues)} conversation(s) parcourues, ${fr(e.importees)} nouvelle(s), ${fr(e.maj)} mise(s) à jour, ${fr(e.anciennes)} trop ancienne(s), ${fr(e.erreurs)} illisible(s), ${fr(e.pages)} page(s).`,
     enBase != null ? `Conversations dans TTP Suite : ${fr(enBase)}.` : "",
-    e.termine ? `Fin : ${jour(e.fin)}. Pour tout relire : recommencer = true.` : `Il en reste environ ${fr(reste)} (sur ~${fr(total)} annoncées par Instagram, Meta ne donne pas le total exact). Relancer l'outil pour la tranche suivante.`,
+    e.termine ? `Fin : ${jour(e.fin)}. L'historique est complet : recommencer (tout relire, des heures d'appels Meta) seulement sur demande explicite de Marc ou de Gianni.` : `Il en reste environ ${fr(reste)} (sur ~${fr(total)} annoncées par Instagram, Meta ne donne pas le total exact). Relancer l'outil pour la tranche suivante.`,
     e.arret ? `Arrêt : ${e.arretDetail ?? e.arret}` : "",
     ...extra,
   ];

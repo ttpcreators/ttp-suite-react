@@ -59,6 +59,8 @@ import { BrandIgInline, BrandIgPanel } from "@/components/BrandInstagram";
 import type { IgBrand } from "@/lib/instagram";
 import { lireEmailCheck, lireSequence } from "../../supabase/functions/_shared/sequence.ts";
 import { CONTACT_TAGS, SYSTEM_TAGS, normaliserTag, tagHorsListe } from "../../supabase/functions/_shared/contactTags.ts";
+import { texteSur } from "../../supabase/functions/_shared/texteSur.ts";
+import { ecrireParLots } from "../../supabase/functions/_shared/ecritureLot.ts";
 
 type Row = {
   id: string;
@@ -139,7 +141,7 @@ const clean = (x?: string | null) => {
 const NO_COMPANY = /^(freelance|ind[ée]pendante?|auto[- ]?entrepreneu[rs]e?)$/i;
 /**
  * Titre et ligne du dessous d'un contact : « Marque » puis « Personne · rôle » ;
- * sans société, la personne passe en titre : « Camille Tilak » puis « Freelance · rôle ».
+ * sans société, la personne passe en titre : « Camille Renaud » puis « Freelance · rôle ».
  */
 function contactTitle(r: { brand?: string | null; person?: string | null; role?: string | null }): { title: string; sub: string } {
   const brand = clean(r.brand);
@@ -982,7 +984,10 @@ export function Contacts() {
   const importCsv = async (file: File) => {
     setImporting(true);
     try {
-      const text = await file.text();
+      const octets = new Uint8Array(await file.arrayBuffer());
+      const encodage = octets[0] === 0xff && octets[1] === 0xfe ? "utf-16le" : octets[0] === 0xfe && octets[1] === 0xff ? "utf-16be" : "utf-8";
+      // CSV en UTF-16 (Excel « Texte Unicode », Numbers) lu avec le bon décodeur ; texteSur retire ensuite les caractères nuls et les moitiés d'emoji seules, que la base refuse.
+      const text = texteSur(new TextDecoder(encodage).decode(octets));
       const parsed = csvToContacts(text).filter((c) => (c.brand ?? "").trim() || (c.person ?? "").trim() || (c.first_name ?? "").trim() || (c.last_name ?? "").trim());
       if (parsed.length === 0) {
         toast("Aucune ligne exploitable dans ce CSV");
@@ -1022,19 +1027,25 @@ export function Contacts() {
           sort_order: order++,
         };
       });
-      const { data, error } = await supabase
-        .from("contacts")
-        .insert(payload)
-        .select("*");
-      if (error) {
+      // Tout le fichier en une requête, comme avant. Refusée à cause d'une ligne (valeur trop
+      // longue…), elle est refaite ligne par ligne : seules les lignes fautives manquent, et
+      // on dit lesquelles (_shared/ecritureLot.ts).
+      const inserted: Row[] = [];
+      const bilan = await ecrireParLots(payload, payload.length, async (lot) => {
+        const r = await supabase.from("contacts").insert(lot).select("*");
+        if (!r.error) inserted.push(...((r.data as Row[] | null) ?? []));
+        return r;
+      });
+      if (!inserted.length) {
         toast("Échec de l'import, vérifie le fichier");
         return;
       }
-      const inserted = (data as Row[]) ?? [];
       const merged = [...inserted, ...currentRows];
       setCache("contacts", merged);
       setRows(merged);
-      toast(`${inserted.length} contact${inserted.length > 1 ? "s" : ""} importé${inserted.length > 1 ? "s" : ""} ✓${skipped ? ` · ${skipped} déjà dans le carnet` : ""}`);
+      const nRefus = bilan.refusees.length;
+      const refus = nRefus ? ` · ${nRefus} refusé${nRefus > 1 ? "s" : ""} : ${bilan.refusees.slice(0, 3).map((c) => c.brand).join(", ")}${nRefus > 3 ? "…" : ""}` : "";
+      toast(`${inserted.length} contact${inserted.length > 1 ? "s" : ""} importé${inserted.length > 1 ? "s" : ""} ✓${skipped ? ` · ${skipped} déjà dans le carnet` : ""}${refus}`);
     } catch {
       toast("Fichier illisible");
     } finally {

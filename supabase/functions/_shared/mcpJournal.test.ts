@@ -33,6 +33,14 @@ describe("journal du connecteur Claude", () => {
     expect(ligneJournal({ userId: "u1", grantId: "g1", tool: "point_du_jour", args: undefined, res: { text: "ok" } }).summary).toBe("{}");
   });
 
+  it("coupe la demande et la raison sans casser d'emoji (la ligne serait refusée par la base)", () => {
+    // '{"t":"' fait 6 caractères : l'emoji tombe pile sur la coupe à 300.
+    const l = ligneJournal({ userId: "u1", grantId: "g1", tool: "noter_journal", args: { t: `${"x".repeat(293)}😀 fin` }, res: { text: `${"y".repeat(MAX_ERREUR - 1)}😀`, isError: true } });
+    expect(l.summary).toBe(`{"t":"${"x".repeat(293)}`);
+    expect(l.error).toBe("y".repeat(MAX_ERREUR - 1));
+    expect(() => encodeURIComponent(`${l.summary}${l.error}`)).not.toThrow();
+  });
+
   it("retire la raison pour le repli d'avant le SQL", () => {
     const l = ligneJournal({ userId: "u1", grantId: "g1", tool: "envoyer_mail", args: {}, res: { text: "Message vide.", isError: true } });
     expect(sansErreur(l)).toEqual({ user_id: "u1", grant_id: "g1", tool: "envoyer_mail", summary: "{}", ok: false });

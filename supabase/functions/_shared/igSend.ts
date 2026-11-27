@@ -3,6 +3,8 @@
 // Règles pures, testées par igSend.test.ts.
 // ============================================================================
 
+import { texteSur } from "./texteSur.ts";
+
 /** Longueur maximale d'un DM Instagram (limite Meta : 1 000 caractères). */
 export const DM_MAX = 1000;
 
@@ -30,8 +32,8 @@ export function sendWhy(e: GraphError): string {
   return e.message === "reseau" ? "reseau" : `meta_${e.code ?? "erreur"}`;
 }
 
-/** Texte envoyé : nettoyé, non vide, sous la limite. null si refusé. */
+/** Texte envoyé : nettoyé (sans caractère nul ni moitié d'emoji seule, voir texteSur), non vide, sous la limite. null si refusé. */
 export function cleanDm(text: unknown): string | null {
-  const t = String(text ?? "").replace(/\r\n/g, "\n").trim();
+  const t = texteSur(String(text ?? "")).replace(/\r\n/g, "\n").trim();
   return t && t.length <= DM_MAX ? t : null;
 }

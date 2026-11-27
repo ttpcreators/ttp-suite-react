@@ -6,7 +6,7 @@
 
 export type Explain = { meaning: string; action: string };
 
-/** Prénom lisible (« CANDICE MAISSA » → « Candice »). */
+/** Prénom lisible (« ROMANE LEFORT » → « Romane »). */
 function first(name: string | null | undefined): string {
   const w = (name ?? "").trim().split(/\s+/)[0] ?? "";
   return w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : "";

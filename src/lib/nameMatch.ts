@@ -2,7 +2,7 @@ import { foldName } from "../../supabase/functions/_shared/exclusivites.ts";
 
 /**
  * Retrouver les lignes d'un créateur dans une table où son nom est écrit à la main
- * (« LÉNA PASQUALE », « Léna Pasquale », « Lena Pasquale »), sans tenir compte des
+ * (« LÉNA MOREL », « Léna Morel », « Lena Morel »), sans tenir compte des
  * majuscules ni des accents (audit données 2026-11-22). Logique pure, testée.
  *
  * 1. `namePattern` : motif ILIKE large (chaque lettre qui peut porter un accent devient

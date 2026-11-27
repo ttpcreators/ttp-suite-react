@@ -43,7 +43,7 @@ export const GIFT_STATUS: StatusOption[] = [
 export const giftStatusMeta = (v: string | null | undefined): StatusOption =>
   GIFT_STATUS.find((s) => s.value === v) ?? GIFT_STATUS[0];
 
-/** Prénom lisible (« LÉNA PASQUALE » → « Léna »). */
+/** Prénom lisible (« LÉNA MOREL » → « Léna »). */
 export function firstNameOf(name: string | null | undefined): string {
   const w = (name ?? "").trim().split(/\s+/)[0] ?? "";
   return w ? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase() : "";

@@ -45,7 +45,7 @@ describe("tableauLundi", () => {
       { tag: "Marque", touches: null, last_contacted: "2026-09-01" },
     ],
     creatorPool: [{ last_contacted: "2026-11-17" }, { last_contacted: "2026-11-01" }],
-    todos: [{ text: "Visio : Nakd × Léna", created_at: "2026-11-18T10:00:00Z" }, { text: "Relancer Teveo", created_at: "2026-11-18T10:00:00Z" }],
+    todos: [{ text: "Visio : Nova × Léna", created_at: "2026-11-18T10:00:00Z" }, { text: "Relancer Kora", created_at: "2026-11-18T10:00:00Z" }],
     events: [
       { date: "2026-11-17", type: "call" },
       { date: "2026-11-20", type: "reunion" },
@@ -55,10 +55,10 @@ describe("tableauLundi", () => {
     ],
     quotes: [{ issueDate: "2026-11-18", status: "envoye" }, { issueDate: "2026-11-18", status: "brouillon" }],
     signatures: [
-      { reached_at: "2026-11-17T09:00:00Z", cachet: "1 000 €", creator: "LÉNA PASQUALE" },
+      { reached_at: "2026-11-17T09:00:00Z", cachet: "1 000 €", creator: "LÉNA MOREL" },
       { reached_at: "2026-11-18T09:00:00Z", cachet: "Produits offert", creator: "Pierre" },
       { reached_at: "2026-11-10T09:00:00Z", cachet: "400 € HT", creator: "Justine" },
-      { reached_at: "2026-10-27T09:00:00Z", cachet: "500€", creator: "LÉNA PASQUALE" },
+      { reached_at: "2026-10-27T09:00:00Z", cachet: "500€", creator: "LÉNA MOREL" },
     ],
   };
   const t = tableauLundi(d, NOW);
@@ -116,14 +116,14 @@ describe("tableauLundi", () => {
 describe("datesSignature", () => {
   it("première étape de négociation, même créée à l'étape 2 ; rien pour une collab recréée tard", () => {
     const d = datesSignature([
-      { collab_id: "kosbiotic", step: 2, reached_at: "2026-11-10T08:00:00Z" },
-      { collab_id: "kosbiotic", step: 4, reached_at: "2026-11-20T08:00:00Z" },
-      { collab_id: "yade", step: 1, reached_at: "2026-10-27T08:00:00Z" },
-      { collab_id: "yade", step: 2, reached_at: "2026-11-02T08:00:00Z" },
-      { collab_id: "jnpr", step: 8, reached_at: "2026-11-02T08:00:00Z" },
+      { collab_id: "nova", step: 2, reached_at: "2026-11-10T08:00:00Z" },
+      { collab_id: "nova", step: 4, reached_at: "2026-11-20T08:00:00Z" },
+      { collab_id: "kora", step: 1, reached_at: "2026-10-27T08:00:00Z" },
+      { collab_id: "kora", step: 2, reached_at: "2026-11-02T08:00:00Z" },
+      { collab_id: "solvi", step: 8, reached_at: "2026-11-02T08:00:00Z" },
     ]);
-    expect(d.get("kosbiotic")).toBe("2026-11-10T08:00:00Z");
-    expect(d.get("yade")).toBe("2026-10-27T08:00:00Z");
-    expect(d.has("jnpr")).toBe(false);
+    expect(d.get("nova")).toBe("2026-11-10T08:00:00Z");
+    expect(d.get("kora")).toBe("2026-10-27T08:00:00Z");
+    expect(d.has("solvi")).toBe(false);
   });
 });

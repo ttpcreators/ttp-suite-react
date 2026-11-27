@@ -4,7 +4,7 @@ import { brandAddressOf, type GMessageLite } from "../../supabase/functions/crea
 
 describe("photos de profil des mails", () => {
   it("extrait l'adresse d'un en-tête", () => {
-    expect(emailOf('"Clara" <Clara@FourSeasons.com>')).toBe("clara@fourseasons.com");
+    expect(emailOf('"Julie" <Julie@HotelNova.com>')).toBe("julie@hotelnova.com");
     expect(emailOf("pas d'adresse")).toBe("");
   });
 
@@ -45,7 +45,7 @@ describe("boîtes communes de l'agence", () => {
     const { SHARED_BOXES } = await import("./mailAvatar");
     expect(SHARED_BOXES.test("talent@ttpcreators.pro")).toBe(true);
     expect(SHARED_BOXES.test("Partnerships@ttpcreators.pro")).toBe(true);
-    expect(SHARED_BOXES.test("chloedifranscesco@ttpcreators.pro")).toBe(false);
+    expect(SHARED_BOXES.test("chloemercier@ttpcreators.pro")).toBe(false);
   });
 });
 
@@ -61,7 +61,7 @@ describe("plus de logos de marques", () => {
 
   it("une marque en gmail prend le site d'un autre contact de la même marque", () => {
     const rows = [
-      { brand: "Sephora", email: "netty@gmail.com" },
+      { brand: "Sephora", email: "nora@gmail.com" },
       { brand: "SEPHORA ", email: "Julie <julie@sephora.fr>" },
       { brand: "Sephora", email: "paul@sephora.fr" },
       { brand: "Sephora", email: "x@agence-rp.com" },
@@ -71,7 +71,7 @@ describe("plus de logos de marques", () => {
     expect(m.get(brandKey("Séphora"))).toBe("sephora.fr");
     expect(m.has(brandKey("Freelance"))).toBe(false);
     expect(brandDomainFrom(rows, "sephora")).toBe("sephora.fr");
-    const c = avatarCandidates("netty@gmail.com", { brandDomain: "sephora.fr" });
+    const c = avatarCandidates("nora@gmail.com", { brandDomain: "sephora.fr" });
     expect(c.map((x) => x.url)).toEqual([logoUrl("sephora.fr")]);
     // Jamais deux fois le même logo.
     expect(avatarCandidates("julie@sephora.fr", { brandDomain: "sephora.fr" })).toHaveLength(1);

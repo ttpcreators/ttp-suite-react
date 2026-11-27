@@ -89,8 +89,8 @@ const DATA = resumeWidget(
   [{ date: "2026-11-19", time: "17:00", title: "Call Nakd", type: "call" }, { date: "2026-11-20", title: "Poster le reel", type: "deadline" }],
   NOW,
   [
-    { contact_name: "Manon Le Moal", contact_email: "manon@fitaya.fr", subject: "Facture Fitaya", created_at: "2026-11-19T13:02:00Z", box: "partnerships", direction: "in" },
-    { contact_name: "Adelina", contact_email: "adelina@x.fr", subject: "Contrat", created_at: "2026-11-18T09:00:00Z", box: "talent", direction: "in" },
+    { contact_name: "Sophie Durand", contact_email: "sophie@nova.fr", subject: "Facture Nova", created_at: "2026-11-19T13:02:00Z", box: "partnerships", direction: "in" },
+    { contact_name: "Camille", contact_email: "camille@x.fr", subject: "Contrat", created_at: "2026-11-18T09:00:00Z", box: "talent", direction: "in" },
   ],
 );
 const OK: Net = { dessin: "ok", data: { code: 200, body: DATA } };
@@ -131,7 +131,7 @@ describe("dessin du widget", () => {
         if (famille === "medium" || famille === "large") {
           if (vue === "" || vue === "taches") expect(f.textes).toContain("Relancer Nakd");
           if (vue === "" || vue === "planning") expect(f.textes).toContain("Call Nakd");
-          if (vue === "mails") expect(f.textes).toEqual(expect.arrayContaining(["Manon Le Moal", "Facture Fitaya", "partnerships 1", "talent 1"]));
+          if (vue === "mails") expect(f.textes).toEqual(expect.arrayContaining(["Sophie Durand", "Facture Nova", "partnerships 1", "talent 1"]));
           if (vue === "mails") expect(f.textes).not.toContain("Relancer Nakd");
         }
       });

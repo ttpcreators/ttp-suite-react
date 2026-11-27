@@ -6,8 +6,11 @@
 // pas la raison de l'échec. Résultat : 15 brouillons de mail ratés sur 89 en 3 jours, retentés
 // jusqu'à 5 fois de suite, sans qu'on puisse dire pourquoi. La raison est maintenant gardée
 // dans la colonne `error` (SQL 2026-11-24-mcp-log-erreur).
-// Règles PURES, testées par mcpJournal.test.ts.
+// Règles PURES, testées par mcpJournal.test.ts. Textes coupés sans casser d'emoji (couper,
+// _shared/texteSur.ts) : une moitié d'emoji seule faisait refuser la ligne du journal.
 // ============================================================================
+
+import { couper } from "./texteSur.ts";
 
 /** Longueur gardée de la demande (arguments de l'outil). */
 export const MAX_RESUME = 300;
@@ -27,14 +30,14 @@ export type LigneJournal = {
 export function erreurJournal(res: { text?: unknown; isError?: boolean }): string | null {
   if (!res.isError) return null;
   const texte = String(res.text ?? "").replace(/\s+/g, " ").trim();
-  return texte ? texte.slice(0, MAX_ERREUR) : null;
+  return texte ? couper(texte, MAX_ERREUR) || null : null;
 }
 
 /** La ligne du journal : la colonne `error` n'est posée que pour un appel raté. */
 export function ligneJournal(p: { userId: string; grantId: string; tool: string; args: unknown; res: { text?: unknown; isError?: boolean } }): LigneJournal {
   let summary = "";
   try {
-    summary = JSON.stringify(p.args ?? {}).slice(0, MAX_RESUME);
+    summary = couper(JSON.stringify(p.args ?? {}), MAX_RESUME);
   } catch {
     summary = "";
   }

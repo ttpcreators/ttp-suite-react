@@ -275,3 +275,10 @@ For implementation, see the [tools registry](https://github.com/coreyhaines31/ma
 - **sales-enablement**: For battle cards and one-pagers used in the outreach
 - **directory-submissions**: For inbound discovery surfaces (the prospects might find you back)
 - **product-marketing**: For the ICP definition that anchors every prospecting engagement
+
+## Pour Alfred (TTP Creators)
+
+- Chez TTP, la prospection est à Gianni (mode soutien, voir « La prospection : Gianni ou Marc » de `fiches/strategie.md`) : tu lui trouves des pistes et tu gardes les doublons. Tu ne prépares des premiers mails que si Marc reprend la prospection.
+- Les outils cités ici (Apollo, Clay, ZoomInfo, Hunter, Truelist…) ne sont pas les nôtres. Pour une adresse : `lire_site_marque` d'abord (gratuit), puis, seulement quand Marc t'écrit et pour une marque prioritaire, `trouver_emails_marque` ou `trouver_email_personne` (crédits FullEnrich, le seul service gardé : Hunter est mis de côté depuis le 24 novembre 2026).
+- Les listes viennent de l'app : `sourcing`, `contacts`, `pipeline`, `contacts_a_relancer`, la veille des pubs du mardi. Une marque déjà en cours (tâche « Gianni : », `a_valider`, `journal_agents`, `file_envoi`) ne revient pas.
+- `REDACTION.md` et la règle absolue de ton `CLAUDE.md` passent avant.

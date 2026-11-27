@@ -1,6 +1,9 @@
 // ============================================================================
 // _shared/hunter.ts : Hunter (hunter.io), e-mails pro des marques.
 // ----------------------------------------------------------------------------
+// MIS DE CÔTÉ le 24/11/2026 : l'agence passe par FullEnrich seulement (_shared/fullenrich.ts).
+// Ce code reste en sommeil : sans la clé HUNTER_API_KEY, il n'appelle rien. Ne pas créer de
+// compte Hunter. `domaineDe` sert toujours aux outils FullEnrich.
 // Règles PURES, testées par hunter.test.ts. Les appels sont faits par les outils
 // `trouver_emails_marque` et `trouver_email_personne` du connecteur Claude
 // (ttp-mcp/autonomie.ts), avec la clé du secret HUNTER_API_KEY (jamais dans le code).
@@ -19,7 +22,8 @@ const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
 const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
 
 export const HUNTER_API = "https://api.hunter.io/v2";
-export const CLE_MANQUANTE = "Clé Hunter manquante : Marc doit créer un compte Hunter et enregistrer HUNTER_API_KEY (supabase secrets set HUNTER_API_KEY=… --project-ref zizvggziggswhrbuyhuo).";
+/** Message quand FullEnrich n'a pas trouvé l'e-mail et que Hunter n'a pas de clé (mis de côté). */
+export const CLE_MANQUANTE = "Pas trouvé par FullEnrich. Hunter est mis de côté depuis le 24/11 : chercher l'adresse partenariats ou presse du site (lire_site_marque), sinon le LinkedIn de la personne.";
 
 /** « https://www.Sephora.fr/fr » → « sephora.fr » ; "" si ce n'est pas un domaine. */
 export function domaineDe(v: string): string {

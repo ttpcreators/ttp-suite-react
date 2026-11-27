@@ -3,8 +3,9 @@
 // ----------------------------------------------------------------------------
 //   1. séquence sur chaque fiche contact + outil `contacts_a_relancer` ;
 //      l'étape avance toute seule quand un mail part (envoyer_mail, envoyer_brouillon,
-//      envoyer_brouillons_valides) ; les autres canaux : `sequence_contact` ;
-//   3. `envoyer_brouillons_valides` (dans admin.ts) : la liste validée par Marc, en une fois ;
+//      envoyer_brouillons_valides, file d'envoi) ; les autres canaux : `sequence_contact` ;
+//   3. une liste validée part par `programmer_envoi` (envois.ts : file étalée, plafond, 30 jours
+//      par société), jamais par `envoyer_brouillons_valides` pour un lot de prospection ;
 //   7. domaine vérifié avant d'envoyer (MX), adresse marquée « en erreur » sur la fiche.
 // La détection des réponses et des rebonds est dans gmail-poll (sequences.ts).
 // Règles : _shared/sequence.ts et _shared/mxCheck.ts. Colonnes : SQL 2026-11-20-sequences-contacts.
@@ -14,11 +15,11 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4
 import type { AdminTool } from "./admin.ts";
 import { ETAPES, aRelancer, apresMail, arreter, demarrerSequence, etapeFaite, lireEmailCheck, lireSequence, type Sequence } from "../_shared/sequence.ts";
 import { verifierDomaines } from "../_shared/mxCheck.ts";
+import { str } from "../_shared/texteSur.ts";
 
 type Json = Record<string, unknown>;
 const ok = (text: string) => ({ text });
 const fail = (text: string) => ({ text, isError: true });
-const str = (v: unknown, max = 500) => (typeof v === "string" ? v.trim().slice(0, max) : "");
 const today = () => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 const frDay = (iso: string) => new Date(iso + "T12:00:00Z").toLocaleDateString("fr-FR", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
 const colonneAbsente = (e: { code?: string; message?: string } | null) => !!e && (e.code === "42703" || e.code === "PGRST204" || /sequence|email_check/.test(e.message ?? ""));

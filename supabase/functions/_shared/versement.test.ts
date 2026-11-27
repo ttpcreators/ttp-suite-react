@@ -3,9 +3,9 @@ import { cleDuCreateur, dateVersement, versementEnDouble } from "./versement.ts"
 
 describe("versement", () => {
   it("range le versement sous la graphie déjà utilisée, sinon celle du roster", () => {
-    expect(cleDuCreateur("léna pasquale", { "LÉNA PASQUALE": [{ amount: 280 }] }, ["Léna Pasquale"])).toBe("LÉNA PASQUALE");
-    expect(cleDuCreateur("Léna Pasquale", {}, ["Léna Pasquale"])).toBe("Léna Pasquale");
-    expect(cleDuCreateur("Inconnu", {}, ["Léna Pasquale"])).toBeNull();
+    expect(cleDuCreateur("léna morel", { "LÉNA MOREL": [{ amount: 280 }] }, ["Léna Morel"])).toBe("LÉNA MOREL");
+    expect(cleDuCreateur("Léna Morel", {}, ["Léna Morel"])).toBe("Léna Morel");
+    expect(cleDuCreateur("Inconnu", {}, ["Léna Morel"])).toBeNull();
   });
 
   it("repère un versement déjà noté (même montant, 5 jours près)", () => {

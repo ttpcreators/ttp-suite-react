@@ -6,6 +6,8 @@
  * Logique pure, testée par igDraft.test.ts.
  */
 
+import { couper, texteSur } from "./texteSur.ts";
+
 export const CREE_PAR_CLAUDE = "Claude (Alfred)";
 export const KINDS = ["post", "carrousel", "reel", "story"] as const;
 export type DraftKind = (typeof KINDS)[number];
@@ -55,8 +57,9 @@ export function collaborateurs(v: unknown): string[] | null {
 export function preparerBrouillonPost(a: Record<string, unknown>, maintenant = Date.now()): { row: DraftRow } | { error: string } {
   const kind = (String(a.type ?? "post").toLowerCase() || "post") as DraftKind;
   if (!KINDS.includes(kind)) return { error: "Type inconnu : post, carrousel, reel ou story." };
-  // Pas de tiret long ni de demi tiret dans ce qui est publié (règle de Marc).
-  const caption = String(a.legende ?? "").replace(/\s*[—–]\s*/g, ", ").trim();
+  // Pas de tiret long ni de demi tiret dans ce qui est publié (règle de Marc). Textes gardés
+  // en base : sans caractère nul ni moitié d'emoji (_shared/texteSur.ts).
+  const caption = texteSur(String(a.legende ?? "")).replace(/\s*[—–]\s*/g, ", ").trim();
   if (kind !== "story" && !caption) return { error: "Il manque la légende." };
   if (caption.length > 2200) return { error: `Légende trop longue : ${caption.length} caractères pour 2 200 au plus.` };
   const collab = kind === "story" ? [] : collaborateurs(a.collaborateurs);
@@ -68,9 +71,9 @@ export function preparerBrouillonPost(a: Record<string, unknown>, maintenant = D
     if (Date.parse(scheduled_at) < maintenant + 15 * 60_000) return { error: "La date proposée est déjà passée (ou dans moins de 15 minutes)." };
   }
   const ref = {
-    ...(String(a.createur ?? "").trim() ? { creator: String(a.createur).trim().slice(0, 80) } : {}),
-    ...(String(a.marque ?? "").trim() ? { brand: String(a.marque).trim().slice(0, 80) } : {}),
-    ...(String(a.collab ?? "").trim() ? { collab_id: String(a.collab).trim().slice(0, 64) } : {}),
+    ...(String(a.createur ?? "").trim() ? { creator: couper(String(a.createur).trim(), 80) } : {}),
+    ...(String(a.marque ?? "").trim() ? { brand: couper(String(a.marque).trim(), 80) } : {}),
+    ...(String(a.collab ?? "").trim() ? { collab_id: couper(String(a.collab).trim(), 64) } : {}),
   };
   return { row: { kind, caption, collaborators: collab, ref: Object.keys(ref).length ? ref : null, scheduled_at, status: "brouillon" } };
 }

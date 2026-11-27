@@ -5,7 +5,7 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-// « CANDICE MAISSA » -> « Candice Maissa »
+// « ROMANE LEFORT » -> « Romane Lefort »
 export function titleCase(s: string | null | undefined) {
   return String(s ?? "")
     .toLowerCase()

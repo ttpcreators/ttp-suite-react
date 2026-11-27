@@ -401,7 +401,7 @@ export function Prospection({ embedded = false }: { embedded?: boolean } = {}) {
 
   // Fiche contact de la négociation : son lien, sinon la personne écrite dans « Contact »
   // (adresse ou prénom) parmi les contacts de la marque, sinon un contact de la marque
-  // (audit du 2 nov., n° 42 : « Tiffany » chez Teveo, pas l'adresse générique press@).
+  // (audit du 2 nov., n° 42 : la personne nommée chez la marque, pas l'adresse générique press@).
   const contactOf = (r: Row) => {
     const byId = r.contact_id ? brandContacts.find((c) => c.id === r.contact_id) : undefined;
     if (byId) return byId;

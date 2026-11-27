@@ -42,14 +42,14 @@ describe("resumeWidget", () => {
     { text: "Sans échéance basse", priority: "basse", sort_order: 1 },
     { text: "Sans échéance haute", priority: "haute", sort_order: 9 },
     { text: "À venir", due: "2026-11-25", priority: "moyenne" },
-    { text: "Du jour", due: "2026-11-19", creators: ["LÉNA PASQUALE", "adelina krasnici"] },
-    { text: "Très en retard", due: "2026-11-10", creator: "LUCIE BOTANS" },
+    { text: "Du jour", due: "2026-11-19", creators: ["LÉNA MOREL", "inès faure"] },
+    { text: "Très en retard", due: "2026-11-10", creator: "CAMILLE LEFORT" },
     { text: "Un peu en retard", due: "18/11/2026" },
     { text: "   " },
   ];
   const events = [
     { date: "2026-11-19", time: "10:00", title: "Call passé", type: "call" },
-    { date: "2026-11-19", time: "17:00", title: "Call Nakd", type: "call", who: "LÉNA PASQUALE" },
+    { date: "2026-11-19", time: "17:00", title: "Call Nova", type: "call", who: "LÉNA MOREL" },
     { date: "2026-11-19", time: "—", title: "Poster le reel", type: "deadline" },
     { date: "2026-11-20", time: "09:00", title: "Tournage", type: "shoot" },
     { date: "2026-11-27", title: "Trop loin", type: "call" },
@@ -64,12 +64,12 @@ describe("resumeWidget", () => {
     expect(r.taches.liste.map((t) => t.t.split(" · ")[0])).toEqual([
       "Très en retard", "Un peu en retard", "Du jour", "À venir", "Sans échéance haute", "Sans échéance basse",
     ]);
-    expect(r.taches.liste[0]).toMatchObject({ t: "Très en retard · Lucie Botans", quand: "9 j de retard", ton: "retard" });
-    expect(r.taches.liste[2].t).toBe("Du jour · Léna Pasquale, Adelina Krasnici");
+    expect(r.taches.liste[0]).toMatchObject({ t: "Très en retard · Camille Lefort", quand: "9 j de retard", ton: "retard" });
+    expect(r.taches.liste[2].t).toBe("Du jour · Léna Morel, Inès Faure");
     expect(r.taches.liste[4].haute).toBe(true);
   });
   it("planning : de maintenant à J+7, rendez-vous passés du jour retirés", () => {
-    expect(r.planning.liste.map((e) => e.t)).toEqual(["Poster le reel", "Call Nakd · Léna Pasquale", "Tournage"]);
+    expect(r.planning.liste.map((e) => e.t)).toEqual(["Poster le reel", "Call Nova · Léna Morel", "Tournage"]);
     expect(r.planning.liste[0]).toMatchObject({ quand: "Aujourd'hui", heure: "", deadline: true, ton: "jour" });
     expect(r.planning.liste[2]).toMatchObject({ quand: "Demain", heure: "09:00", deadline: false, ton: "demain" });
     expect(r.planning.total).toBe(3);
@@ -103,8 +103,8 @@ describe("clé du widget", () => {
 
 describe("resumeMails", () => {
   const rows = [
-    { contact_name: "Manon", contact_email: "manon@fitaya.fr", subject: "Facture", created_at: "2026-11-19T13:02:00Z", box: "partnerships", direction: "in" },
-    { contact_name: "", contact_email: "Adelina <adelina@x.fr>", subject: "  Contrat\n signé ", created_at: "2026-11-18T09:00:00Z", box: "talent", direction: "in" },
+    { contact_name: "Manon", contact_email: "manon@marque-exemple.fr", subject: "Facture", created_at: "2026-11-19T13:02:00Z", box: "partnerships", direction: "in" },
+    { contact_name: "", contact_email: "Inès <ines@x.fr>", subject: "  Contrat\n signé ", created_at: "2026-11-18T09:00:00Z", box: "talent", direction: "in" },
     { contact_name: "Lu ailleurs", contact_email: "a@b.fr", subject: "x", created_at: "2026-11-19T10:00:00Z", box: "talent", read_at: "2026-11-19T11:00:00Z" },
     { contact_name: "Newsletter", contact_email: "news@promo.fr", subject: "x", created_at: "2026-11-19T12:00:00Z", box: "partnerships" },
     { contact_name: "Envoyé", contact_email: "c@d.fr", subject: "x", created_at: "2026-11-19T12:00:00Z", direction: "out" },
@@ -112,7 +112,7 @@ describe("resumeMails", () => {
   ];
   const m = resumeWidget([], [], NOW, rows, { "news@promo.fr": 1 }).mails;
   it("garde les non lus reçus, sans les expéditeurs « Pas à traiter »", () => {
-    expect(m.liste.map((x) => x.de)).toEqual(["Manon", "adelina@x.fr", "Vieux"]);
+    expect(m.liste.map((x) => x.de)).toEqual(["Manon", "ines@x.fr", "Vieux"]);
     expect(m).toMatchObject({ nonLus: 3, partnerships: 1, talent: 1 });
   });
   it("heure du jour, « hier », sinon le jour", () => {

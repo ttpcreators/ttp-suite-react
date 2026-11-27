@@ -219,7 +219,7 @@ function brouillonRepresentation(a, { id, ts, ctName, by = "Claude", externe = f
 * Parti pris, pensé pour l'impression A4 :
 *  - Instrument Serif pour les titres et les chiffres, Instrument Sans pour le texte
 *    (les polices des media kits, servies par l'app : public/fonts/) ;
-*  - un titre en deux temps, la fin en italique bordeaux (« Nike *× Candice* ») ;
+*  - un titre en deux temps, la fin en italique bordeaux (« Nike *× Romane* ») ;
 *  - libellés en petites capitales espacées, valeurs reliées par des pointillés ;
 *  - filets fins, aucun aplat de couleur, beaucoup de blanc.
 *

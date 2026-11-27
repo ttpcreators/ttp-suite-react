@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cachetOf, collabFromProspect, contactForBrand, inDealWith, openProspectFor, proposalPatch, proposalValue, type Proposal } from "./prospectProposal";
 
-const P: Proposal = { mode: "influence", creator: "LÉNA PASQUALE", deliverables: "2 reels Instagram", min: 800, max: 1100, target: 950, at: "2026-10-23" };
+const P: Proposal = { mode: "influence", creator: "LÉNA MOREL", deliverables: "2 reels Instagram", min: 800, max: 1100, target: 950, at: "2026-10-23" };
 const amount = (s: string) => s.replace(/\s/g, " ");
 
 describe("Tarifs → prospect → collab", () => {
@@ -12,7 +12,7 @@ describe("Tarifs → prospect → collab", () => {
   it("avant le SQL : seulement marque, contact, valeur et étape", () => {
     expect(Object.keys(proposalPatch(P, { brand: " Nike ", contact: "", contactId: "k1" }, false)).sort()).toEqual(["brand", "contact", "stage", "value"]);
     const full = proposalPatch(P, { brand: "Nike", contact: "Tom", contactId: "k1" }, true);
-    expect(full).toMatchObject({ brand: "Nike", contact: "Tom", stage: "Négociation", creator: "LÉNA PASQUALE", deliverables: "2 reels Instagram", contact_id: "k1" });
+    expect(full).toMatchObject({ brand: "Nike", contact: "Tom", stage: "Négociation", creator: "LÉNA MOREL", deliverables: "2 reels Instagram", contact_id: "k1" });
   });
   it("retrouve le contact et le prospect ouvert de la marque", () => {
     expect(contactForBrand([{ id: "a", brand: "Asics" }, { id: "b", brand: "NIKE" }], "Nike")?.id).toBe("b");
@@ -29,8 +29,8 @@ describe("Tarifs → prospect → collab", () => {
     expect(cachetOf({ id: "p", brand: "Nike", contact: null, value: "—", stage: null })).toBe("");
   });
   it("la collab démarre à l'étape 1 avec tout rempli", () => {
-    const c = collabFromProspect({ id: "p", brand: "Nike ", contact: "Tom", value: null, stage: null }, { creator: "LÉNA PASQUALE", deliverables: "2 reels", cachet: "950 €" }, 3);
-    expect(c).toEqual({ brand: "Nike", creator: "LÉNA PASQUALE", contact: "Tom", deliverables: "2 reels", cachet: "950 €", step: 1, status: "active", sort_order: 3 });
+    const c = collabFromProspect({ id: "p", brand: "Nike ", contact: "Tom", value: null, stage: null }, { creator: "LÉNA MOREL", deliverables: "2 reels", cachet: "950 €" }, 3);
+    expect(c).toEqual({ brand: "Nike", creator: "LÉNA MOREL", contact: "Tom", deliverables: "2 reels", cachet: "950 €", step: 1, status: "active", sort_order: 3 });
   });
 });
 

@@ -55,26 +55,26 @@ describe("commissionMap", () => {
 
 describe("commission du contrat", () => {
   const history = [
-    { creator: "Justine Gentet", createdAt: "2026-07-31", config: { modeCommission: "parOrigine", commUniforme: "17", commApportee: "25", commInitiee: "20", commAutonome: "0" } },
-    { creator: "Ivana", createdAt: "2026-11-02", config: { modeCommission: "uniforme", commUniforme: "20", commApportee: "30", commInitiee: "15", commAutonome: "0" } },
+    { creator: "Justine Faure", createdAt: "2026-07-31", config: { modeCommission: "parOrigine", commUniforme: "17", commApportee: "25", commInitiee: "20", commAutonome: "0" } },
+    { creator: "Nina", createdAt: "2026-11-02", config: { modeCommission: "uniforme", commUniforme: "20", commApportee: "30", commInitiee: "15", commAutonome: "0" } },
   ];
   const contracts = contractRatesFrom(history);
   it("suit l'origine du deal quand le contrat a un barème par origine", () => {
-    expect(collabRateFor("JUSTINE GENTET", "agence", contracts, {})).toBe(25);
-    expect(collabRateFor("Justine Gentet", "talent", contracts, {})).toBe(20);
-    expect(collabRateFor("Justine Gentet", "autonome", contracts, {})).toBe(0);
+    expect(collabRateFor("JUSTINE FAURE", "agence", contracts, {})).toBe(25);
+    expect(collabRateFor("Justine Faure", "talent", contracts, {})).toBe(20);
+    expect(collabRateFor("Justine Faure", "autonome", contracts, {})).toBe(0);
   });
   it("applique le taux unique d'un contrat uniforme, sauf deal géré seul", () => {
-    expect(collabRateFor("Ivana", "talent", contracts, {})).toBe(20);
-    expect(collabRateFor("Ivana", "autonome", contracts, {})).toBe(0);
+    expect(collabRateFor("Nina", "talent", contracts, {})).toBe(20);
+    expect(collabRateFor("Nina", "autonome", contracts, {})).toBe(0);
   });
   it("contrat sans `creator` : retrouvé par le nom du talent, sans majuscules ni accents", () => {
     const rates = contractRatesFrom([
-      { createdAt: "2026-11-10", config: { talentNom: "LÉNA PASQUALE", modeCommission: "uniforme", commUniforme: "15" } },
+      { createdAt: "2026-11-10", config: { talentNom: "LÉNA MOREL", modeCommission: "uniforme", commUniforme: "15" } },
       { createdAt: "2026-11-11", config: { modeCommission: "uniforme", commUniforme: "40" } }, // ni creator ni talentNom : ignoré
     ]);
-    expect(collabRateFor("Léna Pasquale", "agence", rates, {})).toBe(15);
-    expect(collabRateFor("lena pasquale", "talent", rates, {})).toBe(15);
+    expect(collabRateFor("Léna Morel", "agence", rates, {})).toBe(15);
+    expect(collabRateFor("lena morel", "talent", rates, {})).toBe(15);
     expect(Object.keys(rates)).toHaveLength(1);
   });
   it("reprend la fiche sans contrat", () => {

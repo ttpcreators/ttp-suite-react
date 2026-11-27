@@ -1,10 +1,10 @@
-# Validation Google : « Connecter mon YouTube » pour toutes les créatrices
+# Validation Google : « Connecter mon YouTube » pour tous les créateurs
 
 > ⏸️ En pause (Marc, 2026-10-14). Reprendre à : déploiement des fonctions, essai réel, puis étape 4.
 
 Pourquoi : l'app Google « TTP Suite » (ex « TTP Creators ») est **en test**. Seules les adresses de la liste
 « Utilisateurs tests » peuvent se connecter (100 au maximum), et l'accès saute tous les
-7 jours. Pour ouvrir « Connecter mon YouTube » à toutes les créatrices, sans liste et sans
+7 jours. Pour ouvrir « Connecter mon YouTube » à tous les créateurs, sans liste et sans
 coupure, il faut **publier l'app** puis la faire **valider par Google**.
 
 Projet Google Cloud : **`ttp-creators`** (organisation ttpcreators.pro), compte propriétaire
@@ -28,9 +28,9 @@ Drive…), et nous n'en demandons aucun.
 | 2 | Pages publiques sur ttpcreators.pro : **`/suite/`** (page d'accueil de l'app, FR + EN), `/confidentialite/` (connexions des comptes, effacement, usage limité Google), `/conditions/` (phrase « vous acceptez les conditions de YouTube ») | assistant | ✅ en ligne (2026-10-14) |
 | 3 | Google Auth Platform → Branding : **nom de l'app « TTP Suite »** (même nom que la page d'accueil, sinon Google refuse pour « nom différent ») ; page d'accueil **`https://ttpcreators.pro/suite/`** | assistant, avec l'accord de Marc | ✅ fait (2026-10-14) |
 | 4 | **Propriété du domaine** : Google Search Console (search.google.com/search-console), connecté avec **partnerships@ttpcreators.pro** → Ajouter une propriété → **Domaine** → `ttpcreators.pro`. Un enregistrement `google-site-verification` existe déjà chez OVH : s'il appartient à ce compte, c'est validé tout de suite. Sinon, Google donne un nouvel enregistrement TXT : OVH → Web Cloud → Noms de domaine → ttpcreators.pro → Zone DNS → Ajouter une entrée → TXT (sous-domaine vide), coller la valeur, puis « Valider » dans Search Console (quelques minutes à quelques heures) | Marc | ⏳ |
-| 5 | Compte de démonstration pour Google (il peut le demander) : un accès créatrice « ZZZ Démo Google » créé depuis l'app (Réglages → Accès → Comptes app) ; identifiants transmis à Google seulement s'il les demande, par le formulaire de validation | Marc | ⏳ si demandé |
+| 5 | Compte de démonstration pour Google (il peut le demander) : un accès créateur « ZZZ Démo Google » créé depuis l'app (Réglages → Accès → Comptes app) ; identifiants transmis à Google seulement s'il les demande, par le formulaire de validation | Marc | ⏳ si demandé |
 | 6 | **Vidéo de démonstration** (scénario ci-dessous), mise sur YouTube en « Non répertoriée » | Marc + assistant | ⏳ |
-| 7 | Google Auth Platform → Audience → **« Publier l'application »** → Confirmer. Effet immédiat : plus de coupure à 7 jours et plus de liste de testeurs ; tant que la validation n'est pas finie, la page Google affiche « Google n'a pas validé cette application » (la créatrice clique « Paramètres avancés » → « Accéder à TTP Suite »), 100 personnes maximum | Marc | ⏳ |
+| 7 | Google Auth Platform → Audience → **« Publier l'application »** → Confirmer. Effet immédiat : plus de coupure à 7 jours et plus de liste de testeurs ; tant que la validation n'est pas finie, la page Google affiche « Google n'a pas validé cette application » (le créateur clique « Paramètres avancés » → « Accéder à TTP Suite »), 100 personnes maximum | Marc | ⏳ |
 | 8 | Google Auth Platform → **Centre de validation** → « Préparer la validation » : coller les textes ci-dessous et le lien de la vidéo, puis envoyer | Marc (assistant à côté) | ⏳ |
 | 9 | Répondre aux e-mails de Google (expéditeur « Google Trust and Safety » ou « API OAuth Dev Verification », sur partnerships@ttpcreators.pro) : ils demandent souvent une précision ou une nouvelle vidéo. Me transférer le message, je prépare la réponse | Marc + assistant | ⏳ |
 
@@ -109,7 +109,7 @@ Compte utilisé : un compte Google de la liste des testeurs, avec une petite cha
 
 1. Ouvrir `https://ttpcreators.pro/suite/` : montrer la page, puis le lien « Privacy policy ».
    *Caption : “TTP Suite homepage and privacy policy.”*
-2. Se connecter à `https://app.ttpcreators.pro` avec un compte créatrice (ou « ZZZ Démo
+2. Se connecter à `https://app.ttpcreators.pro` avec un compte créateur (ou « ZZZ Démo
    Google »), ouvrir « Envoyer mes stats », cliquer **« Connecter mon YouTube »**.
    *Caption : “A creator chooses to connect her YouTube channel.”*
 3. Page Google : **passer la page en anglais** (menu de langue en bas à gauche → English
@@ -118,17 +118,17 @@ Compte utilisé : un compte Google de la liste des testeurs, avec une petite cha
    `client_id=1484…` (Google l'exige), montrer le nom de l'app et les deux autorisations,
    cocher, « Continue ». *Caption : “OAuth consent screen, client ID visible in the URL.”*
 5. Retour dans l'app : message « YouTube connecté ✓ ».
-6. Côté agence : fiche de la créatrice → carte **« YouTube du jour »** : abonnés, vues
+6. Côté agence : fiche du créateur → carte **« YouTube du jour »** : abonnés, vues
    moyennes des vidéos et des Shorts, vignettes des vidéos.
    *Caption : “youtube.readonly: channel and recent videos statistics.”*
    Puis les chiffres YouTube Studio (vues 30 j, heures regardées, abonnés gagnés) et
    l'audience. *Caption : “yt-analytics.readonly: aggregated 30-day analytics and audience.”*
-7. Media kit de la créatrice → ligne YouTube remplie (vues 30 j, vues moyennes, heures).
+7. Media kit du créateur → ligne YouTube remplie (vues 30 j, vues moyennes, heures).
    *Caption : “Used to keep the creator's media kit up to date.”*
-8. Calculateur de prix : choisir la créatrice, plateforme YouTube, format « Intégration » → vues réelles
+8. Calculateur de prix : choisir le créateur, plateforme YouTube, format « Intégration » → vues réelles
    reprises. *Caption : “Used to set rates based on real views.”*
 9. (Si une collab existe) Collabs → « Publications repérées » : la vidéo YouTube de la collab.
-10. Retour dans l'espace créatrice → **« Déconnecter »** → message « données effacées » ;
+10. Retour dans l'espace créateur → **« Déconnecter »** → message « données effacées » ;
     côté agence, la carte est vide. *Caption : “Disconnect revokes access and deletes all
     YouTube data.”*
 
@@ -138,5 +138,5 @@ Compte utilisé : un compte Google de la liste des testeurs, avec une petite cha
 - Mettre à jour le tableau d'état du runbook (`supabase/sql/README.md`, ligne « Connecter mon
   YouTube »).
 - Quotas : le projet `ttp-creators` a 10 000 unités par jour pour la YouTube Data API ;
-  `yt-sync` en utilise environ 3 par créatrice et par jour. YouTube Analytics a son propre
+  `yt-sync` en utilise environ 3 par créateur et par jour. YouTube Analytics a son propre
   quota, largement suffisant.

@@ -25,7 +25,7 @@ partagent la même base Supabase.
 | Données | Supabase : Postgres + RLS, Auth, Storage |
 | Serveur | Edge Functions Deno (`supabase/functions/`) |
 | Intégrations | Google (Agenda, Gmail, Meet) · Instagram · TikTok · YouTube · Web Push · connecteur Claude (MCP) |
-| Hébergement | GitHub Pages, déployé automatiquement à chaque push sur `main` |
+| Hébergement | GitHub Pages, déployé à chaque fusion d'une PR dans `main` (contrôle « build » vert) |
 
 ## Démarrer
 
@@ -41,9 +41,9 @@ npm run build   # porte de qualité : oxlint + vitest + tsc + vite build
 
 | Quoi | Comment |
 |---|---|
-| L'app | `git push` sur `main` : GitHub Actions construit et publie (1 à 2 min) |
-| Une Edge Function | `supabase functions deploy <nom> --project-ref zizvggziggswhrbuyhuo` (à la main) |
-| La base | SQL lancé à la main dans Supabase ; état de chaque migration dans [`supabase/sql/README.md`](supabase/sql/README.md) |
+| L'app | fusion d'une PR dans `main` (contrôle « build » vert) : GitHub Actions construit et publie (1 à 2 min) ; jamais de push direct |
+| Une Edge Function | « Déploiement des fonctions » (onglet Actions, depuis `main`) après le « oui » de Marc ou de Gianni, ou Marc à la main |
+| La base | fichier daté de `supabase/sql/`, appliqué après le « oui » de Marc ou de Gianni (voir [`CLAUDE.md`](CLAUDE.md), « Règle prod ») ; état dans [`supabase/sql/README.md`](supabase/sql/README.md) |
 
 Une app ouverte pendant une mise en ligne se met à jour toute seule à la page suivante
 (`version.json`, voir [`src/lib/appUpdate.ts`](src/lib/appUpdate.ts)).
@@ -66,12 +66,12 @@ docs/             documentation (index : docs/README.md)
 
 ## Conventions
 
-- **Branches** : `main` = production. Chaque chantier se fait sur une branche courte,
-  fusionnée puis supprimée.
+- **Branches** : `main` = production, protégée. Chaque chantier se fait sur une branche courte,
+  fusionnée par une PR (contrôle « build » vert) puis supprimée.
 - **Sauvegardes** : tags `sauvegarde-AAAA-MM-JJ` avant les gros changements.
 - **Commits** : en français, une phrase qui dit ce qui change.
-- **Base** : l'assistant prépare le SQL et les fonctions, l'équipe les applique, puis le
-  tableau d'état est mis à jour ([`supabase/sql/README.md`](supabase/sql/README.md)).
+- **Base** : la session prépare le SQL et les fonctions ; ils s'appliquent après le « oui »
+  de Marc ou de Gianni, puis le tableau d'état est mis à jour ([`supabase/sql/README.md`](supabase/sql/README.md)).
 - **Sécurité** : seule la clé publique `anon` est dans le code ; les données sont protégées
   par RLS (agence = tout, créateur = les siennes). Tous les secrets sont des secrets
   Supabase, jamais dans ce dépôt.

@@ -8,6 +8,8 @@
 // Règles PURES (heure de Paris), testées par rdv.test.ts.
 // ============================================================================
 
+import { couper } from "./texteSur.ts";
+
 export const RDV_KEY = "rdvMarc";
 export const RDV_URL = "https://app.ttpcreators.pro/rdv/";
 export const RDV_ORIGINS = ["https://app.ttpcreators.pro", "http://localhost:5173", "http://localhost:4173"];
@@ -134,7 +136,8 @@ export function creneauxLibres(c: RdvConfig, now: Date, occupe: readonly Occupe[
 
 export type Reservation = { jour: string; heure: string; nom: string; email: string; marque: string; message: string };
 
-const propre = (v: unknown, max: number) => String(v ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim().slice(0, max);
+// Coupe sans casser d'emoji (couper, _shared/texteSur.ts) : le texte va en base (contact, tâche).
+const propre = (v: unknown, max: number) => couper(String(v ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim(), max);
 const EMAIL_RE = /^[^@\s<>"',;:]{1,64}@[^@\s<>"',;:]{1,190}\.[a-z]{2,24}$/i;
 
 /** Demande de réservation lue et nettoyée, ou la raison du refus. `site` rempli = robot. */
@@ -149,7 +152,7 @@ export function lireReservation(body: unknown): { r: Reservation } | { robot: tr
   if (!nom) return { erreur: "nom" };
   const marque = propre(b.marque, 80);
   if (!marque) return { erreur: "marque" };
-  return { r: { jour, heure, nom, email, marque, message: String(b.message ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, " ").trim().slice(0, 1500) } };
+  return { r: { jour, heure, nom, email, marque, message: couper(String(b.message ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, " ").trim(), 1500) } };
 }
 
 /** Le créneau demandé est-il toujours libre et dans les règles ? */

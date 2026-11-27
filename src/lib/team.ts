@@ -36,7 +36,7 @@ export function pokeTeam(table: string, patch?: Record<string, unknown>) {
   }, 4000);
 }
 
-/** Prénom deviné depuis l'adresse : « gianni.valter@… » → « Gianni ». */
+/** Prénom deviné depuis l'adresse : « gianni.exemple@… » → « Gianni ». */
 export function guessName(email: string): string {
   const local = email.split("@")[0] ?? "";
   if (/gianni/i.test(local)) return "Gianni";

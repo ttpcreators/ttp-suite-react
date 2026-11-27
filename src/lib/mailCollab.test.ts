@@ -6,7 +6,7 @@ const collab = (p: Partial<CollabLite> & { id: string; brand: string }): CollabL
 });
 
 const COLLABS = [
-  collab({ id: "a", brand: "Saucony", creator: "CANDICE", step: 1, updated_at: "2026-10-10" }),
+  collab({ id: "a", brand: "Saucony", creator: "ROMANE", step: 1, updated_at: "2026-10-10" }),
   collab({ id: "b", brand: "Saucony", creator: "LÉA", step: 4, updated_at: "2026-10-12" }),
   collab({ id: "c", brand: "Nutripure", creator: "LÉA", step: 2, contact: "Pauline · pauline@nutri.example" }),
 ];
@@ -27,7 +27,7 @@ describe("mailCollab : fil → collab", () => {
   });
 
   it("garde seulement la collab du créateur dont l'alias est dans le fil", () => {
-    expect(matchCollabs({ emails: ["pauline@saucony.fr"], creator: "candice" }, INDEX, COLLABS).map((c) => c.id)).toEqual(["a"]);
+    expect(matchCollabs({ emails: ["pauline@saucony.fr"], creator: "romane" }, INDEX, COLLABS).map((c) => c.id)).toEqual(["a"]);
   });
 
   it("reconnaît la marque dans le domaine de l'expéditeur et dans le contact de la collab", () => {
@@ -65,6 +65,6 @@ describe("mailCollab : étiquettes", () => {
   it("domaine racine et couleur stable", () => {
     expect(domainRoot("news.saucony.fr")).toBe("saucony");
     expect(domainRoot("brand.co.uk")).toBe("brand");
-    expect(creatorTone("Candice")).toBe(creatorTone(" candice "));
+    expect(creatorTone("Romane")).toBe(creatorTone(" romane "));
   });
 });

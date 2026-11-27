@@ -257,7 +257,7 @@ export function incidentsConformite(input: ConformiteIn): Incident[] {
 
 // ── Tâche de la to-do et journal ────────────────────────────────────────────
 
-/** Titre de la tâche : « Conformité : Chloé Deyre · Teveo · mention manquante ». */
+/** Titre de la tâche : « Conformité : Zoé Morel · Nova · mention manquante ». */
 export function tacheTitre(i: Pick<Incident, "creator" | "brand" | "type">): string {
   return `Conformité : ${titleCase(i.creator)} · ${i.brand} · ${TYPE_LABEL[i.type]}`;
 }

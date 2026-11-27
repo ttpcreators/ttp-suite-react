@@ -8,15 +8,16 @@
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
+import { couper, texteSur } from "./texteSur.ts";
 
 export type Auteur = { id: string; nom: string };
 
 /** Nom affiché d'un compte : son prénom réglé dans l'app, sinon le début de son adresse. */
 export function nomAffiche(displayName: unknown, email: unknown): string {
   const dn = String(displayName ?? "").trim();
-  if (dn) return dn.slice(0, 40);
+  if (dn) return couper(dn, 40);
   const local = String(email ?? "").split("@")[0].trim();
-  return (local || "Agence").slice(0, 40);
+  return couper(local || "Agence", 40);
 }
 
 /**
@@ -45,13 +46,13 @@ export function lignesEnvoi(
   return destinataires.map((e, i) => ({
     contact_email: e,
     direction: "out",
-    subject: m.subject.slice(0, 300),
-    snippet: m.snippet,
+    subject: couper(m.subject, 300), // textes coupés sans casser d'emoji (_shared/texteSur.ts)
+    snippet: texteSur(m.snippet),
     source: m.source,
     thread_id: m.threadId || null,
     ...(m.box ? { box: m.box } : {}),
     ...(i === 0 && m.messageId ? { gmail_message_id: m.messageId } : {}),
-    ...(m.auteur?.id ? { envoye_par: m.auteur.id, envoye_par_nom: m.auteur.nom.slice(0, 40) } : {}),
+    ...(m.auteur?.id ? { envoye_par: m.auteur.id, envoye_par_nom: couper(m.auteur.nom, 40) } : {}),
   }));
 }
 

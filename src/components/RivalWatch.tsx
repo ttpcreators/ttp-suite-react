@@ -285,8 +285,8 @@ function RivalCard({ r, busy, pool, roster, known, people, emailDom, onRefresh, 
   // Une créatrice (roster, scouting, mise en avant par l'agence, ou reconnue par le radar)
   // n'est pas une marque.
   const notBrand = new Set([...creators.map((c) => c.u.toLowerCase()), ...people, ...roster, ...pool]);
-  // Plusieurs « marques » d'une agence avec une adresse au même domaine (isabeau@foll-ow.com,
-  // jade@foll-ow.com) : ce sont ses talents, une marque a son propre domaine (audit du 2 nov., n° 47).
+  // Plusieurs « marques » d'une agence avec une adresse au même domaine (lea@agence-exemple.fr,
+  // sam@agence-exemple.fr) : ce sont ses talents, une marque a son propre domaine (audit du 2 nov., n° 47).
   const FREE = /^(gmail|hotmail|outlook|yahoo|icloud|live|orange|free|sfr|laposte|wanadoo|protonmail|me)\./;
   const domCount = new Map<string, number>();
   for (const b of r.brands ?? []) {

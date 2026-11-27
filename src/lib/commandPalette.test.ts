@@ -4,7 +4,7 @@ import { firstName, rankEntries, relanceActionLabel, scoreMatch, stepIndex } fro
 describe("palette ⌘K : classement", () => {
   it("début de libellé > début de mot > contient > mot-clé", () => {
     expect(scoreMatch("rel", "Relances")).toBe(100);
-    expect(scoreMatch("lena", "Relancer JNPR × Léna")).toBe(80);
+    expect(scoreMatch("lena", "Relancer Nova × Léna")).toBe(80);
     expect(scoreMatch("ance", "Relances")).toBe(60);
     expect(scoreMatch("impaye", "Relances", ["impayé", "retard"])).toBe(50);
     expect(scoreMatch("zzz", "Relances")).toBe(0);
@@ -30,8 +30,8 @@ describe("palette ⌘K : classement", () => {
 
 describe("palette ⌘K : libellés et navigation", () => {
   it("relance courte : marque × prénom", () => {
-    expect(firstName("LÉNA PASQUALE")).toBe("Léna");
-    expect(relanceActionLabel({ party: "JNPR", creator: "LÉNA PASQUALE" })).toBe("Relancer JNPR × Léna");
+    expect(firstName("LÉNA MOREL")).toBe("Léna");
+    expect(relanceActionLabel({ party: "Nova", creator: "LÉNA MOREL" })).toBe("Relancer Nova × Léna");
     expect(relanceActionLabel({ party: "Sanytol", creator: null })).toBe("Relancer Sanytol");
   });
 

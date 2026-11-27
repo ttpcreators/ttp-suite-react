@@ -19,6 +19,8 @@ import { CRON_SECRET, corsHeaders, getServiceClient, timingSafeEqualStr } from "
 import { saveState } from "../_shared/instagram.ts";
 import { isPaid } from "../_shared/signals.ts";
 import { brandsInVideo, YT_KEY, yt, ytSaveQuota, ytUsage, ytUsedToday } from "../_shared/youtube.ts";
+import { couper, texteSur } from "../_shared/texteSur.ts";
+import { ecrireParLots } from "../_shared/ecritureLot.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
 type Json = Record<string, unknown>;
@@ -78,9 +80,9 @@ async function sponsoredPosts(ids: string[], src: (channelId: string) => Src, su
       out.push({
         brands,
         post: {
-          v: String(x.id ?? ""), url: `https://www.youtube.com/watch?v=${x.id}`, at: String(s.publishedAt ?? ""), title: String(s.title ?? "").slice(0, 200),
+          v: String(x.id ?? ""), url: `https://www.youtube.com/watch?v=${x.id}`, at: String(s.publishedAt ?? ""), title: couper(String(s.title ?? ""), 200),
           thumb: thumbs.medium?.url ?? thumbs.default?.url ?? "", views: t.viewCount != null ? Number(t.viewCount) : null,
-          likes: t.likeCount != null ? Number(t.likeCount) : null, flag, ch, c: String(s.channelTitle ?? ""), h: info?.handle ?? "",
+          likes: t.likeCount != null ? Number(t.likeCount) : null, flag, ch, c: texteSur(String(s.channelTitle ?? "")), h: info?.handle ?? "",
           subs: info?.subs ?? null, src: where, fr,
         },
       });
@@ -207,7 +209,7 @@ Deno.serve(async (req: Request) => {
   const byBrand = new Map<string, { name: string; posts: Post[] }>();
   for (const f of found) {
     for (const b of f.brands) {
-      const e = byBrand.get(b.key) ?? { name: b.name, posts: [] };
+      const e = byBrand.get(b.key) ?? { name: texteSur(b.name), posts: [] };
       if (!e.posts.some((p) => p.v === f.post.v)) e.posts.push({ ...f.post, seen: now });
       byBrand.set(b.key, e);
     }
@@ -215,13 +217,21 @@ Deno.serve(async (req: Request) => {
   // On retire les vidéos non relues depuis 30 jours (règle YouTube) et celles des chaînes
   // étrangères gardées avant le filtre France ; les marques « à traiter » restées vides partent.
   const keep = (p: Post, rowSeen: string | null) => (p.src !== "hors" || p.fr === true) && (p.seen ?? rowSeen ?? "") >= cutoff;
+  // Lignes refusées par la base (nettoyage et écriture du radar), comptées dans le relevé du passage.
+  let refus = 0;
   const { data: oldRows } = await sb.from("yt_radar").select("brand, name, posts, status, last_seen");
   for (const r of (oldRows as { brand: string; name: string; posts: Post[]; status: string; last_seen: string | null }[] | null) ?? []) {
     // (vidéos d'avant ce champ : datées du dernier passage de leur marque, une fois pour toutes)
     const kept = (r.posts ?? []).filter((p) => keep(p, r.last_seen)).map((p) => (p.seen ? p : { ...p, seen: r.last_seen ?? now }));
     if (kept.length === (r.posts ?? []).length && (r.posts ?? []).every((p) => p.seen)) continue;
     if (!kept.length && r.status === "nouveau" && !byBrand.has(r.brand)) await sb.from("yt_radar").delete().eq("brand", r.brand);
-    else await sb.from("yt_radar").update({ posts: kept }).eq("brand", r.brand);
+    else {
+      const { error } = await sb.from("yt_radar").update({ posts: kept }).eq("brand", r.brand);
+      if (error) {
+        refus++;
+        console.warn("yt-radar nettoyage refusé", error.message);
+      }
+    }
   }
   const keys = [...byBrand.keys()];
   const existing = new Map<string, { name: string; posts: Post[]; last_seen: string | null }>();
@@ -238,10 +248,13 @@ Deno.serve(async (req: Request) => {
     const name = (byBrand.get(k)?.name ?? "").startsWith("@") && cur?.name ? cur.name : byBrand.get(k)?.name ?? cur?.name ?? k;
     return { brand: k, name, posts, last_seen: now };
   });
-  for (let i = 0; i < rows.length; i += 200) await sb.from("yt_radar").upsert(rows.slice(i, i + 200));
+  // Par paquets de 200 ; un paquet refusé est réécrit marque par marque (_shared/ecritureLot.ts).
+  const ecrit = await ecrireParLots(rows, 200, (lot) => sb.from("yt_radar").upsert(lot));
+  refus += ecrit.refusees.length;
+  if (ecrit.refusees.length) console.warn("yt-radar yt_radar", `${ecrit.refusees.length}/${rows.length} marque(s) refusée(s)`, ecrit.erreur);
 
   const quota = await ytSaveQuota(sb);
-  const out = { ok: true, channels: srcOf.size, videos: videoIds.length, searched, sponsored: found.length, brands: rows.length, quota, ms: Date.now() - t0 };
+  const out = { ok: true, channels: srcOf.size, videos: videoIds.length, searched, sponsored: found.length, brands: rows.length, refus, quota, ms: Date.now() - t0 };
   await saveState(sb, "yt_radar", out);
   console.log("yt-radar", JSON.stringify(out));
   return res(out);
