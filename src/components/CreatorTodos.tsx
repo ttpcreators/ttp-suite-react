@@ -249,9 +249,10 @@ export function CreatorTodos(p: Props) {
     const due = dueText(td);
     const awaits = p.progressOn && agencyAwaits(td.progress);
     const can = ctDroits(td);
-    // Trois infos au plus : avec qui (ou qui l'a demandée, ou qui s'en occupe), l'échéance, un message de l'agence.
+    // Trois infos au plus : qui l'a demandée ou qui s'en occupe (tâche de l'agence, même
+    // partagée : « Avec … » reste dans la fiche), sinon avec qui ; l'échéance ; un message de l'agence.
     const meta = [
-      shared ?? (td.source === "agency" ? t(ctSorte(td) === "suivie" ? "Suivie par ton agence" : "Demandée par l'agence") : null),
+      td.source === "agency" ? t(ctSorte(td) === "suivie" ? "Suivie par ton agence" : "Demandée par l'agence") : shared,
       due && !td.done ? t("Échéance {date}", { date: due }) : null,
     ].filter(Boolean) as string[];
     return (
@@ -381,7 +382,8 @@ export function CreatorTodos(p: Props) {
 
           {td.descr && <p className="-mt-2 whitespace-pre-wrap text-[14px] leading-relaxed text-muted-foreground">{td.descr}</p>}
 
-          {/* Où j'en suis : le dernier point ; un message de l'agence ressort en bleu. */}
+          {/* Où j'en suis : le dernier point ; un message de l'agence ressort en bleu. Tâche suivie
+              par l'agence : « Où ça en est » (on ne lui demande pas où il en est d'un travail de l'agence). */}
           {p.progressOn && (
             <button
               type="button"
@@ -396,7 +398,7 @@ export function CreatorTodos(p: Props) {
             >
               <span className="flex items-baseline justify-between gap-2">
                 <span className={cn("text-[12px] font-semibold", awaits ? "text-primary" : "text-muted-foreground")}>
-                  {awaits ? t("Message de l'agence") : t("Où j'en suis")}
+                  {awaits ? t("Message de l'agence") : suivie ? t("Où ça en est") : t("Où j'en suis")}
                 </span>
                 {last?.date && <span className="text-[11px] tabular-nums text-faint">{last.date}</span>}
               </span>
@@ -580,7 +582,7 @@ export function CreatorTodos(p: Props) {
                   ref={pointRef}
                   value={pointInput}
                   onChange={(e) => setPointInput(e.target.value)}
-                  placeholder={awaits ? t("Réponds à l'agence…") : t("Où en es-tu ?")}
+                  placeholder={awaits ? t("Réponds à l'agence…") : suivie ? t("Écris à ton agence…") : t("Où en es-tu ?")}
                   aria-label={t("Nouveau point d'avancement")}
                   className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground outline-none placeholder:text-faint"
                 />

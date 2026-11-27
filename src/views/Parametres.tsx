@@ -1453,7 +1453,7 @@ export function Parametres() {
             </Card>
             <Card title="Activité des créateurs" hint="Quand un créateur ajoute une tâche, une idée ou un évènement depuis son espace.">
               <PrefRow label="Notification immédiate sur le téléphone" hint="Un push dès qu'un créateur ajoute quelque chose." checked={on(prefs.pushCreatorActivity)} onChange={(v) => setPref("pushCreatorActivity", v)} />
-              <PrefRow label="Aussi quand il écrit sur une tâche ou une idée" hint="Sous-tâche, description, message d'avancement : un push par tâche toutes les 10 minutes au plus." checked={on(prefs.pushCreatorUpdates)} onChange={(v) => setPref("pushCreatorUpdates", v)} />
+              <PrefRow label="Aussi quand il écrit sur une tâche ou une idée" hint="Sous-tâche, description, message d'avancement, tâche demandée terminée ou tâche supprimée : un push par tâche toutes les 10 minutes au plus." checked={on(prefs.pushCreatorUpdates)} onChange={(v) => setPref("pushCreatorUpdates", v)} />
               <PrefRow label="Afficher dans la cloche" hint="L'activité des 7 derniers jours en haut des notifications de l'app." checked={on(prefs.bellCreatorActivity)} onChange={(v) => setPref("bellCreatorActivity", v)} />
             </Card>
             <Card title="Emails" hint="Quand un email arrive sur la boîte de l'agence (Gmail connecté).">

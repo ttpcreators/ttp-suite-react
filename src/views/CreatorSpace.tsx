@@ -76,7 +76,7 @@ import { selectTodosFor } from "@/lib/todoCreatorsDb";
 import { evenementInterne, pourCreateurColumnMissing, pourToi, visibiliteColumnMissing, visiblePourCreateur } from "@/lib/todoVisibility";
 import { ctDroits, ctPeutRetirer } from "@/lib/creatorTodos";
 import { infosPatch } from "@/lib/creatorInfos";
-import { countsByPage, keepOpen, sameOpenObjects, unreadKeys, type OpenObjects } from "@/lib/activityEvents";
+import { countsByPage, keepOpen, sameOpenObjects, throttlePush, unreadKeys, type OpenObjects } from "@/lib/activityEvents";
 import { agencyAwaits, progressColumnMissing } from "@/lib/todoProgress";
 import { CreatorTodos } from "@/components/CreatorTodos";
 import { invoiceHT } from "@/lib/invoice";
@@ -496,6 +496,7 @@ export function CreatorSpace({
   const [taskView, setTaskView] = useState<Todo | null>(null); // fiche tâche (texte complet)
   const [progressOn, setProgressOn] = useState(false); // colonne todos.progress présente (SQL 2026-10-22)
   const pourCreateurOn = useRef(false); // colonne todos.pour_createur présente (SQL 2026-11-27)
+  const pourCreateurAbsent = useRef(false); // colonne vue absente : plus redemandée pendant la visite
   const [subInput, setSubInput] = useState(""); // saisie nouvelle sous-tâche
   const attFileRef = useRef<HTMLInputElement>(null);
   const [attUploading, setAttUploading] = useState(false);
@@ -835,12 +836,16 @@ export function CreatorSpace({
     // Tâches internes de l'agence (pas cochées « Visible par le créateur ») : jamais ici,
     // même dans l'aperçu agence (lib/todoVisibility). Sans la colonne : toutes cachées.
     // « Pour toi » ou « Ton agence s'en occupe » (`pour_createur`, SQL 2026-11-27) : sans la
-    // colonne, on relit sans elle et tout reste « Pour toi ».
+    // colonne, on relit sans elle et tout reste « Pour toi ». Vue absente une fois, elle n'est
+    // plus demandée pendant la visite (sinon une lecture refusée à chaque rafraîchissement).
     const TODO_COLS = "id,text,descr,due,priority,done,status,sort_order,subtasks,attachments,created_at,source";
     const loadTodos = async (cols: string) => {
-      let r = await selectTodosFor<Todo>(name, `${cols},visible_createur,pour_createur`);
-      if (r.error && pourCreateurColumnMissing(r.error)) r = await selectTodosFor<Todo>(name, `${cols},visible_createur`);
-      else if (!r.error) pourCreateurOn.current = true;
+      const avecPour = !pourCreateurAbsent.current;
+      let r = await selectTodosFor<Todo>(name, `${cols},visible_createur${avecPour ? ",pour_createur" : ""}`);
+      if (avecPour && r.error && pourCreateurColumnMissing(r.error)) {
+        pourCreateurAbsent.current = true;
+        r = await selectTodosFor<Todo>(name, `${cols},visible_createur`);
+      } else if (avecPour && !r.error) pourCreateurOn.current = true;
       if (r.error && visibiliteColumnMissing(r.error)) r = await selectTodosFor<Todo>(name, cols);
       return { data: r.data ? r.data.filter(visiblePourCreateur) : r.data, error: r.error };
     };
@@ -1766,7 +1771,8 @@ export function CreatorSpace({
   }, [todos, briefs, ideas]);
   // Son dossier de fichiers (« creator-uploads/<son id>/ ») : sur une tâche demandée par
   // l'agence, il ne retire que ses propres pièces jointes. Aperçu agence : tout dépôt d'un créateur.
-  const [mesFichiers, setMesFichiers] = useState("creator-uploads/");
+  // Vide (aucune à retirer) tant que son id n'est pas lu, jamais les fichiers d'un autre créateur.
+  const [mesFichiers, setMesFichiers] = useState(preview ? "creator-uploads/" : "");
   useEffect(() => {
     if (preview) return;
     let alive = true;
@@ -1856,14 +1862,20 @@ export function CreatorSpace({
 
   /** Tâche que le créateur vient de terminer : son repère « nouveau » n'a plus lieu d'être, et
    *  l'agence est prévenue quand c'est une tâche qu'elle lui avait demandée (push « tâche
-   *  terminée », coupé par le réglage « Aussi quand il écrit sur une tâche »).
+   *  terminée », coupé par le réglage « Aussi quand il écrit sur une tâche »), une fois par
+   *  tâche toutes les 10 min au plus (Fait, Rouvrir puis Fait : un seul push).
    *  Les push « tâche terminée » et « tâche supprimée » partent seulement une fois le SQL du
    *  27/11 lancé (colonne pour_createur lue) : daily-digest est redéployé avec lui, et
    *  l'ancienne version les annoncerait comme une nouvelle tâche. */
+  const doneSent = useRef<Record<string, number>>({});
   const afterTodoDone = (td: Todo) => {
     if (preview) return;
     void markActivityRead("todo", td.id);
-    if (pourCreateurOn.current && td.source === "agency" && pourToi(td)) notifyAgency("tache-faite", name, td.text, td.id);
+    if (!pourCreateurOn.current || td.source !== "agency" || !pourToi(td)) return;
+    const next = throttlePush(doneSent.current, `a:${name}:todo:${td.id}:done`, Date.now());
+    if (!next) return;
+    doneSent.current = next;
+    notifyAgency("tache-faite", name, td.text, td.id);
   };
 
   const markTodo = async (td: Todo, next: boolean): Promise<boolean> => {

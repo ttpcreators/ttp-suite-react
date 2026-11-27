@@ -61,7 +61,7 @@ export function ctKpis(rows: readonly CtTodo[], today: string): Record<CtKpi, nu
  *   « sienne »   : pas une tâche de l'agence, il fait tout ;
  *   « demandee » : l'agence la lui demande ; il la termine, ajoute sous-tâches et fichiers,
  *                  mais ne la modifie, ne la reporte ni ne la supprime ;
- *   « suivie »   : travail de l'agence, il la lit et répond (« Où j'en suis ») seulement.
+ *   « suivie »   : travail de l'agence, il la lit et écrit à son agence (échanges) seulement.
  * Avant le SQL, toute tâche visible de l'agence est « demandee » (voir pourToi).
  */
 export type CtSorte = "sienne" | "demandee" | "suivie";
