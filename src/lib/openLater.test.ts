@@ -12,7 +12,7 @@ describe("viewableUrl", () => {
   });
 
   it("laisse les autres fichiers et les liens externes tels quels", () => {
-    for (const url of [`${SIGN}/briefs/x.pdf?token=a`, "https://drive.google.com/file/d/x.html", "https://canva.com/design/x"]) {
+    for (const url of [`${SIGN}/briefs/x.pdf?token=a`, `${SIGN}/creator-uploads/u1/facture.html?token=a`, `${SIGN}/contracts/../creator-uploads/u1/f.html?token=a`, "https://drive.google.com/file/d/x.html", "https://canva.com/design/x"]) {
       expect(viewableUrl(url)).toBe(url);
     }
   });

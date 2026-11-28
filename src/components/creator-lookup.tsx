@@ -10,6 +10,7 @@ import { fmtAgo, fmtEr, igWhyText, noteQuota } from "@/lib/instagram";
 import { fmtCompact } from "@/lib/timeSeries";
 import { cn, initials } from "@/lib/utils";
 import { IgDmStart } from "@/components/ig-dm-start";
+import { sansFormule } from "@/lib/fichierSur";
 
 /** Un post de collab (ig-sourcing mode « collabs ») et le résumé par marque. */
 type CollabPost = { id: string; url: string; at: string; kind: string; likes: number | null; comments: number; er: number | null; paid: boolean; brands: string[]; caption: string };
@@ -58,8 +59,8 @@ function CreatorCollabs({ u, onLeave }: { u: string; onLeave?: () => void }) {
   const paidCount = data.posts.filter((p) => p.paid).length;
   const exportCsv = () => {
     const cell = (v: unknown) => {
-      const t = String(v ?? "");
-      return /[";\n]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+      const t = sansFormule(v); // jamais lue comme une formule par Excel
+      return /[";\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
     };
     const lines = [["Date", "Marques", "Format", "Payé", "Likes", "Commentaires", "Engagement %", "Lien", "Texte"], ...shown.map((p) => [
       fmtDate(p.at), p.brands.map((b) => `@${b}`).join(" "), p.kind, p.paid ? "oui" : "non", p.likes ?? "masqués", p.comments, p.er ?? "", p.url, p.caption,

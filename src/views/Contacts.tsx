@@ -61,6 +61,7 @@ import { lireEmailCheck, lireSequence } from "../../supabase/functions/_shared/s
 import { CONTACT_TAGS, SYSTEM_TAGS, normaliserTag, tagHorsListe } from "../../supabase/functions/_shared/contactTags.ts";
 import { texteSur } from "../../supabase/functions/_shared/texteSur.ts";
 import { ecrireParLots } from "../../supabase/functions/_shared/ecritureLot.ts";
+import { retirerApostrophe, sansFormule } from "@/lib/fichierSur";
 
 type Row = {
   id: string;
@@ -271,9 +272,9 @@ const FIELD_ALIASES: Record<CsvField, string[]> = {
   city: ["ville", "city", "localite"],
 };
 
-/** Échappe une valeur pour une cellule CSV. */
+/** Échappe une valeur pour une cellule CSV (jamais lue comme une formule par Excel). */
 function csvCell(v: string): string {
-  const s = v ?? "";
+  const s = sansFormule(v);
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 
@@ -320,7 +321,8 @@ function parseCsv(text: string): string[][] {
     }
   }
   if (field.length > 0 || row.length > 0) { row.push(field); rows.push(row); }
-  return rows.filter((r) => r.some((cell) => cell.trim() !== ""));
+  // Un export de l'app préfixe d'une apostrophe les cellules lues comme formule (sansFormule).
+  return rows.filter((r) => r.some((cell) => cell.trim() !== "")).map((r) => r.map(retirerApostrophe));
 }
 
 /** Transforme les lignes CSV en objets contact (mappe l'entête si présent, sinon positionnel). */

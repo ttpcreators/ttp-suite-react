@@ -21,7 +21,7 @@ import { dbInsert, dbUpdate, dbDelete, nextOrder } from "@/lib/db";
 import { writeTodoStatus } from "@/lib/todoStatus";
 import { namePattern, sameName } from "@/lib/nameMatch";
 import { toast } from "@/components/ui/toast";
-import { openLater } from "@/lib/openLater";
+import { openExternal, openLater } from "@/lib/openLater";
 import { consumeIgReturn, etatConnexion, igConnect, igDisconnect, MESSAGES_RAISON, useIgConnexions, type IgCreator, type Raison } from "@/lib/instagram";
 import { IgConnexionBanner } from "@/components/ig-connexion-banner";
 import { IgFeedStats } from "@/components/ig-feed-stats";
@@ -1503,7 +1503,7 @@ export function CreatorSpace({
     const path = doc.path;
     if (!path) return;
     if (/^https?:\/\//i.test(path)) {
-      window.open(path, "_blank");
+      openExternal(path);
       return;
     }
     // Onglet ouvert dans le clic, avant l'await (sinon bloqué sur iPhone).
@@ -2096,7 +2096,7 @@ export function CreatorSpace({
     }
   };
   const openAttachment = async (att: Attachment) => {
-    if (/^https?:\/\//i.test(att.path)) { window.open(att.path, "_blank"); return; }
+    if (/^https?:\/\//i.test(att.path)) { openExternal(att.path); return; }
     // Onglet ouvert dans le clic, avant l'await (sinon bloqué sur iPhone).
     const ok = await openLater(async () => {
       const { data, error } = await supabase.storage.from("documents").createSignedUrl(att.path, 3600);

@@ -11,10 +11,11 @@
 //     de passe (credVault) ;
 //   • les PDF des media kits publiés sur le site (créateurs + agence) ;
 //   • un LISEZMOI.txt, qui dit aussi ce qui n'est pas dans l'archive.
-// L'archive est aussi rangée dans Storage, bucket PRIVÉ « backups » (aucune politique :
-// seul le serveur y accède ; les membres de l'agence ne voient pas les factures),
-// et le mail contient un lien de téléchargement valable 30 jours. Si l'archive dépasse
-// 20 Mo, elle n'est pas jointe : le lien suffit.
+// L'archive est d'abord rangée dans Storage, bucket PRIVÉ « backups » (aucune politique :
+// seul le serveur y accède ; les membres de l'agence ne voient pas les factures). Une fois
+// rangée dans Google Drive, elle est retirée de Storage et le mail ne porte aucun lien. Sans
+// Drive, elle reste dans Storage et le mail porte un lien de téléchargement valable 3 jours
+// (LIEN_JOURS). Si l'archive dépasse 20 Mo, elle n'est pas jointe.
 //
 // Appels :
 //   • pg_cron, le 1er de chaque mois : Authorization: Bearer <CRON_SECRET> ;
@@ -44,6 +45,8 @@ const SITE = "https://ttpcreators.pro";
 const AGENCY_DOMAIN = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLowerCase();
 const ATTACH_MAX = 20 * 1024 * 1024;
 const PDF_MAX = 15 * 1024 * 1024;
+/** Durée du lien de téléchargement mis dans le mail (archive restée dans Storage). */
+const LIEN_JOURS = 3;
 
 type Sb = ReturnType<typeof getServiceClient>;
 
@@ -227,14 +230,10 @@ async function runBackup(sb: Sb, now: Date): Promise<Out> {
   const zip = zipSync(files, { level: 6 });
   const name = `sauvegarde-ttp-${month}.zip`;
 
-  // 4) Rangée dans Storage + lien 30 jours
+  // 4) Rangée dans Storage (le lien éventuel est créé après Drive, étape 5 bis)
   const path = name;
   let link = "";
   const up = await sb.storage.from("backups").upload(path, zip, { contentType: "application/zip", upsert: true });
-  if (!up.error) {
-    const { data: s } = await sb.storage.from("backups").createSignedUrl(path, 30 * 86400);
-    link = s?.signedUrl ?? "";
-  }
 
   // 5) Google Drive (même jeton Google que l'envoi du mail)
   let token = "";
@@ -260,6 +259,17 @@ async function runBackup(sb: Sb, now: Date): Promise<Out> {
       console.error("monthly-backup drive", String(e).slice(0, 300));
     }
   }
+  // 5 bis) Rangée dans Drive : retirée de Storage, aucun lien dans le mail. Sinon, lien court.
+  let stored = !up.error;
+  if (stored && drive === "ok") {
+    const { error: rmErr } = await sb.storage.from("backups").remove([path]);
+    if (rmErr) console.error("monthly-backup retrait de Storage", rmErr.message.slice(0, 200));
+    else stored = false;
+  }
+  if (stored) {
+    const { data: s } = await sb.storage.from("backups").createSignedUrl(path, LIEN_JOURS * 86400);
+    link = s?.signedUrl ?? "";
+  }
   const driveNote =
     drive === "ok"
       ? `<p>Rangée aussi dans ton Google Drive : dossier « TTP Suite · Sauvegardes » (les contacts à part dans « Contacts »).</p>`
@@ -284,13 +294,17 @@ async function runBackup(sb: Sb, now: Date): Promise<Out> {
   const manque = [...missing, ...nonClassees.map((n) => `${n} (table pas classée)`)];
   const html =
     `<p>Bonjour,</p><p>Voici la sauvegarde mensuelle de TTP Suite (${month}).` +
-    (attach ? " L'archive est jointe à ce mail." : ` L'archive fait ${mb} Mo : trop lourde pour être jointe, elle est à télécharger avec le lien ci-dessous.`) +
+    (attach
+      ? " L'archive est jointe à ce mail."
+      : link
+        ? ` L'archive fait ${mb} Mo : trop lourde pour être jointe, elle est à télécharger avec le lien ci-dessous.`
+        : ` L'archive fait ${mb} Mo : trop lourde pour être jointe.`) +
     `</p>` +
     (missing.length ? `<p style="color:#b00020"><b>Sauvegarde incomplète.</b> Non lu ce jour-là : ${missing.join(", ")}. Relance « Envoyer maintenant » dans Paramètres.</p>` : "") +
     (nonClassees.length ? `<p style="color:#b00020"><b>Tables pas sauvegardées.</b> Nouvelles en base, pas encore classées : ${nonClassees.join(", ")}. À ajouter à la liste de la sauvegarde (_shared/backupTables.ts).</p>` : "") +
     (controle ? "" : `<p style="color:#777;font-size:12px">Contrôle des tables en base impossible ce jour-là : la liste de l'app fait foi.</p>`) +
     ecartees +
-    (link ? `<p><a href="${link}">Télécharger la sauvegarde (${mb} Mo)</a> · lien valable 30 jours.</p>` : "") +
+    (link ? `<p><a href="${link}">Télécharger la sauvegarde (${mb} Mo)</a> · lien valable ${LIEN_JOURS} jours.</p>` : "") +
     driveNote +
     `<table style="border-collapse:collapse;font-size:13px">${counts.map((c) => `<tr><td style="padding:2px 12px 2px 0">${c.name}</td><td style="padding:2px 0;color:#555">${c.n}</td></tr>`).join("")}</table>` +
     `<p style="color:#777;font-size:12px">Le coffre des mots de passe n'est jamais inclus. Garde ce mail en lieu sûr.</p>`;

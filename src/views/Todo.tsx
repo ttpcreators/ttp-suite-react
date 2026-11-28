@@ -48,7 +48,7 @@ import { appendPoint, latestPoint, parsePoints, progressColumnMissing } from "@/
 import { TONE_DOT, TONE_TEXT, type StatusTone } from "@/lib/statusTone";
 import { useAppState, mergeAppStateKey, getAppState, invalidateAppState, type AppState } from "@/lib/appState";
 import { getCache, setCache } from "@/lib/viewCache";
-import { openLater } from "@/lib/openLater";
+import { openExternal, openLater } from "@/lib/openLater";
 import { StatusSelect, type StatusOption } from "@/components/ui/status-select";
 import {
   Select,
@@ -455,7 +455,7 @@ export function Todo() {
       window.dispatchEvent(new CustomEvent("ttp-navigate", { detail: "mails" }));
       return;
     }
-    if (/^https?:\/\//i.test(att.path)) { window.open(att.path, "_blank"); return; }
+    if (/^https?:\/\//i.test(att.path)) { openExternal(att.path); return; }
     // Onglet ouvert dans le clic, avant l'await (sinon bloqué sur iPhone).
     const ok = await openLater(async () => {
       const { data, error } = await supabase.storage.from("documents").createSignedUrl(att.path, 3600);

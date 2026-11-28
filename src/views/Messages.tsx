@@ -18,6 +18,7 @@ import { fmtCompact } from "@/lib/timeSeries";
 import { fmtAgo, igWhyText, noteQuota } from "@/lib/instagram";
 import { useIntent } from "@/lib/openIntent";
 import { couper } from "../../supabase/functions/_shared/texteSur.ts";
+import { sansFormule } from "@/lib/fichierSur";
 
 /**
  * DM INSTAGRAM (agence) : les messages privés du compte Instagram de TTP, lus toutes
@@ -497,7 +498,11 @@ function EmailsPanel({ threads, contacts, onClose, onOpen }: {
     }
   };
   const exportCsv = () => {
-    const cell = (v: string) => (/[";\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+    // Jamais lue comme une formule par Excel (sansFormule), puis échappée.
+    const cell = (v: string) => {
+      const t = sansFormule(v);
+      return /[";\n\r]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t;
+    };
     const lines = [["Email", "Nom", "Instagram", "Fiche contact", "Dernier échange"], ...shown.map((r) => [
       r.email, r.t.name ?? "", r.t.username ? `@${r.t.username}` : "", r.fiche ?? "", r.t.updated_at ? new Date(r.t.updated_at).toLocaleDateString("fr-FR") : "",
     ])].map((l) => l.map(cell).join(";"));
