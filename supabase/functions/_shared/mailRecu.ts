@@ -9,10 +9,13 @@
 //     (mailer-daemon@, postmaster@) ET au format des avis (multipart/report,
 //     report-type=delivery-status), ou un avis de Google avec l'en-tête X-Failed-Recipients. Un
 //     avis qui se dit de Google doit être signé par Google. Le nom affiché et l'objet seuls ne
-//     suffisent jamais ;
+//     suffisent jamais. Le format seul ne prouve rien (n'importe qui peut l'écrire) : la relève ne
+//     garde l'avis que s'il suit un envoi réel de l'agence à l'adresse citée
+//     (_shared/ancreRebond.ts), sinon le mail est noté douteux ;
 //   - un expéditeur authentifié (expediteurAuthentifie) : dans l'en-tête Authentication-Results
 //     posé par Google, DMARC « pass » pour le domaine de son adresse ; quand Google ne rend aucun
-//     résultat DMARC (domaine sans règle DMARC), un SPF ou un DKIM « pass » aligné sur ce domaine.
+//     résultat DMARC (domaine sans règle DMARC, ou « bestguesspass », une estimation de Google), un
+//     SPF ou un DKIM « pass » aligné sur ce domaine.
 //     Seule une réponse authentifiée arrête une séquence ou montre qu'une adresse marche ;
 //   - la source notée au journal (email_activity.source) qui garde ce verdict : « inbox-rebond »,
 //     « inbox-verifie » ou « inbox-douteux ». Les lignes écrites avant (« inbox ») sont lues avec
@@ -28,7 +31,7 @@ const ADRESSE = /^[^\s@<>()[\]\\,;:"]+@[^\s@<>()[\]\\,;:"]+\.[^\s@<>()[\]\\,;:".
  * hors commentaires (`angle`, null s'il n'y en a pas) et sa position, le texte hors guillemets,
  * commentaires et <…> (`hors`), et le premier commentaire (`note`).
  */
-function lireFrom(s: string): { angle: string | null; pos: number; hors: string; note: string } {
+function lireFrom(s: string): { angle: string | null; pos: number; hors: string; note: string; ouvert: boolean } {
   let guillemets = false;
   let profondeur = 0;
   let ouvert = -1;
@@ -73,12 +76,17 @@ function lireFrom(s: string): { angle: string | null; pos: number; hors: string;
     } else if (c === "<") ouvert = i;
     else hors += c;
   }
-  return { angle, pos, hors, note };
+  return { angle, pos, hors, note, ouvert: guillemets || profondeur > 0 || ouvert >= 0 };
 }
 
-/** Adresse de l'expéditeur d'un en-tête From (minuscules), ou "" si elle est illisible. */
+/**
+ * Adresse de l'expéditeur d'un en-tête From (minuscules), ou "" si elle est illisible : en-tête
+ * mal formé (guillemet, commentaire ou chevron resté ouvert à la fin) ou plusieurs adresses (une
+ * virgule hors guillemets, commentaires et <…>).
+ */
 export function adresseDe(from: string): string {
-  const { angle, hors } = lireFrom(String(from ?? ""));
+  const { angle, hors, ouvert } = lireFrom(String(from ?? ""));
+  if (ouvert || hors.includes(",")) return "";
   const brut = (angle !== null ? angle : hors).trim().toLowerCase();
   return ADRESSE.test(brut) ? brut : "";
 }
@@ -199,8 +207,9 @@ function aligne(a: string, b: string): boolean {
 
 /**
  * L'expéditeur `adresse` est-il authentifié par Google (`auth` : authentificationGoogle) ? DMARC
- * « pass » pour le domaine de l'adresse ; sans résultat DMARC (domaine sans règle DMARC), un
- * DKIM ou un SPF « pass » aligné sur ce domaine. Un DMARC en échec ne se rattrape jamais.
+ * « pass » pour le domaine de l'adresse ; sans résultat DMARC (domaine sans règle DMARC, ou
+ * « bestguesspass » : Google estime, le domaine n'a rien publié), un DKIM ou un SPF « pass »
+ * aligné sur ce domaine. Un DMARC en échec ne se rattrape jamais.
  */
 export function expediteurAuthentifie(auth: string | undefined, adresse: string): boolean {
   const a = String(adresse ?? "").trim().toLowerCase();
@@ -208,7 +217,7 @@ export function expediteurAuthentifie(auth: string | undefined, adresse: string)
   if (!dom) return false;
   const { serveur, resultats } = lireAuthentification(auth ?? "");
   if (serveur !== SERVEUR_GOOGLE) return false;
-  const dmarc = resultats.filter((r) => r.methode === "dmarc" && r.resultat !== "none");
+  const dmarc = resultats.filter((r) => r.methode === "dmarc" && r.resultat !== "none" && r.resultat !== "bestguesspass");
   if (dmarc.length) return dmarc.every((r) => r.resultat === "pass") && dmarc.some((r) => r.props["header.from"] === dom);
   return resultats.some((r) => r.resultat === "pass" && (
     (r.methode === "dkim" && aligne(dom, domaineDe(r.props["header.d"] || r.props["header.i"] || ""))) ||

@@ -22,7 +22,7 @@
 // gmail_message_id, donc ni doublon ni nouvelle alerte au passage suivant).
 // Expéditeur (28/11, _shared/mailRecu.ts) : l'adresse réelle de l'en-tête From, jamais une
 // adresse du nom affiché ; chaque mail est classé avis de non-remise (format des avis, adresse de
-// robot), expéditeur authentifié (Authentication-Results de Google : DMARC, sinon SPF ou DKIM
+// robot, et envoi réel de l'agence à l'adresse citée : _shared/ancreRebond.ts), expéditeur authentifié (Authentication-Results de Google : DMARC, sinon SPF ou DKIM
 // alignés) ou douteux, et ce verdict est noté au journal (email_activity.source : inbox-rebond,
 // inbox-verifie, inbox-douteux) pour les séquences et la file d'envoi.
 // ============================================================================
@@ -36,6 +36,7 @@ import { closeAnsweredTasks, tasksFromMails } from "./tasks.ts";
 import { suivreReponses } from "./sequences.ts";
 import { excluFromMails } from "./exclu.ts";
 import { isUnread, rowsNowRead, threadsToClose, type UnreadByBox } from "../_shared/mailLu.ts";
+import { ancrerAvis } from "../_shared/ancreRebond.ts";
 import { adresseDe, authentificationGoogle, estAvisDeNonRemise, expediteurAuthentifie, nomAffiche, sourceDuJournal } from "../_shared/mailRecu.ts";
 import { couper, texteSur } from "../_shared/texteSur.ts";
 
@@ -325,6 +326,20 @@ Deno.serve(async (req: Request) => {
     }
   }));
 
+  // Un avis de non-remise ne compte que s'il suit un envoi réel de l'agence à l'adresse qu'il
+  // cite (_shared/ancreRebond.ts) ; sinon il est noté douteux et ne change aucune fiche.
+  let avisDouteux = 0;
+  try {
+    avisDouteux = await ancrerAvis(sb, fresh, AGENCY_DOMAIN);
+  } catch (e) {
+    for (const f of fresh) if (f.avis) {
+      f.avis = false;
+      f.verifie = false;
+      avisDouteux++;
+    }
+    console.error("gmail-poll avis : envois illisibles, avis notés douteux", (e as Error)?.message);
+  }
+
   // Enregistre les mails reçus (pour la cloche) — dédoublonné par gmail_message_id
   // (et, dans un même passage, par Message-ID : un mail adressé aux deux boîtes compte une fois).
   fresh.sort((a, b) => a.ts - b.ts);
@@ -456,6 +471,7 @@ Deno.serve(async (req: Request) => {
 
   return jsonRes({
     ok: true, new: added.length, pushed, read, creatorPushed, tasks, tasksDone, exclu, ...sequences,
+    ...(avisDouteux ? { avisDouteux } : {}),
     ...(baseline ? { baseline: true } : {}),
     ...(more ? { more: true } : {}),
     ...(failedBoxes.length ? { partial: true, failedBoxes } : {}),

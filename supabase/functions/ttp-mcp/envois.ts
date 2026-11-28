@@ -16,7 +16,8 @@
 // (verrou.ts). Chaque ligne garde la connexion qui l'a programmée, relue avant l'envoi : cochée
 // « agent autonome » depuis, une ligne sans validation ne part pas.
 // Depuis le 28/11 : le journal des mails reçus est lu avec le verdict de la relève
-// (email_activity.source, _shared/mailRecu.ts) ; « ne plus contacter » compare les adresses
+// (email_activity.source, _shared/mailRecu.ts), et un rebond n'y compte que s'il suit un envoi
+// réel de l'agence à l'adresse (_shared/ancreRebond.ts) ; « ne plus contacter » compare les adresses
 // exactement (« * » refusé, retrait par id, envois prévus retirés adresse par adresse).
 // Règles pures : _shared/fileEnvoi.ts. Tables : SQL 2026-11-25-file-envoi, puis
 // 2026-11-27-verrou-connexions (envoi_file.proposition et grant_id).
@@ -33,9 +34,10 @@ import { modifieApres, raisonConnexionFile } from "../_shared/verrouAgent.ts";
 import { colonneAuteurAbsente, idDejaJournalise, lignesEnvoi, nomAuteur, sansAuteur, sansIdGmail, type Auteur } from "../_shared/auteurEnvoi.ts";
 import { couper, str, texteSur } from "../_shared/texteSur.ts";
 import { ilikeContient, ilikeExact, lignesExactes } from "../_shared/ilikeExact.ts";
+import { envoisVers } from "../_shared/ancreRebond.ts";
 import {
-  MAX_PROGRAMMES, REGLES, adresses, cleSociete, dansLaFenetre, etatPalier, journalDesAdresses, jourParis, ligneFile, lignesVers, planifier, quandCourt, raisonDeBloquer,
-  rebondsDuJournal, rebondsQuiComptent, texteListe, type EnvoiRecent, type EtatPalier, type FicheVerifiee, type LigneFile, type MailRecu, type NePlusContacter,
+  ANCRE_REBOND_JOURS, MAX_PROGRAMMES, REGLES, adresses, cleSociete, dansLaFenetre, etatPalier, journalDesAdresses, jourParis, ligneFile, lignesVers, planifier, quandCourt, raisonDeBloquer,
+  rebondsAncres, rebondsDuJournal, rebondsQuiComptent, texteListe, type EnvoiRecent, type EtatPalier, type FicheVerifiee, type LigneFile, type MailRecu, type NePlusContacter,
 } from "../_shared/fileEnvoi.ts";
 
 type Json = Record<string, unknown>;
@@ -95,7 +97,8 @@ async function rebondsLus(sb: SupabaseClient, depuis: string): Promise<EnvoiRece
 
 /**
  * Contrôle d'avant envoi : ce que le journal des mails reçus dit de ces adresses depuis `depuis`,
- * leurs rebonds (avis de non-remise qui cite l'adresse) et les mails venus d'elles d'un expéditeur
+ * leurs rebonds (avis de non-remise qui cite l'adresse, après un envoi réel de l'agence à cette
+ * adresse dans les 7 jours avant l'avis) et les mails venus d'elles d'un expéditeur
  * authentifié (elle marche). La requête ne vise que ces adresses (20 au plus, motifs exacts de
  * _shared/ilikeExact.ts) : la limite ne coupe jamais un vieux rebond. Lecture ratée : rien, noté
  * dans les journaux de la fonction (le contrôle garde ses autres règles).
@@ -110,7 +113,13 @@ async function journalDes(sb: SupabaseClient, emails: string[], depuis: string):
     console.warn("ttp-mcp contrôle d'envoi : journal des mails illisible, rebonds non vérifiés", error.message);
     return { rebonds: [], recus: [] };
   }
-  return journalDesAdresses((data as MailRecu[] | null) ?? [], vises, AGENCE);
+  const lu = journalDesAdresses((data as MailRecu[] | null) ?? [], vises, AGENCE);
+  if (!lu.rebonds.length) return lu;
+  // Un rebond ne compte que s'il suit un envoi réel de l'agence à l'adresse (_shared/ancreRebond.ts).
+  const plusTot = Math.min(...lu.rebonds.map((r) => Date.parse(r.at)).filter(Number.isFinite), Date.now());
+  const envois = await envoisVers(sb, lu.rebonds.map((r) => r.email), new Date(plusTot - ANCRE_REBOND_JOURS * 86_400_000).toISOString());
+  if (!envois) console.warn("ttp-mcp contrôle d'envoi : envois illisibles, rebonds du journal non comptés");
+  return { rebonds: envois ? rebondsAncres(lu.rebonds, envois) : [], recus: lu.recus };
 }
 
 /** Premiers mails partis depuis `jours` jours vers les mêmes sociétés (journal des mails et file). */
@@ -458,7 +467,9 @@ async function etatCoupeCircuit(sb: SupabaseClient, now = new Date()): Promise<E
       sb.from("contacts").select("email").eq("email_check->>statut", "erreur").gte("email_check->>le", debutJour).limit(500),
       rebondsLus(sb, debutJour),
     ]);
-    const autres = [...((err as Json[] | null) ?? []).map((c) => String(c.email ?? "").trim().toLowerCase()), ...journal.map((r) => r.email)];
+    // Rebonds du journal : seulement ceux qui suivent un mail parti aujourd'hui vers l'adresse.
+    const partisVers = partis.flatMap((r) => adresses(r.destinataires).map((e) => ({ email: e, at: String(r.envoye_at ?? "") })));
+    const autres = [...((err as Json[] | null) ?? []).map((c) => String(c.email ?? "").trim().toLowerCase()), ...rebondsAncres(journal, partisVers).map((r) => r.email)];
     for (const e of autres) if (emails.includes(e)) enRebond.add(e);
   }
   const rebonds = partis.filter((r) => adresses(r.destinataires).some((e) => enRebond.has(e))).length;

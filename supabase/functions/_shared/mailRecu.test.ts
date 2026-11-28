@@ -37,6 +37,17 @@ describe("adresseDe : la vraie adresse de l'expéditeur", () => {
     expect(adresseDe("\"jean@marque-exemple.fr\"")).toBe("");
     expect(adresseDe("Jean <pas une adresse>")).toBe("");
   });
+  it("en-tête mal formé : guillemet, commentaire ou chevron resté ouvert à la fin", () => {
+    expect(adresseDe("<jean@marque-exemple.fr> ( <autre@autre-exemple.fr>")).toBe("");
+    expect(adresseDe("<jean@marque-exemple.fr> \" <autre@autre-exemple.fr>")).toBe("");
+    expect(adresseDe("<jean@marque-exemple.fr> <autre@autre-exemple.fr")).toBe("");
+  });
+  it("plusieurs adresses (virgule hors guillemets, commentaires et <…>) : aucune n'est choisie", () => {
+    expect(adresseDe("<autre@autre-exemple.fr>, <jean@marque-exemple.fr>")).toBe("");
+    expect(adresseDe("Autre <autre@autre-exemple.fr>, Jean <jean@marque-exemple.fr>")).toBe("");
+    expect(adresseDe("Martin, Jean <jean@marque-exemple.fr>")).toBe("");
+    expect(adresseDe("Jean (Martin, Jean) <jean@marque-exemple.fr>")).toBe("jean@marque-exemple.fr");
+  });
   it("« * » reste lisible ici : c'est la recherche (ilikeExact) qui le refuse", () => {
     expect(adresseDe("<a*@marque-exemple.fr>")).toBe("a*@marque-exemple.fr");
   });
@@ -126,6 +137,13 @@ describe("expéditeur authentifié", () => {
     expect(expediteurAuthentifie("mx.google.com; spf=pass smtp.mailfrom=x@autremarque-exemple.fr", "jean@marque-exemple.fr")).toBe(false);
     expect(expediteurAuthentifie("mx.google.com; spf=softfail smtp.mailfrom=jean@marque-exemple.fr", "jean@marque-exemple.fr")).toBe(false);
     expect(expediteurAuthentifie("mx.google.com; spf=neutral smtp.mailfrom=jean@marque-exemple.fr", "jean@marque-exemple.fr")).toBe(false);
+  });
+  it("« bestguesspass » (estimation de Google, domaine sans DMARC publié) : comme sans DMARC", () => {
+    const base = "mx.google.com; dmarc=bestguesspass header.from=marque-exemple.fr";
+    expect(expediteurAuthentifie(`${base}; dkim=pass header.d=marque-exemple.fr`, "jean@marque-exemple.fr")).toBe(true);
+    expect(expediteurAuthentifie(`${base}; spf=pass smtp.mailfrom=jean@marque-exemple.fr`, "jean@marque-exemple.fr")).toBe(true);
+    expect(expediteurAuthentifie(base, "jean@marque-exemple.fr")).toBe(false);
+    expect(expediteurAuthentifie(`${base}; dkim=pass header.d=autre-exemple.fr`, "jean@marque-exemple.fr")).toBe(false);
   });
   it("en-tête d'un autre serveur, absent, ou adresse illisible : non", () => {
     expect(expediteurAuthentifie("relais.exemple.net; dmarc=pass header.from=marque-exemple.fr", "jean@marque-exemple.fr")).toBe(false);

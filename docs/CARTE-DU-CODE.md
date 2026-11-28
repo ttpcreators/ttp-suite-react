@@ -431,6 +431,7 @@ commandes en base contiennent le secret des crons : ne jamais les recopier dans 
 | `mailKind.ts` | Fil qui n'attend pas de réponse (absence, notification, newsletter, transfert) | `gmail-history`, `creator-mail` |
 | `mailLu.ts` | Un mail ouvert dans Gmail ou Spark devient « lu » dans l'app | `gmail-poll` |
 | `mailRecu.ts` | Un mail reçu : adresse réelle de l'expéditeur (jamais une adresse du nom affiché), vrai avis de non-remise (adresse de robot et format des avis, ou avis de Google signé), expéditeur authentifié (Authentication-Results de Google : DMARC, sinon SPF ou DKIM alignés), verdict noté au journal (`email_activity.source` : `inbox-rebond`, `inbox-verifie`, `inbox-douteux`) | `gmail-poll`, `sequence.ts`, `fileEnvoi.ts` |
+| `ancreRebond.ts` | Un avis de non-remise ne compte que s'il suit un envoi réel de l'agence à l'adresse citée (journal des mails envoyés ou file d'envoi, 7 jours) ; sinon il est noté douteux | `gmail-poll`, `ttp-mcp` (`envois.ts`) |
 | `ilikeExact.ts` | Retrouver une fiche par une valeur venue de l'extérieur : motif ilike échappé, « * » refusé (joker de PostgREST que rien n'échappe), lignes gardées à l'égalité près avant une écriture par id | `gmail-poll`, `rdv`, `ttp-mcp` (`envois.ts`, `prospection.ts`) |
 | `mailModels.ts` | Modèles de mails fournis par l'app, copie de `src/lib/mailModels.ts` (test `mailModelsSync.test.ts`) | `ttp-mcp` (`reglages_app`) |
 | `gmailDrafts.ts` | Brouillons Gmail du dossier « Brouillons » (ceux de Claude repérés) | `gmail-history`, `gmail-thread` |

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  REGLES, adresses, cleSociete, dansLaFenetre, etatPalier, journalDesAdresses, ligneFile, lignesVers, planifier, prochainCreneau, quandCourt, raisonDeBloquer, rebondsDuJournal, rebondsQuiComptent,
+  ANCRE_REBOND_JOURS, REGLES, adresses, cleSociete, dansLaFenetre, etatPalier, journalDesAdresses, ligneFile, lignesVers, planifier, prochainCreneau, quandCourt, raisonDeBloquer, rebondAncre, rebondsAncres, rebondsDuJournal, rebondsQuiComptent,
   texteListe,
 } from "./fileEnvoi.ts";
 
@@ -179,6 +179,29 @@ describe("file d'envoi : rebonds lus dans le journal des mails reçus", () => {
     expect(journalDesAdresses(lignes, ["jean@marque-exemple.fr"], "ttpcreators.pro").recus).toEqual([]);
     const verifie = [lignes[0], { ...lignes[1], source: "inbox-verifie" }];
     expect(journalDesAdresses(verifie, ["jean@marque-exemple.fr"], "ttpcreators.pro").recus).toEqual([{ email: "jean@marque-exemple.fr", at: "2026-11-26T15:00:00Z" }]);
+  });
+});
+
+describe("file d'envoi : un rebond suit un envoi réel", () => {
+  const rebond = { email: "jean@marque-exemple.fr", at: "2026-11-26T09:00:00Z" };
+  it("envoi à cette adresse exacte dans les 7 jours avant l'avis", () => {
+    expect(ANCRE_REBOND_JOURS).toBe(7);
+    expect(rebondAncre(rebond, [{ email: "Jean@Marque-Exemple.fr", at: "2026-11-26T08:59:00Z" }])).toBe(true);
+    expect(rebondAncre(rebond, [{ email: "jean@marque-exemple.fr", at: "2026-11-19T09:00:00Z" }])).toBe(true);
+    // Avis presque en même temps que l'envoi (horloges) : accepté à 10 minutes près.
+    expect(rebondAncre(rebond, [{ email: "jean@marque-exemple.fr", at: "2026-11-26T09:05:00Z" }])).toBe(true);
+  });
+  it("aucun envoi, trop ancien, après l'avis, ou à une autre adresse : le rebond ne compte pas", () => {
+    expect(rebondAncre(rebond, [])).toBe(false);
+    expect(rebondAncre(rebond, [{ email: "jean@marque-exemple.fr", at: "2026-11-19T08:59:00Z" }])).toBe(false);
+    expect(rebondAncre(rebond, [{ email: "jean@marque-exemple.fr", at: "2026-11-26T10:00:00Z" }])).toBe(false);
+    expect(rebondAncre(rebond, [{ email: "anne@marque-exemple.fr", at: "2026-11-26T08:00:00Z" }])).toBe(false);
+    expect(rebondAncre({ email: "jean@marque-exemple.fr", at: "" }, [{ email: "jean@marque-exemple.fr", at: "2026-11-26T08:00:00Z" }])).toBe(false);
+    expect(rebondAncre(rebond, [{ email: "jean@marque-exemple.fr", at: "" }])).toBe(false);
+  });
+  it("rebondsAncres garde seulement les rebonds ancrés", () => {
+    const autre = { email: "anne@marque-exemple.fr", at: "2026-11-26T09:00:00Z" };
+    expect(rebondsAncres([rebond, autre], [{ email: "jean@marque-exemple.fr", at: "2026-11-25T09:00:00Z" }])).toEqual([rebond]);
   });
 });
 

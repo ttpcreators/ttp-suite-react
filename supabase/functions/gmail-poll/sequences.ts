@@ -9,7 +9,8 @@
 //     aucun mail envoyé) ;
 //   - un rebond : l'adresse est marquée « en erreur » sur la fiche et sa séquence s'arrête.
 // Depuis le 28/11 (_shared/mailRecu.ts) : l'expéditeur est l'adresse réelle de l'en-tête From ;
-// un rebond n'est lu que dans un vrai avis de non-remise (`avis`, classé par la relève) ; une
+// un rebond n'est lu que dans un vrai avis de non-remise qui suit un envoi réel de l'agence à
+// l'adresse citée (`avis`, classé par la relève : _shared/ancreRebond.ts) ; une
 // réponse ne change la fiche (séquence, journal) que si son expéditeur est authentifié
 // (`verifie`), sinon seule une tâche « Réponse à lire » la signale. Les recherches par adresse
 // sont exactes (_shared/ilikeExact.ts : « * » refusé).
@@ -74,7 +75,8 @@ export async function suivreReponses(sb: Sb, mails: Mail[], domaineAgence: strin
   for (const m of mails) {
     const now = new Date(m.ts || Date.now());
     const jour = new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
-    // Rebond : seulement un vrai avis de non-remise (adresseEnRebond lit l'adresse réelle du robot).
+    // Rebond : seulement un vrai avis de non-remise ancré sur un envoi réel (adresseEnRebond lit
+    // l'adresse réelle du robot).
     const rebond = m.avis ? adresseEnRebond(m, domaineAgence) : null;
     if (rebond) {
       const noteFile = await noterRebondFile(sb, rebond, now);

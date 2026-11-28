@@ -23,7 +23,8 @@
 // gmail-poll note sur la ligne de la file et les fiches marquées en erreur du jour.
 // Depuis le 28/11 : le journal garde le verdict de la relève (email_activity.source,
 // _shared/mailRecu.ts). Seul un vrai avis de non-remise compte comme rebond, et seul un mail d'un
-// expéditeur authentifié montre que l'adresse marche ; le nom affiché ne compte jamais.
+// expéditeur authentifié montre que l'adresse marche ; le nom affiché ne compte jamais. Un rebond
+// ne compte que s'il suit un envoi réel de l'agence à cette adresse (rebondAncre).
 // Règles PURES (heure de Paris), testées par fileEnvoi.test.ts.
 // ============================================================================
 
@@ -301,6 +302,31 @@ export function journalDesAdresses(lignes: readonly MailRecu[], vises: readonly 
     if (v.has(de)) recus.push({ email: de, at: String(l.created_at ?? "") });
   }
   return { rebonds: rebondsDuJournal(lignes, agence).filter((r) => v.has(r.email)), recus };
+}
+
+/** Jours pendant lesquels un avis de non-remise peut suivre l'envoi qu'il signale (un serveur réessaie jusqu'à 5 jours). */
+export const ANCRE_REBOND_JOURS = 7;
+/** Écart d'horloge accepté entre l'heure d'un envoi au journal et celle de l'avis reçu. */
+const ANCRE_MARGE_MS = 10 * 60_000;
+
+/**
+ * Un rebond est-il ancré sur un envoi réel : un mail de l'agence (`envois` : journal des mails
+ * envoyés ou file d'envoi) vers cette adresse exacte, parti dans les `jours` jours avant l'avis ?
+ * Un avis bien formaté qui ne suit aucun envoi ne prouve rien : il ne compte pas.
+ */
+export function rebondAncre(r: EnvoiRecent, envois: readonly EnvoiRecent[], jours = ANCRE_REBOND_JOURS): boolean {
+  const email = String(r.email ?? "").trim().toLowerCase();
+  const t = Date.parse(r.at);
+  if (!email || !Number.isFinite(t)) return false;
+  return envois.some((e) => {
+    const te = Date.parse(e.at);
+    return String(e.email ?? "").trim().toLowerCase() === email && Number.isFinite(te) && te <= t + ANCRE_MARGE_MS && te >= t - jours * 86_400_000;
+  });
+}
+
+/** Les rebonds ancrés sur un envoi réel (rebondAncre). */
+export function rebondsAncres(rebonds: readonly EnvoiRecent[], envois: readonly EnvoiRecent[], jours = ANCRE_REBOND_JOURS): EnvoiRecent[] {
+  return rebonds.filter((r) => rebondAncre(r, envois, jours));
 }
 
 /**
