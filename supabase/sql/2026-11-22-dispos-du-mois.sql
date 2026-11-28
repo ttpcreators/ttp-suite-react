@@ -13,6 +13,8 @@
 -- ORDRE : ce SQL peut être lancé avant ou après `supabase functions deploy dispos-du-mois` ;
 -- tant que la fonction n'est pas déployée, l'appel du 1er échoue sans rien casser.
 -- Relançable sans risque. Contrôle en fin de fichier.
+-- APRÈS UNE RELANCE : relancer ensuite 2026-11-28-listes-par-lien.sql (ce fichier redonne
+-- à anon la lecture directe de la vue public_creator_lists, que le fichier du 28/11 retire).
 -- ============================================================================
 
 -- 1) La sélection du mois ------------------------------------------------------------

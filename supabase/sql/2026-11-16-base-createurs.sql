@@ -11,6 +11,8 @@
 --   4. public_creator_lists : la vue anonyme lue par ttpcreators.pro/selection/ ; seulement les
 --      listes publiques, seulement des chiffres publics (jamais d'email, de bio ni de note).
 -- Relançable sans risque. Contrôle en fin de fichier.
+-- APRÈS UNE RELANCE : relancer ensuite 2026-11-28-listes-par-lien.sql (ce fichier redonne
+-- à anon la lecture directe de la vue public_creator_lists, que le fichier du 28/11 retire).
 -- ============================================================================
 
 -- 1) Niche, ville, note et retrait ------------------------------------------------
