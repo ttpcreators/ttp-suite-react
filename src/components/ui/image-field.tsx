@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent } from "react";
 import { Spin } from "@/components/ui/loader";
 import { Trash2, Camera } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
+import { cheminAvatar, extensionImage } from "@/lib/fichierSur";
 import { toast } from "@/components/ui/toast";
 
 /**
@@ -86,7 +87,7 @@ export function ImageField({
     // Compression fail-safe : logo → PNG 512px, photo/capture → JPEG 1600px.
     // Si le réencodage échoue (format exotique, canvas indispo), on uploade l'original.
     let blob: Blob = file;
-    let ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    let ext = extensionImage(file);
     let contentType = file.type || "image/jpeg";
     try {
       if (kind === "logo") {
@@ -102,7 +103,9 @@ export function ImageField({
       blob = file; // repli : fichier d'origine tel quel
     }
     const s = (slug || "creator").replace(/[^a-z0-9-]/g, "") || "creator";
-    const path = `mediakit/${s}/${field}-${Date.now()}.${ext}`;
+    // Rangé dans le dossier du compte qui dépose (creators/<id>/…, règle avatars_obj_insert).
+    const { data: sess } = await supabase.auth.getSession();
+    const path = cheminAvatar(sess.session?.user.id, `mediakit/${s}/${field}-${Date.now()}.${ext}`);
     const { error } = await supabase.storage.from("avatars").upload(path, blob, { upsert: false, cacheControl: "3600", contentType });
     setBusy(false);
     if (error) return toast("Échec de l'upload, réessaie");

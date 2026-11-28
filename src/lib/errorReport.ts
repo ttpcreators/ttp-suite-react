@@ -53,7 +53,8 @@ export function reportError(err: unknown, opts: { componentStack?: string; page?
           page,
           stack: String(e?.stack ?? "").slice(0, 4000),
           componentStack: String(opts.componentStack ?? "").slice(0, 4000),
-          url: typeof location !== "undefined" ? location.href : "",
+          // Adresse sans « ? » ni « # » : un lien de connexion y porte ses jetons.
+          url: typeof location !== "undefined" ? location.origin + location.pathname : "",
           userAgent: typeof navigator !== "undefined" ? navigator.userAgent : "",
         },
       })
