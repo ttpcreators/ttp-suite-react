@@ -3,7 +3,8 @@
 //   • MIN_MOT_DE_PASSE : longueur minimale d'un mot de passe, la même dans l'app
 //     (src/lib/passwordRecovery.ts, page Accès) et dans la fonction create-access.
 //   • resetAutorise : « Nouveau mot de passe » (create-access, action reset) ne touche jamais
-//     le compte d'un autre fondateur.
+//     le compte d'un autre fondateur, ni un compte sans profil (sauf le sien). Le SQL
+//     2026-11-28-comptes-fondateurs-proteges.sql garde le profil d'un fondateur intact.
 //   • rattachementCreateur : un nouveau compte créateur vise une fiche qui existe et qui n'a
 //     pas déjà son compte.
 //   • adresseAgenceAttendue / compteGoogleAgenceOk : la connexion Google de l'app
@@ -18,7 +19,8 @@ export type ProfilCible = { role: string | null; agency_role: string | null } | 
 export function resetAutorise(appelant: string, cible: string, profil: ProfilCible): boolean {
   if (!appelant || !cible) return false;
   if (cible === appelant) return true;
-  return !(profil?.role === "agency" && profil?.agency_role === "founder");
+  if (!profil) return false;
+  return !(profil.role === "agency" && profil.agency_role === "founder");
 }
 
 /** Refus à renvoyer pour un nouveau compte créateur, sinon null. */

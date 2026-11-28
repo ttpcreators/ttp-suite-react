@@ -8,7 +8,7 @@
  * servi revient avec « error_code=otp_expired ».
  */
 
-/** Longueur minimale, la même que la page Accès et la fonction create-access (_shared/motDePasse.ts). */
+/** Longueur minimale, la même que la page Accès et la fonction create-access (supabase/functions/_shared/comptes.ts). */
 export const MIN_MOT_DE_PASSE = 12;
 /** Message du minimum (texte français, clé de traduction). */
 export const MESSAGE_MINIMUM = "12 caractères au moins.";

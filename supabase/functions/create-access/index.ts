@@ -9,7 +9,8 @@
 // Entrée : { email, password, role: 'creator'|'agency', creator? }. Un compte créateur
 // vise une fiche existante qui n'a pas encore de compte.
 // « Nouveau mot de passe » : { action: 'reset', email, password } → remplace le mot
-// de passe d'un compte existant (jamais celui d'un autre fondateur) et coupe ses
+// de passe d'un compte existant (jamais celui d'un autre fondateur ni d'un compte sans
+// profil) et coupe ses
 // connexions Claude. Le mot de passe n'est JAMAIS stocké par l'app :
 // il est seulement montré une fois au fondateur, pour le transmettre.
 // Règles pures : _shared/comptes.ts (12 caractères au moins).
@@ -68,10 +69,11 @@ Deno.serve(async (req: Request) => {
       if (data.users.length < 200) break;
     }
     if (!userId) return jsonRes({ error: "compte_introuvable" }, 404);
-    // Jamais le compte d'un autre fondateur (profil illisible : refus).
+    // Jamais le compte d'un autre fondateur, ni un compte sans profil sauf le sien
+    // (profil illisible : refus).
     const { data: cible, error: cibleErr } = await sb.from("profiles").select("role, agency_role").eq("user_id", userId).maybeSingle<NonNullable<ProfilCible>>();
     if (cibleErr) return jsonRes({ error: "reset_echoue" }, 502);
-    if (!resetAutorise(appelant, userId, cible ?? null)) return jsonRes({ error: "reset_fondateur_refuse" }, 403);
+    if (!resetAutorise(appelant, userId, cible ?? null)) return jsonRes({ error: cible ? "reset_fondateur_refuse" : "reset_profil_absent" }, 403);
     const { error: upErr } = await sb.auth.admin.updateUserById(userId, { password });
     if (upErr) return jsonRes({ error: "reset_echoue", detail: String(upErr.message).slice(0, 200) }, 400);
     // Nouveau mot de passe : les connexions Claude ouvertes avec l'ancien sont coupées.

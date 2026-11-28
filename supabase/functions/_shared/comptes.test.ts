@@ -14,10 +14,11 @@ describe("resetAutorise", () => {
     expect(resetAutorise("a", "a", { role: "agency", agency_role: "founder" })).toBe(true);
     expect(resetAutorise("a", "b", { role: "creator", agency_role: null })).toBe(true);
     expect(resetAutorise("a", "b", { role: "agency", agency_role: "member" })).toBe(true);
-    expect(resetAutorise("a", "b", null)).toBe(true);
+    expect(resetAutorise("a", "a", null)).toBe(true);
   });
-  it("jamais celui d'un autre fondateur", () => {
+  it("jamais celui d'un autre fondateur, ni un compte sans profil", () => {
     expect(resetAutorise("a", "b", { role: "agency", agency_role: "founder" })).toBe(false);
+    expect(resetAutorise("a", "b", null)).toBe(false);
     expect(resetAutorise("", "b", null)).toBe(false);
   });
 });

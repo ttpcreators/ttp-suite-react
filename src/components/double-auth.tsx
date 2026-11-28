@@ -146,8 +146,8 @@ function DoubleAuthBody({ onEtat }: { onEtat?: (active: boolean | null) => void 
       <div className="flex flex-col gap-2.5">
         <p className="text-[13px] leading-relaxed text-muted-foreground">
           {active
-            ? t("Activée : un code de ton application est demandé à chaque connexion.")
-            : t("Facultative : en plus du mot de passe, un code à 6 chiffres donné par une application (Google Authenticator, 1Password…) à chaque connexion.")}
+            ? t("Activée : l'app demande un code de ton application à chaque connexion.")
+            : t("Facultative : en plus du mot de passe, un code à 6 chiffres donné par une application (Google Authenticator, 1Password…), demandé par l'app à chaque connexion.")}
         </p>
         <Erreur texte={error} />
         <div className="flex justify-end">

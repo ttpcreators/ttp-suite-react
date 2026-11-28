@@ -369,6 +369,7 @@ export function Acces() {
         const map: Record<string, string> = {
           compte_introuvable: "Aucun compte de connexion pour cet email",
           reset_fondateur_refuse: "Un autre fondateur change lui même son mot de passe",
+          reset_profil_absent: "Ce compte n'a pas de profil dans l'app : nouveau mot de passe refusé",
           unauthorized: "Action réservée aux fondateurs",
           email_invalide: "Email invalide",
         };
