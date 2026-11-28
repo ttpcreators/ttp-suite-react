@@ -448,9 +448,11 @@ export async function deleteClaudeDraft(sb: SupabaseClient, box: MailBox, draftI
 /** Un brouillon tel qu'il partira (pour le garde-fou des media kits avant l'envoi). */
 export type BrouillonLu = { from: string; to: string; cc: string; bcc: string; subject: string; text: string; files: string[]; reponse: boolean; kit: string };
 
-export async function sendDraft(sb: SupabaseClient, box: MailBox, draftId: string, expectFrom?: string, verifier?: (b: BrouillonLu) => Promise<string | null>): Promise<{ to: string; subject: string; threadId: string; from: string; id: string }> {
+export async function sendDraft(sb: SupabaseClient, box: MailBox, draftId: string, expectFrom?: string, verifier?: (b: BrouillonLu) => Promise<string | null>, expectMessage?: string): Promise<{ to: string; subject: string; threadId: string; from: string; id: string }> {
   const token = await tokenFor(sb, box, "modify");
   const d = (await gjson(token, `${GMAIL}/drafts/${encodeURIComponent(draftId)}?format=${verifier ? "full" : "metadata"}`)) as DraftRes;
+  // Verrou des agents : le brouillon doit être encore le message contrôlé (une modification crée un nouveau message).
+  if (expectMessage && String(d.message?.id ?? "") !== expectMessage) throw new Error("draft_changed");
   const h = d.message?.payload?.headers;
   if (header(h, "x-ttp-source").toLowerCase() !== "claude") throw new Error("not_claude");
   // Alias demandé : le brouillon doit déjà partir de cette adresse (rien n'est réécrit à l'envoi).

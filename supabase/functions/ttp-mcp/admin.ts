@@ -666,7 +666,7 @@ const envoyerBrouillon: AdminTool = {
     const alias = str(a.envoyer_en_tant_que, 200);
     try {
       if (alias) await resolveSender(sb, box, alias);
-      const r = await sendDraft(sb, box, id, alias || undefined, verifierAvantEnvoi(sb, str(a.createur, 80) || undefined));
+      const r = await sendDraft(sb, box, id, alias || undefined, verifierAvantEnvoi(sb, str(a.createur, 80) || undefined), ctx.messages?.[id]);
       await journaliserEnvoi(sb, { box: String(box), to: r.to, subject: r.subject, threadId: r.threadId, source: "claude", messageId: r.id, auteur: await nomAuteur(sb, ctx.userId) });
       const suivi = await suiviApresEnvoi(sb, adressesDe(r.to), { demarrer: a.demarrer_sequence === true, createur: str(a.createur, 80) || undefined }).catch(() => "");
       return ok(`✓ Brouillon envoyé de ${r.from || `${box}@`} à ${r.to} · objet « ${r.subject} ».${suivi}`);
@@ -676,6 +676,7 @@ const envoyerBrouillon: AdminTool = {
       if (m.startsWith("kit_refuse: ")) return fail(m.slice(12));
       if (m.startsWith("from_mismatch: ")) return fail(`Ce brouillon part de ${m.slice(15)}, pas de ${alias} : rien n'est envoyé. Refais le brouillon avec envoyer_en_tant_que.`);
       if (m === "not_claude") return fail("Ce brouillon n'a pas été préparé par Claude : à envoyer depuis Gmail ou l'app.");
+      if (m === "draft_changed") return fail("Brouillon modifié entre le contrôle et l'envoi : rien n'est envoyé, à reproposer.");
       if (/gmail_404/.test(m)) return fail("Brouillon introuvable : déjà envoyé ou supprimé.");
       return fail(/not_connected|invalid_grant/.test(m) ? "La boîte n'est pas connectée à l'app (Planning → Google Agenda → Connecter)." : /403|insufficient/i.test(m) ? "Gmail refuse l'envoi : le droit d'envoi manque pour cette boîte." : `Envoi impossible : ${m}`);
     }
@@ -724,14 +725,14 @@ const envoyerBrouillonsValides: AdminTool = {
     let partis = 0;
     for (const id of ids) {
       try {
-        const r = await sendDraft(sb, box, id, alias || undefined, verifierAvantEnvoi(sb));
+        const r = await sendDraft(sb, box, id, alias || undefined, verifierAvantEnvoi(sb), ctx.messages?.[id]);
         partis++;
         await journaliserEnvoi(sb, { box: String(box), to: r.to, subject: r.subject, threadId: r.threadId, source: "claude", messageId: r.id, auteur: await nomAuteur(sb, ctx.userId) });
         const suivi = await suiviApresEnvoi(sb, adressesDe(r.to), { demarrer: a.demarrer_sequence === true }).catch(() => "");
         lignes.push(`✓ ${id} → ${r.to} · « ${r.subject} »${suivi.replace(/^\nSuivi : /, " · ")}`);
       } catch (e) {
         const m = (e as Error).message ?? "";
-        const why = m.startsWith("kit_refuse: ") ? m.slice(12).replace(/^Rien n'est envoyé : /, "").replace(/\n/g, " ") : m === "not_claude" ? "pas préparé par Claude" : /gmail_404/.test(m) ? "introuvable (déjà envoyé ou supprimé)" : m.startsWith("from_mismatch: ") ? `part de ${m.slice(15)}, pas de ${alias}` : /not_connected|invalid_grant/.test(m) ? "boîte non connectée" : m.slice(0, 120);
+        const why = m.startsWith("kit_refuse: ") ? m.slice(12).replace(/^Rien n'est envoyé : /, "").replace(/\n/g, " ") : m === "not_claude" ? "pas préparé par Claude" : m === "draft_changed" ? "modifié entre le contrôle et l'envoi" : /gmail_404/.test(m) ? "introuvable (déjà envoyé ou supprimé)" : m.startsWith("from_mismatch: ") ? `part de ${m.slice(15)}, pas de ${alias}` : /not_connected|invalid_grant/.test(m) ? "boîte non connectée" : m.slice(0, 120);
         lignes.push(`✗ ${id} : ${why}, rien n'est parti`);
       }
     }

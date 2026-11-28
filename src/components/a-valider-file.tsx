@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Check, Copy, ExternalLink, Pencil, Send, X, Keyboard, type LucideIcon } from "@/components/icons";
 import { fmtDayTime } from "@/lib/dates";
-import { gesteClavier, gesteValider, lignesMail, modeModifier, positionCourante, positionVoisine, validablesEnLot, type PropositionLite } from "@/lib/aValider";
+import { gesteClavier, gesteValider, lignesMail, modeModifier, noteMail, positionCourante, positionVoisine, validablesEnLot, type PropositionLite } from "@/lib/aValider";
 
 /**
  * La file « À valider » de la page Agents, faite pour aller vite : une carte compacte par
@@ -225,6 +225,7 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, origine, copie
                 {lignesMail(a).map((l) => <span key={l} className="break-words">{l}</span>)}
               </div>
             )}
+            {noteMail(a) && <p className={cn("mt-1 text-[11px] leading-relaxed text-muted-foreground", !active && "line-clamp-1")}>{noteMail(a)}</p>}
             {a.contexte && !lignesMail(a).length && <p className={cn("mt-1 text-[11px] leading-relaxed text-muted-foreground", !active && "line-clamp-1")}>{a.contexte}</p>}
             {active && a.lien_spark && <p className="mt-1 truncate text-[10px] text-faint" title={a.lien_spark}>Lien : {a.lien_spark}</p>}
             {ed ? (

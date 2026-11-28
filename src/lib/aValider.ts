@@ -155,6 +155,17 @@ export function lignesMail(a: Pick<PropositionLite, "type" | "contexte" | "outil
   return a.contexte.split(" · ").filter((x) => /^(De|Objet|À|Cc|Cci) : /.test(x));
 }
 
+/**
+ * La note de l'agent sous l'en-tête d'un tel mail (« Prospection » s'il l'a dit, puis ses raisons
+ * après « Note de l'agent : »), encadrée par le serveur. Vide pour une autre proposition.
+ */
+export function noteMail(a: Pick<PropositionLite, "type" | "contexte" | "outil">): string {
+  if (!lignesMail(a).length || !a.contexte) return "";
+  const parts = a.contexte.split(" · ");
+  const note = parts.find((x) => x.startsWith("Note de l'agent : ")) ?? "";
+  return [parts[0] === "Prospection" ? "Prospection" : "", note].filter(Boolean).join(" · ");
+}
+
 export type Geste = "valider" | "modifier" | "ecarter" | "suivante" | "precedente" | "cocher" | "valider_selection";
 
 /**

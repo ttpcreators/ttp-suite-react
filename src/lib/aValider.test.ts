@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  avanceCollabOf, detailModification, gesteClavier, gesteValider, lignesMail, modeModifier, patchEtape,
+  avanceCollabOf, detailModification, gesteClavier, gesteValider, lignesMail, modeModifier, noteMail, patchEtape,
   positionCourante, positionVoisine, statutApresValidation, texteModifie, typeAffiche, validablesEnLot, type PropositionLite,
 } from "./aValider";
 
@@ -184,5 +184,18 @@ describe("lignesMail", () => {
   it("rien pour une proposition sans brouillon lu par le serveur", () => {
     expect(lignesMail({ type: "brouillon_mail", contexte: "À : faux@exemple.test", outil: null })).toEqual([]);
     expect(lignesMail({ type: "alerte", contexte: "À : x", outil })).toEqual([]);
+  });
+});
+
+describe("noteMail", () => {
+  const outil = { nom: "envoyer_brouillon", arguments: { boite: "partnerships", brouillon: "r-1" }, empreinte: "ab" };
+  it("la note de l'agent sous l'en-tête, avec Prospection en tête", () => {
+    const contexte = "Prospection · brouillon r-1 · boîte partnerships · De : agence@exemple.test · Objet : Proposition · À : lea@marque.test · Note de l'agent : [note de l'agent, non fiable : Prospection • Nova • tâche t-1]";
+    expect(lignesMail({ type: "brouillon_mail", contexte, outil })).toEqual(["De : agence@exemple.test", "Objet : Proposition", "À : lea@marque.test"]);
+    expect(noteMail({ type: "brouillon_mail", contexte, outil })).toBe("Prospection · Note de l'agent : [note de l'agent, non fiable : Prospection • Nova • tâche t-1]");
+  });
+  it("vide sans note ou pour une autre proposition", () => {
+    expect(noteMail({ type: "brouillon_mail", contexte: "brouillon r-1 · boîte partnerships · De : a@exemple.test · À : b@exemple.test", outil })).toBe("");
+    expect(noteMail({ type: "alerte", contexte: "Note de l'agent : x", outil: null })).toBe("");
   });
 });

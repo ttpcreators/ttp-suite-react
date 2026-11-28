@@ -27,6 +27,7 @@
 // ============================================================================
 
 import { str } from "./texteSur.ts";
+import { externeLigne } from "./contenuExterne.ts";
 
 type Args = Record<string, unknown>;
 
@@ -58,10 +59,27 @@ export const TABLES_A_VALIDER = ["invoices", "creators", "documents", "creator_m
 /** Collabs et prospects : les champs d'argent ou d'avancement qui se valident. */
 const CHAMPS_A_VALIDER: Record<string, string[]> = {
   collabs: ["cachet", "step", "status"],
-  prospects: ["value", "proposal", "status"],
+  // stage : l'étape du pipeline (Signé, Perdu…). status n'existe pas sur prospects, gardé sans effet.
+  prospects: ["value", "proposal", "stage", "status"],
 };
-/** À la création d'une collab ou d'un prospect : seulement quand un montant est posé. */
+/** À la création d'une collab ou d'un prospect : quand un montant est posé. */
 const MONTANTS_A_LA_CREATION: Record<string, string[]> = { collabs: ["cachet"], prospects: ["value", "proposal"] };
+
+/** Étape de collab lue comme les outils la lisent (tools.ts, int : arrondi, bornée 1 à 11) ; null si illisible. */
+export function etapeCollab(v: unknown): number | null {
+  if (v === undefined || v === null || (typeof v === "string" && !v.trim())) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(1, Math.min(11, Math.round(n))) : null;
+}
+
+/** Une collab créée déjà avancée (étape 8 ou plus, ou un statut autre que « active ») se valide comme avancer_collab. */
+function collabDejaAvancee(champs: Record<string, unknown>): boolean {
+  if (rempli(champs.step)) {
+    const e = etapeCollab(champs.step);
+    if (e === null || e >= 8) return true;
+  }
+  return rempli(champs.status) && String(champs.status).trim().toLowerCase() !== "active";
+}
 
 const objet = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
 const rempli = (v: unknown) => v !== undefined && v !== null && String(v).trim() !== "";
@@ -119,12 +137,14 @@ export function besoinValidation(nom: string, a: Args, agence: string): Besoin {
       const table = str(a.table, 40);
       if ((TABLES_A_VALIDER as readonly string[]).includes(table)) return { genre: "outil" };
       const champs = objet(a.champs);
+      if (table === "collabs" && collabDejaAvancee(champs)) return { genre: "outil" };
       return (MONTANTS_A_LA_CREATION[table] ?? []).some((c) => rempli(champs[c])) ? { genre: "outil" } : null;
     }
     case "avancer_collab": {
-      // Facture envoyée, paiement reçu, créateur payé, bilan ; et tout retour en arrière.
-      const etape = Number(a.etape);
-      return !Number.isFinite(etape) || etape >= 8 || a.revenir === true ? { genre: "outil" } : null;
+      // Facture envoyée, paiement reçu, créateur payé, bilan ; et tout retour en arrière. L'étape
+      // est lue comme l'outil la lit (arrondie) : 7,5 compte pour 8.
+      const etape = etapeCollab(a.etape);
+      return etape === null || etape >= 8 || a.revenir === true ? { genre: "outil" } : null;
     }
     case "noter_droits":
       return rempli(a.prix) || a.clos !== undefined ? { genre: "outil" } : null;
@@ -158,7 +178,7 @@ export function canonique(v: unknown): string {
 
 export type OutilPropose = { nom: string; arguments: Args; empreinte?: string };
 
-/** L'outil d'une proposition (colonne agent.actions.outil), ou null s'il est illisible. */
+/** L'outil d'une proposition (colonne agent.actions.outil), ou null s'il est illisible. L'empreinte n'est lue que dans une ligne de la base (écrite par le serveur). */
 export function lireOutil(v: unknown): OutilPropose | null {
   const o = v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
   if (!o || typeof o.nom !== "string") return null;
@@ -184,22 +204,35 @@ export function brouillonDe(v: { type: string; outil: unknown }): BrouillonPropo
 /** Même boîte (« partnerships », « talent » ou adresse d'une boîte de créateur), sans casse ni espaces. */
 export const memeBoite = (a: unknown, b: unknown) => String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
 
+/** La forme stricte « brouillon <id> · boîte <boîte> » d'un contexte (un « brouillon prêt » ou « le brouillon joint » ne compte pas). */
+const CITATION = /brouillon\s+([A-Za-z0-9_-]+)\s*·\s*bo[iî]te\s+([^\s·,;]+)/gi;
+
+/** Les citations strictes « brouillon <id> · boîte <boîte> » d'un contexte, sans doublon d'id. */
+export function citationsBrouillon(contexte: unknown): { brouillon: string; boite: string }[] {
+  const vus = new Map<string, string>();
+  for (const m of str(contexte, 1000).matchAll(CITATION)) if (!vus.has(m[1])) vus.set(m[1], m[2]);
+  return [...vus].map(([brouillon, boite]) => ({ brouillon, boite }));
+}
+
 /**
  * Le brouillon qu'un agent fait valider (proposer_action, type brouillon_mail) : le paramètre
- * `brouillon`, sinon le seul « brouillon <id> » de contexte. Plusieurs ids : refus (un brouillon
- * par proposition). La boîte : le paramètre `boite`, sinon « boîte <boîte> » de contexte.
+ * `brouillon`, sinon la seule citation « brouillon <id> · boîte <boîte> » de contexte. Plusieurs
+ * ids : refus (un brouillon par proposition). La boîte : le paramètre `boite`, sinon celle de la
+ * citation, sinon « boîte <boîte> » de contexte. `cite` : un id a été donné (paramètre ou
+ * citation stricte) ; sans lui, une connexion qui n'est pas un agent dépose comme avant.
  */
-export function brouillonCite(a: Args): { brouillon: string; boite: string } | { erreur: string } {
+export function brouillonCite(a: Args): ({ brouillon: string; boite: string } | { erreur: string }) & { cite: boolean } {
   const contexte = str(a.contexte, 1000);
-  const ids = [...new Set([...contexte.matchAll(/brouillon\s+([A-Za-z0-9_-]+)/gi)].map((m) => m[1]))];
+  const citations = citationsBrouillon(contexte);
   const donne = str(a.brouillon, 64);
-  if (donne && !ID_BROUILLON.test(donne)) return { erreur: "id de brouillon illisible" };
-  if (!donne && ids.length > 1) return { erreur: `un seul brouillon par proposition (contexte en cite ${ids.length} : ${ids.join(", ")})` };
-  const brouillon = donne || ids[0] || "";
-  if (!brouillon) return { erreur: "donne l'id du brouillon (paramètre brouillon, ou « brouillon <id> · boîte <boîte> » dans contexte)" };
-  const boite = str(a.boite, 120) || (/bo[iî]te\s+([^\s·,;]+)/i.exec(contexte)?.[1] ?? "");
-  if (!boite) return { erreur: "donne la boîte du brouillon (paramètre boite : partnerships, talent ou l'adresse d'une boîte de créateur)" };
-  return { brouillon, boite };
+  const cite = !!donne || citations.length > 0;
+  if (donne && !ID_BROUILLON.test(donne)) return { erreur: "id de brouillon illisible", cite };
+  if (!donne && citations.length > 1) return { erreur: `un seul brouillon par proposition (contexte en cite ${citations.length} : ${citations.map((c) => c.brouillon).join(", ")})`, cite };
+  const brouillon = donne || citations[0]?.brouillon || "";
+  if (!brouillon) return { erreur: "donne l'id du brouillon (paramètre brouillon, ou « brouillon <id> · boîte <boîte> » dans contexte)", cite };
+  const boite = str(a.boite, 120) || citations.find((c) => c.brouillon === brouillon)?.boite || (/bo[iî]te\s+([^\s·,;]+)/i.exec(contexte)?.[1] ?? "");
+  if (!boite) return { erreur: "donne la boîte du brouillon (paramètre boite : partnerships, talent ou l'adresse d'une boîte de créateur)", cite };
+  return { brouillon, boite, cite };
 }
 
 /** Un brouillon tel que le serveur le lit dans Gmail (verrou des agents). */
@@ -222,16 +255,36 @@ export async function empreinteBrouillon(b: BrouillonComplet): Promise<string> {
   return [...new Uint8Array(h)].map((x) => x.toString(16).padStart(2, "0")).join("");
 }
 
-/** Ce que la page Agents montre d'un brouillon : écrit par le serveur d'après Gmail, jamais par l'agent. */
-export function propositionBrouillon(b: BrouillonComplet, boite: string, brouillon: string): { cible: string; contexte: string; contenu: string } {
-  // Sur une ligne, sans « · » : un objet ne peut pas imiter un autre champ de l'en-tête.
+/** Au delà, un brouillon ne se montre pas en entier dans la page Agents : la proposition est refusée. */
+export const ENTETE_MAX = 4000;
+export const TEXTE_MAX = 30000;
+
+/** Repère de la note de l'agent, après l'en-tête du serveur (lue par la page Agents, src/lib/aValider.ts). */
+export const NOTE_AGENT = "Note de l'agent : ";
+
+/**
+ * Ce que la page Agents montre d'un brouillon : l'en-tête et le texte écrits par le serveur
+ * d'après Gmail, en entier (rien n'est coupé : trop long, la proposition est refusée). Le
+ * contexte écrit par l'agent (`note`) suit l'en-tête, après « Note de l'agent : », sur une ligne
+ * et encadré comme une donnée ; s'il commence par « Prospection · », ce préfixe est repris en tête.
+ */
+export function propositionBrouillon(b: BrouillonComplet, boite: string, brouillon: string, note = ""): { cible: string; contexte: string; contenu: string } | { erreur: string } {
+  // Sur une ligne, sans « · » : un objet ou une note ne peut pas imiter un autre champ de l'en-tête.
   const une = (s: string) => s.replace(/[\r\n]+/g, " ").replace(/·/g, "•").trim();
   const dest = [`À : ${une(b.to) || "(personne)"}`, ...(b.cc ? [`Cc : ${une(b.cc)}`] : []), ...(b.bcc ? [`Cci : ${une(b.bcc)}`] : [])].join(" · ");
   const pieces = b.pieces.length ? `\n\nPièces jointes : ${b.pieces.map((p) => une(p.nom)).join(", ")}` : "";
+  const entete = `brouillon ${brouillon} · boîte ${boite} · De : ${une(b.from) || boite} · Objet : ${une(b.subject) || "(sans objet)"} · ${dest}`;
+  const texte = b.texte || "(message vide)";
+  if (entete.length > ENTETE_MAX || texte.length + pieces.length > TEXTE_MAX) {
+    return { erreur: "brouillon trop long pour être montré en entier dans la page Agents (destinataires, objet ou texte), raccourcis-le" };
+  }
+  const n = note.trim();
+  const prefixe = /^Prospection\s*·/i.test(n) ? "Prospection · " : "";
+  const encadree = n ? externeLigne("note de l'agent", une(n)) : "";
   return {
-    cible: dest.slice(0, 200),
-    contexte: `brouillon ${brouillon} · boîte ${boite} · De : ${une(b.from) || boite} · Objet : ${une(b.subject) || "(sans objet)"} · ${dest}`.slice(0, 1000),
-    contenu: `${b.texte || "(message vide)"}`.slice(0, 5800) + pieces,
+    cible: dest.length > 200 ? `${dest.slice(0, 199)}…` : dest,
+    contexte: `${prefixe}${entete}${encadree ? ` · ${NOTE_AGENT}${encadree}` : ""}`,
+    contenu: texte + pieces,
   };
 }
 

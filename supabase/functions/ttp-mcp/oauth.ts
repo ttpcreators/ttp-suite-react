@@ -42,6 +42,8 @@ export type Ctx = {
   validations?: Record<string, string>;
   /** Pour un agent : brouillon → id de la proposition validée (posé par verrou.ts, relu avant l'envoi de la file). */
   propositions?: Record<string, string>;
+  /** Pour un agent : brouillon → id du message Gmail relu par le verrou (l'envoi s'arrête s'il a changé depuis). */
+  messages?: Record<string, string>;
 };
 
 const enc = new TextEncoder();

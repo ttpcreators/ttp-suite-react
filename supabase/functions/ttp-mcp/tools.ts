@@ -877,7 +877,7 @@ const aValider: Tool = {
 const ecarterProposition: Tool = {
   name: "ecarter_proposition",
   title: "Écarter une proposition d'agent",
-  description: "Retire une proposition de la file « À valider » : statut « ecarte » (périmée, remplacée, refusée) ou « envoye » (c'est parti : sur le oui de Marc, ou déjà fait ailleurs). Un mail validé puis mis dans la file d'envoi (programmer_envoi) se marque « envoye » : « ecarte » annule son envoi (pour une connexion d'agent, le serveur marque lui même « envoye » la validation utilisée ; annuler_envoi retire alors le mail de la file). La liste de l'app et celle de Telegram restent ainsi la même. Donner l'id (a_valider).",
+  description: "Retire une proposition de la file « À valider » : statut « ecarte » (périmée, remplacée, refusée) ou « envoye » (c'est parti : sur le oui de Marc, ou déjà fait ailleurs). Un mail validé puis mis dans la file d'envoi (programmer_envoi) se marque « envoye ». Pour annuler un mail mis en file par une connexion d'agent, utiliser annuler_envoi : la proposition est déjà « envoye » et écarter ne s'applique plus. La liste de l'app et celle de Telegram restent ainsi la même. Donner l'id (a_valider).",
   inputSchema: { type: "object", properties: { proposition: { type: "string", description: "Id de la proposition" }, statut: { type: "string", enum: ["ecarte", "envoye"], description: "ecarte (défaut) ou envoye" } }, required: ["proposition"], additionalProperties: false },
   write: true,
   founder: true,
@@ -2556,9 +2556,10 @@ const proposerAction: Tool = {
     let outilBrouillon: OutilPropose | null = null;
     let contenuServeur: string | null = null;
     if (type === "brouillon_mail" && a.outil === undefined) {
+      // Sans id (ni paramètre ni « brouillon <id> · boîte <boîte> »), une connexion qui n'est pas
+      // un agent dépose comme avant ; un agent doit toujours le donner.
       const cite = brouillonCite(a);
-      const sansId = "erreur" in cite && !str(a.brouillon, 64) && !/brouillon\s+[A-Za-z0-9_-]/i.test(str(a.contexte, 1000));
-      if ("erreur" in cite && !(sansId && !ctx.agent)) return fail(`Proposition non déposée : ${cite.erreur}.`);
+      if ("erreur" in cite && (cite.cite || ctx.agent)) return fail(`Proposition non déposée : ${cite.erreur}.`);
       if (!("erreur" in cite)) {
         const pb = await parseMailBox(sb, cite.boite);
         if ("error" in pb) return fail(`Proposition non déposée : ${pb.error}`);
@@ -2577,7 +2578,9 @@ const proposerAction: Tool = {
           return !!b && b.brouillon === cite.brouillon && b.empreinte === empreinte;
         });
         if (meme) return fail(`Déjà proposé tel quel (proposition ${meme.id}) : attends la validation dans la page Agents.`);
-        const vu = propositionBrouillon(lu, String(pb.box), cite.brouillon);
+        // Le contexte de l'agent (« Prospection · », raisons, tâche) suit l'en-tête du serveur.
+        const vu = propositionBrouillon(lu, String(pb.box), cite.brouillon, str(a.contexte, 1000));
+        if ("erreur" in vu) return fail(`Proposition non déposée : ${vu.erreur}.`);
         cible = vu.cible;
         contexte = vu.contexte;
         contenuServeur = vu.contenu;
@@ -2602,7 +2605,7 @@ const proposerAction: Tool = {
         return !!q && memeAppel(q, p.nom, p.arguments);
       });
       if (deja) return fail(`Déjà proposé (proposition ${deja.id}) : Marc ne l'a pas encore validé, ou tu peux l'appeler s'il l'a validé (a_valider).`);
-      outil = p;
+      outil = { nom: p.nom, arguments: p.arguments }; // l'empreinte ne s'écrit que par le serveur (brouillon)
       type = "alerte";
       lien = null; // jamais lu comme une autre action (avancer une collab) par la page Agents
       contenu = texteOutil(p, vise.title, str(a.contenu, 2000));
@@ -3592,12 +3595,16 @@ export async function callTool(sb: SupabaseClient, ctx: Ctx, name: string, args:
     if (!v.ok) res = fail(v.texte);
     else {
       consommees = v.consommees ?? 0;
-      res = await t.run(sb, v.validations ? { ...ctx, validations: v.validations, propositions: v.propositions } : ctx, args ?? {});
+      res = await t.run(sb, v.validations ? { ...ctx, validations: v.validations, propositions: v.propositions, messages: v.messages } : ctx, args ?? {});
     }
   } catch (e) {
     res = fail(`Erreur : ${(e as Error).message}`);
   }
   if (consommees && res.isError) res = { ...res, text: `${res.text}\n\n(Verrou agent : la validation utilisée pour cet appel a servi et ne vaut plus. Pour réessayer, repropose avec proposer_action.)` };
+  // Lot de brouillons : un brouillon sauté (✗) a aussi utilisé sa validation.
+  else if (consommees && name === "envoyer_brouillons_valides" && /^✗ /m.test(res.text)) {
+    res = { ...res, text: `${res.text}\n\n(Verrou agent : la validation de chaque brouillon sauté (✗) a servi aussi et ne vaut plus. Pour l'envoyer, repropose-le avec proposer_action.)` };
+  }
   // Journal : qui, quoi, quand (Paramètres → Assistants IA), et la raison d'un appel raté
   // (colonne `error`, SQL 2026-11-24-mcp-log-erreur). Le journal ne bloque jamais l'outil.
   try {

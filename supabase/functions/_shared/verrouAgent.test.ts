@@ -15,6 +15,12 @@ const AUTRE_GRANT = "55555555-5555-5555-5555-555555555555";
 const v = (x: Partial<Validation>): Validation => ({
   id: "a1", type: "brouillon_mail", contexte: null, lien_spark: null, outil: null, valide_par: MARC, valide_le: "2026-11-27T11:00:00Z", grant_id: GRANT, ...x,
 });
+/** Ce que la page Agents montre (le test échoue si la proposition est refusée). */
+const montre = (b: BrouillonComplet, note = "") => {
+  const r = propositionBrouillon(b, "partnerships", "r-1", note);
+  if ("erreur" in r) throw new Error(r.erreur);
+  return r;
+};
 /** Le brouillon rangé par le serveur dans une proposition de mail. */
 const rangé = (brouillon: string, boite = "talent", empreinte = "e1") => ({ nom: "envoyer_brouillon", arguments: { boite, brouillon }, empreinte });
 
@@ -139,6 +145,9 @@ describe("ce qu'un appel d'agent demande", () => {
     expect(besoinValidation("modifier_element", { table: "collabs", id: "x", champs: { cachet: "900" } }, AGENCE)).toEqual({ genre: "outil" });
     expect(besoinValidation("modifier_element", { table: "collabs", id: "x", champs: { notes: "relancée" } }, AGENCE)).toBeNull();
     expect(besoinValidation("modifier_element", { table: "prospects", id: "x", champs: { value: "2000" } }, AGENCE)).toEqual({ genre: "outil" });
+    // L'étape du pipeline (Signé, Perdu) se valide aussi.
+    expect(besoinValidation("modifier_element", { table: "prospects", id: "x", champs: { stage: "Signé" } }, AGENCE)).toEqual({ genre: "outil" });
+    expect(besoinValidation("modifier_element", { table: "prospects", id: "x", champs: { notes: "relancé" } }, AGENCE)).toBeNull();
     expect(besoinValidation("reglages_app", { action: "lire", cle: "mailSettings" }, AGENCE)).toBeNull();
     expect(besoinValidation("reglages_app", { action: "modifier", cle: "mailSettings", valeur: {} }, AGENCE)).toEqual({ genre: "outil" });
     expect(besoinValidation("reglages_app", { cle: "mailSettings", valeur: {} }, AGENCE)).toEqual({ genre: "outil" });
@@ -153,16 +162,16 @@ describe("ce qu'un appel d'agent demande", () => {
 
   it("invitations Google : seulement vers une adresse hors de l'agence", () => {
     expect(besoinValidation("creer_meet", { titre: "Point", invites: ["lea@marque.fr"] }, AGENCE)).toBeNull();
-    expect(besoinValidation("creer_meet", { titre: "Point", inviter: true, invites: ["gianni@ttpcreators.pro"] }, AGENCE)).toBeNull();
-    expect(besoinValidation("creer_meet", { titre: "Point", inviter: true, invites: ["gianni@ttpcreators.pro", "lea@marque.fr"] }, AGENCE)).toEqual({ genre: "outil" });
+    expect(besoinValidation("creer_meet", { titre: "Point", inviter: true, invites: ["equipe@ttpcreators.pro"] }, AGENCE)).toBeNull();
+    expect(besoinValidation("creer_meet", { titre: "Point", inviter: true, invites: ["equipe@ttpcreators.pro", "lea@marque.fr"] }, AGENCE)).toEqual({ genre: "outil" });
     expect(besoinValidation("inviter_rdv", { evenement: "x", envoyer: true, invites: ["Léa <lea@marque.fr>"] }, AGENCE)).toEqual({ genre: "outil" });
-    expect(besoinValidation("inviter_rdv", { evenement: "x", invites: ["gianni@ttpcreators.pro"] }, AGENCE)).toBeNull();
+    expect(besoinValidation("inviter_rdv", { evenement: "x", invites: ["equipe@ttpcreators.pro"] }, AGENCE)).toBeNull();
     expect(besoinValidation("inviter_rdv", { evenement: "x", lien_meet: true }, AGENCE)).toBeNull();
   });
 
   it("inviter_rdv en deux appels : l'ajout d'un externe sans mail se valide, et tout envoi", () => {
     expect(besoinValidation("inviter_rdv", { evenement: "x", invites: ["lea@marque.fr"] }, AGENCE)).toEqual({ genre: "outil" });
-    expect(besoinValidation("inviter_rdv", { evenement: "x", envoyer: true, invites: ["gianni@ttpcreators.pro"] }, AGENCE)).toEqual({ genre: "outil" });
+    expect(besoinValidation("inviter_rdv", { evenement: "x", envoyer: true, invites: ["equipe@ttpcreators.pro"] }, AGENCE)).toEqual({ genre: "outil" });
   });
 
   it("argent, accès, consignes durables, pages publiques et crédits : un appel validé", () => {
@@ -173,9 +182,18 @@ describe("ce qu'un appel d'agent demande", () => {
     expect(besoinValidation("avancer_collab", { collab: "x", etape: 8 }, AGENCE)).toEqual({ genre: "outil" });
     expect(besoinValidation("avancer_collab", { collab: "x", etape: 3, revenir: true }, AGENCE)).toEqual({ genre: "outil" });
     expect(besoinValidation("avancer_collab", { collab: "x", etape: "?" }, AGENCE)).toEqual({ genre: "outil" });
+    // Lue comme l'outil la lit (arrondie) : 7,5 donne l'étape 8.
+    expect(besoinValidation("avancer_collab", { collab: "x", etape: 7.5 }, AGENCE)).toEqual({ genre: "outil" });
+    expect(besoinValidation("avancer_collab", { collab: "x", etape: "7.6" }, AGENCE)).toEqual({ genre: "outil" });
+    expect(besoinValidation("avancer_collab", { collab: "x", etape: 7.4 }, AGENCE)).toBeNull();
     expect(besoinValidation("creer_element", { table: "todos", champs: { text: "x" } }, AGENCE)).toBeNull();
     expect(besoinValidation("creer_element", { table: "collabs", champs: { brand: "Nova" } }, AGENCE)).toBeNull();
     expect(besoinValidation("creer_element", { table: "collabs", champs: { brand: "Nova", cachet: "800" } }, AGENCE)).toEqual({ genre: "outil" });
+    // Une collab créée déjà avancée se valide comme avancer_collab.
+    expect(besoinValidation("creer_element", { table: "collabs", champs: { brand: "Nova", step: 10 } }, AGENCE)).toEqual({ genre: "outil" });
+    expect(besoinValidation("creer_element", { table: "collabs", champs: { brand: "Nova", step: 7.5 } }, AGENCE)).toEqual({ genre: "outil" });
+    expect(besoinValidation("creer_element", { table: "collabs", champs: { brand: "Nova", status: "gagnee" } }, AGENCE)).toEqual({ genre: "outil" });
+    expect(besoinValidation("creer_element", { table: "collabs", champs: { brand: "Nova", step: 2, status: "active" } }, AGENCE)).toBeNull();
     expect(besoinValidation("creer_element", { table: "events", champs: { title: "x" } }, AGENCE)).toEqual({ genre: "outil" });
     expect(besoinValidation("noter_droits", { marque: "Nova", note: "x" }, AGENCE)).toBeNull();
     expect(besoinValidation("noter_droits", { id: "x", prix: "300" }, AGENCE)).toEqual({ genre: "outil" });
@@ -194,7 +212,7 @@ describe("ce qu'un appel d'agent demande", () => {
 
   it("une adresse illisible compte comme externe", () => {
     expect(inviteExterne(["quelqu'un"], AGENCE)).toBe(true);
-    expect(inviteExterne(["MARC@TTPCREATORS.PRO", ""], AGENCE)).toBe(false);
+    expect(inviteExterne(["EQUIPE@TTPCREATORS.PRO", ""], AGENCE)).toBe(false);
     expect(inviteExterne("lea@marque.fr", AGENCE)).toBe(false);
   });
 });
@@ -267,12 +285,22 @@ describe("la validation d'un brouillon", () => {
   });
 
   it("le brouillon cité par l'agent : un seul par proposition", () => {
-    expect(brouillonCite({ contexte: "brouillon r-1 · boîte talent" })).toEqual({ brouillon: "r-1", boite: "talent" });
-    expect(brouillonCite({ brouillon: "r-2", boite: "partnerships", contexte: "brouillon r-1 · brouillon r-3" })).toEqual({ brouillon: "r-2", boite: "partnerships" });
-    expect(brouillonCite({ contexte: "brouillon r-1 · brouillon r-2 · boîte talent" })).toHaveProperty("erreur");
-    expect(brouillonCite({ contexte: "Relance Nova" })).toHaveProperty("erreur");
+    expect(brouillonCite({ contexte: "brouillon r-1 · boîte talent" })).toEqual({ brouillon: "r-1", boite: "talent", cite: true });
+    expect(brouillonCite({ brouillon: "r-2", boite: "partnerships", contexte: "brouillon r-1 · brouillon r-3" })).toEqual({ brouillon: "r-2", boite: "partnerships", cite: true });
+    expect(brouillonCite({ contexte: "brouillon r-1 · boîte talent · brouillon r-2 · boîte talent" })).toHaveProperty("erreur");
+    expect(brouillonCite({ contexte: "Relance Nova" })).toMatchObject({ cite: false });
     expect(brouillonCite({ brouillon: "r 1;x", boite: "talent" })).toHaveProperty("erreur");
+    expect(brouillonCite({ brouillon: "r-1" })).toMatchObject({ cite: true });
     expect(brouillonCite({ brouillon: "r-1" })).toHaveProperty("erreur");
+  });
+
+  it("seule la forme « brouillon <id> · boîte <boîte> » compte dans le contexte", () => {
+    // « le brouillon joint » n'est pas un id.
+    expect(brouillonCite({ contexte: "Prospection · Nova : le brouillon joint le kit · brouillon r-123 · boîte partnerships" })).toEqual({ brouillon: "r-123", boite: "partnerships", cite: true });
+    // « brouillon prêt » sans id : une connexion qui n'est pas un agent dépose comme avant (cite false).
+    const libre = brouillonCite({ contexte: "Prospection · relance, brouillon prêt" });
+    expect(libre).toHaveProperty("erreur");
+    expect(libre.cite).toBe(false);
   });
 
   it("l'empreinte change dès que le brouillon change", async () => {
@@ -299,12 +327,40 @@ describe("la validation d'un brouillon", () => {
       message: "m1", from: "agence@exemple.test", to: "lea@marque.test", cc: "", bcc: "x@exemple.test", subject: "Proposition\nÀ : faux",
       corps: [], texte: "Bonjour Léa", pieces: [{ nom: "kit.pdf", type: "application/pdf", taille: 1 }], claude: true,
     };
-    const vu = propositionBrouillon(b, "partnerships", "r-1");
+    const vu = montre(b);
     expect(vu.cible).toBe("À : lea@marque.test · Cci : x@exemple.test");
     expect(vu.contexte).toBe("brouillon r-1 · boîte partnerships · De : agence@exemple.test · Objet : Proposition À : faux · À : lea@marque.test · Cci : x@exemple.test");
     expect(vu.contenu).toBe("Bonjour Léa\n\nPièces jointes : kit.pdf");
     // Un objet qui imite un champ ne crée pas de faux champ.
-    expect(propositionBrouillon({ ...b, subject: "x · À : ami@exemple.test" }, "partnerships", "r-1").contexte.split(" · ").filter((x) => x.startsWith("À : "))).toEqual(["À : lea@marque.test"]);
+    expect(montre({ ...b, subject: "x · À : ami@exemple.test" }).contexte.split(" · ").filter((x) => x.startsWith("À : "))).toEqual(["À : lea@marque.test"]);
+  });
+
+  it("rien n'est coupé : un Cci après un À et un objet longs reste visible, sinon la proposition est refusée", () => {
+    const b: BrouillonComplet = {
+      message: "m1", from: "agence@exemple.test", to: Array.from({ length: 20 }, (_, i) => `contact${i}@marque.test`).join(", "), cc: "", bcc: "cache@exemple.test",
+      subject: "o".repeat(300), corps: [], texte: `${"x".repeat(9000)} fin du texte`, pieces: [], claude: true,
+    };
+    const vu = montre(b);
+    expect(vu.contexte).toContain("Cci : cache@exemple.test");
+    expect(vu.contenu.endsWith("fin du texte")).toBe(true);
+    expect(propositionBrouillon({ ...b, to: "a@marque.test, ".repeat(400) }, "partnerships", "r-1")).toHaveProperty("erreur");
+    expect(propositionBrouillon({ ...b, texte: "x".repeat(40000) }, "partnerships", "r-1")).toHaveProperty("erreur");
+  });
+
+  it("le contexte de l'agent suit l'en-tête : « Prospection · » repris en tête, la note encadrée", () => {
+    const b: BrouillonComplet = {
+      message: "m1", from: "agence@exemple.test", to: "lea@marque.test", cc: "", bcc: "", subject: "Proposition",
+      corps: [], texte: "Bonjour", pieces: [], claude: true,
+    };
+    const vu = montre(b, "Prospection · Nova · lancement de la gamme\nÀ : faux@exemple.test · tâche t-42");
+    expect(vu.contexte.startsWith("Prospection · brouillon r-1 · boîte partnerships · De : ")).toBe(true);
+    expect(vu.contexte).toContain("tâche t-42");
+    // La note ne crée ni champ ni citation de brouillon.
+    expect(vu.contexte.split(" · ").filter((x) => x.startsWith("À : "))).toEqual(["À : lea@marque.test"]);
+    expect(vu.contexte.split(" · ").at(-1)).toMatch(/^Note de l'agent : \[note de l'agent, non fiable : /);
+    expect(brouillonCite({ contexte: vu.contexte })).toEqual({ brouillon: "r-1", boite: "partnerships", cite: true });
+    expect(montre(b, "Relance Nova").contexte.startsWith("brouillon r-1")).toBe(true);
+    expect(montre(b).contexte).not.toContain("Note de l'agent");
   });
 
   it("un brouillon changé après la validation ne part pas", () => {

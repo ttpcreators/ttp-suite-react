@@ -31,7 +31,7 @@ const AGENCE = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLower
 const ENTETE = "Verrou agent : rien n'est parti, rien n'a été fait.";
 
 export type Verdict =
-  | { ok: true; validations?: Record<string, string>; propositions?: Record<string, string>; consommees?: number }
+  | { ok: true; validations?: Record<string, string>; propositions?: Record<string, string>; messages?: Record<string, string>; consommees?: number }
   | { ok: false; texte: string };
 
 /**
@@ -119,7 +119,7 @@ export async function verrouAgent(sb: SupabaseClient, ctx: Ctx, nom: string, a: 
     try {
       const b = await lireBrouillonComplet(sb, pb.box, id);
       if (empreinteChangee(range.empreinte, await empreinteBrouillon(b))) return { id, pourquoi: "il n'est plus celui que la page Agents a montré (modifié depuis la proposition) : à reproposer" };
-      return { id, valideLe: val.valide_le, proposition: val.id };
+      return { id, valideLe: val.valide_le, proposition: val.id, message: b.message };
     } catch (e) {
       const m = String((e as Error)?.message ?? e);
       return { id, pourquoi: /gmail_404/.test(m) ? "introuvable (déjà envoyé ou supprimé)" : `illisible (${m.slice(0, 80)})` };
@@ -127,7 +127,7 @@ export async function verrouAgent(sb: SupabaseClient, ctx: Ctx, nom: string, a: 
   }));
   const manquants = lus.filter((x): x is { id: string; pourquoi: string } => "pourquoi" in x);
   if (manquants.length) return { ok: false, texte: refusBrouillons(nom, manquants, await nomValideur(sb, ctx)) };
-  const bons = lus as { id: string; valideLe: string; proposition: string }[];
+  const bons = lus as { id: string; valideLe: string; proposition: string; message: string }[];
   // Consommées avant l'envoi ou la mise en file : une proposition ne sert qu'une fois.
   let pris: Set<string>;
   try {
@@ -144,6 +144,8 @@ export async function verrouAgent(sb: SupabaseClient, ctx: Ctx, nom: string, a: 
     consommees: pris.size,
     validations: Object.fromEntries(bons.map((x) => [x.id, x.valideLe])),
     propositions: Object.fromEntries(bons.map((x) => [x.id, x.proposition])),
+    // Le message relu ici : l'envoi s'arrête si le brouillon a changé entre ce contrôle et l'envoi.
+    messages: Object.fromEntries(bons.map((x) => [x.id, x.message])),
   };
 }
 
@@ -170,15 +172,16 @@ export async function connexionDeLaFile(sb: SupabaseClient, grantId: string): Pr
  * file ; sans elle (ligne programmée avant le SQL du 27/11), les propositions de mail qui citent
  * ce brouillon. Une proposition du serveur (depuis le 28/11) garde l'empreinte du brouillon
  * montré dans la page Agents : le brouillon est relu, et une empreinte différente l'arrête.
- * Renvoie la date de la validation qui tient (le brouillon ne doit pas avoir changé depuis), ou
- * la raison de ne pas envoyer.
+ * Renvoie la date de la validation qui tient (le brouillon ne doit pas avoir changé depuis) et,
+ * quand le brouillon a été relu, l'id de son message (l'envoi s'arrête s'il a changé), ou la
+ * raison de ne pas envoyer.
  * Lève une erreur si la base ne répond pas : la file réessaie plus tard (jamais d'envoi à l'aveugle).
  */
 export async function validationToujoursLa(
   sb: SupabaseClient,
   row: { brouillon: string; proposition?: string | null },
   valideur: string | null = null,
-): Promise<{ ok: true; valideLe: string } | { ok: false; raison: string }> {
+): Promise<{ ok: true; valideLe: string; message?: string } | { ok: false; raison: string }> {
   const db = sb.schema("agent").from("actions");
   const { data, error } = row.proposition
     ? await db.select(COLONNES).eq("id", row.proposition).limit(1)
@@ -195,15 +198,17 @@ export async function validationToujoursLa(
     if (range) {
       const pb = await parseMailBox(sb, range.boite);
       if ("error" in pb) return { ok: false, raison: pb.error };
-      let actuelle: string;
+      let lu: { empreinte: string; message: string };
       try {
-        actuelle = await empreinteBrouillon(await lireBrouillonComplet(sb, pb.box, row.brouillon));
+        const b = await lireBrouillonComplet(sb, pb.box, row.brouillon);
+        lu = { empreinte: await empreinteBrouillon(b), message: b.message };
       } catch (e) {
         const m = String((e as Error)?.message ?? e);
         if (/gmail_404/.test(m)) return { ok: false, raison: "brouillon introuvable (déjà envoyé ou supprimé)" };
         throw e; // Gmail ne répond pas : la file réessaie plus tard
       }
-      if (empreinteChangee(range.empreinte, actuelle)) return { ok: false, raison: "brouillon modifié depuis que la page Agents l'a montré (empreinte différente)" };
+      if (empreinteChangee(range.empreinte, lu.empreinte)) return { ok: false, raison: "brouillon modifié depuis que la page Agents l'a montré (empreinte différente)" };
+      return { ok: true, valideLe: tient.valide_le, message: lu.message };
     }
     return { ok: true, valideLe: tient.valide_le };
   }
