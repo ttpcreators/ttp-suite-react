@@ -84,8 +84,10 @@ const A_COPIER = ["whatsapp", "instagram", "linkedin"];
 
 export function gesteValider(a: PropositionLite, alfredId: string | null): GesteValider {
   if (avanceCollabOf(a)) return "avancer_collab";
-  if (a.outil != null) return "alfred_fait";
+  // Un mail : le serveur range lui même le brouillon dans `outil` (verrou des agents, 28/11) ;
+  // c'est toujours un mail que l'agent envoie, pas un appel d'outil.
   if (a.type === "brouillon_mail" && ((!!alfredId && a.agent_id === alfredId) || a.connexion_agent === true)) return "alfred_envoie";
+  if (a.outil != null && a.type !== "brouillon_mail") return "alfred_fait";
   if (A_COPIER.includes(a.type) && !!a.contenu?.trim()) return "copier_envoye";
   return "marquer_envoye";
 }
@@ -142,6 +144,28 @@ export function patchEtape(cur: { step: number; status: string | null }, etape: 
   return step === STEP_COUNT && cur.status === "active" ? { step, status: "gagnee" } : { step };
 }
 
+/**
+ * En-tête d'un mail dont le serveur a lu le brouillon (proposer_action, 28/11) : De, Objet, À,
+ * Cc, Cci, tels que le serveur les a écrits dans contexte. Toujours affichés en entier en tête de
+ * la carte. Vide pour une autre proposition (le texte d'un agent n'est jamais présenté ainsi).
+ */
+export function lignesMail(a: Pick<PropositionLite, "type" | "contexte" | "outil">): string[] {
+  const o = a.outil && typeof a.outil === "object" ? (a.outil as { nom?: unknown }) : null;
+  if (a.type !== "brouillon_mail" || o?.nom !== "envoyer_brouillon" || !a.contexte) return [];
+  return a.contexte.split(" · ").filter((x) => /^(De|Objet|À|Cc|Cci) : /.test(x));
+}
+
+/**
+ * La note de l'agent sous l'en-tête d'un tel mail (« Prospection » s'il l'a dit, puis ses raisons
+ * après « Note de l'agent : »), encadrée par le serveur. Vide pour une autre proposition.
+ */
+export function noteMail(a: Pick<PropositionLite, "type" | "contexte" | "outil">): string {
+  if (!lignesMail(a).length || !a.contexte) return "";
+  const parts = a.contexte.split(" · ");
+  const note = parts.find((x) => x.startsWith("Note de l'agent : ")) ?? "";
+  return [parts[0] === "Prospection" ? "Prospection" : "", note].filter(Boolean).join(" · ");
+}
+
 export type Geste = "valider" | "modifier" | "ecarter" | "suivante" | "precedente" | "cocher" | "valider_selection";
 
 /**
@@ -172,10 +196,12 @@ export function positionVoisine(i: number, n: number, sens: 1 | -1): number {
 
 /**
  * Propositions cochées que « Valider (n) » peut traiter d'un coup : jamais celles dont la
- * validation copie un texte (WhatsApp, DM, LinkedIn), qui restent dans la file.
+ * validation copie un texte (WhatsApp, DM, LinkedIn), ni un mail qu'un agent enverra, ni un
+ * appel d'outil d'un agent : chacun se lit en entier et se valide seul.
  */
+const PAS_EN_LOT: GesteValider[] = ["copier_envoye", "alfred_envoie", "alfred_fait"];
 export function validablesEnLot<T extends PropositionLite>(cochees: T[], alfredId: string | null): T[] {
-  return cochees.filter((a) => gesteValider(a, alfredId) !== "copier_envoye");
+  return cochees.filter((a) => !PAS_EN_LOT.includes(gesteValider(a, alfredId)));
 }
 
 /**

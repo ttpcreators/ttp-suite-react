@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { Check, Copy, ExternalLink, Pencil, Send, X, Keyboard, type LucideIcon } from "@/components/icons";
 import { fmtDayTime } from "@/lib/dates";
-import { gesteClavier, gesteValider, modeModifier, positionCourante, positionVoisine, validablesEnLot, type PropositionLite } from "@/lib/aValider";
+import { gesteClavier, gesteValider, lignesMail, modeModifier, noteMail, positionCourante, positionVoisine, validablesEnLot, type PropositionLite } from "@/lib/aValider";
 
 /**
  * La file « À valider » de la page Agents, faite pour aller vite : une carte compacte par
@@ -220,7 +220,14 @@ export function AValiderFile({ items, alfredId, meta, agentBadge, origine, copie
               <span className="ml-auto shrink-0 text-[10px] tabular-nums text-faint">{fmtDayTime(a.cree_le)}</span>
             </div>
             {qui && <p className="mt-0.5 truncate text-[10px] text-faint">Proposé par {qui}</p>}
-            {a.contexte && <p className={cn("mt-1 text-[11px] leading-relaxed text-muted-foreground", !active && "line-clamp-1")}>{a.contexte}</p>}
+            {lignesMail(a).length > 0 && (
+              <div className="mt-1 flex flex-col text-[11px] leading-relaxed text-foreground">
+                {lignesMail(a).map((l) => <span key={l} className="break-words">{l}</span>)}
+              </div>
+            )}
+            {noteMail(a) && <p className={cn("mt-1 text-[11px] leading-relaxed text-muted-foreground", !active && "line-clamp-1")}>{noteMail(a)}</p>}
+            {a.contexte && !lignesMail(a).length && <p className={cn("mt-1 text-[11px] leading-relaxed text-muted-foreground", !active && "line-clamp-1")}>{a.contexte}</p>}
+            {active && a.lien_spark && <p className="mt-1 truncate text-[10px] text-faint" title={a.lien_spark}>Lien : {a.lien_spark}</p>}
             {ed ? (
               <textarea autoFocus value={ed.texte} rows={Math.min(14, Math.max(4, ed.texte.split("\n").length + 1))}
                 onChange={(e) => setEdition({ id: a.id, texte: e.target.value })}

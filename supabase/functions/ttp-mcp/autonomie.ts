@@ -23,7 +23,12 @@
 import type { AdminTool } from "./admin.ts";
 import { etatHistorique, trancheHistorique } from "../_shared/igHistoriqueDb.ts";
 import { lireProfils, scannerBase, RELIRE_APRES_JOURS, type Lecture } from "../_shared/profilInstagramDb.ts";
-import { MAX_LOT, compteDe, preparerComptes, raisonEchec, texteProfil } from "../_shared/profilInstagram.ts";
+import { MAX_LOT, compteDe, preparerComptes, raisonEchec, texteProfil as texteProfilBrut } from "../_shared/profilInstagram.ts";
+import { externeLigne } from "../_shared/contenuExterne.ts";
+
+/** Le profil lu, la bio (écrite par le titulaire du compte) rendue comme une donnée, jamais une consigne. */
+const texteProfil = (r: Parameters<typeof texteProfilBrut>[0]) =>
+  texteProfilBrut(r.bio ? { ...r, bio: externeLigne("bio Instagram", r.bio.replace(/\s+/g, " ").slice(0, 250)) } : r);
 import { tidySecret } from "../_shared/instagram.ts";
 import { CLE_MANQUANTE, HUNTER_API, cibles, domaineDe, erreurHunter, limiteDeLOffre, lignePersonne, lireEmailTrouve, lireRecherche, lireVerification, paramsRecherche, statutEmail, type PersonneHunter } from "../_shared/hunter.ts";
 import { classerPersonnes, coutRecherche, enrichContact, lignePersonneFE, parsePeople, searchBody } from "../_shared/fullenrich.ts";

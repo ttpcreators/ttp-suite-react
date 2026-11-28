@@ -494,17 +494,19 @@ async function envoyerUne(sb: SupabaseClient, row: Ligne): Promise<string> {
     // d'un compte agence, et du valideur choisi aujourd'hui pour la connexion), et le brouillon ne
     // doit pas avoir changé depuis. Base illisible : erreur levée, nouvel essai dans 15 minutes
     // (jamais d'envoi à l'aveugle).
+    let message: string | undefined;
     if (row.valide_le) {
       const v = await validationToujoursLa(sb, { brouillon: row.brouillon, proposition: row.proposition ?? null }, cx?.agent ? cx.valideur : null);
       if (!v.ok) return await fin("annule", { erreur: v.raison.slice(0, 300) });
       if (modifieApres(b.date, v.valideLe)) return await fin("annule", { erreur: "brouillon modifié après sa validation dans la page Agents" });
+      message = v.message;
     }
     const dest = adresses(`${b.to}, ${b.cc}`);
     const raison = await bloquant(sb, dest, b.reponse, true);
     if (raison) return await fin("annule", { erreur: raison.slice(0, 300) });
     const invalide = await adressesInvalides(sb, dest);
     if (invalide) return await fin("annule", { erreur: invalide.slice(0, 300) });
-    const r = await sendDraft(sb, box, row.brouillon, undefined, verifierAvantEnvoi(sb, row.createur || undefined, true));
+    const r = await sendDraft(sb, box, row.brouillon, undefined, verifierAvantEnvoi(sb, row.createur || undefined, true), message);
     // Le mail est parti : le statut « envoyé » doit être écrit, même si les textes relus chez
     // Gmail sont refusés (sinon la ligne finirait en « échec » et le mail pourrait repartir).
     const envoyeAt = new Date().toISOString();
@@ -522,6 +524,7 @@ async function envoyerUne(sb: SupabaseClient, row: Ligne): Promise<string> {
     const m = (e as Error).message ?? "";
     if (/gmail_404/.test(m)) return await fin("annule", { erreur: "brouillon introuvable (envoyé ou supprimé à la main)" });
     if (m === "not_claude") return await fin("annule", { erreur: "brouillon pas préparé par Claude" });
+    if (m === "draft_changed") return await fin("annule", { erreur: "brouillon modifié entre le dernier contrôle et l'envoi" });
     if (m.startsWith("kit_refuse: ")) return await fin("annule", { erreur: m.slice(12).replace(/\n/g, " ").slice(0, 300) });
     // Erreur passagère (réseau, Gmail) : nouvel essai dans 15 minutes, 3 essais au plus.
     if (row.essais < 3) return await fin("en_attente", { erreur: `nouvel essai : ${m.slice(0, 200)}`, prevu_a: new Date(Date.now() + 15 * 60_000).toISOString() });
