@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  avanceCollabOf, detailModification, gesteClavier, gesteValider, modeModifier, patchEtape,
+  avanceCollabOf, detailModification, gesteClavier, gesteValider, lignesMail, modeModifier, patchEtape,
   positionCourante, positionVoisine, statutApresValidation, texteModifie, typeAffiche, validablesEnLot, type PropositionLite,
 } from "./aValider";
 
@@ -147,15 +147,22 @@ describe("corrections de relecture", () => {
     expect(patchEtape({ step: 6, status: "perdue" }, 9)).toBeNull();
     expect(patchEtape({ step: 6, status: "archivee" }, 9)).toBeNull();
   });
-  it("Valider (n) laisse dans la file les messages à copier", () => {
+  it("Valider (n) laisse dans la file les messages à copier, les mails et les appels d'outil des agents", () => {
     const items = [
       p({ id: "w", type: "whatsapp" }),
       p({ id: "m", type: "brouillon_mail", agent_id: ALFRED }),
       p({ id: "c", type: "avancer_collab", lien_spark: lien(9) }),
       p({ id: "i", type: "instagram" }),
       p({ id: "a", type: "alerte", contenu: "Facture à créer" }),
+      p({ id: "o", type: "alerte", outil: { nom: "noter_reversement", arguments: {} } }),
+      p({ id: "g", type: "brouillon_mail", connexion_agent: true }),
     ];
-    expect(validablesEnLot(items, ALFRED).map((x) => x.id)).toEqual(["m", "c", "a"]);
+    expect(validablesEnLot(items, ALFRED).map((x) => x.id)).toEqual(["c", "a"]);
+  });
+  it("un mail dont le serveur a rangé le brouillon reste un mail que l'agent envoie", () => {
+    const outil = { nom: "envoyer_brouillon", arguments: { boite: "partnerships", brouillon: "r-1" }, empreinte: "ab" };
+    expect(gesteValider(p({ type: "brouillon_mail", agent_id: ALFRED, outil }), ALFRED)).toBe("alfred_envoie");
+    expect(gesteValider(p({ type: "brouillon_mail", outil }), ALFRED)).toBe("marquer_envoye");
   });
   it("la proposition courante se retrouve par son id", () => {
     // Une nouvelle proposition arrive en tête : la cible reste la même carte.
@@ -165,5 +172,17 @@ describe("corrections de relecture", () => {
     expect(positionCourante(["a"], "b", 4)).toBe(0);
     expect(positionCourante([], "b", 2)).toBe(0);
     expect(positionCourante(["a", "b"], null, 0)).toBe(0);
+  });
+});
+
+describe("lignesMail", () => {
+  const outil = { nom: "envoyer_brouillon", arguments: { boite: "partnerships", brouillon: "r-1" }, empreinte: "ab" };
+  it("l'en-tête lu par le serveur, ligne par ligne", () => {
+    const contexte = "brouillon r-1 · boîte partnerships · De : agence@exemple.test · Objet : Proposition · À : lea@marque.test · Cci : x@exemple.test";
+    expect(lignesMail({ type: "brouillon_mail", contexte, outil })).toEqual(["De : agence@exemple.test", "Objet : Proposition", "À : lea@marque.test", "Cci : x@exemple.test"]);
+  });
+  it("rien pour une proposition sans brouillon lu par le serveur", () => {
+    expect(lignesMail({ type: "brouillon_mail", contexte: "À : faux@exemple.test", outil: null })).toEqual([]);
+    expect(lignesMail({ type: "alerte", contexte: "À : x", outil })).toEqual([]);
   });
 });

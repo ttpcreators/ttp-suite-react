@@ -10,15 +10,20 @@
 // SQL : 2026-11-27-securite-alfred, puis 2026-11-27-verrou-connexions (valideur, proposition et
 // connexion gardées dans la file et relues juste avant l'envoi : connexionDeLaFile,
 // validationToujoursLa).
+// Depuis le 28/11 : une validation ne vaut que pour la connexion qui l'a proposée (grant_id), elle
+// est consommée (statut « envoye ») AVANT que l'outil tourne (deux appels lancés ensemble ne
+// passent pas sur la même), et un brouillon doit avoir l'empreinte relevée par le serveur quand
+// il l'a montré dans la page Agents (brouillonVerrou.ts).
 // Les autres connexions (Marc, Gianni, leurs Claude) ne passent jamais par ici.
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 import type { Ctx } from "./oauth.ts";
-import { lireEntetesBrouillon, parseMailBox } from "./gmail.ts";
+import { parseMailBox } from "./gmail.ts";
+import { lireBrouillonComplet } from "./brouillonVerrou.ts";
 import {
-  VALIDATION_JOURS, besoinValidation, modifieApres, refusBrouillons, refusInterdit, refusOutil, validationBrouillon, validationOutil, validationTient,
-  type ConnexionFile, type PropositionRelue, type Validation,
+  VALIDATION_JOURS, besoinValidation, brouillonDe, empreinteBrouillon, empreinteChangee, refusBrouillons, refusInterdit, refusOutil, validationBrouillon,
+  validationOutil, validationTient, type ConnexionFile, type PropositionRelue, type Validation,
 } from "../_shared/verrouAgent.ts";
 
 type Args = Record<string, unknown>;
@@ -26,8 +31,21 @@ const AGENCE = (Deno.env.get("AGENCY_MAIL_DOMAIN") ?? "ttpcreators.pro").toLower
 const ENTETE = "Verrou agent : rien n'est parti, rien n'a été fait.";
 
 export type Verdict =
-  | { ok: true; validations?: Record<string, string>; propositions?: Record<string, string>; apres?: (reussi: boolean) => Promise<void> }
+  | { ok: true; validations?: Record<string, string>; propositions?: Record<string, string>; consommees?: number }
   | { ok: false; texte: string };
+
+/**
+ * Consomme des validations (statut valide → envoye, seulement si elles sont encore « valide ») et
+ * renvoie celles qui ont été prises. Le déclencheur agent.action_validation garde valide_par et
+ * valide_le : la file d'envoi relit encore la proposition juste avant l'envoi.
+ */
+async function consommer(sb: SupabaseClient, ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set();
+  const { data, error } = await sb.schema("agent").from("actions")
+    .update({ statut: "envoye", traite_le: new Date().toISOString() }).in("id", ids).eq("statut", "valide").select("id");
+  if (error) throw new Error(`validation non consommée (${error.message.slice(0, 120)})`);
+  return new Set(((data as { id: string }[] | null) ?? []).map((r) => r.id));
+}
 
 /** Ceux de ces comptes qui sont encore des comptes agence. Lève une erreur si la lecture échoue. */
 async function comptesAgence(sb: SupabaseClient, ids: string[]): Promise<Set<string>> {
@@ -41,7 +59,7 @@ async function comptesAgence(sb: SupabaseClient, ids: string[]): Promise<Set<str
 async function lireValidations(sb: SupabaseClient): Promise<{ liste: Validation[]; comptes: Set<string> } | { erreur: string }> {
   const depuis = new Date(Date.now() - VALIDATION_JOURS * 86_400_000).toISOString();
   const { data, error } = await sb.schema("agent").from("actions")
-    .select("id, type, contexte, lien_spark, outil, valide_par, valide_le")
+    .select("id, type, contexte, lien_spark, outil, valide_par, valide_le, grant_id")
     .eq("statut", "valide").gte("valide_le", depuis).order("valide_le", { ascending: false }).limit(300);
   if (error) return { erreur: `validations illisibles (${error.message.slice(0, 120)}), SQL 2026-11-27-securite-alfred à lancer ?` };
   const liste = (data as Validation[] | null) ?? [];
@@ -63,10 +81,10 @@ async function nomValideur(sb: SupabaseClient, ctx: Ctx): Promise<string | null>
 }
 
 /**
- * Avant chaque outil : refus (avec la marche à suivre) ou feu vert. Pour un appel d'outil
- * validé, `apres` marque la proposition « envoye » quand l'outil a réussi (une validation = un appel).
- * Pour des brouillons, `validations` donne la date de validation de chacun et `propositions`
- * l'id de la proposition validée (file d'envoi : relue juste avant l'envoi).
+ * Avant chaque outil : refus (avec la marche à suivre) ou feu vert. La validation trouvée est
+ * consommée avant le feu vert (une validation = un appel, même si l'outil échoue ensuite :
+ * `consommees` le dit). Pour des brouillons, `validations` donne la date de validation de chacun
+ * et `propositions` l'id de la proposition validée (file d'envoi : relue juste avant l'envoi).
  */
 export async function verrouAgent(sb: SupabaseClient, ctx: Ctx, nom: string, a: Args): Promise<Verdict> {
   if (!ctx.agent) return { ok: true };
@@ -79,26 +97,28 @@ export async function verrouAgent(sb: SupabaseClient, ctx: Ctx, nom: string, a: 
   const valideur = ctx.valideur ?? null;
 
   if (besoin.genre === "outil") {
-    const trouve = validationOutil(v.liste, nom, a, v.comptes, maintenant, valideur);
+    const trouve = validationOutil(v.liste, nom, a, v.comptes, maintenant, valideur, ctx.grantId);
     if (!trouve) return { ok: false, texte: refusOutil(nom, a, await nomValideur(sb, ctx)) };
-    return {
-      ok: true,
-      apres: async (reussi) => {
-        if (!reussi) return; // l'outil a échoué : la validation reste, l'agent peut réessayer
-        await sb.schema("agent").from("actions").update({ statut: "envoye", traite_le: new Date().toISOString() }).eq("id", trouve.id).eq("statut", "valide");
-      },
-    };
+    let pris: Set<string>;
+    try {
+      pris = await consommer(sb, [trouve.id]);
+    } catch (e) {
+      return { ok: false, texte: `${ENTETE} Vérification impossible : ${(e as Error).message}.` };
+    }
+    if (!pris.has(trouve.id)) return { ok: false, texte: `${ENTETE} ${nom} : cette validation a déjà servi (un autre appel l'a utilisée). Une validation = un appel : repropose avec proposer_action.` };
+    return { ok: true, consommees: 1 };
   }
 
   if (!besoin.ids.length) return { ok: false, texte: refusBrouillons(nom, [{ id: "?", pourquoi: "aucun id de brouillon valable" }], await nomValideur(sb, ctx)) };
   const pb = await parseMailBox(sb, a.boite);
   if ("error" in pb) return { ok: false, texte: `${ENTETE} ${pb.error}` };
   const lus = await Promise.all(besoin.ids.map(async (id) => {
-    const val = validationBrouillon(v.liste, id, v.comptes, maintenant, valideur);
-    if (!val?.valide_le) return { id, pourquoi: "aucune proposition validée dans la page Agents ne le cite" };
+    const val = validationBrouillon(v.liste, id, pb.box, v.comptes, maintenant, valideur, ctx.grantId);
+    const range = val ? brouillonDe(val) : null;
+    if (!val?.valide_le || !range) return { id, pourquoi: "aucune proposition validée dans la page Agents pour ce brouillon, cette boîte et cette connexion (proposer_action, type brouillon_mail)" };
     try {
-      const b = await lireEntetesBrouillon(sb, pb.box, id);
-      if (modifieApres(b.date, val.valide_le)) return { id, pourquoi: "modifié après la validation, à faire valider de nouveau" };
+      const b = await lireBrouillonComplet(sb, pb.box, id);
+      if (empreinteChangee(range.empreinte, await empreinteBrouillon(b))) return { id, pourquoi: "il n'est plus celui que la page Agents a montré (modifié depuis la proposition) : à reproposer" };
       return { id, valideLe: val.valide_le, proposition: val.id };
     } catch (e) {
       const m = String((e as Error)?.message ?? e);
@@ -108,14 +128,27 @@ export async function verrouAgent(sb: SupabaseClient, ctx: Ctx, nom: string, a: 
   const manquants = lus.filter((x): x is { id: string; pourquoi: string } => "pourquoi" in x);
   if (manquants.length) return { ok: false, texte: refusBrouillons(nom, manquants, await nomValideur(sb, ctx)) };
   const bons = lus as { id: string; valideLe: string; proposition: string }[];
+  // Consommées avant l'envoi ou la mise en file : une proposition ne sert qu'une fois.
+  let pris: Set<string>;
+  try {
+    pris = await consommer(sb, [...new Set(bons.map((x) => x.proposition))]);
+  } catch (e) {
+    return { ok: false, texte: `${ENTETE} Vérification impossible : ${(e as Error).message}.` };
+  }
+  const dejaPris = bons.filter((x) => !pris.has(x.proposition));
+  if (dejaPris.length) {
+    return { ok: false, texte: refusBrouillons(nom, dejaPris.map((x) => ({ id: x.id, pourquoi: "sa validation a déjà servi (un autre appel l'a utilisée)" })), await nomValideur(sb, ctx)) };
+  }
   return {
     ok: true,
+    consommees: pris.size,
     validations: Object.fromEntries(bons.map((x) => [x.id, x.valideLe])),
     propositions: Object.fromEntries(bons.map((x) => [x.id, x.proposition])),
   };
 }
 
 const COLONNES = "id, type, statut, contexte, lien_spark, outil, valide_par, valide_le";
+const COLONNES_SANS_LIEN = "id, type, statut, contexte, outil, valide_par, valide_le";
 
 /**
  * File d'envoi, juste avant l'envoi : la connexion qui a programmé la ligne (envoi_file.grant_id),
@@ -135,8 +168,10 @@ export async function connexionDeLaFile(sb: SupabaseClient, grantId: string): Pr
  * tient-elle encore (pas retirée, pas écartée, toujours d'un compte agence, et du valideur
  * d'aujourd'hui de la connexion s'il y en a un) ? Relit la proposition gardée sur la ligne de la
  * file ; sans elle (ligne programmée avant le SQL du 27/11), les propositions de mail qui citent
- * ce brouillon. Renvoie la date de la validation qui tient (le brouillon ne doit pas avoir changé
- * depuis), ou la raison de ne pas envoyer.
+ * ce brouillon. Une proposition du serveur (depuis le 28/11) garde l'empreinte du brouillon
+ * montré dans la page Agents : le brouillon est relu, et une empreinte différente l'arrête.
+ * Renvoie la date de la validation qui tient (le brouillon ne doit pas avoir changé depuis), ou
+ * la raison de ne pas envoyer.
  * Lève une erreur si la base ne répond pas : la file réessaie plus tard (jamais d'envoi à l'aveugle).
  */
 export async function validationToujoursLa(
@@ -147,13 +182,30 @@ export async function validationToujoursLa(
   const db = sb.schema("agent").from("actions");
   const { data, error } = row.proposition
     ? await db.select(COLONNES).eq("id", row.proposition).limit(1)
-    : await db.select(COLONNES).eq("type", "brouillon_mail").not("valide_le", "is", null)
-      .or(`contexte.ilike.${JSON.stringify(`%${row.brouillon}%`)},lien_spark.ilike.${JSON.stringify(`%${row.brouillon}%`)}`)
+    // Ligne d'avant le SQL du 27/11 : l'id cité dans contexte (jamais le lien, qui ne se lit pas).
+    : await db.select(COLONNES_SANS_LIEN).eq("type", "brouillon_mail").not("valide_le", "is", null)
+      .ilike("contexte", `%${row.brouillon.replace(/[%_\\]/g, (c) => `\\${c}`)}%`)
       .order("valide_le", { ascending: false }).limit(20);
   if (error) throw new Error(`validation illisible : ${error.message.slice(0, 120)}`);
   const props = (data as PropositionRelue[] | null) ?? [];
   const comptes = await comptesAgence(sb, [...new Set(props.map((p) => p.valide_par).filter((x): x is string => !!x))]);
   const tient = props.find((p) => validationTient(p, row.brouillon, comptes, valideur) === null);
-  if (tient?.valide_le) return { ok: true, valideLe: tient.valide_le };
+  if (tient?.valide_le) {
+    const range = brouillonDe(tient);
+    if (range) {
+      const pb = await parseMailBox(sb, range.boite);
+      if ("error" in pb) return { ok: false, raison: pb.error };
+      let actuelle: string;
+      try {
+        actuelle = await empreinteBrouillon(await lireBrouillonComplet(sb, pb.box, row.brouillon));
+      } catch (e) {
+        const m = String((e as Error)?.message ?? e);
+        if (/gmail_404/.test(m)) return { ok: false, raison: "brouillon introuvable (déjà envoyé ou supprimé)" };
+        throw e; // Gmail ne répond pas : la file réessaie plus tard
+      }
+      if (empreinteChangee(range.empreinte, actuelle)) return { ok: false, raison: "brouillon modifié depuis que la page Agents l'a montré (empreinte différente)" };
+    }
+    return { ok: true, valideLe: tient.valide_le };
+  }
   return { ok: false, raison: validationTient(props[0] ?? null, row.brouillon, comptes, valideur) ?? "validation introuvable dans la page Agents" };
 }

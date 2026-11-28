@@ -8,18 +8,21 @@ describe("en-tête d'acteur du connecteur", () => {
     expect(ENTETE_ACTEUR).toBe("x-ttp-acteur");
     expect(ENTETE_ACTEUR).toBe(ENTETE_ACTEUR.toLowerCase());
   });
-  it("dit Alfred pour une connexion d'agent autonome", () => {
-    expect(valeurActeur({ agent: true, userId: ID })).toBe(`alfred:${ID}`);
+  it("dit Alfred seulement pour une connexion au libellé « Alfred »", () => {
+    expect(valeurActeur({ libelle: "Alfred", userId: ID })).toBe(`alfred:${ID}`);
+    expect(valeurActeur({ libelle: " alfred ", userId: ID })).toBe(`alfred:${ID}`);
   });
-  it("dit Claude pour la connexion d'un membre de l'équipe", () => {
-    expect(valeurActeur({ agent: false, userId: ID.toUpperCase() })).toBe(`claude:${ID}`);
+  it("une connexion d'agent qui n'est pas Alfred, ou sans libellé : Claude", () => {
+    expect(valeurActeur({ libelle: "Tâches planifiées", userId: ID })).toBe(`claude:${ID}`);
+    expect(valeurActeur({ libelle: "Alfred bis", userId: ID })).toBe(`claude:${ID}`);
+    expect(valeurActeur({ userId: ID.toUpperCase() })).toBe(`claude:${ID}`);
   });
   it("laisse tomber un id illisible, jamais de texte libre dans l'en-tête", () => {
-    expect(valeurActeur({ agent: false, userId: "Créatrice A" })).toBe("claude");
-    expect(valeurActeur({ agent: true, userId: "" })).toBe("alfred");
+    expect(valeurActeur({ libelle: null, userId: "Créatrice A" })).toBe("claude");
+    expect(valeurActeur({ libelle: "Alfred", userId: "" })).toBe("alfred");
   });
   it("donne l'objet d'en-têtes du client Supabase, en ASCII", () => {
-    const h = entetesActeur({ agent: false, userId: ID });
+    const h = entetesActeur({ userId: ID });
     expect(h).toEqual({ "x-ttp-acteur": `claude:${ID}` });
     expect(/^[\x20-\x7e]+$/.test(h[ENTETE_ACTEUR])).toBe(true);
   });
