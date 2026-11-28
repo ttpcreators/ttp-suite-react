@@ -158,7 +158,10 @@ export function Login({ lienPerime = false }: { lienPerime?: boolean } = {}) {
     const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
       redirectTo: adresseRetour(window.location.origin, BASE),
     });
-    if (resetErr) setError("Une erreur est survenue. Réessaie dans un moment.");
+    // 429 : Supabase refuse une 2e demande dans la minute, seulement pour un compte qui
+    // existe. Même message qu'un envoi réussi : l'écran ne dit pas si le compte existe.
+    const status = (resetErr as { status?: number } | null)?.status ?? 0;
+    if (resetErr && status !== 429) setError("Une erreur est survenue. Réessaie dans un moment.");
     else setNotice("Email envoyé. Ouvre le lien qu'il contient pour choisir ton nouveau mot de passe.");
   };
 

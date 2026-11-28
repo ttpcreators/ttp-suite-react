@@ -26,17 +26,18 @@ describe("adresseRetour", () => {
 });
 
 describe("motDePasseInvalide", () => {
-  it("6 caractères au moins, et les deux saisies pareilles", () => {
-    expect(motDePasseInvalide("abc", "abc")).toBe("6 caractères au moins.");
-    expect(motDePasseInvalide("abcdef", "abcdeg")).toBe("Les deux mots de passe ne sont pas identiques.");
-    expect(motDePasseInvalide("abcdef", "abcdef")).toBe(null);
+  it("12 caractères au moins, et les deux saisies pareilles", () => {
+    expect(motDePasseInvalide("abc", "abc")).toBe("12 caractères au moins.");
+    expect(motDePasseInvalide("abcdefghijk", "abcdefghijk")).toBe("12 caractères au moins.");
+    expect(motDePasseInvalide("abcdefghijkl", "abcdefghijkm")).toBe("Les deux mots de passe ne sont pas identiques.");
+    expect(motDePasseInvalide("abcdefghijkl", "abcdefghijkl")).toBe(null);
   });
 });
 
 describe("messageErreurMotDePasse", () => {
   it("traduit les refus connus de Supabase Auth", () => {
     expect(messageErreurMotDePasse({ code: "same_password" })).toBe("Le mot de passe doit être différent de l'ancien.");
-    expect(messageErreurMotDePasse({ code: "weak_password", message: "Password should be at least 6 characters." })).toBe("6 caractères au moins.");
+    expect(messageErreurMotDePasse({ code: "weak_password", message: "Password should be at least 6 characters." })).toBe("12 caractères au moins.");
     expect(messageErreurMotDePasse({ code: "reauthentication_needed" })).toBe("Pour des raisons de sécurité, reconnecte-toi puis réessaie.");
     expect(messageErreurMotDePasse({ message: "Failed to fetch" })).toBe("Ça n'a pas marché. Réessaie dans un instant.");
     expect(messageErreurMotDePasse(null)).toBe("Ça n'a pas marché. Réessaie dans un instant.");

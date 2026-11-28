@@ -6,25 +6,30 @@
 // La clé service_role reste côté serveur (getServiceClient).
 //
 // AUTH (config.toml -> verify_jwt = true) : réservé aux FONDATEURS.
-// Entrée : { email, password, role: 'creator'|'agency', creator? }.
+// Entrée : { email, password, role: 'creator'|'agency', creator? }. Un compte créateur
+// vise une fiche existante qui n'a pas encore de compte.
 // « Nouveau mot de passe » : { action: 'reset', email, password } → remplace le mot
-// de passe d'un compte existant. Le mot de passe n'est JAMAIS stocké par l'app :
+// de passe d'un compte existant (jamais celui d'un autre fondateur) et coupe ses
+// connexions Claude. Le mot de passe n'est JAMAIS stocké par l'app :
 // il est seulement montré une fois au fondateur, pour le transmettre.
+// Règles pures : _shared/comptes.ts (12 caractères au moins).
 // ============================================================================
 
 import { getServiceClient, corsHeaders } from "../_shared/google.ts";
+import { MIN_MOT_DE_PASSE, rattachementCreateur, resetAutorise, type ProfilCible } from "../_shared/comptes.ts";
 
 // La gestion des accès est réservée aux FONDATEURS (agence + agency_role='founder').
-async function isFounder(req: Request, sb: ReturnType<typeof getServiceClient>): Promise<boolean> {
+// Renvoie l'id du fondateur appelant, sinon null.
+async function founderId(req: Request, sb: ReturnType<typeof getServiceClient>): Promise<string | null> {
   const authz = req.headers.get("Authorization") ?? "";
   const bearer = authz.startsWith("Bearer ") ? authz.slice(7).trim() : "";
-  if (!bearer) return false;
+  if (!bearer) return null;
   const { data, error } = await sb.auth.getUser(bearer);
-  if (error || !data?.user) return false;
+  if (error || !data?.user) return null;
   const { data: prof, error: profErr } = await sb
     .from("profiles").select("role, agency_role").eq("user_id", data.user.id).maybeSingle<{ role: string; agency_role: string | null }>();
-  if (profErr || !prof) return false; // fail-closed
-  return prof.role === "agency" && (prof.agency_role ?? "member") === "founder";
+  if (profErr || !prof) return null; // fail-closed
+  return prof.role === "agency" && (prof.agency_role ?? "member") === "founder" ? data.user.id : null;
 }
 
 Deno.serve(async (req: Request) => {
@@ -34,7 +39,8 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
 
   const sb = getServiceClient();
-  if (!(await isFounder(req, sb))) return jsonRes({ error: "unauthorized" }, 401);
+  const appelant = await founderId(req, sb);
+  if (!appelant) return jsonRes({ error: "unauthorized" }, 401);
 
   let body: { action?: string; email?: string; password?: string; role?: string; creator?: string; agencyRole?: string } = {};
   try {
@@ -50,7 +56,7 @@ Deno.serve(async (req: Request) => {
   const agencyRole = role === "agency" && body.agencyRole === "founder" ? "founder" : "member";
 
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return jsonRes({ error: "email_invalide" }, 400);
-  if (password.length < 6) return jsonRes({ error: "mot_de_passe_trop_court" }, 400);
+  if (password.length < MIN_MOT_DE_PASSE) return jsonRes({ error: "mot_de_passe_trop_court" }, 400);
 
   // Nouveau mot de passe pour un compte qui existe déjà (perdu, oublié…).
   if (body.action === "reset") {
@@ -62,12 +68,28 @@ Deno.serve(async (req: Request) => {
       if (data.users.length < 200) break;
     }
     if (!userId) return jsonRes({ error: "compte_introuvable" }, 404);
+    // Jamais le compte d'un autre fondateur (profil illisible : refus).
+    const { data: cible, error: cibleErr } = await sb.from("profiles").select("role, agency_role").eq("user_id", userId).maybeSingle<NonNullable<ProfilCible>>();
+    if (cibleErr) return jsonRes({ error: "reset_echoue" }, 502);
+    if (!resetAutorise(appelant, userId, cible ?? null)) return jsonRes({ error: "reset_fondateur_refuse" }, 403);
     const { error: upErr } = await sb.auth.admin.updateUserById(userId, { password });
     if (upErr) return jsonRes({ error: "reset_echoue", detail: String(upErr.message).slice(0, 200) }, 400);
+    // Nouveau mot de passe : les connexions Claude ouvertes avec l'ancien sont coupées.
+    await sb.from("mcp_grants").update({ revoked_at: new Date().toISOString() }).eq("user_id", userId).is("revoked_at", null).then(() => {}, () => {});
     return jsonRes({ ok: true, email });
   }
 
-  if (role === "creator" && !creator) return jsonRes({ error: "createur_requis" }, 400);
+  if (role === "creator") {
+    // La fiche doit exister, et ne pas être déjà reliée à un autre compte (le lien compte →
+    // créateur passe par le nom : deux comptes liraient les mêmes données).
+    const [{ data: fiche, error: ficheErr }, { count, error: lienErr }] = await Promise.all([
+      sb.from("creators").select("name").eq("name", creator).limit(1),
+      sb.from("profiles").select("user_id", { count: "exact", head: true }).eq("role", "creator").eq("creator_name", creator),
+    ]);
+    if (ficheErr || lienErr) return jsonRes({ error: "creation_echouee" }, 502);
+    const refus = rattachementCreateur(creator, ((fiche as unknown[] | null) ?? []).length > 0, count ?? 0);
+    if (refus) return jsonRes({ error: refus }, refus === "createur_requis" ? 400 : 409);
+  }
 
   // Création du compte (email déjà confirmé → connexion immédiate).
   const { data: created, error: createErr } = await sb.auth.admin.createUser({

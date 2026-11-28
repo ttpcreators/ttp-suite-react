@@ -6,7 +6,10 @@
 //
 //   1. verifyState(state) — anti-CSRF (HMAC-SHA256, TTL 10 min) -> { origin }.
 //   2. Échange authorization_code -> {access_token, refresh_token, id_token, ...}.
-//   3. Décode l'id_token -> { sub, email }.
+//   3. Décode l'id_token -> { sub, email }. Seule la boîte de l'agence est acceptée
+//      (_shared/comptes.ts : secret GOOGLE_AGENCY_EMAIL, sinon partnerships@ du domaine
+//      AGENCY_MAIL_DOMAIN). Un autre compte Google : rien n'est écrit, retour
+//      <origin>?google=compte, la connexion en place reste intacte.
 //   4. upsert google_tokens (id=1) via service-role. refresh_token JAMAIS écrasé
 //      par null (Google ne le renvoie qu'au 1er consentement / prompt=consent).
 //   5. Sync full initial (runSyncCycle) + création du watch (gcalWatch) — best
@@ -27,6 +30,7 @@ import {
   waitUntil,
 } from "../_shared/google.ts";
 import { verifyState } from "../_shared/state.ts";
+import { adresseAgenceAttendue, compteGoogleAgenceOk } from "../_shared/comptes.ts";
 import { ligneErreur, ligneJournal } from "../_shared/synchroAgenda.ts";
 
 const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
@@ -51,7 +55,7 @@ function buildSafeRedirect(rawOrigin: string, status: string): string | null {
 }
 
 /** Décode le payload d'un id_token (JWT) sans vérif de signature (canal TLS Google). */
-function decodeIdToken(idToken: string): { sub?: string; email?: string } {
+function decodeIdToken(idToken: string): { sub?: string; email?: string; email_verified?: unknown } {
   try {
     const parts = idToken.split(".");
     if (parts.length !== 3) return {};
@@ -61,7 +65,7 @@ function decodeIdToken(idToken: string): { sub?: string; email?: string } {
       Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)),
     );
     const claims = JSON.parse(jsonStr);
-    return { sub: claims.sub, email: claims.email };
+    return { sub: claims.sub, email: claims.email, email_verified: claims.email_verified };
   } catch {
     return {};
   }
@@ -152,14 +156,25 @@ Deno.serve(async (req: Request): Promise<Response> => {
       return Response.redirect(errorRedirect, 302);
     }
 
-    const { sub, email } = id_token ? decodeIdToken(id_token) : {};
+    const { sub, email, email_verified } = id_token ? decodeIdToken(id_token) : {};
+    // Seule la boîte de l'agence : un autre compte ne remplace jamais la connexion en place.
+    const attendue = adresseAgenceAttendue(Deno.env.get("GOOGLE_AGENCY_EMAIL"), Deno.env.get("AGENCY_MAIL_DOMAIN"));
+    if (!compteGoogleAgenceOk(email, email_verified, attendue)) {
+      console.warn("google-oauth-callback: compte Google refusé (pas la boîte de l'agence)");
+      // Le jeton obtenu n'est pas gardé : on le rend à Google (best effort, jeton dans le corps).
+      await fetch("https://oauth2.googleapis.com/revoke", {
+        method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ token: refresh_token ?? access_token }), signal: AbortSignal.timeout(5000),
+      }).then(() => {}, () => {});
+      return Response.redirect(buildSafeRedirect(origin, "compte") ?? errorRedirect, 302);
+    }
     const expiresAt = new Date(Date.now() + (expires_in ?? 3600) * 1000).toISOString();
 
     // 4. Stockage. refresh_token ajouté SEULEMENT s'il est présent (jamais null).
     const upd: Record<string, unknown> = {
       id: 1, access_token, token_type: token_type ?? "Bearer",
       scope: scope ?? null, expires_at: expiresAt,
-      google_sub: sub ?? null, google_email: email ?? null,
+      google_sub: sub ?? null, google_email: attendue,
       connected: true, last_error: null,
     };
     if (refresh_token) upd.refresh_token = refresh_token;

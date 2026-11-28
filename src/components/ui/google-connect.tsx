@@ -50,9 +50,10 @@ export function GoogleConnect() {
   }, []);
 
   useEffect(() => {
-    const { justConnected, error } = consumeOAuthReturn();
+    const { justConnected, error, wrongAccount } = consumeOAuthReturn();
     void refresh();
     if (justConnected) toast("Google Agenda connecté ✓");
+    else if (wrongAccount) toast("Connecte la boîte partnerships@ de l'agence, pas un autre compte Google");
     else if (error) toast("Échec de la connexion Google, réessaie");
   }, [refresh]);
 

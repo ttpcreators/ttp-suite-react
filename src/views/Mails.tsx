@@ -799,6 +799,7 @@ export function Mails() {
     }
     const r = consumeOAuthReturn();
     if (r.justConnected) toast("Google reconnecté ✓");
+    else if (r.wrongAccount) toast("Connecte la boîte partnerships@ de l'agence, pas un autre compte Google");
     else if (r.error) toast("Échec de la connexion Google, réessaie");
   }, []);
   const reconnectGoogle = async () => {

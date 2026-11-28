@@ -5,6 +5,8 @@ import { Check, LogOut, ShieldCheck, X } from "@/components/icons";
 import "@/index.css";
 import { supabase } from "@/lib/supabase";
 import { destinationRetour } from "../../supabase/functions/_shared/oauthRetour.ts";
+import { DoubleAuthCodeForm } from "@/components/double-auth";
+import { codeAttendu } from "@/lib/doubleAuth";
 
 /**
  * Page « Autoriser Claude » (app.ttpcreators.pro/connecteur/) : étape d'accord du
@@ -17,6 +19,9 @@ import { destinationRetour } from "../../supabase/functions/_shared/oauthRetour.
  * repart vraiment (adresse de retour, _shared/oauthRetour.ts), pour qu'une application ne
  * puisse pas se faire passer pour Claude. Case « agent autonome » (Alfred) : ses envois et ses
  * actions irréversibles attendront une validation dans la page Agents.
+ * Double authentification activée sur le compte (facultative) : le code est demandé avant
+ * l'accord. L'avertissement « refuse si tu n'as rien lancé » vaut pour toute destination, et
+ * chaque nouvelle connexion prévient les fondateurs (ttp-mcp/oauth.ts).
  */
 const FN = "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ttp-mcp";
 const P = new URLSearchParams(location.search);
@@ -50,8 +55,14 @@ const CAN = [
 ];
 const NEVER = ["Agir sans ton accord", "Effacer définitivement (tout passe par la Corbeille)", "Voir les mots de passe du coffre, les IBAN ou les accès Google / Meta"];
 
+/** Après la connexion : le code de double authentification s'il est attendu, sinon l'accord. */
+async function etapeApresConnexion(): Promise<"code" | "consent"> {
+  const { data } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel().catch(() => ({ data: null }));
+  return codeAttendu(data) ? "code" : "consent";
+}
+
 function App() {
-  const [step, setStep] = useState<"check" | "login" | "consent" | "busy" | "error">("check");
+  const [step, setStep] = useState<"check" | "login" | "code" | "consent" | "busy" | "error">("check");
   const [err, setErr] = useState("");
   const [client, setClient] = useState("");
   const [agentPossible, setAgentPossible] = useState(false);
@@ -80,7 +91,7 @@ function App() {
       const { data } = await supabase.auth.getSession();
       if (data.session) {
         setWho(data.session.user.email ?? "");
-        setStep("consent");
+        setStep(await etapeApresConnexion());
       } else setStep("login");
     })();
   }, []);
@@ -95,7 +106,7 @@ function App() {
     }
     setErr("");
     setWho(data.session.user.email ?? "");
-    setStep("consent");
+    setStep(await etapeApresConnexion());
   };
 
   const allow = async () => {
@@ -103,6 +114,7 @@ function App() {
     const { data } = await supabase.auth.getSession();
     const jwt = data.session?.access_token;
     if (!jwt) return setStep("login");
+    if ((await etapeApresConnexion()) === "code") return setStep("code");
     const r = await post("/authorize/approve", { ...req, ...(agent ? { agent: true } : {}) }, jwt);
     if (!r.ok || !texte(r.data.redirect)) {
       setErr(texte(r.data.error_description) || "Autorisation impossible, réessaie.");
@@ -143,6 +155,8 @@ function App() {
           <div className="flex items-center gap-2 py-6 text-[14px] text-muted-foreground"><Spin size={16} /> Un instant…</div>
         ) : step === "error" ? (
           <p className="rounded-xl bg-muted px-4 py-3 text-[14px] text-foreground">{err}</p>
+        ) : step === "code" ? (
+          <DoubleAuthCodeForm onDone={() => setStep("consent")} onLogout={() => void switchAccount()} />
         ) : step === "login" ? (
           <form onSubmit={(e) => { e.preventDefault(); void login(); }} className="flex flex-col gap-3">
             <h1 className="text-[22px] font-semibold tracking-tight">Connecte-toi à TTP Suite</h1>
@@ -160,7 +174,11 @@ function App() {
             <div className="rounded-xl border border-border px-4 py-3 text-[13px] leading-snug">
               <div><span className="text-muted-foreground">Retour vers : </span><span className="font-semibold">{dest?.texte}</span></div>
               {client && <div className="mt-1 text-muted-foreground">Nom donné par l'application : « {client} » (choisi par elle, non vérifié)</div>}
-              {dest?.locale && <div className="mt-1 text-muted-foreground">Si tu n'as rien lancé toi même sur cet ordinateur, refuse.</div>}
+              <div className="mt-1 text-muted-foreground">
+                {dest?.locale
+                  ? "Si tu n'as rien lancé toi même sur cet ordinateur, refuse."
+                  : "N'autorise que si tu viens de lancer cette connexion depuis ton propre assistant. Sinon, refuse."}
+              </div>
             </div>
             <div className="rounded-xl bg-muted/60 p-4">
               <div className="mb-2 flex items-center gap-1.5 text-[13px] font-semibold"><ShieldCheck className="h-4 w-4" /> Cette connexion pourra</div>
@@ -182,7 +200,7 @@ function App() {
               </label>
             )}
             <p className="text-[12px] leading-relaxed text-muted-foreground">
-              Chaque consultation et chaque action sont notées. Tu peux couper cet accès à tout moment dans Paramètres → Assistants IA.
+              Chaque consultation et chaque action sont notées, et les fondateurs sont prévenus de chaque nouvelle connexion. Tu peux couper cet accès à tout moment dans Paramètres → Assistants IA.
             </p>
             {err && <p className="text-[13px] text-dangertext">{err}</p>}
             <div className="flex flex-col-reverse gap-2 sm:flex-row">
