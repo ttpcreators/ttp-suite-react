@@ -21,9 +21,14 @@
 // part, et bloque l'adresse tant qu'elle n'a pas donné signe de vie depuis : un mail reçu d'elle,
 // ou sa fiche revérifiée. Le coupe-circuit par paliers le compte aussi, avec les rebonds que
 // gmail-poll note sur la ligne de la file et les fiches marquées en erreur du jour.
+// Depuis le 28/11 : le journal garde le verdict de la relève (email_activity.source,
+// _shared/mailRecu.ts). Seul un vrai avis de non-remise compte comme rebond, et seul un mail d'un
+// expéditeur authentifié montre que l'adresse marche ; le nom affiché ne compte jamais. Un rebond
+// ne compte que s'il suit un envoi réel de l'agence à cette adresse (rebondAncre).
 // Règles PURES (heure de Paris), testées par fileEnvoi.test.ts.
 // ============================================================================
 
+import { estRobot, prouveAdresse, rebondDuJournal } from "./mailRecu.ts";
 import { instantParis, paris } from "./rdv.ts";
 import { adresseEnRebond } from "./sequence.ts";
 
@@ -256,13 +261,16 @@ export function etatPalier(envoyes: number, rebonds: number, minutesDepuisDernie
 }
 
 /** Une ligne du journal des mails reçus (email_activity), telle que la base la rend. */
-export type MailRecu = { contact_email?: unknown; contact_name?: unknown; subject?: unknown; snippet?: unknown; created_at?: unknown };
+export type MailRecu = { contact_email?: unknown; contact_name?: unknown; subject?: unknown; snippet?: unknown; created_at?: unknown; source?: unknown };
 
 /**
- * Les rebonds lus dans le journal des mails reçus : un message d'un robot (mailer-daemon,
- * postmaster) qui annonce un échec et cite l'adresse refusée (même règle que gmail-poll,
- * adresseEnRebond). Sert surtout aux adresses sans fiche contact, que gmail-poll ne peut pas marquer
- * « en erreur » (il note seulement le rebond sur la ligne de la file, pour le coupe-circuit).
+ * Les rebonds lus dans le journal des mails reçus : un avis de non-remise qui cite l'adresse
+ * refusée (même règle que gmail-poll, adresseEnRebond). La ligne doit venir d'une adresse de robot
+ * (mailer-daemon@, postmaster@ : estRobot, jamais le nom affiché), et avoir été notée « avis » par
+ * la relève (source « inbox-rebond ») ; une ligne d'avant ce tri (« inbox ») compte sur l'adresse
+ * seule, un mail ordinaire jamais (_shared/mailRecu.ts, rebondDuJournal). Sert surtout aux adresses
+ * sans fiche contact, que gmail-poll ne peut pas marquer « en erreur » (il note seulement le rebond
+ * sur la ligne de la file, pour le coupe-circuit).
  * Limite : ici, la règle ne voit que ce que garde le journal, 180 caractères de l'avis, sans
  * l'en-tête X-Failed-Recipients ; gmail-poll lit 300 caractères et cet en-tête. Un avis qui ne cite
  * l'adresse que dans l'en-tête, ou plus loin (avis Exim « Mail delivery failed »), n'est pas vu ici :
@@ -271,25 +279,66 @@ export type MailRecu = { contact_email?: unknown; contact_name?: unknown; subjec
 export function rebondsDuJournal(lignes: readonly MailRecu[], agence: string): EnvoiRecent[] {
   const out: EnvoiRecent[] = [];
   for (const l of lignes) {
-    const from = `${String(l.contact_name ?? "").trim()} <${String(l.contact_email ?? "").trim()}>`;
-    const email = adresseEnRebond({ from, subject: String(l.subject ?? ""), snippet: String(l.snippet ?? "") }, agence);
+    if (rebondDuJournal(l.source) === "non") continue;
+    const robot = String(l.contact_email ?? "").trim().toLowerCase();
+    if (!estRobot(robot)) continue;
+    const email = adresseEnRebond({ from: robot, subject: String(l.subject ?? ""), snippet: String(l.snippet ?? "") }, agence);
     if (email) out.push({ email, at: String(l.created_at ?? "") });
   }
   return out;
 }
 
 /**
- * Ce que le journal des mails reçus dit de ces adresses (`vises`) : leurs rebonds (message d'un
- * robot qui cite l'adresse) et les mails venus d'elles (`recus` : l'adresse marche).
+ * Ce que le journal des mails reçus dit de ces adresses (`vises`) : leurs rebonds (avis de
+ * non-remise qui cite l'adresse) et les mails venus d'elles (`recus` : l'adresse marche). Un mail
+ * dont l'expéditeur n'est pas authentifié (source « inbox-douteux ») ne compte pas dans `recus`.
  */
 export function journalDesAdresses(lignes: readonly MailRecu[], vises: readonly string[], agence: string): { rebonds: EnvoiRecent[]; recus: EnvoiRecent[] } {
   const v = new Set(vises.map((e) => e.trim().toLowerCase()));
   const recus: EnvoiRecent[] = [];
   for (const l of lignes) {
+    if (!prouveAdresse(l.source)) continue;
     const de = String(l.contact_email ?? "").trim().toLowerCase();
     if (v.has(de)) recus.push({ email: de, at: String(l.created_at ?? "") });
   }
   return { rebonds: rebondsDuJournal(lignes, agence).filter((r) => v.has(r.email)), recus };
+}
+
+/** Jours pendant lesquels un avis de non-remise peut suivre l'envoi qu'il signale (un serveur réessaie jusqu'à 5 jours). */
+export const ANCRE_REBOND_JOURS = 7;
+/** Écart d'horloge accepté entre l'heure d'un envoi au journal et celle de l'avis reçu. */
+const ANCRE_MARGE_MS = 10 * 60_000;
+
+/**
+ * Un rebond est-il ancré sur un envoi réel : un mail de l'agence (`envois` : journal des mails
+ * envoyés ou file d'envoi) vers cette adresse exacte, parti dans les `jours` jours avant l'avis ?
+ * Un avis bien formaté qui ne suit aucun envoi ne prouve rien : il ne compte pas.
+ */
+export function rebondAncre(r: EnvoiRecent, envois: readonly EnvoiRecent[], jours = ANCRE_REBOND_JOURS): boolean {
+  const email = String(r.email ?? "").trim().toLowerCase();
+  const t = Date.parse(r.at);
+  if (!email || !Number.isFinite(t)) return false;
+  return envois.some((e) => {
+    const te = Date.parse(e.at);
+    return String(e.email ?? "").trim().toLowerCase() === email && Number.isFinite(te) && te <= t + ANCRE_MARGE_MS && te >= t - jours * 86_400_000;
+  });
+}
+
+/** Les rebonds ancrés sur un envoi réel (rebondAncre). */
+export function rebondsAncres(rebonds: readonly EnvoiRecent[], envois: readonly EnvoiRecent[], jours = ANCRE_REBOND_JOURS): EnvoiRecent[] {
+  return rebonds.filter((r) => rebondAncre(r, envois, jours));
+}
+
+/**
+ * Les lignes de la file qui écrivent à cette adresse (`email`), ou à une adresse de ce domaine
+ * (`domaine`, même règle que la liste « ne plus contacter ») : comparaison exacte des adresses
+ * de chaque ligne, jamais un motif de recherche.
+ */
+export function lignesVers<T extends { destinataires?: unknown }>(lignes: readonly T[] | null | undefined, cible: { email?: string; domaine?: string }): T[] {
+  const email = String(cible.email ?? "").trim().toLowerCase();
+  const domaine = String(cible.domaine ?? "").trim().toLowerCase().replace(/^@/, "");
+  if (!email && !domaine) return [];
+  return (lignes ?? []).filter((l) => adresses(l.destinataires).some((e) => (email ? e === email : e.split("@")[1] === domaine)));
 }
 
 /** La date de la dernière vérification de l'adresse notée sur sa fiche contact (email_check.le), si elle existe. */

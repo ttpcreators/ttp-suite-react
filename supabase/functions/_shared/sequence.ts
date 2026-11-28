@@ -13,6 +13,7 @@
 // Règles PURES, testées par sequence.test.ts.
 // ============================================================================
 
+import { adresseDe, estRobot } from "./mailRecu.ts";
 import { couper } from "./texteSur.ts";
 
 export type SeqCanal = "email" | "linkedin" | "instagram" | "whatsapp";
@@ -160,9 +161,11 @@ const ECHEC_NET = /undeliver|non remis|failure|[ée]chec/i;
  * Adresse en échec d'un rebond (mailer-daemon, postmaster), ou null. `failed` : en-tête
  * X-Failed-Recipients ; sinon la première adresse du résumé qui n'est pas celle du robot
  * ni de l'agence. Un simple retard (RETARD, sans mot d'échec dans l'objet) n'est pas un rebond.
+ * Le robot se reconnaît à l'adresse réelle de l'expéditeur (_shared/mailRecu.ts), jamais au nom
+ * affiché. Le format de l'avis (vrai avis de non-remise) est vérifié avant, par la relève.
  */
 export function adresseEnRebond(m: { from: string; subject: string; snippet: string; failed?: string }, domaineAgence: string): string | null {
-  const robot = /mailer-daemon|postmaster|mail delivery (sub)?system/i.test(m.from);
+  const robot = estRobot(adresseDe(m.from));
   const echec = /delivery status notification|undeliver|non remis|not delivered|delivery (has )?failed|address not found|adresse introuvable|could not be delivered|message bloqu|returned mail|échec de (la )?remise/i.test(m.subject);
   if (!robot || !echec || (RETARD.test(m.subject) && !ECHEC_NET.test(m.subject))) return null;
   const cands = [...(m.failed ?? "").matchAll(EMAIL_RE), ...m.snippet.matchAll(EMAIL_RE)].map((x) => x[0].toLowerCase());

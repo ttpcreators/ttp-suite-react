@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  REGLES, adresses, cleSociete, dansLaFenetre, etatPalier, journalDesAdresses, ligneFile, planifier, prochainCreneau, quandCourt, raisonDeBloquer, rebondsDuJournal, rebondsQuiComptent, texteListe,
+  ANCRE_REBOND_JOURS, REGLES, adresses, cleSociete, dansLaFenetre, etatPalier, journalDesAdresses, ligneFile, lignesVers, planifier, prochainCreneau, quandCourt, raisonDeBloquer, rebondAncre, rebondsAncres, rebondsDuJournal, rebondsQuiComptent,
+  texteListe,
 } from "./fileEnvoi.ts";
 
 // Le mercredi 25 novembre 2026, Paris est à UTC+1.
@@ -154,6 +155,75 @@ describe("file d'envoi : rebonds lus dans le journal des mails reçus", () => {
       rebonds: [{ email: "jean@marque-exemple.fr", at: "2026-11-26T07:35:00Z" }],
       recus: [{ email: "jean@marque-exemple.fr", at: "2026-11-26T15:00:00Z" }],
     });
+  });
+  it("le nom affiché d'un robot ne suffit jamais : il faut l'adresse d'un robot", () => {
+    const echec = { subject: "Undeliverable: Collab", snippet: "Your message wasn't delivered to jean@marque-exemple.fr", created_at: "2026-11-26T09:00:00Z" };
+    expect(rebondsDuJournal([
+      { ...echec, contact_email: "jean@autre-exemple.fr", contact_name: "Mail Delivery Subsystem" },
+      { ...echec, contact_email: "jean@postmaster.exemple.fr", contact_name: "Postmaster" },
+    ], "ttpcreators.pro")).toEqual([]);
+  });
+  it("lignes triées par la relève : seul l'avis vérifié compte comme rebond", () => {
+    const echec = { ...robot, subject: "Delivery Status Notification (Failure)", snippet: "Your message wasn't delivered to jean@marque-exemple.fr" };
+    expect(rebondsDuJournal([{ ...echec, source: "inbox-rebond" }], "ttpcreators.pro")).toEqual([{ email: "jean@marque-exemple.fr", at: "2026-11-26T07:35:00Z" }]);
+    // Ligne d'avant le tri (« inbox ») : lue comme avant, sur l'adresse du robot.
+    expect(rebondsDuJournal([{ ...echec, source: "inbox" }], "ttpcreators.pro")).toHaveLength(1);
+    // Mail ordinaire (pas au format des avis), même venu d'une adresse de robot : jamais un rebond.
+    expect(rebondsDuJournal([{ ...echec, source: "inbox-verifie" }, { ...echec, source: "inbox-douteux" }], "ttpcreators.pro")).toEqual([]);
+  });
+  it("seul un expéditeur authentifié montre que l'adresse marche", () => {
+    const lignes = [
+      { ...robot, source: "inbox-rebond", subject: "Delivery Status Notification (Failure)", snippet: "Your message wasn't delivered to jean@marque-exemple.fr" },
+      { contact_email: "jean@marque-exemple.fr", contact_name: "Jean", source: "inbox-douteux", subject: "Re: Collab", snippet: "Avec plaisir", created_at: "2026-11-26T15:00:00Z" },
+    ];
+    expect(journalDesAdresses(lignes, ["jean@marque-exemple.fr"], "ttpcreators.pro").recus).toEqual([]);
+    const verifie = [lignes[0], { ...lignes[1], source: "inbox-verifie" }];
+    expect(journalDesAdresses(verifie, ["jean@marque-exemple.fr"], "ttpcreators.pro").recus).toEqual([{ email: "jean@marque-exemple.fr", at: "2026-11-26T15:00:00Z" }]);
+  });
+});
+
+describe("file d'envoi : un rebond suit un envoi réel", () => {
+  const rebond = { email: "jean@marque-exemple.fr", at: "2026-11-26T09:00:00Z" };
+  it("envoi à cette adresse exacte dans les 7 jours avant l'avis", () => {
+    expect(ANCRE_REBOND_JOURS).toBe(7);
+    expect(rebondAncre(rebond, [{ email: "Jean@Marque-Exemple.fr", at: "2026-11-26T08:59:00Z" }])).toBe(true);
+    expect(rebondAncre(rebond, [{ email: "jean@marque-exemple.fr", at: "2026-11-19T09:00:00Z" }])).toBe(true);
+    // Avis presque en même temps que l'envoi (horloges) : accepté à 10 minutes près.
+    expect(rebondAncre(rebond, [{ email: "jean@marque-exemple.fr", at: "2026-11-26T09:05:00Z" }])).toBe(true);
+  });
+  it("aucun envoi, trop ancien, après l'avis, ou à une autre adresse : le rebond ne compte pas", () => {
+    expect(rebondAncre(rebond, [])).toBe(false);
+    expect(rebondAncre(rebond, [{ email: "jean@marque-exemple.fr", at: "2026-11-19T08:59:00Z" }])).toBe(false);
+    expect(rebondAncre(rebond, [{ email: "jean@marque-exemple.fr", at: "2026-11-26T10:00:00Z" }])).toBe(false);
+    expect(rebondAncre(rebond, [{ email: "anne@marque-exemple.fr", at: "2026-11-26T08:00:00Z" }])).toBe(false);
+    expect(rebondAncre({ email: "jean@marque-exemple.fr", at: "" }, [{ email: "jean@marque-exemple.fr", at: "2026-11-26T08:00:00Z" }])).toBe(false);
+    expect(rebondAncre(rebond, [{ email: "jean@marque-exemple.fr", at: "" }])).toBe(false);
+  });
+  it("rebondsAncres garde seulement les rebonds ancrés", () => {
+    const autre = { email: "anne@marque-exemple.fr", at: "2026-11-26T09:00:00Z" };
+    expect(rebondsAncres([rebond, autre], [{ email: "jean@marque-exemple.fr", at: "2026-11-25T09:00:00Z" }])).toEqual([rebond]);
+  });
+});
+
+describe("file d'envoi : lignes vers une adresse ou un domaine", () => {
+  const lignes = [
+    { id: "1", destinataires: "Jean Martin <Jean@Marque-Exemple.fr>" },
+    { id: "2", destinataires: "ajean@marque-exemple.fr" },
+    { id: "3", destinataires: "paul@marque-exemple.fr, julie@nova-exemple.fr" },
+    { id: "4", destinataires: "zoe@sous.marque-exemple.fr" },
+    { id: "5", destinataires: null },
+  ];
+  it("adresse : comparaison exacte, jamais une partie d'adresse", () => {
+    expect(lignesVers(lignes, { email: "jean@marque-exemple.fr" }).map((l) => l.id)).toEqual(["1"]);
+    expect(lignesVers(lignes, { email: "JULIE@nova-exemple.fr " }).map((l) => l.id)).toEqual(["3"]);
+  });
+  it("domaine : le domaine exact de l'adresse, comme la liste « ne plus contacter »", () => {
+    expect(lignesVers(lignes, { domaine: "marque-exemple.fr" }).map((l) => l.id)).toEqual(["1", "2", "3"]);
+    expect(lignesVers(lignes, { domaine: "@nova-exemple.fr" }).map((l) => l.id)).toEqual(["3"]);
+  });
+  it("rien à chercher ou lignes absentes : rien", () => {
+    expect(lignesVers(lignes, {})).toEqual([]);
+    expect(lignesVers(null, { email: "jean@marque-exemple.fr" })).toEqual([]);
   });
 });
 

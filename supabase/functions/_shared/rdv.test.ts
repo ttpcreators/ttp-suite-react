@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { RDV_DEFAUT, creneauOk, creneauxLibres, instantParis, lireRdv, lireReservation, paris, mailRdv, occupeDepuisEvenements, quandFr, texteTelegramRdv } from "./rdv.ts";
+import { INVITATION_RDV, RDV_DEFAUT, creneauOk, creneauxLibres, instantParis, lireRdv, lireReservation, paris, mailRdv, occupeDepuisEvenements, quandFr, tacheRdv, texteTelegramRdv } from "./rdv.ts";
 
 const cfg = { ...RDV_DEFAUT, actif: true }; // mardi 14 h-18 h, jeudi 9 h-12 h 30, 30 min, 20 h de délai
 // Dimanche 22 novembre 2026, 16 h à Paris (15 h UTC).
@@ -52,6 +52,13 @@ describe("lireRdv et lireReservation", () => {
     expect(lireReservation({ site: "x" })).toEqual({ robot: true });
     expect(lireReservation({ jour: "2026-11-24", heure: "14:30", nom: "J", email: "pas-un-mail", marque: "N" })).toEqual({ erreur: "email" });
   });
+  it("adresse avec « * » refusée (joker d'ilike que rien n'échappe)", () => {
+    const base = { jour: "2026-11-24", heure: "14:30", nom: "Julie", marque: "Nova" };
+    expect(lireReservation({ ...base, email: "a*@marque.fr" })).toEqual({ erreur: "email" });
+    expect(lireReservation({ ...base, email: "*@marque.fr" })).toEqual({ erreur: "email" });
+    expect(lireReservation({ ...base, email: "julie@*.fr" })).toEqual({ erreur: "email" });
+    expect(lireReservation({ ...base, email: "julie_martin@marque.fr" })).toMatchObject({ r: { email: "julie_martin@marque.fr" } });
+  });
   it("quandFr", () => {
     expect(quandFr("2026-11-24", "14:30")).toBe("mardi 24 novembre à 14 h 30");
     expect(quandFr("2026-11-24", "14:00")).toBe("mardi 24 novembre à 14 h");
@@ -93,5 +100,39 @@ describe("lireRdv et lireReservation", () => {
   });
   it("texteTelegramRdv : le créneau, sans texte du visiteur", () => {
     expect(texteTelegramRdv("2026-11-24", "14:30", 30)).toBe("Visio réservée : mardi 24 novembre à 14 h 30 (30 min). La fiche du contact est dans la to-do de l'app.");
+  });
+});
+
+describe("réservation : invitation fixe, fiche et tâche jamais réécrites", () => {
+  const r = { jour: "2026-11-24", heure: "14:30", nom: "Julie Martin", email: "julie@nova-exemple.fr", marque: "Nova", message: "Campagne janvier" };
+  it("l'invitation Google a un titre et un texte fixes, sans rien du visiteur", () => {
+    expect(INVITATION_RDV.titre).toBe("Visio TTP Creators");
+    for (const t of [INVITATION_RDV.titre, INVITATION_RDV.texte]) {
+      for (const v of [r.nom, r.email, r.marque, r.message]) expect(t).not.toContain(v);
+    }
+  });
+  it("fiche existante : non modifiée, et la tâche dit quoi vérifier", () => {
+    const t = tacheRdv({ r, duree: 30, meet: "https://meet.google.com/abc-defg-hij", carnet: { etat: "fiche", marque: "Nova", historique: "- 2026-11-10 · email · contact", sequenceEnCours: true }, visioOuverte: false });
+    expect(t.text).toBe("Visio : Nova");
+    expect(t.descr).toContain("Visio réservée par Julie Martin (julie@nova-exemple.fr) pour le mardi 24 novembre à 14 h 30 (30 min).");
+    expect(t.descr).toContain("Lien Meet : https://meet.google.com/abc-defg-hij");
+    expect(t.descr).toContain("Son besoin : Campagne janvier");
+    expect(t.descr).toContain("fiche non modifiée, l'adresse n'a pas été confirmée par mail");
+    expect(t.descr).toContain("Sa séquence de prospection continue : l'arrêter (sequence_contact) si c'est bien ce contact.");
+    expect(t.descr).toContain("Historique :\n- 2026-11-10 · email · contact");
+    const sansSequence = tacheRdv({ r, duree: 30, carnet: { etat: "fiche", marque: "", historique: "", sequenceEnCours: false }, visioOuverte: false });
+    expect(sansSequence.descr).toContain("Déjà au carnet (sans marque)");
+    expect(sansSequence.descr).not.toContain("séquence");
+    expect(sansSequence.descr).not.toContain("Historique");
+    expect(sansSequence.descr).not.toContain("Lien Meet");
+  });
+  it("nouveau contact, ou carnet raté", () => {
+    expect(tacheRdv({ r, duree: 30, carnet: { etat: "nouveau" }, visioOuverte: false }).descr).toContain("Nouveau contact (ajouté au carnet, étiquette « Lead site »).");
+    expect(tacheRdv({ r, duree: 30, carnet: { etat: "rate" }, visioOuverte: false }).descr).toContain("Contact pas ajouté au carnet");
+  });
+  it("une tâche « Visio : » déjà ouverte n'est pas réécrite : la réservation a sa propre tâche", () => {
+    const t = tacheRdv({ r, duree: 45, carnet: { etat: "nouveau" }, visioOuverte: true });
+    expect(t.text).toBe("Réservation : Nova");
+    expect(t.descr).toContain("Une tâche « Visio : Nova » était déjà ouverte : elle n'a pas été modifiée.");
   });
 });

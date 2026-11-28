@@ -4,11 +4,15 @@
 // GET  → { actif, duree, jours: [{ jour, label, heures[] }] } : créneaux libres de Marc
 //        (ses demi-journées réglées dans Paramètres, moins ce qui est déjà dans Google Agenda).
 // POST { jour, heure, nom, email, marque, message?, site? (piège à robots) } →
-//        rendez-vous Google Agenda avec lien Meet et invitation Google au contact,
-//        contact noté au carnet (séquence arrêtée : il a répondu), tâche « Visio : marque »
-//        avec la fiche pour Marc, push générique à l'agence, message Telegram à Marc
-//        (secrets ALFRED_BOT_TOKEN et TELEGRAM_CHAT_ID, comme agent-watchdog ; sans eux, rien)
-//        et mail à la boîte partnerships@ (qui, quand, lien Meet, message du contact).
+//        rendez-vous Google Agenda avec lien Meet et invitation Google au contact (titre et
+//        texte fixes : INVITATION_RDV, rien de ce que le visiteur a écrit), tâche
+//        « Visio : marque » avec la fiche pour Marc, push générique à l'agence, message Telegram
+//        à Marc (secrets ALFRED_BOT_TOKEN et TELEGRAM_CHAT_ID, comme agent-watchdog ; sans eux,
+//        rien) et mail à la boîte partnerships@ (qui, quand, lien Meet, message du contact).
+//        L'adresse saisie n'est pas confirmée par mail : une fiche du carnet qui a cette adresse
+//        n'est jamais modifiée (ni séquence arrêtée, ni journal), une adresse inconnue devient
+//        un nouveau contact « Lead site », et une tâche « Visio : marque » déjà ouverte n'est
+//        jamais réécrite (la réservation fait sa propre tâche « Réservation : marque »).
 // AUTH : verify_jwt = false (page publique). Garde-fous : CORS app seulement, piège à
 // robots, créneau revérifié au moment de réserver, 10 réservations par heure au plus,
 // aucun texte du visiteur dans la notification. Règles : _shared/rdv.ts.
@@ -19,9 +23,13 @@ import { mimeMessage } from "../_shared/backup.ts";
 import { readAppState } from "../_shared/appState.ts";
 import { meetEventBody, meetLinkOf } from "../_shared/meetEvent.ts";
 import { makePayload, pushReady, sendTo } from "../_shared/push.ts";
-import { arreter, lireSequence } from "../_shared/sequence.ts";
+import { lireSequence } from "../_shared/sequence.ts";
 import { LEAD_TAG } from "../_shared/siteLead.ts";
-import { RDV_KEY, RDV_ORIGINS, creneauOk, creneauxLibres, lireRdv, lireReservation, mailRdv, occupeDepuisEvenements, quandFr, texteTelegramRdv, type EvenementAgenda, type Occupe, type RdvConfig } from "../_shared/rdv.ts";
+import { ilikeExact, lignesExactes } from "../_shared/ilikeExact.ts";
+import {
+  INVITATION_RDV, RDV_KEY, RDV_ORIGINS, creneauOk, creneauxLibres, lireRdv, lireReservation, mailRdv, occupeDepuisEvenements, quandFr, tacheRdv, texteTelegramRdv,
+  type CarnetRdv, type EvenementAgenda, type Occupe, type RdvConfig,
+} from "../_shared/rdv.ts";
 import { couper } from "../_shared/texteSur.ts";
 
 type Sb = ReturnType<typeof getServiceClient>;
@@ -148,12 +156,12 @@ Deno.serve(async (req: Request) => {
 
   await sb.from("rdv_journal").insert({ email: mail }).then(() => {}, () => {});
 
-  // Le rendez-vous, avec Meet et l'invitation Google au contact.
+  // Le rendez-vous, avec Meet et l'invitation Google au contact : titre et texte fixes
+  // (INVITATION_RDV). Le nom, la marque et le message du visiteur restent dans la tâche interne.
   const cal = `/calendars/${encodeURIComponent(CALENDAR_ID)}/events`;
-  const note = [`Visio réservée depuis la page de rendez-vous par ${r.nom} (${r.email}), ${r.marque}.`, r.message ? `Son besoin : ${r.message}` : ""].filter(Boolean).join("\n");
   const res = await gcalFetch(sb, `${cal}?conferenceDataVersion=1&sendUpdates=all`, {
     method: "POST",
-    body: JSON.stringify(meetEventBody({ title: `Visio TTP Creators × ${r.marque}`, date: r.jour, time: r.heure, duration: c.duree, guests: [r.email], meet: true, invite: true, note, who: null }, APP_TIMEZONE, crypto.randomUUID())),
+    body: JSON.stringify(meetEventBody({ title: INVITATION_RDV.titre, date: r.jour, time: r.heure, duration: c.duree, guests: [r.email], meet: true, invite: true, note: INVITATION_RDV.texte, who: null }, APP_TIMEZONE, crypto.randomUUID())),
   }, { maxRetries: 2 }).catch(() => null);
   const ev = res ? await res.json().catch(() => ({})) as { id?: string; hangoutLink?: string; conferenceData?: { entryPoints?: { entryPointType?: string; uri?: string }[] } } : {};
   if (!res?.ok || !ev.id) {
@@ -162,41 +170,38 @@ Deno.serve(async (req: Request) => {
   }
   const meet = meetLinkOf(ev);
 
-  // Carnet : le contact a répondu (sa séquence s'arrête), la visio est notée dans son journal.
-  const jour = r.jour;
-  const touche = { id: `rdv${now.getTime().toString(36)}`, date: new Date().toISOString().slice(0, 10), canal: "email", kind: "reponse", note: `Visio réservée pour le ${quandFr(r.jour, r.heure)}` };
-  const { data: ex } = await sb.from("contacts").select("*").ilike("email", r.email.replace(/[\\%_]/g, (m) => `\\${m}`)).limit(1);
-  const contact = ((ex ?? []) as Record<string, unknown>[])[0];
-  let historique = "";
+  // Carnet : l'adresse saisie n'est pas confirmée par mail. Une fiche qui a cette adresse exacte
+  // n'est jamais modifiée (ni séquence arrêtée, ni journal : la tâche dit quoi vérifier) ; une
+  // adresse inconnue devient un nouveau contact « Lead site ». Lecture ratée : rien n'est écrit.
+  const motif = ilikeExact(mail);
+  const lecture = motif
+    ? await sb.from("contacts").select("*").ilike("email", motif).limit(5)
+    : { data: null, error: { message: "adresse refusée" } };
+  const contact = lignesExactes((lecture.data ?? []) as Record<string, unknown>[], "email", mail)[0];
+  let carnet: CarnetRdv = { etat: "rate" };
   if (contact) {
     const touches = Array.isArray(contact.touches) ? (contact.touches as Record<string, unknown>[]) : [];
-    historique = touches.slice(0, 6).map((t) => `- ${String(t.date ?? "").slice(0, 10)} · ${t.canal ?? ""} · ${t.kind ?? ""}${t.note ? ` · ${couper(String(t.note), 120)}` : ""}`).join("\n");
-    const patch: Record<string, unknown> = { touches: [touche, ...touches] };
-    const seq = lireSequence(contact.sequence);
-    if (seq && seq.statut === "en_cours") patch.sequence = arreter(seq, "visio réservée", now, "positive");
-    await sb.from("contacts").update(patch).eq("id", contact.id).then(({ error }) => {
-      if (error) console.warn("rdv fiche contact refusée", error.message);
-    }, () => {});
+    carnet = {
+      etat: "fiche",
+      marque: String(contact.brand ?? ""),
+      historique: touches.slice(0, 6).map((t) => `- ${String(t.date ?? "").slice(0, 10)} · ${t.canal ?? ""} · ${t.kind ?? ""}${t.note ? ` · ${couper(String(t.note), 120)}` : ""}`).join("\n"),
+      sequenceEnCours: lireSequence(contact.sequence)?.statut === "en_cours",
+    };
+  } else if (lecture.error) {
+    console.warn("rdv carnet illisible : contact non ajouté", lecture.error.message);
   } else {
-    await sb.from("contacts").insert({ brand: r.marque, person: r.nom, email: r.email, tag: LEAD_TAG, touches: [touche] }).then(({ error }) => {
-      if (error) console.warn("rdv nouveau contact refusé", error.message);
-    }, () => {});
+    const touche = { id: `rdv${now.getTime().toString(36)}`, date: new Date().toISOString().slice(0, 10), canal: "email", kind: "reponse", note: `Visio réservée pour le ${quandFr(r.jour, r.heure)}` };
+    const ajout = await sb.from("contacts").insert({ brand: r.marque, person: r.nom, email: r.email, tag: LEAD_TAG, touches: [touche] })
+      .then((x) => x.error, () => ({ message: "écriture impossible" }));
+    if (ajout) console.warn("rdv nouveau contact refusé", ajout.message);
+    else carnet = { etat: "nouveau" };
   }
 
-  // Tâche « Visio : marque » avec la fiche avant l'appel (une seule ouverte par marque).
-  const text = `Visio : ${couper(r.marque, 80)}`;
-  const descr = [
-    `Visio réservée par ${r.nom} (${r.email}) pour le ${quandFr(r.jour, r.heure)} (${c.duree} min).`,
-    meet ? `Lien Meet : ${meet}` : "",
-    r.message ? `Son besoin : ${r.message}` : "",
-    contact ? `Déjà au carnet (${String(contact.brand ?? "")}).` : "Nouveau contact (ajouté au carnet, étiquette « Lead site »).",
-    historique ? `Historique :\n${historique}` : "",
-    "La visio en 5 points : le besoin, le budget, qui décide, notre proposition orale, et un devis envoyé le jour même.",
-  ].filter(Boolean).join("\n");
-  const { data: deja } = await sb.from("todos").select("id").eq("text", text).or("done.is.null,done.eq.false").limit(1);
-  const tache = (deja ?? []).length
-    ? await sb.from("todos").update({ descr, due: jour, priority: "haute" }).eq("id", (deja as { id: string }[])[0].id).then((x) => x.error, () => null)
-    : await sb.from("todos").insert({ text, descr, priority: "haute", due: jour, done: false }).then((x) => x.error, () => null);
+  // Tâche « Visio : marque » avec la fiche avant l'appel. Une tâche de ce titre déjà ouverte n'est
+  // jamais réécrite : la réservation fait alors sa propre tâche « Réservation : marque » (tacheRdv).
+  const { data: deja } = await sb.from("todos").select("id").eq("text", `Visio : ${couper(r.marque, 80)}`).or("done.is.null,done.eq.false").limit(1);
+  const t = tacheRdv({ r, duree: c.duree, meet: meet || undefined, carnet, visioOuverte: (deja ?? []).length > 0 });
+  const tache = await sb.from("todos").insert({ text: t.text, descr: t.descr, priority: "haute", due: r.jour, done: false }).then((x) => x.error, () => null);
   if (tache) console.warn("rdv tâche Visio refusée", tache.message);
 
   if (pushReady()) {
