@@ -20,6 +20,11 @@
 // Plus de 100 nouveaux mails : on traite les 100 plus anciens, le reste au passage suivant
 // (rien n'est sauté). Un message illisible : le curseur n'avance pas (dédoublonnage par
 // gmail_message_id, donc ni doublon ni nouvelle alerte au passage suivant).
+// Expéditeur (28/11, _shared/mailRecu.ts) : l'adresse réelle de l'en-tête From, jamais une
+// adresse du nom affiché ; chaque mail est classé avis de non-remise (format des avis, adresse de
+// robot), expéditeur authentifié (Authentication-Results de Google : DMARC, sinon SPF ou DKIM
+// alignés) ou douteux, et ce verdict est noté au journal (email_activity.source : inbox-rebond,
+// inbox-verifie, inbox-douteux) pour les séquences et la file d'envoi.
 // ============================================================================
 
 import { getServiceClient, getAccessToken, corsHeaders, timingSafeEqualStr } from "../_shared/google.ts";
@@ -31,6 +36,7 @@ import { closeAnsweredTasks, tasksFromMails } from "./tasks.ts";
 import { suivreReponses } from "./sequences.ts";
 import { excluFromMails } from "./exclu.ts";
 import { isUnread, rowsNowRead, threadsToClose, type UnreadByBox } from "../_shared/mailLu.ts";
+import { adresseDe, authentificationGoogle, estAvisDeNonRemise, expediteurAuthentifie, nomAffiche, sourceDuJournal } from "../_shared/mailRecu.ts";
 import { couper, texteSur } from "../_shared/texteSur.ts";
 
 const CRON_SECRET = Deno.env.get("CRON_SECRET") ?? "";
@@ -40,9 +46,11 @@ const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const LIST_PAGE = 100; // ids par page de liste
 const LIST_CAP = 500; // ids listés au plus par boîte et par passage
 const PER_RUN = 100; // messages traités au plus par boîte et par passage
-// En-têtes lus : la notification (expéditeur, objet), les destinataires (mails des créateurs)
-// et List-Unsubscribe (newsletter : jamais de tâche tirée de ce mail).
-const META_HEADERS = ["From", "Subject", "Message-ID", "To", "Cc", "Delivered-To", "X-Original-To", "List-Unsubscribe", "X-Failed-Recipients"]
+// En-têtes lus : la notification (expéditeur, objet), les destinataires (mails des créateurs),
+// List-Unsubscribe (newsletter : jamais de tâche tirée de ce mail), et ce qui classe le mail
+// (Content-Type et X-Failed-Recipients pour un avis de non-remise, Authentication-Results pour
+// l'expéditeur : _shared/mailRecu.ts).
+const META_HEADERS = ["From", "Subject", "Message-ID", "To", "Cc", "Delivered-To", "X-Original-To", "List-Unsubscribe", "X-Failed-Recipients", "Content-Type", "Authentication-Results"]
   .map((h) => `metadataHeaders=${h}`).join("&");
 type Sb = ReturnType<typeof getServiceClient>;
 type Header = { name: string; value: string };
@@ -90,7 +98,11 @@ async function saveStateKey(sb: Sb, key: string, value: unknown) {
   else await sb.from("module_rows").insert({ module: "__app_state__", a: json });
 }
 
-type Fresh = NewMail & { rfcId: string; listUnsub?: boolean; failed?: string };
+/**
+ * Un mail nouveau. `avis` : vrai avis de non-remise ; `verifie` : expéditeur authentifié par
+ * Google (_shared/mailRecu.ts). Les deux se calculent ici, une fois, pour toute la relève.
+ */
+type Fresh = NewMail & { rfcId: string; listUnsub?: boolean; failed?: string; avis: boolean; verifie: boolean };
 
 /**
  * Nouveaux messages d'une boîte depuis `cursor` (ms). Liste paginée (Gmail : du plus
@@ -129,13 +141,19 @@ async function scanBox(box: Box, token: string, cursor: number): Promise<{ fresh
       const all = (n: string) => headers.filter((x) => x.name.toLowerCase() === n).map((x) => x.value).join(", ");
       // Expéditeur, objet et extrait vont en base (journal, tâches, séquences, exclusivités) :
       // sans caractère nul ni moitié d'emoji seule (_shared/texteSur.ts).
+      const from = texteSur(h("from"));
+      const failed = h("x-failed-recipients");
+      // L'en-tête Authentication-Results de Google : le premier des siens, dans l'ordre du mail.
+      const authGoogle = authentificationGoogle(headers.filter((x) => x.name.toLowerCase() === "authentication-results").map((x) => String(x.value ?? "")));
       return {
-        id: m.id, threadId: m.threadId, from: texteSur(h("from")), subject: texteSur(h("subject")),
+        id: m.id, threadId: m.threadId, from, subject: texteSur(h("subject")),
         snippet: couper(String(m.snippet ?? ""), 300), ts, rfcId: h("message-id").trim(), box,
         to: h("to"), cc: h("cc"), deliveredTo: all("delivered-to"), originalTo: all("x-original-to"),
         labelIds: Array.isArray(m.labelIds) ? m.labelIds : [],
         listUnsub: !!h("list-unsubscribe"),
-        failed: h("x-failed-recipients"),
+        failed,
+        avis: estAvisDeNonRemise({ from, contentType: h("content-type"), failed, auth: authGoogle }),
+        verifie: expediteurAuthentifie(authGoogle, adresseDe(from)),
       };
     } catch {
       return "fail";
@@ -205,13 +223,6 @@ async function recentlyReadThreads(sb: Sb): Promise<string[]> {
     .order("read_at", { ascending: false }).limit(80);
   if (error) return [];
   return ((data ?? []) as { thread_id: string | null }[]).map((r) => r.thread_id ?? "");
-}
-
-function parseFrom(from: string): { email: string; name: string } {
-  const m = /<([^>]+)>/.exec(from);
-  const email = (m ? m[1] : from).trim().toLowerCase();
-  const nm = /^\s*"?([^"<]+?)"?\s*</.exec(from);
-  return { email, name: (nm ? nm[1] : from.replace(/[<>]/g, "")).trim() };
 }
 
 /**
@@ -324,14 +335,17 @@ Deno.serve(async (req: Request) => {
       if (seenRfc.has(f.rfcId)) continue;
       seenRfc.add(f.rfcId);
     }
-    const { email, name } = parseFrom(f.from);
+    // L'adresse réelle (jamais celle du nom affiché) ; sans nom affiché, la cloche montre l'adresse.
+    const email = adresseDe(f.from);
+    const name = nomAffiche(f.from) || (email ? "" : couper(f.from.replace(/[<>]/g, " ").trim(), 120));
     const { data: exists, error: selError } = await sb.from("email_activity").select("id").eq("gmail_message_id", f.id).limit(1);
     if (selError) console.error("gmail-poll lecture journal", selError.message);
     if (exists && exists.length) continue;
     // Le constructeur de requête Supabase n'a pas de .catch : on lit { error }.
+    // `source` garde le verdict de la relève (avis, authentifié, douteux) pour la file d'envoi.
     const row = {
       contact_email: email, contact_name: name, direction: "in",
-      subject: f.subject, snippet: couper(f.snippet, 180), source: "inbox",
+      subject: f.subject, snippet: couper(f.snippet, 180), source: sourceDuJournal(f),
       thread_id: f.threadId, gmail_message_id: f.id,
     };
     // Boîte + déjà lu (ouvert dans Gmail ou Spark avant ce passage). Base pas encore
@@ -401,9 +415,9 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  // Prospection : une réponse arrête la séquence du contact (tâche « Visio » pour Marc),
-  // un rebond marque l'adresse en erreur (voir sequences.ts).
-  let sequences = { reponses: 0, rebonds: 0 };
+  // Prospection : une réponse authentifiée arrête la séquence du contact (tâche « Visio » pour
+  // Marc), un avis de non-remise marque l'adresse en erreur (voir sequences.ts).
+  let sequences = { reponses: 0, douteuses: 0, rebonds: 0 };
   if (added.length) {
     try {
       sequences = await suivreReponses(sb, added, AGENCY_DOMAIN);

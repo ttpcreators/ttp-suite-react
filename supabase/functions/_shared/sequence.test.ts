@@ -71,6 +71,13 @@ describe("mails reçus", () => {
     expect(adresseEnRebond({ from: "jean@marque.fr", subject: "Delivery Status Notification", snippet: "x@y.fr" }, "ttpcreators.pro")).toBeNull();
     expect(adresseEnRebond({ from: "mailer-daemon@googlemail.com", subject: "Delivery Status Notification (Failure)", snippet: "partnerships@ttpcreators.pro" }, "ttpcreators.pro")).toBeNull();
   });
+  it("rebond : le robot se reconnaît à l'adresse réelle, jamais au nom affiché", () => {
+    const avis = { subject: "Delivery Status Notification (Failure)", snippet: "Your message wasn't delivered to jean@marque-exemple.fr" };
+    expect(adresseEnRebond({ ...avis, from: "Mail Delivery Subsystem <jean@autre-exemple.fr>" }, "ttpcreators.pro")).toBeNull();
+    expect(adresseEnRebond({ ...avis, from: "\"<mailer-daemon@googlemail.com>\" <jean@autre-exemple.fr>" }, "ttpcreators.pro")).toBeNull();
+    expect(adresseEnRebond({ ...avis, from: "Postmaster <jean@postmaster.exemple.fr>" }, "ttpcreators.pro")).toBeNull();
+    expect(adresseEnRebond({ ...avis, from: "Mail Delivery System <MAILER-DAEMON@mx.exemple.fr>" }, "ttpcreators.pro")).toBe("jean@marque-exemple.fr");
+  });
   it("un simple retard n'est pas un rebond (le serveur réessaie)", () => {
     const snippet = "Delivery incomplete There was a temporary problem delivering your message to jean@marque-exemple.fr";
     expect(adresseEnRebond({ from: "Mail Delivery Subsystem <mailer-daemon@googlemail.com>", subject: "Delivery Status Notification (Delay)", snippet }, "ttpcreators.pro")).toBeNull();

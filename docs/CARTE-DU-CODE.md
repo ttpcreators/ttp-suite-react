@@ -424,12 +424,14 @@ commandes en base contiennent le secret des crons : ne jamais les recopier dans 
 | `dmSansReponse.ts` | Conversations Instagram restées sans réponse, avec ce qu'on sait déjà du compte | `ttp-mcp` (`dm_sans_reponse`) |
 | `siteMarque.ts` | Lire le site d'une marque pour trouver son adresse de contact (gratuit) | `ttp-mcp` (`lire_site_marque`), `ig-sourcing` |
 | `siteLead.ts` | Demande de roster venue du site : contact « Lead site » et tâche de tri pour Gianni | `site-lead`, `rdv` |
-| `rdv.ts` | Page publique de rendez-vous : créneaux libres de Marc (heure de Paris), messages Telegram et mail | `rdv`, `fileEnvoi.ts`, `ttp-mcp` (`envois.ts`), app (Paramètres) |
+| `rdv.ts` | Page publique de rendez-vous : créneaux libres de Marc (heure de Paris), messages Telegram et mail, invitation Google au texte fixe (`INVITATION_RDV`), tâche de la réservation (`tacheRdv` : fiche existante jamais modifiée, tâche « Visio : » ouverte jamais réécrite) | `rdv`, `fileEnvoi.ts`, `ttp-mcp` (`envois.ts`), app (Paramètres) |
 | `auteurEnvoi.ts` | « Envoyé par » : qui de l'équipe a envoyé un mail (`email_activity.envoye_par`) | `gmail-send`, `ttp-mcp` |
 | `mailFil.ts` | Lire un long fil sans perdre la fin (citations retirées, messages récents d'abord) | `ttp-mcp` (`gmail.ts`) |
 | `mailIgnore.ts` | Expéditeurs « Pas à traiter » (blob `mailIgnoredSenders`) | `gmail-poll`, `widget`, app (`mailIgnored.ts`, Mails) |
 | `mailKind.ts` | Fil qui n'attend pas de réponse (absence, notification, newsletter, transfert) | `gmail-history`, `creator-mail` |
 | `mailLu.ts` | Un mail ouvert dans Gmail ou Spark devient « lu » dans l'app | `gmail-poll` |
+| `mailRecu.ts` | Un mail reçu : adresse réelle de l'expéditeur (jamais une adresse du nom affiché), vrai avis de non-remise (adresse de robot et format des avis, ou avis de Google signé), expéditeur authentifié (Authentication-Results de Google : DMARC, sinon SPF ou DKIM alignés), verdict noté au journal (`email_activity.source` : `inbox-rebond`, `inbox-verifie`, `inbox-douteux`) | `gmail-poll`, `sequence.ts`, `fileEnvoi.ts` |
+| `ilikeExact.ts` | Retrouver une fiche par une valeur venue de l'extérieur : motif ilike échappé, « * » refusé (joker de PostgREST que rien n'échappe), lignes gardées à l'égalité près avant une écriture par id | `gmail-poll`, `rdv`, `ttp-mcp` (`envois.ts`, `prospection.ts`) |
 | `mailModels.ts` | Modèles de mails fournis par l'app, copie de `src/lib/mailModels.ts` (test `mailModelsSync.test.ts`) | `ttp-mcp` (`reglages_app`) |
 | `gmailDrafts.ts` | Brouillons Gmail du dossier « Brouillons » (ceux de Claude repérés) | `gmail-history`, `gmail-thread` |
 | `emailReaction.ts` | Réactions emoji au format Gmail | `gmail-send`, `gmail-thread`, `creator-mail` |

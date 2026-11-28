@@ -14,6 +14,8 @@
 // juste avant chaque écriture : une ligne confirmée ou modifiée dans la page pendant le passage
 // (téléchargement et lecture des PDF compris) n'est jamais remise « à confirmer ».
 // Réglage : `notifPrefs.mailExclu === false` coupe tout.
+// Expéditeur : l'adresse réelle de l'en-tête From (_shared/mailRecu.ts) ; sa fiche contact est
+// cherchée par adresse exacte (_shared/ilikeExact.ts, « * » refusé).
 // ============================================================================
 
 import type { getServiceClient } from "../_shared/google.ts";
@@ -23,6 +25,8 @@ import { brandFromEmail } from "../_shared/mailTasks.ts";
 import { readAppState } from "../_shared/appState.ts";
 import { ligneDeProposition, looksLikeContract, proposalFromMail, readContract, readExclusivites } from "../_shared/exclusivites.ts";
 import type { TaskMail } from "./tasks.ts";
+import { adresseDe } from "../_shared/mailRecu.ts";
+import { ilikeExact } from "../_shared/ilikeExact.ts";
 import { couper, texteSur } from "../_shared/texteSur.ts";
 
 type Sb = ReturnType<typeof getServiceClient>;
@@ -34,7 +38,6 @@ const MAX_PDFS = 5; // contrats lus par passage
 const MAX_BYTES = 15 * 1024 * 1024;
 const KEEP_DAYS = 180;
 
-const addr = (from: string) => ((/<([^>]+)>/.exec(from)?.[1] ?? from).trim().toLowerCase());
 const parisToday = () => new Intl.DateTimeFormat("fr-CA", { timeZone: "Europe/Paris" }).format(new Date());
 const firstName = (n: string) => {
   const w = n.trim().split(/\s+/)[0] ?? "";
@@ -71,7 +74,7 @@ export async function excluFromMails(
   settings: CreatorMailSetting[],
 ): Promise<number> {
   const candidates = mails.filter((m) => {
-    const email = addr(m.from);
+    const email = adresseDe(m.from);
     return email.includes("@") && !email.endsWith("@" + agencyDomain) && !(m.labelIds ?? []).includes("SPAM");
   });
   if (!candidates.length) return 0;
@@ -127,9 +130,12 @@ export async function excluFromMails(
       const reading = readContract(text, known, today);
       if (!reading.exclusivity) continue;
 
-      // Marque de l'expéditeur (fiche contact, sinon domaine) et créatrice destinataire, en secours.
-      const email = addr(m.from);
-      const { data: ct } = await sb.from("contacts").select("brand").ilike("email", email.replace(/[\\%_]/g, (c) => `\\${c}`)).not("brand", "is", null).limit(1);
+      // Marque de l'expéditeur (fiche contact de l'adresse exacte, sinon domaine) et créatrice destinataire, en secours.
+      const email = adresseDe(m.from);
+      const motif = ilikeExact(email);
+      const { data: ct } = motif
+        ? await sb.from("contacts").select("brand").ilike("email", motif).not("brand", "is", null).limit(1)
+        : { data: null };
       const brandHint = ((ct?.[0] as { brand?: string } | undefined)?.brand ?? "").trim() || brandFromEmail(email);
       const creatorHint = creatorsForMail(m, settings, agencyDomain)[0] ?? null;
 

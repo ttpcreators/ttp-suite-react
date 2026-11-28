@@ -15,6 +15,7 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4
 import type { AdminTool } from "./admin.ts";
 import { ETAPES, aRelancer, apresMail, arreter, demarrerSequence, etapeFaite, lireEmailCheck, lireSequence, type Sequence } from "../_shared/sequence.ts";
 import { verifierDomaines } from "../_shared/mxCheck.ts";
+import { ilikeExact, lignesExactes } from "../_shared/ilikeExact.ts";
 import { str } from "../_shared/texteSur.ts";
 
 type Json = Record<string, unknown>;
@@ -30,9 +31,15 @@ export function adressesDe(v: string): string[] {
   return [...String(v ?? "").matchAll(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g)].map((m) => m[0].toLowerCase());
 }
 
+/**
+ * La fiche contact de cette adresse exacte (casse ignorée), ou null. Une adresse avec « * »
+ * (joker de PostgREST que rien n'échappe) ne cherche rien : _shared/ilikeExact.ts.
+ */
 async function contactParEmail(sb: SupabaseClient, email: string): Promise<Json | null> {
-  const { data } = await sb.from("contacts").select("*").ilike("email", email.replace(/[\\%_]/g, (c) => `\\${c}`)).limit(1);
-  return ((data as Json[] | null) ?? [])[0] ?? null;
+  const motif = ilikeExact(email);
+  if (!motif) return null;
+  const { data } = await sb.from("contacts").select("*").ilike("email", motif).limit(5);
+  return lignesExactes((data as Json[] | null) ?? [], "email", email)[0] ?? null;
 }
 
 /**
