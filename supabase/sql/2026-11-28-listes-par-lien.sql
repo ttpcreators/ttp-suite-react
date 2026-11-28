@@ -35,8 +35,8 @@ revoke all on function public.liste_publique(text) from public;
 grant execute on function public.liste_publique(text) to anon, authenticated;
 
 -- 2) Plus de lecture directe de la vue ------------------------------------------------
-revoke select on public.public_creator_lists from anon, authenticated;
-revoke insert, update, delete, truncate on public.public_creator_lists from anon, authenticated, public;
+-- Tous les droits retirés (lecture comprise) ; service_role n'est pas touché.
+revoke all on public.public_creator_lists from anon, authenticated, public;
 
 notify pgrst, 'reload schema';
 
