@@ -316,9 +316,14 @@ function BackupCard() {
         );
         return;
       }
-      const d = (data ?? {}) as { recipients?: number; attached?: boolean; bytes?: number };
+      const d = (data ?? {}) as { recipients?: number; attached?: boolean; bytes?: number; link?: boolean; drive?: string };
       const mb = ((d.bytes ?? 0) / 1024 / 1024).toFixed(1).replace(".", ",");
-      toast(`Sauvegarde envoyée ✓ (${mb} Mo${d.attached ? ", jointe au mail" : ", lien dans le mail"})`);
+      // `link` absent : ancienne version de la fonction, qui mettait toujours un lien.
+      const ou = d.attached ? ", jointe au mail"
+        : d.link !== false ? ", lien dans le mail"
+          : d.drive === "ok" ? ", rangée dans Google Drive"
+            : ", trop lourde pour le mail et pas rangée : réessaie";
+      toast(`Sauvegarde envoyée ✓ (${mb} Mo${ou})`);
     } finally {
       setBusy(false);
       // Succès ou échec, la fonction a laissé son état : on le relit tout de suite.

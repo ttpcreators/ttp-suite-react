@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cheminAvatar, estPdf, extensionImage, genreFichier, lienContrat, retirerApostrophe, sansFormule } from "./fichierSur";
+import { cheminAvatar, estPdf, extensionDepot, extensionImage, genreFichier, lienContrat, retirerApostrophe, sansFormule } from "./fichierSur";
 
 const SIGN = "https://zizvggziggswhrbuyhuo.supabase.co/storage/v1/object/sign/documents";
 
@@ -81,5 +81,25 @@ describe("extensionImage", () => {
     expect(extensionImage({ name: "Photo.PNG", type: "image/png" })).toBe("png");
     expect(extensionImage({ name: "photo", type: "image/webp" })).toBe("webp");
     expect(extensionImage({ name: "photo.bmp", type: "image/bmp" })).toBe("jpg");
+  });
+});
+
+describe("extensionDepot", () => {
+  it("garde l'extension du nom quand elle est dans la liste", () => {
+    expect(extensionDepot({ name: "Facture Mars.PDF", type: "application/pdf" })).toBe("pdf");
+    expect(extensionDepot({ name: "IMG_0001.HEIC", type: "" })).toBe("heic");
+    expect(extensionDepot({ name: "brief.docx" })).toBe("docx");
+  });
+
+  it("prend le type quand le nom n'a pas d'extension permise", () => {
+    expect(extensionDepot({ name: "image", type: "image/jpeg" })).toBe("jpg");
+    expect(extensionDepot({ name: "clip.bin", type: "video/quicktime" })).toBe("mov");
+  });
+
+  it("refuse le reste", () => {
+    expect(extensionDepot({ name: "archive.rar", type: "application/x-rar" })).toBeNull();
+    expect(extensionDepot({ name: "pdf", type: "" })).toBeNull();
+    expect(extensionDepot({ name: "page.html", type: "text/html" })).toBeNull();
+    expect(extensionDepot({ name: "dessin.svg", type: "image/svg+xml" })).toBeNull();
   });
 });

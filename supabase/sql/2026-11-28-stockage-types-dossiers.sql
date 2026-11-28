@@ -8,11 +8,12 @@
 -- 2. Dépôt d'un créateur dans « documents » (documents_obj_creator_insert) : toujours dans
 --    son dossier creator-uploads/<id du compte>/, et seulement avec une extension de la
 --    liste (pdf, photos, vidéos, sons, Office, OpenDocument, iWork, csv, txt, rtf, zip).
+--    Un nom sans point est refusé (storage.extension renverrait alors le nom entier).
 -- 3. Suppression par un créateur (documents_obj_creator_own_delete) : toujours dans son
 --    dossier, mais plus un fichier rattaché à une fiche documents (facture, stats,
 --    contenu…) ni la capture d'un post de collab (collab_posts.capture_path). Ses pièces
 --    jointes de tâche et les fichiers sans fiche (envoi interrompu) restent supprimables.
--- 4. Bucket public « avatars » (avatars_obj_insert) : extension d'image seulement pour
+-- 4. Bucket public « avatars » (avatars_obj_insert) : nom avec point et extension d'image pour
 --    tous ; pour un compte qui n'est pas de l'agence, dossier creators/<id du compte>/.
 --    L'app range déjà les photos à cet endroit (avatar-upload, image-field).
 --
@@ -63,6 +64,7 @@ create policy documents_obj_creator_insert on storage.objects for insert to auth
   with check (
     bucket_id = 'documents'
     and name like 'creator-uploads/' || auth.uid()::text || '/%'
+    and storage.filename(name) like '%.%'
     and lower(coalesce(storage.extension(name), '')) = any (array[
       'pdf',
       'jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'avif', 'heic', 'heif',
@@ -87,6 +89,7 @@ drop policy if exists avatars_obj_insert on storage.objects;
 create policy avatars_obj_insert on storage.objects for insert to authenticated
   with check (
     bucket_id = 'avatars'
+    and storage.filename(name) like '%.%'
     and lower(coalesce(storage.extension(name), '')) = any (array['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'avif', 'heic', 'heif'])
     and (public.is_agency() or name like 'creators/' || auth.uid()::text || '/%')
   );
@@ -95,7 +98,7 @@ create policy avatars_obj_insert on storage.objects for insert to authenticated
 select
   (select allowed_mime_types is not null from storage.buckets where id = 'documents')            as documents_types_ok,
   (select count(*) from storage.buckets b, unnest(b.allowed_mime_types) t
-    where b.id = 'documents' and (t like '%svg%' or t like '%xml%'))                             as types_dangereux,
+    where b.id = 'documents' and (t like '%svg%' or t like '%/xml' or t like '%+xml'))                             as types_dangereux,
   exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects'
            and policyname = 'documents_obj_creator_insert' and with_check like '%extension%')    as depot_createur_ok,
   exists (select 1 from pg_policies where schemaname = 'storage' and tablename = 'objects'

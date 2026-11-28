@@ -283,7 +283,7 @@ async function runBackup(sb: Sb, now: Date): Promise<Out> {
   // que chez des fondateurs ; `backupRecipients` sert seulement à en choisir certains. Sans
   // destinataire sûr, pas de mail : l'archive est déjà dans Storage (et Drive).
   const dest = destinatairesSauvegarde(state.backupRecipients, await founderEmails(sb), reglagesLus);
-  if ("error" in dest) return { status: 409, body: { error: dest.error, stored: !up.error, drive } };
+  if ("error" in dest) return { status: 409, body: { error: dest.error, stored, link: Boolean(link), drive } };
   const to = dest.to;
   const ecartees = dest.ignorees
     ? `<p style="color:#b00020">Pas envoyée à ${dest.ignorees === 1 ? "1 adresse" : `${dest.ignorees} adresses`} de la liste des destinataires (réglage backupRecipients) : ce ne sont pas des adresses de connexion de fondateurs.</p>`
@@ -315,7 +315,7 @@ async function runBackup(sb: Sb, now: Date): Promise<Out> {
     html,
     attachments: attach ? [{ filename: name, mimeType: "application/zip", bytes: zip }] : [],
   });
-  if (!token) return { status: 409, body: { error: "google_non_connecte", stored: !up.error, drive } };
+  if (!token) return { status: 409, body: { error: "google_non_connecte", stored, link: Boolean(link), drive } };
   // Envoi « media » : accepte un mail jusqu'à 35 Mo (le format JSON raw s'arrête à 5 Mo).
   const sent = await fetch("https://gmail.googleapis.com/upload/gmail/v1/users/me/messages/send?uploadType=media", {
     method: "POST",
@@ -325,7 +325,7 @@ async function runBackup(sb: Sb, now: Date): Promise<Out> {
   });
   if (!sent.ok) {
     console.error("monthly-backup send", sent.status, (await sent.text()).slice(0, 300));
-    return { status: 502, body: { error: "envoi_echoue", stored: !up.error, drive } };
+    return { status: 502, body: { error: "envoi_echoue", stored, link: Boolean(link), drive } };
   }
-  return { status: 200, body: { ok: true, month, files: Object.keys(files).length, bytes: zip.length, attached: attach, recipients: to.length, missing: manque, drive } };
+  return { status: 200, body: { ok: true, month, files: Object.keys(files).length, bytes: zip.length, attached: attach, stored, link: Boolean(link), recipients: to.length, missing: manque, drive } };
 }

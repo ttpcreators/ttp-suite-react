@@ -84,3 +84,33 @@ export function extensionImage(file: { name?: string | null; type?: string | nul
   const duType = String(file.type ?? "").toLowerCase().replace(/^image\//, "");
   return EXT_IMAGE.includes(duType) ? duType : "jpg";
 }
+
+/** Extensions acceptées pour un dépôt d'un créateur dans « documents » (règle
+ *  documents_obj_creator_insert, SQL 2026-11-28). Même liste des deux côtés. */
+export const EXT_DEPOT = [
+  "pdf",
+  ...EXT_IMAGE,
+  "mp4", "mov", "m4v", "webm", "mp3", "m4a", "wav", "aac",
+  "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "key", "pages", "numbers",
+  "csv", "txt", "rtf", "zip",
+];
+
+/** Type → extension, pour un fichier dont le nom n'en donne pas une de la liste (photo
+ *  choisie sans nom de fichier, par exemple). */
+const EXT_DU_TYPE: Record<string, string> = {
+  "application/pdf": "pdf",
+  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "image/gif": "gif",
+  "image/avif": "avif", "image/heic": "heic", "image/heif": "heif",
+  "video/mp4": "mp4", "video/quicktime": "mov", "video/webm": "webm", "video/x-m4v": "m4v",
+  "audio/mpeg": "mp3", "audio/mp4": "m4a", "audio/x-m4a": "m4a", "audio/wav": "wav", "audio/x-wav": "wav", "audio/aac": "aac",
+};
+
+/** Extension d'un fichier qu'un créateur dépose : celle du nom si elle est dans EXT_DEPOT,
+ *  sinon celle de son type, sinon null (fichier refusé : l'app le dit avant l'envoi). */
+export function extensionDepot(file: { name?: string | null; type?: string | null }): string | null {
+  const nom = String(file.name ?? "");
+  const ext = nom.includes(".") ? (nom.split(".").pop() ?? "").toLowerCase().replace(/[^a-z0-9]/g, "") : "";
+  if (EXT_DEPOT.includes(ext)) return ext;
+  const type = String(file.type ?? "").toLowerCase().split(";")[0].trim();
+  return EXT_DU_TYPE[type] ?? null;
+}

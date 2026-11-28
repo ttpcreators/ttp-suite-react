@@ -9,6 +9,7 @@ import { fmtCompact } from "@/lib/timeSeries";
 import { cumulativeFollowers, type LiveOther } from "@/lib/rosterAudience";
 import { LayoutDashboard, ListChecks, SquareCheckBig, ChevronRight, Camera, PenLine, CircleCheck, FileText, MessageSquare, Sparkles, Globe2, CalendarDays, Files, Image as ImageIcon, Receipt, Upload, Mail, ShieldCheck, Package, LogOut, Moon, Sun, Pencil, Check, Trash2, TrendingUp, ExternalLink, BarChart3, Contact, X, Copy, List, Columns3, PanelLeftOpen, Share2, Plus, Eye, ArrowLeft } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
+import { extensionDepot } from "@/lib/fichierSur";
 import { titleCase, cn, initials } from "@/lib/utils";
 import { useEdgeSwipeBack } from "@/lib/useEdgeSwipeBack";
 import { UndoBar, undoable } from "@/components/creator-undo";
@@ -1114,7 +1115,11 @@ export function CreatorSpace({
       toast(t("Session expirée. Reconnecte-toi."));
       return null;
     }
-    const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+    const ext = extensionDepot(file);
+    if (!ext) {
+      toast(t("«\u00A0{file}\u00A0» : type de fichier non accepté (PDF, photo, vidéo, son, Office, texte, CSV ou zip)", { file: file.name }));
+      return null;
+    }
     const path = `creator-uploads/${uid}/stats-${Date.now()}.${ext}`;
     const up = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined, upsert: false });
     if (up.error) {
@@ -1256,7 +1261,11 @@ export function CreatorSpace({
         toast(t("Session expirée. Reconnecte-toi."));
         return;
       }
-      const ext = (file.name.split(".").pop() || "pdf").toLowerCase().replace(/[^a-z0-9]/g, "") || "pdf";
+      const ext = extensionDepot(file);
+      if (!ext) {
+        toast(t("«\u00A0{file}\u00A0» : type de fichier non accepté (PDF, photo, vidéo, son, Office, texte, CSV ou zip)", { file: file.name }));
+        return;
+      }
       const path = `creator-uploads/${uid}/facture-${Date.now()}.${ext}`;
       const up = await supabase.storage.from("documents").upload(path, file, {
         contentType: file.type || undefined,
@@ -1318,6 +1327,11 @@ export function CreatorSpace({
       toast(t("Fichier trop lourd : 50 Mo au plus. Envoie-le par WeTransfer."), { variant: "error" });
       return;
     }
+    const refuse = files.find((f) => !extensionDepot(f));
+    if (refuse) {
+      toast(t("«\u00A0{file}\u00A0» : type de fichier non accepté (PDF, photo, vidéo, son, Office, texte, CSV ou zip)", { file: refuse.name }), { variant: "error" });
+      return;
+    }
     const { data: u } = await supabase.auth.getUser();
     const uid = u?.user?.id;
     if (!uid) {
@@ -1329,7 +1343,7 @@ export function CreatorSpace({
     setContentUp({ brand: m.brand, pct: 0, done: false });
     const added: Doc[] = [];
     for (const [i, file] of files.entries()) {
-      const ext = (file.name.split(".").pop() || "bin").toLowerCase().replace(/[^a-z0-9]/g, "") || "bin";
+      const ext = extensionDepot(file) ?? "bin";
       const path = `creator-uploads/${uid}/contenu-${Date.now()}-${i}.${ext}`;
       const signed = await supabase.storage.from("documents").createSignedUploadUrl(path);
       const ok = signed.data?.signedUrl
@@ -1464,7 +1478,11 @@ export function CreatorSpace({
           toast(t("«\u00A0{file}\u00A0» trop lourd (max 15 Mo)", { file: file.name }));
           continue;
         }
-        const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
+        const ext = extensionDepot(file);
+        if (!ext) {
+          toast(t("«\u00A0{file}\u00A0» : type de fichier non accepté (PDF, photo, vidéo, son, Office, texte, CSV ou zip)", { file: file.name }));
+          continue;
+        }
         const path = `creator-uploads/${uid}/stats-${Date.now()}-${ok}.${ext}`;
         const up = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined, upsert: false });
         if (up.error) {
@@ -2083,8 +2101,9 @@ export function CreatorSpace({
       const added: Attachment[] = [];
       for (const file of list) {
         if (file.size > 15 * 1024 * 1024) { toast(t("«\u00A0{file}\u00A0» trop lourd (max 15 Mo)", { file: file.name })); continue; }
-        const ext = (file.name.split(".").pop() || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-        const path = `creator-uploads/${uid}/todo-attachments/${todo.id}/${Date.now()}-${added.length}${ext ? "." + ext : ""}`;
+        const ext = extensionDepot(file);
+        if (!ext) { toast(t("«\u00A0{file}\u00A0» : type de fichier non accepté (PDF, photo, vidéo, son, Office, texte, CSV ou zip)", { file: file.name })); continue; }
+        const path = `creator-uploads/${uid}/todo-attachments/${todo.id}/${Date.now()}-${added.length}.${ext}`;
         const up = await supabase.storage.from("documents").upload(path, file, { contentType: file.type || undefined, upsert: false });
         if (up.error) { toast(t("Envoi interrompu. Vérifie ta connexion et réessaie.")); continue; }
         added.push({ name: file.name, size: `${Math.max(1, Math.round(file.size / 1024))} Ko`, path });
