@@ -4,10 +4,8 @@
 // Envoi (sendMail) : fondateurs seulement, et Claude demande l'accord avant (outil envoyer_mail).
 // Boîtes des créateurs (creator_mail_boxes) : réservées aux fondateurs, comme creator-box-mail.
 // Les fonctions qui choisissent une boîte reçoivent `founder` (ctx.founder de l'appel) ; sans
-// lui, elles gardent l'ancien comportement (true). Appels qui ne le passent pas encore (tools.ts) :
-// rechercher_mails (dont « partout »), lire_mail, brouillons_claude, supprimer_brouillon,
-// creer_brouillon_mail (et ses pièces jointes), sa recherche des échanges déjà eus ; l'outil
-// contrats n'est pas encore marqué fondateur. Ceux d'admin.ts passent déjà ctx.founder.
+// lui, elles gardent l'ancien comportement (true). Les outils de tools.ts et d'admin.ts passent
+// ctx.founder ; le verrou et la file d'envoi (outils déjà réservés aux fondateurs) ne le passent pas.
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -16,6 +14,7 @@ import { boxToken, talentAddress } from "../_shared/gmailBox.ts";
 import { connectedCreatorBox, creatorBoxToken, isCreatorBox, listCreatorBoxes, normEmail } from "../_shared/creatorBox.ts";
 import { gfetch, decodeGmailBody, charsetOf, mapPool } from "../_shared/gfetch.ts";
 import { partsDuBudget, sansCitation } from "../_shared/mailFil.ts";
+import { neutraliser } from "../_shared/contenuExterne.ts";
 import { construireRaw, nomPropre, type Piece } from "../_shared/piecesJointes.ts";
 import { addressOf, findSendAs, fromHeader, refusSendAs, usableSendAs, type RawSendAs, type SendAs } from "../_shared/sendAs.ts";
 
@@ -206,11 +205,12 @@ export async function readThread(sb: SupabaseClient, box: MailBox, threadId: str
   const parts: string[] = [`# ${subject}`, `Boîte : ${box.includes("@") ? box : `${box}@`} · ${msgs.length} message(s), du plus ancien au plus récent · fil ${threadId}`];
   lus.forEach(({ m, files, text }, i) => {
     const h = m.payload?.headers;
-    const body = text.slice(0, budgets[i]);
+    // Corps neutralisé : une ligne qui imite « --- », « De : » ou « DERNIER MESSAGE » est préfixée (contenuExterne.ts).
+    const body = neutraliser(text.slice(0, budgets[i]));
     parts.push(
       `\n---\n${i === lus.length - 1 ? "DERNIER MESSAGE\n" : ""}De : ${header(h, "from")}\nÀ : ${header(h, "to")}${header(h, "cc") ? `\nCc : ${header(h, "cc")}` : ""}\nDate : ${frDate(Number(m.internalDate ?? 0))}` +
         (files.length ? `\nPièces jointes : ${files.join(", ")}` : "") +
-        `\n\n${body || "(message vide)"}${text.length > body.length ? "\n[…raccourci : message ancien]" : ""}`,
+        `\n\n${body || "(message vide)"}${text.length > budgets[i] ? "\n[…raccourci : message ancien]" : ""}`,
     );
   });
   return parts.join("\n");

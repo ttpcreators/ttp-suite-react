@@ -88,7 +88,9 @@ Deno.serve(async (req: Request) => {
   // ── OAuth ──
   if (req.method === "POST" && path === "/register") {
     const body = (await req.json().catch(() => ({}))) as Record<string, unknown>;
-    const r = await register(sb, body);
+    // Adresse de l'appelant (premier élément de x-forwarded-for) : plafond par IP de register (oauth.ts).
+    const ip = (req.headers.get("x-forwarded-for") ?? "").split(",")[0].trim().slice(0, 64);
+    const r = await register(sb, body, ip);
     return json(r.body, r.status);
   }
   if (req.method === "POST" && path === "/authorize/check") {

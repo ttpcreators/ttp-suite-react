@@ -39,6 +39,7 @@ import { LIBELLES, etatRecrut, lireSuivi, noterMessage, texteSuivi, type Canal, 
 import { readAppState } from "../_shared/appState.ts";
 import { PLAFONDS } from "../_shared/quotaMeta.ts";
 import { str } from "../_shared/texteSur.ts";
+import { prouveAdresse } from "../_shared/mailRecu.ts";
 
 type Json = Record<string, unknown>;
 const ok = (text: string) => ({ text });
@@ -629,9 +630,11 @@ const createursAContacter: AdminTool = {
     }
     const emails = [...new Set(suivis.map((f) => str(f.r.email, 200).toLowerCase()).filter((e) => e.includes("@")))];
     for (let i = 0; i < emails.length; i += 100) {
-      const { data: recus, error: e } = await sb.from("email_activity").select("contact_email, created_at").eq("direction", "in").in("contact_email", emails.slice(i, i + 100)).order("created_at", { ascending: false }).limit(1000);
+      const { data: recus, error: e } = await sb.from("email_activity").select("contact_email, created_at, source").eq("direction", "in").in("contact_email", emails.slice(i, i + 100)).order("created_at", { ascending: false }).limit(1000);
       if (e) return fail("Les mails reçus n'ont pas pu être relus. Réessayer.");
       for (const m of (recus as Json[] | null) ?? []) {
+        // Un rebond ou un expéditeur non vérifié ne compte pas comme une réponse (_shared/mailRecu.ts).
+        if (!prouveAdresse(m.source)) continue;
         const j = parisJour(new Date(String(m.created_at)));
         const k = `mail:${String(m.contact_email).toLowerCase()}`;
         if (!reponse.has(k) || reponse.get(k)! < j) reponse.set(k, j);

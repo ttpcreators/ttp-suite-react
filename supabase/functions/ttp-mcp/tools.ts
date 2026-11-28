@@ -768,6 +768,8 @@ const contrats: Tool = {
   title: "Contrats et fins de contrat",
   description: "Contrats des créateurs (représentation, marque, UGC) avec leur date de fin, comme la page Fins de contrat : à renouveler dans les 30 jours, déjà échus, puis les autres. Filtre facultatif par créateur.",
   inputSchema: { type: "object", properties: { createur: { type: "string" }, tous: { type: "boolean", description: "Aussi les contrats déjà renouvelés" } }, additionalProperties: false },
+  // Comme la page Fins de contrat (FOUNDER_ONLY) : réservé aux fondateurs.
+  founder: true,
   run: async (sb, _c, a) => {
     const st = await appState(sb);
     const today = isoDay();
@@ -987,14 +989,14 @@ const rechercherMails: Tool = {
     },
     additionalProperties: false,
   },
-  run: async (sb, _c, a) => {
+  run: async (sb, ctx, a) => {
     const q = str(a.requete, 200) || "in:inbox";
     const demande = str(a.boite).toLowerCase();
     if (demande && demande !== "toutes" && demande !== PARTOUT) {
-      const p = await parseMailBox(sb, demande);
+      const p = await parseMailBox(sb, demande, ctx.founder);
       if ("error" in p) return fail(p.error);
     }
-    const { threads, errors } = await searchThreads(sb, demande === "toutes" ? undefined : demande || undefined, q, int(a.max, 10, 1, 25));
+    const { threads, errors } = await searchThreads(sb, demande === "toutes" ? undefined : demande || undefined, q, int(a.max, 10, 1, 25), ctx.founder);
     const out = [`# Mails · « ${q} »`, ...threads.map((t) => `- ${t.unread ? "● " : ""}${t.date} · ${t.from} · « ${t.subject} »${t.messages > 1 ? ` (${t.messages} messages)` : ""}\n  ${t.snippet.slice(0, 160)}\n  [fil ${t.threadId} · boîte ${t.box}]`)];
     if (!threads.length) out.push("Aucun mail trouvé.");
     else if (threads.length >= int(a.max, 10, 1, 25)) out.push(`\n(${threads.length} premiers fils seulement : il y en a peut-être d'autres, relance avec max plus grand.)`);
@@ -1012,8 +1014,8 @@ const lireMail: Tool = {
   title: "Lire un fil de mails",
   description: "Lit un fil Gmail en entier (expéditeurs, dates, texte des messages, noms des pièces jointes). Utiliser l'id du fil et la boîte donnés par rechercher_mails.",
   inputSchema: { type: "object", properties: { fil: { type: "string", description: "Id du fil Gmail" }, boite: { type: "string", description: "partnerships, talent, ou l'adresse d'une boîte de créateur connectée (voir boites_createurs)" } }, required: ["fil", "boite"], additionalProperties: false },
-  run: async (sb, _c, a) => {
-    const p = await parseMailBox(sb, a.boite);
+  run: async (sb, ctx, a) => {
+    const p = await parseMailBox(sb, a.boite, ctx.founder);
     if ("error" in p) return fail(p.error);
     const box = p.box;
     const id = str(a.fil, 40);
@@ -1804,13 +1806,13 @@ const brouillonsClaude: Tool = {
   title: "Brouillons préparés par Claude",
   description: "Liste les brouillons Gmail préparés par Claude (partnerships@ et talent@) : id, destinataire, objet, fil, date, et « DÉJÀ RÉPONDU » quand l'agence a envoyé un message dans le fil après ce brouillon (il fait doublon : à supprimer avec supprimer_brouillon).",
   inputSchema: { type: "object", properties: { boite: { type: "string", description: "toutes (défaut : partnerships@ et talent@), partnerships, talent, ou l'adresse d'une boîte de créateur connectée" } }, additionalProperties: false },
-  run: async (sb, _c, a) => {
+  run: async (sb, ctx, a) => {
     const demande = str(a.boite).toLowerCase();
     if (demande && demande !== "toutes" && demande !== PARTOUT) {
-      const p = await parseMailBox(sb, demande);
+      const p = await parseMailBox(sb, demande, ctx.founder);
       if ("error" in p) return fail(p.error);
     }
-    const { drafts, errors } = await listClaudeDrafts(sb, demande === "toutes" ? undefined : demande || undefined);
+    const { drafts, errors } = await listClaudeDrafts(sb, demande === "toutes" ? undefined : demande || undefined, ctx.founder);
     const lines = drafts.map((d) => {
       const spark = sparkLink(boxAddress(d.box), d.rfcId, d.messageId);
       return `- ${d.answered ? "⚠ DÉJÀ RÉPONDU · " : ""}${d.box.includes("@") ? d.box : `${d.box}@`} · à ${d.to} · « ${d.subject} » · ${d.ts ? frDay(new Date(d.ts).toISOString().slice(0, 10)) : ""} · brouillon ${d.id}${d.threadId ? ` · fil ${d.threadId}` : ""}${spark ? ` · Spark : ${spark}` : ""}`;
@@ -1830,8 +1832,8 @@ const supprimerBrouillon: Tool = {
     required: ["boite", "brouillon"],
     additionalProperties: false,
   },
-  run: async (sb, _c, a) => {
-    const p = await parseMailBox(sb, a.boite);
+  run: async (sb, ctx, a) => {
+    const p = await parseMailBox(sb, a.boite, ctx.founder);
     if ("error" in p) return fail(p.error);
     const box = p.box;
     const id = str(a.brouillon, 64);
@@ -1946,7 +1948,7 @@ const brouillonMail: Tool = {
     additionalProperties: false,
   },
   run: async (sb, ctx, a) => {
-    const p = await parseMailBox(sb, a.boite);
+    const p = await parseMailBox(sb, a.boite, ctx.founder);
     if ("error" in p) return fail(p.error);
     const box = p.box;
     const to = str(a.a, 500);
@@ -2010,11 +2012,11 @@ const brouillonMail: Tool = {
       // dans TOUTES les boîtes, celles des créateurs comprises, cherchés AVANT le brouillon.
       const cibles = ciblesEchange(to);
       const dejaVu = cibles.length
-        ? texteEchanges(cibles, (await searchThreads(sb, PARTOUT, requeteEchange(cibles), 6).catch(() => ({ threads: [] }))).threads)
+        ? texteEchanges(cibles, (await searchThreads(sb, PARTOUT, requeteEchange(cibles), 6, ctx.founder).catch(() => ({ threads: [] }))).threads)
         : "";
       // Les pièces jointes (demande de Marc, 19 novembre 2026) : récupérées AVANT le brouillon ;
       // une pièce introuvable ou refusée : rien n'est créé, Alfred le dit à Marc.
-      const pieces = await piecesDuBrouillon(sb, box, a.pieces_jointes);
+      const pieces = await piecesDuBrouillon(sb, box, a.pieces_jointes, ctx.founder);
       if ("erreur" in pieces) return fail(pieces.erreur);
       const r = await createDraft(sb, box, to, str(a.objet, 300), str(a.message, 20000), /^[A-Za-z0-9]+$/.test(fil) ? fil : undefined, html, cci, from, pieces.liste, kit.kitJoint ? [`${ENTETE_KIT}: verifie`] : []);
       const de = from ? ` (de ${from.email}${from.name ? `, « ${from.name} »` : ""})` : "";
@@ -2038,7 +2040,7 @@ const brouillonMail: Tool = {
 };
 
 /** Les pièces jointes d'un brouillon, depuis la page Documents, un mail reçu ou ttpcreators.pro. */
-async function piecesDuBrouillon(sb: SupabaseClient, box: MailBox, v: unknown): Promise<{ liste: Piece[] } | { erreur: string }> {
+async function piecesDuBrouillon(sb: SupabaseClient, box: MailBox, v: unknown, founder: boolean): Promise<{ liste: Piece[] } | { erreur: string }> {
   const sources = (Array.isArray(v) ? v : []).slice(0, 5) as Json[];
   const liste: Piece[] = [];
   for (const src of sources) {
@@ -2060,7 +2062,7 @@ async function piecesDuBrouillon(sb: SupabaseClient, box: MailBox, v: unknown): 
         if (!/^[A-Za-z0-9]+$/.test(fil)) return { erreur: "Id de fil invalide pour une pièce jointe." };
         let b: MailBox = box;
         if (str(src.boite)) {
-          const p = await parseMailBox(sb, src.boite);
+          const p = await parseMailBox(sb, src.boite, founder);
           if ("error" in p) return { erreur: p.error };
           b = p.box;
         }
@@ -2561,7 +2563,7 @@ const proposerAction: Tool = {
       const cite = brouillonCite(a);
       if ("erreur" in cite && (cite.cite || ctx.agent)) return fail(`Proposition non déposée : ${cite.erreur}.`);
       if (!("erreur" in cite)) {
-        const pb = await parseMailBox(sb, cite.boite);
+        const pb = await parseMailBox(sb, cite.boite, ctx.founder);
         if ("error" in pb) return fail(`Proposition non déposée : ${pb.error}`);
         let lu;
         try {
