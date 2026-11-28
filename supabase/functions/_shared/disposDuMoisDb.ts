@@ -4,7 +4,8 @@
 // Lit le roster (`creators`) et le blob agence (barème de la page Tarifs, exclusivités),
 // calcule la sélection (logique pure : disposDuMois.ts) et la range dans `creator_lists`,
 // lien public activé. Une seule liste par mois : on la retrouve par son adresse
-// (« dispos-2026-12-xxxx ») et on la met à jour. Utilisé par l'app (bouton « Générer les
+// (« dispos-2026-12- » suivi de 20 caractères au hasard) et on la met à jour. La page publique
+// la lit par la fonction SQL liste_publique, avec l'adresse exacte. Utilisé par l'app (bouton « Générer les
 // dispos du mois », client de l'utilisateur, RLS agence), le connecteur Claude (outil
 // `dispos_du_mois`) et la fonction du 1er du mois `dispos-du-mois` (client serveur).
 // Avant le SQL 2026-11-22-dispos-du-mois.sql (colonne `dispos`), la liste est enregistrée
@@ -13,7 +14,7 @@
 // ============================================================================
 
 import { readAppState } from "./appState.ts";
-import { disposDuMois, introDispos, prefixeDispos, slugDispos, titreDispos, type DisposCreatorRow, type DisposResultat } from "./disposDuMois.ts";
+import { disposDuMois, hasardSlug, introDispos, prefixeDispos, slugDispos, titreDispos, type DisposCreatorRow, type DisposResultat } from "./disposDuMois.ts";
 
 // deno-lint-ignore no-explicit-any
 type Sb = { from: (table: string) => any };
@@ -29,7 +30,7 @@ export type DisposEnregistrees =
   | { ok: true; url: string; slug: string; titre: string; cree: boolean; sansDispos: boolean; resultat: DisposResultat }
   | { ok: false; error: string };
 
-export async function genererDisposDuMois(sb: Sb, mois: string, now = new Date(), hasard = Math.random().toString(36).slice(2, 6)): Promise<DisposEnregistrees> {
+export async function genererDisposDuMois(sb: Sb, mois: string, now = new Date(), hasard = hasardSlug()): Promise<DisposEnregistrees> {
   const { data: rows, error: e1 } = await sb.from("creators").select(COLS).order("sort_order", { ascending: true });
   if (e1) return { ok: false, error: `Roster illisible : ${e1.message}` };
   let blob: Record<string, unknown>;

@@ -3,7 +3,7 @@ import { DEFAULT_TARIF_GRID } from "./tarif.ts";
 import { priceTarif, EMPTY_DEAL } from "../../../src/lib/pricingTTP";
 import {
   bornesMois, disposDuMois, disposTexte, indispoTexte, indisposDe, mediane, moisCourant, moisDecale, moisLabel, nombre, prixContenu, reseauxDe,
-  slugDispos, statutDispo, tacheDispos, titreDispos, type DisposCreatorRow,
+  hasardSlug, slugDispos, statutDispo, tacheDispos, titreDispos, type DisposCreatorRow,
 } from "./disposDuMois.ts";
 import { readExclusivites } from "./exclusivites.ts";
 
@@ -39,7 +39,12 @@ describe("dispos du mois : outils", () => {
     expect(titreDispos("2026-12")).toBe("Dispos de décembre 2026");
     expect(bornesMois("2027-02")).toEqual({ first: "2027-02-01", last: "2027-02-28" });
     expect(slugDispos("2026-12", "A7k2")).toBe("dispos-2026-12-a7k2");
-    expect(slugDispos("2026-12", "")).toMatch(/^dispos-2026-12-[a-z0-9]{3,6}$/);
+    expect(slugDispos("2026-12", "")).toMatch(/^dispos-2026-12-[0-9a-f]{20}$/);
+    const h = hasardSlug();
+    expect(h).toMatch(/^[0-9a-f]{20}$/);
+    expect(hasardSlug()).not.toBe(h);
+    expect(slugDispos("2026-12", h)).toBe(`dispos-2026-12-${h}`);
+    expect(slugDispos("2026-12", h)).toMatch(/^[a-z0-9-]{3,60}$/);
   });
   it("nombres saisis et médiane", () => {
     expect([nombre("244 287"), nombre("5,84%"), nombre("12,5 K"), nombre("1,2M"), nombre("abc"), nombre(null)]).toEqual([244287, 5.84, 12500, 1200000, null, null]);

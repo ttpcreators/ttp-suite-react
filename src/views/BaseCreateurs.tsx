@@ -11,7 +11,7 @@ import { VILLES, cleanUser, construireBase, deburr, filtrerBase, type BaseCreate
 import { useStickyState } from "@/lib/useStickyState";
 import { TtpSpider } from "@/components/icons/ttp-icons";
 import { HelpTip } from "@/components/ui/help-tip";
-import { moisCourant, moisDecale, moisLabel } from "../../supabase/functions/_shared/disposDuMois.ts";
+import { hasardSlug, moisCourant, moisDecale, moisLabel } from "../../supabase/functions/_shared/disposDuMois.ts";
 import { genererDisposDuMois } from "../../supabase/functions/_shared/disposDuMoisDb.ts";
 
 /**
@@ -42,10 +42,14 @@ const SORTS = ["abonnes", "engagement", "recent", "nom"] as const;
 const IN = "h-9 rounded-full border border-border bg-surface px-3 text-[13px] text-foreground outline-none focus:border-primary";
 const missingTable = (e: { code?: string } | null) => !!e && (e.code === "42P01" || e.code === "PGRST205" || e.code === "PGRST202");
 
-/** Adresse publique d'une liste : le titre lisible + 4 caractères au hasard (introuvable sans le lien). */
+/**
+ * Adresse publique d'une liste : le titre lisible (35 caractères au plus) + 20 caractères tirés
+ * au hasard (80 bits, introuvable sans le lien), soit 60 caractères au plus comme le veut la table.
+ * La page du site la lit par la fonction SQL liste_publique, avec l'adresse exacte.
+ */
 export function slugFor(title: string): string {
-  const base = deburr(title).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 50) || "selection";
-  return `${base.length < 3 ? `${base}-ttp` : base}-${Math.random().toString(36).slice(2, 6)}`;
+  const base = deburr(title).replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 35).replace(/-+$/, "") || "selection";
+  return `${base.length < 3 ? `${base}-ttp` : base}-${hasardSlug()}`;
 }
 
 async function loadAll<T>(table: string, cols: string): Promise<{ rows: T[]; missing: boolean }> {
