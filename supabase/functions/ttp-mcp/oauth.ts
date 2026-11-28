@@ -16,10 +16,18 @@
 //   • /token échange le code (vérification PKCE) contre un jeton d'accès (1 h) et un
 //     jeton de renouvellement (60 j, remplacé à chaque usage). Tout est stocké haché.
 //   • Une connexion coupée dans Paramètres (revoked_at) invalide tous ses jetons.
+//   • Depuis le 2026-11-28 : chaque nouvelle connexion prévient les fondateurs (push et
+//     Telegram) ; un jeton de renouvellement déjà remplacé, présenté de nouveau, coupe toute
+//     la connexion ; les enregistrements jamais utilisés partent au bout d'1 h, 20 au plus
+//     par heure et par adresse IP (si l'appelant donne l'IP, colonne mcp_clients.ip_hash du
+//     SQL 2026-11-28-comptes-connexions-claude) ; les jetons expirés sont effacés au passage.
+//     Un changement de mot de passe ou une récupération coupe les connexions du compte
+//     (déclencheur du même SQL, et l'app le fait aussi).
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
-import { adresseRetourAutorisee } from "../_shared/oauthRetour.ts";
+import { adresseRetourAutorisee, alerteNouvelleConnexion, reutilisationSuspecte } from "../_shared/oauthRetour.ts";
+import { makePayload, pushReady, sendTo } from "../_shared/push.ts";
 import { couper } from "../_shared/texteSur.ts";
 
 export const FN_URL = "https://zizvggziggswhrbuyhuo.supabase.co/functions/v1/ttp-mcp";
@@ -28,6 +36,10 @@ export const AUTHORIZE_URL = `${ISSUER}/connecteur/`;
 const ACCESS_TTL = 3600; // s
 const REFRESH_TTL = 60 * 86400; // s
 const CODE_TTL = 10 * 60; // s
+/** Enregistrement jamais utilisé (aucune connexion) : effacé au bout d'1 h. */
+const CLIENT_SANS_CONNEXION_MS = 3600_000;
+/** Enregistrements par heure et par adresse IP. */
+const INSCRIPTIONS_PAR_IP = 20;
 
 export type Ctx = {
   userId: string; grantId: string; founder: boolean; name: string;
@@ -42,6 +54,8 @@ export type Ctx = {
   validations?: Record<string, string>;
   /** Pour un agent : brouillon → id de la proposition validée (posé par verrou.ts, relu avant l'envoi de la file). */
   propositions?: Record<string, string>;
+  /** Pour un agent : brouillon → id du message Gmail relu par le verrou (l'envoi s'arrête s'il a changé depuis). */
+  messages?: Record<string, string>;
 };
 
 const enc = new TextEncoder();
@@ -89,27 +103,50 @@ type Json = Record<string, unknown>;
 type Out = { status: number; body: Json };
 const oauthErr = (error: string, description: string, status = 400): Out => ({ status, body: { error, error_description: description } });
 
+/** Colonne absente (SQL pas encore lancé) : on fait sans. */
+const colonneAbsente = (e: { code?: string; message?: string } | null | undefined) =>
+  !!e && (e.code === "42703" || e.code === "PGRST204" || /ip_hash/.test(String(e.message ?? "")));
+
+/** Empreinte de l'adresse IP (jamais l'adresse elle même), salée par un secret du serveur. */
+async function empreinteIp(ip: string): Promise<string | null> {
+  const v = ip.trim();
+  if (!v) return null;
+  return (await sha256hex(`${Deno.env.get("STATE_SIGNING_SECRET") ?? ""}|mcp-register|${v}`)).slice(0, 32);
+}
+
 // ── Enregistrement dynamique ────────────────────────────────────────────────
-export async function register(sb: SupabaseClient, body: Json): Promise<Out> {
+/** `ip` : adresse de l'appelant (en-tête x-forwarded-for, premier élément), quand index.ts la donne. */
+export async function register(sb: SupabaseClient, body: Json, ip = ""): Promise<Out> {
   const uris = Array.isArray(body.redirect_uris) ? body.redirect_uris.map(String) : [];
   if (!uris.length || uris.length > 10 || !uris.every(allowedRedirect)) {
     return oauthErr("invalid_redirect_uri", "Adresse de retour non autorisée (Claude, rappel officiel de ChatGPT ou agent sur l'ordinateur uniquement).");
   }
-  // Ménage : les enregistrements de plus de 24 h jamais utilisés (aucune connexion)
+  // Ménage : les enregistrements de plus d'1 h jamais utilisés (aucune connexion)
   // ne doivent pas remplir le plafond et bloquer les vraies connexions.
   const { data: used } = await sb.from("mcp_grants").select("client_id").not("client_id", "is", null);
   const keep = [...new Set(((used as { client_id: string }[] | null) ?? []).map((g) => g.client_id))];
-  let purge = sb.from("mcp_clients").delete().lt("created_at", new Date(Date.now() - 86400000).toISOString());
+  let purge = sb.from("mcp_clients").delete().lt("created_at", new Date(Date.now() - CLIENT_SANS_CONNEXION_MS).toISOString());
   if (keep.length) purge = purge.not("client_id", "in", `(${keep.map((k) => JSON.stringify(k)).join(",")})`);
   await purge.then(() => {}, () => {});
   const { count } = await sb.from("mcp_clients").select("client_id", { count: "exact", head: true });
   if ((count ?? 0) > 1000) return oauthErr("temporarily_unavailable", "Trop d'enregistrements.", 429);
+  // 20 enregistrements par heure et par adresse IP (colonne absente : plafond global seul).
+  const ipHash = await empreinteIp(ip);
+  let avecIp = !!ipHash;
+  if (ipHash) {
+    const { count: parIp, error: ipErr } = await sb.from("mcp_clients").select("client_id", { count: "exact", head: true })
+      .eq("ip_hash", ipHash).gt("created_at", new Date(Date.now() - 3600_000).toISOString());
+    if (colonneAbsente(ipErr)) avecIp = false;
+    else if ((parIp ?? 0) >= INSCRIPTIONS_PAR_IP) return oauthErr("temporarily_unavailable", "Trop d'enregistrements depuis cette adresse, réessaie dans une heure.", 429);
+  }
   const method = ["client_secret_post", "client_secret_basic"].includes(String(body.token_endpoint_auth_method)) ? String(body.token_endpoint_auth_method) : "none";
   const clientId = "ttpc_" + b64url(crypto.getRandomValues(new Uint8Array(16)));
   const secret = method === "none" ? null : randomToken("ttps_");
   // Coupé sans casser d'emoji : une moitié seule ferait refuser l'inscription (_shared/texteSur.ts).
   const name = couper(String(body.client_name ?? "Claude"), 80);
-  const { error } = await sb.from("mcp_clients").insert({ client_id: clientId, client_name: name, redirect_uris: uris, secret_hash: secret ? await sha256hex(secret) : null });
+  const ligne = { client_id: clientId, client_name: name, redirect_uris: uris, secret_hash: secret ? await sha256hex(secret) : null };
+  let { error } = await sb.from("mcp_clients").insert(avecIp ? { ...ligne, ip_hash: ipHash } : ligne);
+  if (avecIp && colonneAbsente(error)) ({ error } = await sb.from("mcp_clients").insert(ligne));
   if (error) return oauthErr("server_error", "Enregistrement impossible.", 500);
   return {
     status: 201,
@@ -180,11 +217,45 @@ export async function approve(sb: SupabaseClient, jwt: string, body: Json): Prom
     code_hash: await sha256hex(code), grant_id: grant.id, client_id: c.client_id, redirect_uri: redirect, code_challenge: challenge, expires_at: inSeconds(CODE_TTL),
   });
   if (ce) return oauthErr("server_error", "Connexion impossible, réessaie.", 500);
+  await prevenirFondateurs(sb, u.user.id, redirect, agent);
   const url = new URL(redirect);
   url.searchParams.set("code", code);
   if (body.state) url.searchParams.set("state", String(body.state));
   url.searchParams.set("iss", ISSUER);
   return { status: 200, body: { redirect: url.toString(), agent } };
+}
+
+/**
+ * Nouvelle connexion : push aux fondateurs et message Telegram (bot d'Alfred, secrets
+ * ALFRED_BOT_TOKEN et TELEGRAM_CHAT_ID, comme agent-watchdog). Au mieux : un échec
+ * n'empêche jamais la connexion, et l'attente est bornée.
+ */
+async function prevenirFondateurs(sb: SupabaseClient, userId: string, redirect: string, agent: boolean): Promise<void> {
+  try {
+    const { data: p } = await sb.from("profiles").select("display_name").eq("user_id", userId).maybeSingle<{ display_name: string | null }>();
+    const a = alerteNouvelleConnexion(p?.display_name ?? "", redirect, agent);
+    const envois: Promise<unknown>[] = [];
+    if (pushReady()) {
+      envois.push(sendTo(sb as unknown as Parameters<typeof sendTo>[0], { agency: true, audience: "founders" }, makePayload({ kind: "digest", title: a.titre, body: a.texte, tag: "connexion-claude", url: "/?open=view&view=parametres" })));
+    }
+    const bot = Deno.env.get("ALFRED_BOT_TOKEN") ?? "";
+    const chat = Deno.env.get("TELEGRAM_CHAT_ID") ?? "";
+    if (bot && chat) {
+      envois.push(fetch(`https://api.telegram.org/bot${bot}/sendMessage`, {
+        method: "POST", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chat_id: chat, text: `🔐 ${a.titre} : ${a.texte}` }), signal: AbortSignal.timeout(4000),
+      }));
+    }
+    await Promise.race([Promise.allSettled(envois), new Promise((r) => setTimeout(r, 5000))]);
+  } catch (e) {
+    console.warn("ttp-mcp: alerte de nouvelle connexion non envoyée", e);
+  }
+}
+
+/** Ménage au passage (1 appel sur 20 environ) : les jetons expirés depuis plus d'un jour. */
+async function menageJetons(sb: SupabaseClient): Promise<void> {
+  if (Math.random() > 0.05) return;
+  await sb.from("mcp_tokens").delete().lt("expires_at", new Date(Date.now() - 86400_000).toISOString()).then(() => {}, () => {});
 }
 
 async function issue(sb: SupabaseClient, grantId: string, clientId: string): Promise<Json | null> {
@@ -243,7 +314,17 @@ export async function token(sb: SupabaseClient, form: URLSearchParams, basic: st
       .eq("token_hash", await sha256hex(rt)).eq("kind", "refresh").is("revoked_at", null).gt("expires_at", new Date().toISOString())
       .select("grant_id, client_id");
     const row = (rows as { grant_id: string; client_id: string }[] | null)?.[0];
-    if (!row || row.client_id !== c.client_id) return oauthErr("invalid_grant", "Jeton de renouvellement invalide.");
+    if (!row) {
+      // Jeton déjà remplacé présenté de nouveau : le voleur ou Claude garde l'ancien, on coupe tout.
+      const { data: vieux } = await sb.from("mcp_tokens").select("grant_id, client_id, revoked_at")
+        .eq("token_hash", await sha256hex(rt)).eq("kind", "refresh").maybeSingle<{ grant_id: string; client_id: string; revoked_at: string | null }>();
+      if (vieux && vieux.client_id === c.client_id && reutilisationSuspecte(vieux.revoked_at)) {
+        await sb.from("mcp_grants").update({ revoked_at: new Date().toISOString() }).eq("id", vieux.grant_id).is("revoked_at", null).then(() => {}, () => {});
+        console.warn("ttp-mcp: jeton de renouvellement réutilisé, connexion coupée", vieux.grant_id);
+      }
+      return oauthErr("invalid_grant", "Jeton de renouvellement invalide.");
+    }
+    if (row.client_id !== c.client_id) return oauthErr("invalid_grant", "Jeton de renouvellement invalide.");
     if (!(await grantAlive(sb, row.grant_id))) return oauthErr("invalid_grant", "Connexion coupée.");
     const out = await issue(sb, row.grant_id, c.client_id);
     if (!out) {
@@ -251,6 +332,7 @@ export async function token(sb: SupabaseClient, form: URLSearchParams, basic: st
       await sb.from("mcp_tokens").update({ revoked_at: null }).eq("token_hash", await sha256hex(rt)).then(() => {}, () => {});
       return oauthErr("server_error", "Jetons non enregistrés, réessaie.", 500);
     }
+    await menageJetons(sb);
     return { status: 200, body: out };
   }
   return oauthErr("unsupported_grant_type", "Type de demande non pris en charge.");

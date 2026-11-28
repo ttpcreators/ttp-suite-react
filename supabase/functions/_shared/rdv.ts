@@ -138,7 +138,9 @@ export type Reservation = { jour: string; heure: string; nom: string; email: str
 
 // Coupe sans casser d'emoji (couper, _shared/texteSur.ts) : le texte va en base (contact, tâche).
 const propre = (v: unknown, max: number) => couper(String(v ?? "").replace(/[\u0000-\u001f\u007f<>]/g, " ").replace(/\s+/g, " ").trim(), max);
-const EMAIL_RE = /^[^@\s<>"',;:]{1,64}@[^@\s<>"',;:]{1,190}\.[a-z]{2,24}$/i;
+// « * » refusé, comme dans _shared/siteLead.ts : dans un filtre ilike, PostgREST le lit comme un
+// joker et rien ne peut l'échapper.
+const EMAIL_RE = /^[^@\s<>"',;:*]{1,64}@[^@\s<>"',;:*]{1,190}\.[a-z]{2,24}$/i;
 
 /** Demande de réservation lue et nettoyée, ou la raison du refus. `site` rempli = robot. */
 export function lireReservation(body: unknown): { r: Reservation } | { robot: true } | { erreur: string } {
@@ -153,6 +155,50 @@ export function lireReservation(body: unknown): { r: Reservation } | { robot: tr
   const marque = propre(b.marque, 80);
   if (!marque) return { erreur: "marque" };
   return { r: { jour, heure, nom, email, marque, message: couper(String(b.message ?? "").replace(/[\u0000-\u0008\u000b-\u001f\u007f<>]/g, " ").trim(), 1500) } };
+}
+
+/**
+ * L'invitation Google envoyée à l'adresse saisie : titre et texte fixes. Rien de ce que le
+ * visiteur a écrit (nom, marque, message) n'y figure : ces textes restent dans la tâche interne
+ * et le mail à l'agence. Google ajoute lui-même le lien Meet à l'invitation.
+ */
+export const INVITATION_RDV = {
+  titre: "Visio TTP Creators",
+  texte: "Visio avec l'agence TTP Creators. Le lien Google Meet est dans cette invitation.",
+} as const;
+
+/** Ce que le carnet de contacts a fait de l'adresse saisie : fiche existante (jamais modifiée), nouveau contact, ou rien (lecture ou écriture ratée). */
+export type CarnetRdv =
+  | { etat: "fiche"; marque: string; historique: string; sequenceEnCours: boolean }
+  | { etat: "nouveau" }
+  | { etat: "rate" };
+
+/**
+ * La tâche interne d'une réservation : titre et description. L'adresse saisie n'est pas confirmée
+ * par mail, donc une fiche existante n'est pas modifiée (la description dit quoi vérifier), et une
+ * tâche « Visio : marque » déjà ouverte n'est jamais réécrite : la réservation fait alors sa propre
+ * tâche « Réservation : marque » (`visioOuverte`).
+ */
+export function tacheRdv(o: { r: Reservation; duree: number; meet?: string; carnet: CarnetRdv; visioOuverte: boolean }): { text: string; descr: string } {
+  const { r, carnet } = o;
+  const marque = couper(r.marque, 80);
+  const fiche = carnet.etat === "fiche"
+    ? `Déjà au carnet (${carnet.marque || "sans marque"}) : fiche non modifiée, l'adresse n'a pas été confirmée par mail.${carnet.sequenceEnCours ? " Sa séquence de prospection continue : l'arrêter (sequence_contact) si c'est bien ce contact." : ""}`
+    : carnet.etat === "nouveau"
+      ? "Nouveau contact (ajouté au carnet, étiquette « Lead site »)."
+      : "Contact pas ajouté au carnet (lecture ou écriture ratée) : à vérifier.";
+  return {
+    text: o.visioOuverte ? `Réservation : ${marque}` : `Visio : ${marque}`,
+    descr: [
+      `Visio réservée par ${r.nom} (${r.email}) pour le ${quandFr(r.jour, r.heure)} (${o.duree} min).`,
+      o.meet ? `Lien Meet : ${o.meet}` : "",
+      r.message ? `Son besoin : ${r.message}` : "",
+      fiche,
+      carnet.etat === "fiche" && carnet.historique ? `Historique :\n${carnet.historique}` : "",
+      o.visioOuverte ? `Une tâche « Visio : ${marque} » était déjà ouverte : elle n'a pas été modifiée.` : "",
+      "La visio en 5 points : le besoin, le budget, qui décide, notre proposition orale, et un devis envoyé le jour même.",
+    ].filter(Boolean).join("\n"),
+  };
 }
 
 /** Le créneau demandé est-il toujours libre et dans les règles ? */

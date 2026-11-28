@@ -84,6 +84,7 @@ export const EN_CREATORSPACE: Record<string, string> = {
   "Cadeau signalé ✓": "Gift reported ✓",
   "Fichier trop lourd (max 15 Mo)": "File too large (max 15 MB)",
   "«\u00A0{file}\u00A0» trop lourd (max 15 Mo)": "“{file}” is too large (max 15 MB)",
+  "«\u00A0{file}\u00A0» : type de fichier non accepté (PDF, photo, vidéo, son, Office, texte, CSV ou zip)": "“{file}”: file type not accepted (PDF, photo, video, audio, Office, text, CSV or zip)",
   "Session expirée, reconnecte-toi": "Session expired, please log in again",
   "Envoi échoué, réessaie": "Upload failed, try again",
   "Facture envoyée à ton agence ✓": "Invoice sent to your agency ✓",

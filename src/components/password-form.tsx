@@ -6,6 +6,7 @@ import { toast } from "@/components/ui/toast";
 import { supabase } from "@/lib/supabase";
 import { LangProvider, langOf, useT, type Lang } from "@/lib/i18n";
 import { messageErreurMotDePasse, motDePasseInvalide } from "@/lib/passwordRecovery";
+import { couperMesConnexionsClaude } from "@/lib/mesConnexionsClaudeDb";
 import { cn } from "@/lib/utils";
 
 /*
@@ -21,8 +22,11 @@ import { cn } from "@/lib/utils";
 const fieldCls =
   "h-11 w-full rounded-xl border border-border bg-surface pl-3.5 pr-11 text-[15px] text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground focus:border-foreground/30 focus:ring-2 focus:ring-foreground/10";
 
-/** Les deux champs et « Enregistrer ». `onSaved` : appelé une fois le mot de passe changé. */
-export function PasswordForm({ onSaved, onCancel, autoFocus }: { onSaved: () => void; onCancel?: () => void; autoFocus?: boolean }) {
+/**
+ * Les deux champs et « Enregistrer ». `onSaved` : appelé une fois le mot de passe changé, avec
+ * le nombre de connexions Claude coupées (un nouveau mot de passe les coupe toutes).
+ */
+export function PasswordForm({ onSaved, onCancel, autoFocus }: { onSaved: (connexionsCoupees: number) => void; onCancel?: () => void; autoFocus?: boolean }) {
   const t = useT();
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
@@ -41,14 +45,16 @@ export function PasswordForm({ onSaved, onCancel, autoFocus }: { onSaved: () => 
     setBusy(true);
     setError("");
     const { error: err } = await supabase.auth.updateUser({ password: pw });
-    setBusy(false);
     if (err) {
+      setBusy(false);
       setError(t(messageErreurMotDePasse(err)));
       return;
     }
+    const coupees = await couperMesConnexionsClaude();
+    setBusy(false);
     setPw("");
     setPw2("");
-    onSaved();
+    onSaved(coupees);
   };
 
   return (
@@ -112,9 +118,10 @@ export function PasswordForm({ onSaved, onCancel, autoFocus }: { onSaved: () => 
 export function PasswordSettings({ variant = "card" }: { variant?: "card" | "ios" }) {
   const t = useT();
   const [open, setOpen] = useState(false);
-  const saved = () => {
+  const saved = (coupees: number) => {
     setOpen(false);
     toast(t("Mot de passe changé ✓"), { variant: "success" });
+    if (coupees > 0) toast(t("Tes connexions Claude sont coupées : reconnecte-les depuis Claude."));
   };
   if (variant === "ios") {
     return (

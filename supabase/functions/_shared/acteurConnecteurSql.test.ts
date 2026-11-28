@@ -19,9 +19,9 @@ describe("en-tête d'acteur : le connecteur et la base s'accordent", () => {
 
   it("toute valeur du connecteur passe le filtre de la base", () => {
     expect(motif).not.toBe("");
-    for (const agent of [true, false]) {
+    for (const libelle of ["Alfred", "Tâches planifiées", null]) {
       for (const userId of [ID, ID.toUpperCase(), "", "Créatrice A"]) {
-        expect(filtre.test(valeurActeur({ agent, userId }))).toBe(true);
+        expect(filtre.test(valeurActeur({ libelle, userId }))).toBe(true);
       }
     }
   });

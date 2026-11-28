@@ -32,6 +32,9 @@ import { VIEW_HINTS } from "@/lib/viewHints";
 import { Login } from "@/components/Login";
 import { PasswordRecoveryScreen } from "@/components/password-form";
 import { retourDuLien } from "@/lib/passwordRecovery";
+import { couperMesConnexionsClaude } from "@/lib/mesConnexionsClaudeDb";
+import { DoubleAuthCodeScreen } from "@/components/double-auth";
+import { codeAttendu } from "@/lib/doubleAuth";
 import { FAVORIS_BASE, FAVORIS_ID, MAX_PINS, NAV, findItem, findPinnable, viewTitle, withFavorites, type NavFamily, type NavItem, type ViewId } from "@/lib/nav";
 import { NavSubContext, NavSubSetContext } from "@/lib/navSub";
 import { setTeamSession } from "@/lib/team";
@@ -562,12 +565,38 @@ export default function App() {
         window.location.reload();
         return;
       }
-      if (e === "PASSWORD_RECOVERY") setRecovery(true);
+      if (e === "PASSWORD_RECOVERY") {
+        setRecovery(true);
+        // Lien « Mot de passe oublié » : les connexions Claude du compte sont coupées
+        // (une connexion ouverte depuis une session volée ne survit pas à la reprise du compte).
+        // (hors du rappel : un appel à Supabase Auth dedans attendrait la fin du rappel).
+        setTimeout(() => void couperMesConnexionsClaude(), 0);
+      }
       hadSession ||= !!s;
       setSession(s);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  // Double authentification (facultative, src/lib/doubleAuth.ts) : un compte qui l'a activée
+  // tape son code après la connexion. Lecture locale du jeton (pas d'appel réseau), refaite
+  // à chaque nouveau jeton. Lecture impossible : on laisse entrer (le serveur ne l'exige pas).
+  const [codeDemande, setCodeDemande] = useState<boolean | undefined>(undefined);
+  const jeton = session ? session.access_token : null;
+  useEffect(() => {
+    if (!jeton) {
+      setCodeDemande(undefined);
+      return;
+    }
+    let alive = true;
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel().then(
+      ({ data }) => alive && setCodeDemande(codeAttendu(data)),
+      () => alive && setCodeDemande(false),
+    );
+    return () => {
+      alive = false;
+    };
+  }, [jeton]);
 
   // Lien périmé : l'erreur est dite sur l'écran de connexion, l'adresse est remise au propre.
   useEffect(() => {
@@ -844,6 +873,14 @@ export default function App() {
     );
   }
   if (!session) return <Login lienPerime={RETOUR_LIEN === "expired"} />;
+  if (codeDemande === undefined) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background">
+        <Loader variant="dot-matrix" size={26} className="text-muted-foreground" />
+      </div>
+    );
+  }
+  if (codeDemande) return <DoubleAuthCodeScreen onDone={() => setCodeDemande(false)} onLogout={logout} />;
   if (profile === undefined) {
     // Session OK mais profil pas encore chargé. Si les réessais ont tous échoué, on
     // propose une sortie (Réessayer / Se déconnecter) plutôt qu'un spinner sans fin.

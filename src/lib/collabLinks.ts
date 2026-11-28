@@ -77,9 +77,27 @@ export const AUTO_TASKS: Record<number, { text: string; days: number }> = {
   10: { text: "Préparer le bilan pour {marque}", days: 3 },
 };
 
+/**
+ * Étape 9 posée sans facture payée de la collab (et pas en mode « créateur ») : la base crée
+ * cette tâche à la place de « Reverser … » (SQL 2026-11-28-etape9-paiement.sql, qui la recopie).
+ */
+export const VERIF_PAIEMENT: { step: number; text: string; days: number } = { step: 9, text: "Vérifier le paiement de {marque}", days: 3 };
+
 /** Tâche à créer quand la collab atteint `step` (null si l'étape n'en a pas). */
 export function autoTaskFor(step: number, c: Pick<CollabLite, "brand" | "creator">, now: number = Date.now()): { text: string; due: string } | null {
-  const m = AUTO_TASKS[step];
+  return fillTask(AUTO_TASKS[step], c, now);
+}
+
+/**
+ * Textes qui comptent comme la tâche de l'étape `step` : celui de l'app, et pour l'étape 9 celui
+ * que la base pose quand la marque n'a pas encore payé (pas de seconde tâche à côté).
+ */
+export function stepTaskTexts(step: number, c: Pick<CollabLite, "brand" | "creator">): string[] {
+  const out = [autoTaskFor(step, c)?.text, step === VERIF_PAIEMENT.step ? fillTask(VERIF_PAIEMENT, c)?.text : undefined];
+  return out.filter((t): t is string => !!t);
+}
+
+function fillTask(m: { text: string; days: number } | undefined, c: Pick<CollabLite, "brand" | "creator">, now: number = Date.now()): { text: string; due: string } | null {
   if (!m) return null;
   const prenom = firstNameOf(c.creator) || "le créateur";
   const text = m.text.replace("{prenom}", prenom).replace("{marque}", c.brand.trim() || "la marque");

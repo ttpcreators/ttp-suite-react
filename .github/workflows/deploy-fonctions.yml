@@ -11,8 +11,24 @@ name: Déploiement des fonctions
 # Le code déployé est toujours celui de `main`, donc celui qui a passé la « Vérification
 # des PR ». Un seul déploiement à la fois (les demandes suivantes attendent leur tour).
 #
-# Secret requis : SUPABASE_ACCESS_TOKEN (jeton personnel Supabase), posé dans
-# Settings › Secrets and variables › Actions. Jamais dans un fichier ni dans une discussion.
+# Secret requis : SUPABASE_ACCESS_TOKEN (jeton personnel Supabase). Jamais dans un fichier ni
+# dans une discussion.
+#
+# Environnement GitHub « fonctions » (job « déployer ») : le jeton y est rangé, et seul ce job
+# le reçoit. Réglages à faire par le propriétaire du dépôt (Settings › Environments) :
+#   1. créer l'environnement « fonctions » (s'il a été créé tout seul au premier lancement,
+#      il existe déjà, sans aucune règle) ;
+#   2. Deployment branches and tags : « Selected branches and tags », main seulement ;
+#   3. Required reviewers : un fondateur, et cocher « Prevent self-review » (sans cette case,
+#      celui qui lance le déploiement l'approuve lui-même) ;
+#   4. y créer le secret SUPABASE_ACCESS_TOKEN, puis supprimer le secret de dépôt du même nom
+#      (Settings › Secrets and variables › Actions), puis changer ce jeton dans Supabase
+#      (Account › Access Tokens).
+# Tant que le secret de dépôt existe, ce workflow marche comme avant (un secret de dépôt est lu
+# aussi dans un environnement).
+#
+# Version de la CLI Supabase figée (SUPABASE_CLI) : jamais « la dernière publiée » avec le
+# jeton dans l'environnement. Pour monter de version : changer ce numéro dans une PR.
 on:
   workflow_dispatch:
     inputs:
@@ -33,8 +49,12 @@ jobs:
     name: déployer
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Le jeton vit dans cet environnement (règles en tête de fichier) : une copie de ce
+    # workflow lancée depuis une autre branche ne le reçoit pas.
+    environment: fonctions
     env:
       PROJECT_REF: zizvggziggswhrbuyhuo
+      SUPABASE_CLI: 2.122.1
       # Le texte saisi passe par une variable, jamais recopié dans une commande.
       FONCTIONS: ${{ inputs.fonctions }}
     steps:
@@ -52,7 +72,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ "$JETON_PRESENT" != "true" ]; then
-            echo "::error::Le secret SUPABASE_ACCESS_TOKEN n'existe pas encore (Settings › Secrets and variables › Actions)."
+            echo "::error::Le secret SUPABASE_ACCESS_TOKEN n'existe pas (environnement « fonctions », Settings › Environments)."
             exit 1
           fi
           read -r -a NOMS <<< "$FONCTIONS"
@@ -102,7 +122,7 @@ jobs:
             fi
             echo "::group::$n"
             echo "supabase ${ARGS[*]}"
-            npx --yes supabase@2 "${ARGS[@]}"
+            npx --yes "supabase@${SUPABASE_CLI}" "${ARGS[@]}"
             echo "::endgroup::"
             echo "- \`$n\`" >> "$GITHUB_STEP_SUMMARY"
           done

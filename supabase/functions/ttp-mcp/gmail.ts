@@ -2,6 +2,10 @@
 // ttp-mcp/gmail.ts : les deux boîtes de l'agence pour Claude (recherche, lecture,
 // brouillon, envoi). partnerships@ = connexion Google de l'app ; talent@ = compte de service.
 // Envoi (sendMail) : fondateurs seulement, et Claude demande l'accord avant (outil envoyer_mail).
+// Boîtes des créateurs (creator_mail_boxes) : réservées aux fondateurs, comme creator-box-mail.
+// Les fonctions qui choisissent une boîte reçoivent `founder` (ctx.founder de l'appel) ; sans
+// lui, elles gardent l'ancien comportement (true). Les outils de tools.ts et d'admin.ts passent
+// ctx.founder ; le verrou et la file d'envoi (outils déjà réservés aux fondateurs) ne le passent pas.
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -10,6 +14,7 @@ import { boxToken, talentAddress } from "../_shared/gmailBox.ts";
 import { connectedCreatorBox, creatorBoxToken, isCreatorBox, listCreatorBoxes, normEmail } from "../_shared/creatorBox.ts";
 import { gfetch, decodeGmailBody, charsetOf, mapPool } from "../_shared/gfetch.ts";
 import { partsDuBudget, sansCitation } from "../_shared/mailFil.ts";
+import { neutraliser } from "../_shared/contenuExterne.ts";
 import { construireRaw, nomPropre, type Piece } from "../_shared/piecesJointes.ts";
 import { addressOf, findSendAs, fromHeader, refusSendAs, usableSendAs, type RawSendAs, type SendAs } from "../_shared/sendAs.ts";
 
@@ -53,12 +58,17 @@ export type ThreadSummary = { box: MailBox; threadId: string; subject: string; f
  *  17 novembre 2026 : facture déjà partagée depuis la boîte d'un créateur, Alfred ne l'a pas vue). */
 export const PARTOUT = "partout";
 
-export async function searchThreads(sb: SupabaseClient, box: string | undefined, q: string, max: number): Promise<{ threads: ThreadSummary[]; errors: string[] }> {
+/** Refus d'une boîte de créateur pour un compte qui n'est pas fondateur. */
+export const REFUS_BOITE_CREATEUR = "Les boîtes des créateurs sont réservées aux fondateurs de l'agence.";
+
+export async function searchThreads(sb: SupabaseClient, box: string | undefined, q: string, max: number, founder = true): Promise<{ threads: ThreadSummary[]; errors: string[] }> {
   const out: ThreadSummary[] = [];
   const errors: string[] = [];
+  // « partout » pour un membre : les boîtes de l'agence seulement.
   const boxes = box === PARTOUT
-    ? [...boxesFor(undefined), ...(await listCreatorBoxes(sb)).filter((r) => r.connected && r.refresh_token).map((r) => r.email)]
-    : boxesFor(box);
+    ? [...boxesFor(undefined), ...(founder ? (await listCreatorBoxes(sb)).filter((r) => r.connected && r.refresh_token).map((r) => r.email) : [])]
+    : boxesFor(box).filter((b) => founder || !isCreatorBox(b));
+  if (!founder && box && box !== PARTOUT && isCreatorBox(box)) errors.push(REFUS_BOITE_CREATEUR);
   for (const b of boxes) {
     try {
       const token = await tokenFor(sb, b, "read");
@@ -195,11 +205,12 @@ export async function readThread(sb: SupabaseClient, box: MailBox, threadId: str
   const parts: string[] = [`# ${subject}`, `Boîte : ${box.includes("@") ? box : `${box}@`} · ${msgs.length} message(s), du plus ancien au plus récent · fil ${threadId}`];
   lus.forEach(({ m, files, text }, i) => {
     const h = m.payload?.headers;
-    const body = text.slice(0, budgets[i]);
+    // Corps neutralisé : une ligne qui imite « --- », « De : » ou « DERNIER MESSAGE » est préfixée (contenuExterne.ts).
+    const body = neutraliser(text.slice(0, budgets[i]));
     parts.push(
       `\n---\n${i === lus.length - 1 ? "DERNIER MESSAGE\n" : ""}De : ${header(h, "from")}\nÀ : ${header(h, "to")}${header(h, "cc") ? `\nCc : ${header(h, "cc")}` : ""}\nDate : ${frDate(Number(m.internalDate ?? 0))}` +
         (files.length ? `\nPièces jointes : ${files.join(", ")}` : "") +
-        `\n\n${body || "(message vide)"}${text.length > body.length ? "\n[…raccourci : message ancien]" : ""}`,
+        `\n\n${body || "(message vide)"}${text.length > budgets[i] ? "\n[…raccourci : message ancien]" : ""}`,
     );
   });
   return parts.join("\n");
@@ -322,12 +333,13 @@ export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, 
  * La boîte demandée par un outil : « partnerships », « talent », ou l'adresse d'une boîte de
  * créateur connectée. null + message si elle n'est pas utilisable.
  */
-export async function parseMailBox(sb: SupabaseClient, v: unknown): Promise<{ box: MailBox } | { error: string }> {
+export async function parseMailBox(sb: SupabaseClient, v: unknown, founder = true): Promise<{ box: MailBox } | { error: string }> {
   const s = String(v ?? "").trim().toLowerCase();
   if (s === "partnerships") return { box: "partnerships" };
   if (s === "talent") return talentAddress() ? { box: "talent" } : { error: "Boîte talent@ non configurée." };
   const e = normEmail(s);
   if (e) {
+    if (!founder) return { error: REFUS_BOITE_CREATEUR };
     if (await connectedCreatorBox(sb, e)) return { box: e };
     return { error: `La boîte ${e} n'est pas connectée à TTP Suite (boites_createurs ; lien_boite_createur pour la connecter).` };
   }
@@ -395,10 +407,11 @@ export type ClaudeDraft = { box: MailBox; id: string; to: string; subject: strin
  * a déjà envoyé un message dans le fil APRÈS ce brouillon (Marc a répondu lui même : le
  * brouillon fait doublon). Les brouillons écrits à la main ne sont jamais listés.
  */
-export async function listClaudeDrafts(sb: SupabaseClient, box: string | undefined): Promise<{ drafts: ClaudeDraft[]; errors: string[] }> {
+export async function listClaudeDrafts(sb: SupabaseClient, box: string | undefined, founder = true): Promise<{ drafts: ClaudeDraft[]; errors: string[] }> {
   const drafts: ClaudeDraft[] = [];
   const errors: string[] = [];
-  for (const b of boxesFor(box)) {
+  if (!founder && box && isCreatorBox(box)) errors.push(REFUS_BOITE_CREATEUR);
+  for (const b of boxesFor(box).filter((x) => founder || !isCreatorBox(x))) {
     try {
       const token = await tokenFor(sb, b, "read");
       const list = await gjson(token, `${GMAIL}/drafts?maxResults=100`);
@@ -448,9 +461,11 @@ export async function deleteClaudeDraft(sb: SupabaseClient, box: MailBox, draftI
 /** Un brouillon tel qu'il partira (pour le garde-fou des media kits avant l'envoi). */
 export type BrouillonLu = { from: string; to: string; cc: string; bcc: string; subject: string; text: string; files: string[]; reponse: boolean; kit: string };
 
-export async function sendDraft(sb: SupabaseClient, box: MailBox, draftId: string, expectFrom?: string, verifier?: (b: BrouillonLu) => Promise<string | null>): Promise<{ to: string; subject: string; threadId: string; from: string; id: string }> {
+export async function sendDraft(sb: SupabaseClient, box: MailBox, draftId: string, expectFrom?: string, verifier?: (b: BrouillonLu) => Promise<string | null>, expectMessage?: string): Promise<{ to: string; subject: string; threadId: string; from: string; id: string }> {
   const token = await tokenFor(sb, box, "modify");
   const d = (await gjson(token, `${GMAIL}/drafts/${encodeURIComponent(draftId)}?format=${verifier ? "full" : "metadata"}`)) as DraftRes;
+  // Verrou des agents : le brouillon doit être encore le message contrôlé (une modification crée un nouveau message).
+  if (expectMessage && String(d.message?.id ?? "") !== expectMessage) throw new Error("draft_changed");
   const h = d.message?.payload?.headers;
   if (header(h, "x-ttp-source").toLowerCase() !== "claude") throw new Error("not_claude");
   // Alias demandé : le brouillon doit déjà partir de cette adresse (rien n'est réécrit à l'envoi).

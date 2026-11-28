@@ -120,9 +120,11 @@ export function moisDecale(mois: string, n: number): string {
 export const moisLabel = (mois: string) => `${MOIS[Number(mois.slice(5, 7)) - 1]} ${mois.slice(0, 4)}`;
 /** Nom de la liste : « Dispos de décembre 2026 ». */
 export const titreDispos = (mois: string) => `Dispos de ${moisLabel(mois)}`;
-/** Adresse de la liste : le mois + 4 caractères au hasard (introuvable sans le lien). */
+/** Suffixe d'une adresse de liste : 80 bits tirés par le générateur cryptographique (20 caractères hexadécimaux). */
+export const hasardSlug = (): string => Array.from(crypto.getRandomValues(new Uint8Array(10)), (b) => b.toString(16).padStart(2, "0")).join("");
+/** Adresse de la liste : le mois + un suffixe au hasard (introuvable sans le lien). */
 export const prefixeDispos = (mois: string) => `dispos-${mois}-`;
-export const slugDispos = (mois: string, hasard: string) => `${prefixeDispos(mois)}${hasard.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 6) || "ttp"}`;
+export const slugDispos = (mois: string, hasard: string) => `${prefixeDispos(mois)}${hasard.toLowerCase().replace(/[^a-z0-9]/g, "").slice(0, 20) || hasardSlug()}`;
 export const introDispos = (mois: string) =>
   `Les créateurs TTP disponibles en ${moisLabel(mois)}, avec leurs chiffres à jour et un prix agence indicatif par format.`;
 /** Premier et dernier jour du mois (« 2026-12-01 », « 2026-12-31 »). */

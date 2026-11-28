@@ -15,6 +15,10 @@
 // envoi), et un brouillon programmé par un agent ne part que si sa validation tient encore
 // (verrou.ts). Chaque ligne garde la connexion qui l'a programmée, relue avant l'envoi : cochée
 // « agent autonome » depuis, une ligne sans validation ne part pas.
+// Depuis le 28/11 : le journal des mails reçus est lu avec le verdict de la relève
+// (email_activity.source, _shared/mailRecu.ts), et un rebond n'y compte que s'il suit un envoi
+// réel de l'agence à l'adresse (_shared/ancreRebond.ts) ; « ne plus contacter » compare les adresses
+// exactement (« * » refusé, retrait par id, envois prévus retirés adresse par adresse).
 // Règles pures : _shared/fileEnvoi.ts. Tables : SQL 2026-11-25-file-envoi, puis
 // 2026-11-27-verrou-connexions (envoi_file.proposition et grant_id).
 // ============================================================================
@@ -29,9 +33,11 @@ import { instantParis } from "../_shared/rdv.ts";
 import { modifieApres, raisonConnexionFile } from "../_shared/verrouAgent.ts";
 import { colonneAuteurAbsente, idDejaJournalise, lignesEnvoi, nomAuteur, sansAuteur, sansIdGmail, type Auteur } from "../_shared/auteurEnvoi.ts";
 import { couper, str, texteSur } from "../_shared/texteSur.ts";
+import { ilikeContient, ilikeExact, lignesExactes } from "../_shared/ilikeExact.ts";
+import { envoisVers } from "../_shared/ancreRebond.ts";
 import {
-  MAX_PROGRAMMES, REGLES, adresses, cleSociete, dansLaFenetre, etatPalier, journalDesAdresses, jourParis, ligneFile, planifier, quandCourt, raisonDeBloquer, rebondsDuJournal,
-  rebondsQuiComptent, texteListe, type EnvoiRecent, type EtatPalier, type FicheVerifiee, type LigneFile, type MailRecu, type NePlusContacter,
+  ANCRE_REBOND_JOURS, MAX_PROGRAMMES, REGLES, adresses, cleSociete, dansLaFenetre, etatPalier, journalDesAdresses, jourParis, ligneFile, lignesVers, planifier, quandCourt, raisonDeBloquer,
+  rebondsAncres, rebondsDuJournal, rebondsQuiComptent, texteListe, type EnvoiRecent, type EtatPalier, type FicheVerifiee, type LigneFile, type MailRecu, type NePlusContacter,
 } from "../_shared/fileEnvoi.ts";
 
 type Json = Record<string, unknown>;
@@ -72,14 +78,15 @@ async function fichesDes(sb: SupabaseClient, emails: string[]): Promise<{ enErre
 }
 
 /**
- * Coupe-circuit : tous les rebonds lus dans le journal des mails reçus depuis `depuis` (message
- * d'un robot qui cite l'adresse refusée), surtout utiles pour les adresses sans fiche contact, que
- * gmail-poll ne peut pas marquer « en erreur ». [] si la lecture échoue, noté dans les journaux de
- * la fonction (le coupe-circuit garde alors les rebonds notés sur la file et les fiches en erreur).
+ * Coupe-circuit : tous les rebonds lus dans le journal des mails reçus depuis `depuis` (avis de
+ * non-remise venu d'une adresse de robot, qui cite l'adresse refusée : rebondsDuJournal, le nom
+ * affiché ne compte pas), surtout utiles pour les adresses sans fiche contact, que gmail-poll ne
+ * peut pas marquer « en erreur ». [] si la lecture échoue, noté dans les journaux de la fonction
+ * (le coupe-circuit garde alors les rebonds notés sur la file et les fiches en erreur).
  */
 async function rebondsLus(sb: SupabaseClient, depuis: string): Promise<EnvoiRecent[]> {
-  const robots = ["%mailer-daemon%", "%postmaster%"].map((m) => `contact_email.ilike.${JSON.stringify(m)}`).concat(`contact_name.ilike.${JSON.stringify("%mail delivery%")}`);
-  const { data, error } = await sb.from("email_activity").select("contact_email, contact_name, subject, snippet, created_at")
+  const robots = ["%mailer-daemon%", "%postmaster%"].map((m) => `contact_email.ilike.${JSON.stringify(m)}`);
+  const { data, error } = await sb.from("email_activity").select("contact_email, contact_name, subject, snippet, created_at, source")
     .eq("direction", "in").gte("created_at", depuis).or(robots.join(",")).order("created_at", { ascending: false }).limit(300);
   if (error) {
     console.warn("ttp-mcp coupe-circuit : rebonds du journal illisibles", error.message);
@@ -90,21 +97,29 @@ async function rebondsLus(sb: SupabaseClient, depuis: string): Promise<EnvoiRece
 
 /**
  * Contrôle d'avant envoi : ce que le journal des mails reçus dit de ces adresses depuis `depuis`,
- * leurs rebonds (robot qui cite l'adresse) et les mails venus d'elles (elle marche). La requête ne
- * vise que ces adresses (20 au plus) : la limite ne coupe jamais un vieux rebond. Lecture ratée :
- * rien, noté dans les journaux de la fonction (le contrôle garde ses autres règles).
+ * leurs rebonds (avis de non-remise qui cite l'adresse, après un envoi réel de l'agence à cette
+ * adresse dans les 7 jours avant l'avis) et les mails venus d'elles d'un expéditeur
+ * authentifié (elle marche). La requête ne vise que ces adresses (20 au plus, motifs exacts de
+ * _shared/ilikeExact.ts) : la limite ne coupe jamais un vieux rebond. Lecture ratée : rien, noté
+ * dans les journaux de la fonction (le contrôle garde ses autres règles).
  */
 async function journalDes(sb: SupabaseClient, emails: string[], depuis: string): Promise<{ rebonds: EnvoiRecent[]; recus: EnvoiRecent[] }> {
-  const vises = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean))].slice(0, 20);
+  const vises = [...new Set(emails.map((e) => e.trim().toLowerCase()).filter((e) => ilikeExact(e) !== null))].slice(0, 20);
   if (!vises.length) return { rebonds: [], recus: [] };
-  const filtres = vises.flatMap((e) => [`snippet.ilike.${JSON.stringify(`%${echappe(e)}%`)}`, `contact_email.ilike.${JSON.stringify(echappe(e))}`]);
-  const { data, error } = await sb.from("email_activity").select("contact_email, contact_name, subject, snippet, created_at")
+  const filtres = vises.flatMap((e) => [`snippet.ilike.${JSON.stringify(ilikeContient(e))}`, `contact_email.ilike.${JSON.stringify(ilikeExact(e))}`]);
+  const { data, error } = await sb.from("email_activity").select("contact_email, contact_name, subject, snippet, created_at, source")
     .eq("direction", "in").gte("created_at", depuis).or(filtres.join(",")).order("created_at", { ascending: false }).limit(300);
   if (error) {
     console.warn("ttp-mcp contrôle d'envoi : journal des mails illisible, rebonds non vérifiés", error.message);
     return { rebonds: [], recus: [] };
   }
-  return journalDesAdresses((data as MailRecu[] | null) ?? [], vises, AGENCE);
+  const lu = journalDesAdresses((data as MailRecu[] | null) ?? [], vises, AGENCE);
+  if (!lu.rebonds.length) return lu;
+  // Un rebond ne compte que s'il suit un envoi réel de l'agence à l'adresse (_shared/ancreRebond.ts).
+  const plusTot = Math.min(...lu.rebonds.map((r) => Date.parse(r.at)).filter(Number.isFinite), Date.now());
+  const envois = await envoisVers(sb, lu.rebonds.map((r) => r.email), new Date(plusTot - ANCRE_REBOND_JOURS * 86_400_000).toISOString());
+  if (!envois) console.warn("ttp-mcp contrôle d'envoi : envois illisibles, rebonds du journal non comptés");
+  return { rebonds: envois ? rebondsAncres(lu.rebonds, envois) : [], recus: lu.recus };
 }
 
 /** Premiers mails partis depuis `jours` jours vers les mêmes sociétés (journal des mails et file). */
@@ -386,28 +401,40 @@ const nePlusContacter: AdminTool = {
       const rows = (data as Json[] | null) ?? [];
       return ok([`# Ne plus contacter · ${rows.length}`, ...rows.map((r) => `- ${r.email || `@${r.domaine}`} · ${r.raison}${r.note ? ` · ${r.note}` : ""}`)].join("\n"));
     }
-    if (email && !/^[^@\s<>,;"']+@[^@\s<>,;"']+\.[a-z]{2,}$/.test(email)) return fail("Adresse e-mail illisible.");
+    // « * » refusé : dans un filtre ilike, PostgREST le lit comme un joker que rien n'échappe.
+    if (email && !/^[^@\s<>,;"'*]+@[^@\s<>,;"'*]+\.[a-z]{2,}$/.test(email)) return fail("Adresse e-mail illisible.");
     if (domaine && !/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(domaine)) return fail("Domaine illisible (ex. marque.fr).");
     if (!email === !domaine) return fail("Donne soit une adresse e-mail, soit un domaine.");
     if (domaine === AGENCE) return fail("Le domaine de l'agence ne peut pas être dans la liste.");
     const col = email ? "email" : "domaine";
     const val = email || domaine;
-    const { data: ex, error: e0 } = await sb.from("ne_plus_contacter").select("id").ilike(col, echappe(val)).limit(1);
+    const motif = ilikeExact(val);
+    if (!motif) return fail(email ? "Adresse e-mail illisible." : "Domaine illisible (ex. marque.fr).");
+    // Les lignes de cette valeur exacte (casse ignorée) : un retrait se fait ensuite par id.
+    const { data: lus, error: e0 } = await sb.from("ne_plus_contacter").select(`id, ${col}`).ilike(col, motif).limit(50);
     if (tableAbsente(e0)) return fail(SQL_MANQUANT);
     if (e0) return fail(`Liste illisible : ${e0.message}`);
+    const memes = lignesExactes((lus as Json[] | null) ?? [], col, val);
     if (action === "retirer") {
-      if (!(ex as Json[] | null)?.length) return fail(`${val} n'est pas dans la liste.`);
-      const { error } = await sb.from("ne_plus_contacter").delete().ilike(col, echappe(val));
+      if (!memes.length) return fail(`${val} n'est pas dans la liste.`);
+      const { error } = await sb.from("ne_plus_contacter").delete().in("id", memes.map((r) => String(r.id)));
       return error ? fail(`Rien n'a été retiré : ${error.message}`) : ok(`✓ ${val} retiré de la liste « ne plus contacter ».`);
     }
     if (action !== "ajouter") return fail("action : ajouter, retirer ou lister.");
-    if ((ex as Json[] | null)?.length) return ok(`${val} est déjà dans la liste.`);
+    if (memes.length) return ok(`${val} est déjà dans la liste.`);
     const raison = RAISONS.includes(str(a.raison, 10)) ? str(a.raison, 10) : "autre";
     const { error } = await sb.from("ne_plus_contacter").insert({ [col]: val, raison, note: str(a.note, 300) || null, source: "claude", cree_par: ctx.userId });
     if (error) return fail(`Rien n'a été ajouté : ${error.message}`);
-    // Les envois prévus vers cette adresse ou ce domaine sont retirés de la file tout de suite.
-    const motif = `${email ? `%${echappe(email)}%` : `%@${echappe(domaine)}%`}`;
-    const { data: retires } = await sb.from("envoi_file").update({ statut: "annule", erreur: `ne plus contacter (${raison})` }).eq("statut", "en_attente").ilike("destinataires", motif).select("id");
+    // Les envois prévus vers cette adresse ou ce domaine sont retirés de la file tout de suite :
+    // lignes relues, comparées adresse par adresse (lignesVers), puis retirées par id.
+    const contient = ilikeContient(email || `@${domaine}`);
+    const { data: prevus } = contient
+      ? await sb.from("envoi_file").select("id, destinataires").eq("statut", "en_attente").ilike("destinataires", contient).limit(500)
+      : { data: null };
+    const ids = lignesVers((prevus as Json[] | null) ?? [], email ? { email } : { domaine }).map((r) => String(r.id));
+    const { data: retires } = ids.length
+      ? await sb.from("envoi_file").update({ statut: "annule", erreur: `ne plus contacter (${raison})` }).in("id", ids).eq("statut", "en_attente").select("id")
+      : { data: null };
     const n = ((retires as Json[] | null) ?? []).length;
     return ok(`✓ ${val} ajouté à la liste « ne plus contacter » (${raison}).${n ? ` ${n} envoi(s) prévu(s) retiré(s) de la file.` : ""}`);
   },
@@ -440,7 +467,9 @@ async function etatCoupeCircuit(sb: SupabaseClient, now = new Date()): Promise<E
       sb.from("contacts").select("email").eq("email_check->>statut", "erreur").gte("email_check->>le", debutJour).limit(500),
       rebondsLus(sb, debutJour),
     ]);
-    const autres = [...((err as Json[] | null) ?? []).map((c) => String(c.email ?? "").trim().toLowerCase()), ...journal.map((r) => r.email)];
+    // Rebonds du journal : seulement ceux qui suivent un mail parti aujourd'hui vers l'adresse.
+    const partisVers = partis.flatMap((r) => adresses(r.destinataires).map((e) => ({ email: e, at: String(r.envoye_at ?? "") })));
+    const autres = [...((err as Json[] | null) ?? []).map((c) => String(c.email ?? "").trim().toLowerCase()), ...rebondsAncres(journal, partisVers).map((r) => r.email)];
     for (const e of autres) if (emails.includes(e)) enRebond.add(e);
   }
   const rebonds = partis.filter((r) => adresses(r.destinataires).some((e) => enRebond.has(e))).length;
@@ -494,17 +523,19 @@ async function envoyerUne(sb: SupabaseClient, row: Ligne): Promise<string> {
     // d'un compte agence, et du valideur choisi aujourd'hui pour la connexion), et le brouillon ne
     // doit pas avoir changé depuis. Base illisible : erreur levée, nouvel essai dans 15 minutes
     // (jamais d'envoi à l'aveugle).
+    let message: string | undefined;
     if (row.valide_le) {
       const v = await validationToujoursLa(sb, { brouillon: row.brouillon, proposition: row.proposition ?? null }, cx?.agent ? cx.valideur : null);
       if (!v.ok) return await fin("annule", { erreur: v.raison.slice(0, 300) });
       if (modifieApres(b.date, v.valideLe)) return await fin("annule", { erreur: "brouillon modifié après sa validation dans la page Agents" });
+      message = v.message;
     }
     const dest = adresses(`${b.to}, ${b.cc}`);
     const raison = await bloquant(sb, dest, b.reponse, true);
     if (raison) return await fin("annule", { erreur: raison.slice(0, 300) });
     const invalide = await adressesInvalides(sb, dest);
     if (invalide) return await fin("annule", { erreur: invalide.slice(0, 300) });
-    const r = await sendDraft(sb, box, row.brouillon, undefined, verifierAvantEnvoi(sb, row.createur || undefined, true));
+    const r = await sendDraft(sb, box, row.brouillon, undefined, verifierAvantEnvoi(sb, row.createur || undefined, true), message);
     // Le mail est parti : le statut « envoyé » doit être écrit, même si les textes relus chez
     // Gmail sont refusés (sinon la ligne finirait en « échec » et le mail pourrait repartir).
     const envoyeAt = new Date().toISOString();
@@ -522,6 +553,7 @@ async function envoyerUne(sb: SupabaseClient, row: Ligne): Promise<string> {
     const m = (e as Error).message ?? "";
     if (/gmail_404/.test(m)) return await fin("annule", { erreur: "brouillon introuvable (envoyé ou supprimé à la main)" });
     if (m === "not_claude") return await fin("annule", { erreur: "brouillon pas préparé par Claude" });
+    if (m === "draft_changed") return await fin("annule", { erreur: "brouillon modifié entre le dernier contrôle et l'envoi" });
     if (m.startsWith("kit_refuse: ")) return await fin("annule", { erreur: m.slice(12).replace(/\n/g, " ").slice(0, 300) });
     // Erreur passagère (réseau, Gmail) : nouvel essai dans 15 minutes, 3 essais au plus.
     if (row.essais < 3) return await fin("en_attente", { erreur: `nouvel essai : ${m.slice(0, 200)}`, prevu_a: new Date(Date.now() + 15 * 60_000).toISOString() });

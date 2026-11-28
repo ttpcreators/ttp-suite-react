@@ -69,7 +69,10 @@ type Memoire = {
   id: string; creatrice: string; categorie: string; info: string;
   date: string | null; source: string | null; cree_le: string;
 };
-type Lecon = { id: string; module: string | null; lecon: string; cree_le: string; agent_id?: string | null };
+// confirmee : false = leçon écrite par un agent ou un Claude (connecteur), pas encore confirmée
+// ici ; elle n'est pas « à respecter » pour les agents (SQL 2026-11-28-verrou-agents). Absente
+// avant ce SQL : comme une leçon confirmée.
+type Lecon = { id: string; module: string | null; lecon: string; cree_le: string; agent_id?: string | null; confirmee?: boolean | null };
 type Journal = { id: string; action: string; detail: string | null; cree_le: string; agent_id?: string | null };
 type Tab = "apercu" | "valider" | "agents" | "prospection" | "memoire" | "journal";
 const NEW_AGENT: AgentDraft = { nom: "", emoji: "🤖", role: "", moteur: "claude", consignes: "", routines: [], actif: true };
@@ -506,6 +509,11 @@ export function AgentView() {
     log("marc_lecon", couper(row.lecon, 80)); // sans casser d'emoji (_shared/texteSur.ts)
     setLeconModule(""); setLeconTexte(""); setLeconOpen(false);
     toast("Leçon enregistrée ✓");
+  };
+  const confirmerLecon = async (l: Lecon) => {
+    setLecons((xs) => xs.map((x) => (x.id === l.id ? { ...x, confirmee: true } : x)));
+    if (!(await upd("lecons", l.id, { confirmee: true }))) setLecons((xs) => xs.map((x) => (x.id === l.id ? l : x)));
+    else log("marc_lecon", couper(`confirmée : ${l.lecon}`, 80));
   };
   const supprimerLecon = async (l: Lecon) => {
     setConfirmDel(null);
@@ -957,8 +965,14 @@ export function AgentView() {
                 {agentOf(l.agent_id) && <span title={agentOf(l.agent_id)!.nom}><AgentAvatar figurine={figOf(l.agent_id)} className="mt-0.5 h-5 w-5 rounded-full" /></span>}
                 <div className="min-w-0 flex-1">
                   <div className="text-[12px] leading-relaxed text-foreground">{l.lecon}</div>
-                  <div className="mt-0.5 text-[10px] text-faint">{fmtDT(l.cree_le)}</div>
+                  <div className="mt-0.5 text-[10px] text-faint">{fmtDT(l.cree_le)}{l.confirmee === false ? " · proposée par un agent, pas encore suivie" : ""}</div>
                 </div>
+                {l.confirmee === false && (
+                  <button type="button" onClick={() => confirmerLecon(l)}
+                    className="shrink-0 rounded-full bg-primary px-2.5 py-1 text-[11px] font-semibold text-primary-foreground transition-opacity hover:opacity-90">
+                    Confirmer
+                  </button>
+                )}
                 <DeleteButton
                   armed={confirmDel === l.id}
                   onArm={() => setConfirmDel(l.id)}

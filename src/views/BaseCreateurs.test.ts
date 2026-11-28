@@ -16,8 +16,16 @@ describe("guessVille", () => {
 describe("slugFor", () => {
   it("fait une adresse lisible, valide et introuvable sans le lien", () => {
     const s = slugFor("Running Lyon pour Décathlon !");
-    expect(s).toMatch(/^running-lyon-pour-decathlon-[a-z0-9]{1,4}$/);
+    expect(s).toMatch(/^running-lyon-pour-decathlon-[0-9a-f]{20}$/);
     expect(s).toMatch(/^[a-z0-9-]{3,60}$/);
     expect(slugFor("é")).toMatch(/^[a-z0-9-]{3,60}$/);
+    expect(slugFor("Running Lyon pour Décathlon !")).not.toBe(s);
+  });
+  it("coupe un long titre pour rester sous 60 caractères, sans tiret doublé", () => {
+    const s = slugFor("Sélection de créateurs running et trail pour la grande marque de sport de l'hiver");
+    expect(s.length).toBeLessThanOrEqual(60);
+    expect(s).toMatch(/^[a-z0-9-]{3,60}$/);
+    expect(s).not.toMatch(/--/);
+    expect(s.slice(0, -21).length).toBeLessThanOrEqual(35);
   });
 });

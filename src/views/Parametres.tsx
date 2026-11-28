@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SIGNATURE_KEY, scribble, validSig, type SignatureData } from "@/lib/agencySignature";
 import { SignaturePad } from "@/components/signature-pad";
 import { PasswordSettings } from "@/components/password-form";
+import { DoubleAuthSettings } from "@/components/double-auth";
 import {
   BellRing, Smartphone, Sunrise, History, LogOut, Palette, MessageCircle, Bot, Copy, Unplug, PenLine, Sparkles,
   Search, ChevronRight, ChevronDown, X, KeyRound, type LucideIcon,
@@ -316,9 +317,14 @@ function BackupCard() {
         );
         return;
       }
-      const d = (data ?? {}) as { recipients?: number; attached?: boolean; bytes?: number };
+      const d = (data ?? {}) as { recipients?: number; attached?: boolean; bytes?: number; link?: boolean; drive?: string };
       const mb = ((d.bytes ?? 0) / 1024 / 1024).toFixed(1).replace(".", ",");
-      toast(`Sauvegarde envoyée ✓ (${mb} Mo${d.attached ? ", jointe au mail" : ", lien dans le mail"})`);
+      // `link` absent : ancienne version de la fonction, qui mettait toujours un lien.
+      const ou = d.attached ? ", jointe au mail"
+        : d.link !== false ? ", lien dans le mail"
+          : d.drive === "ok" ? ", rangée dans Google Drive"
+            : ", trop lourde pour le mail et pas rangée : réessaie";
+      toast(`Sauvegarde envoyée ✓ (${mb} Mo${ou})`);
     } finally {
       setBusy(false);
       // Succès ou échec, la fonction a laissé son état : on le relit tout de suite.
@@ -1665,6 +1671,9 @@ export function Parametres() {
           <Card anchor="Compte">
             <div className="mb-4 border-b border-border pb-4">
               <PasswordSettings />
+            </div>
+            <div className="mb-4 border-b border-border pb-4">
+              <DoubleAuthSettings />
             </div>
             <button
               type="button"

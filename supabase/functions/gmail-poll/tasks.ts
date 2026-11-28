@@ -9,6 +9,8 @@
 // Dédoublonnage : clé fil + sujet dans le blob (`mailTaskKeys`, 120 jours), et pas de
 // tâche si la même est déjà ouverte. Réglage : `notifPrefs.mailTasks === false` coupe tout.
 // Expéditeur marqué « Pas à traiter » dans l'app (`mailIgnoredSenders`) : aucune tâche.
+// Expéditeur : l'adresse réelle de l'en-tête From et son nom affiché (_shared/mailRecu.ts) ; la
+// fiche contact est cherchée par adresse exacte (_shared/ilikeExact.ts, « * » refusé).
 // ============================================================================
 
 import type { getServiceClient } from "../_shared/google.ts";
@@ -17,6 +19,8 @@ import { brandMatcher, norm } from "../_shared/brandmatch.ts";
 import { creatorsForMail, type CreatorMailSetting, type NewMail } from "../_shared/mailNotif.ts";
 import { brandFromEmail, ignoredSender, kindOfTitle, mailTasks, replyThatDoes, taskKey } from "../_shared/mailTasks.ts";
 import { IGNORED_SENDERS_KEY, isIgnoredSender, readIgnoredSenders } from "../_shared/mailIgnore.ts";
+import { adresseDe, nomAffiche } from "../_shared/mailRecu.ts";
+import { ilikeExact } from "../_shared/ilikeExact.ts";
 import { couper } from "../_shared/texteSur.ts";
 
 type Sb = ReturnType<typeof getServiceClient>;
@@ -29,8 +33,6 @@ const MAX_MAILS = 30; // mails lus en entier par passage
 const KEEP_DAYS = 120;
 const SKIP_LABELS = ["CATEGORY_PROMOTIONS", "CATEGORY_SOCIAL", "CATEGORY_UPDATES", "CATEGORY_FORUMS", "SPAM"];
 
-const addr = (from: string) => ((/<([^>]+)>/.exec(from)?.[1] ?? from).trim().toLowerCase());
-const displayName = (from: string) => (/^\s*"?([^"<]+?)"?\s*</.exec(from)?.[1] ?? "").trim();
 const frDay = (ts: number) => new Date(ts).toLocaleDateString("fr-FR", { day: "numeric", month: "short", timeZone: "Europe/Paris" });
 
 /**
@@ -86,7 +88,7 @@ export async function tasksFromMails(
 ): Promise<number> {
   const notTodo = readIgnoredSenders(blob[IGNORED_SENDERS_KEY]);
   const candidates = mails.filter((m) => {
-    const email = addr(m.from);
+    const email = adresseDe(m.from);
     if (!email.includes("@") || email.endsWith("@" + agencyDomain) || ignoredSender(email) || m.listUnsub) return false;
     if (isIgnoredSender(email, notTodo)) return false;
     return !(m.labelIds ?? []).some((l) => SKIP_LABELS.includes(l));
@@ -104,11 +106,14 @@ export async function tasksFromMails(
     if (!token) continue;
     const body = await readBody(token, m.id).catch(() => null);
     if (body === null) continue;
-    const email = addr(m.from);
-    const name = displayName(m.from) || email;
+    const email = adresseDe(m.from);
+    const name = nomAffiche(m.from) || email;
 
-    // Marque : fiche contact de l'expéditeur, sinon collab citée, sinon domaine, sinon nom.
-    const { data: ct } = await sb.from("contacts").select("brand").ilike("email", email.replace(/[\\%_]/g, (c) => `\\${c}`)).not("brand", "is", null).limit(1);
+    // Marque : fiche contact de l'expéditeur (adresse exacte), sinon collab citée, sinon domaine, sinon nom.
+    const motif = ilikeExact(email);
+    const { data: ct } = motif
+      ? await sb.from("contacts").select("brand").ilike("email", motif).not("brand", "is", null).limit(1)
+      : { data: null };
     const text = `${m.subject}\n${name}\n${email}\n${body}`;
     let brand = ((ct?.[0] as { brand?: string } | undefined)?.brand ?? "").trim();
     const domainBrand = brandFromEmail(email);

@@ -158,7 +158,12 @@ export function Login({ lienPerime = false }: { lienPerime?: boolean } = {}) {
     const { error: resetErr } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
       redirectTo: adresseRetour(window.location.origin, BASE),
     });
-    if (resetErr) setError("Une erreur est survenue. Réessaie dans un moment.");
+    // over_email_send_rate_limit : Supabase refuse un 2e mail au même compte dans la minute.
+    // Même message qu'un envoi réussi, pour que l'écran ne dise pas si le compte existe.
+    // Les autres refus (dont over_request_rate_limit, la limite par adresse IP, elle aussi
+    // en 429) gardent le message d'erreur : rien n'est parti.
+    const code = (resetErr as { code?: string } | null)?.code ?? "";
+    if (resetErr && code !== "over_email_send_rate_limit") setError("Une erreur est survenue. Réessaie dans un moment.");
     else setNotice("Email envoyé. Ouvre le lien qu'il contient pour choisir ton nouveau mot de passe.");
   };
 

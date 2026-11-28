@@ -3,6 +3,7 @@ import { isAvatarImage } from "@/lib/safeUrl";
 import { Spin } from "@/components/ui/loader";
 import { Camera } from "@/components/icons";
 import { supabase } from "@/lib/supabase";
+import { cheminAvatar, extensionImage } from "@/lib/fichierSur";
 import { dbUpdate } from "@/lib/db";
 import { invalidateCreators } from "@/lib/useCreators";
 import { initials } from "@/lib/utils";
@@ -66,8 +67,10 @@ export function AvatarUpload({
       return;
     }
     setBusy(true);
-    const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "") || "jpg";
-    const path = `${slug(name) || "creator"}/${Date.now()}.${ext}`;
+    const ext = extensionImage(file);
+    // Rangé dans le dossier du compte qui dépose (creators/<id>/…, règle avatars_obj_insert).
+    const { data: sess } = await supabase.auth.getSession();
+    const path = cheminAvatar(sess.session?.user.id, `${slug(name) || "creator"}/${Date.now()}.${ext}`);
     // Chemin horodaté = toujours unique → INSERT pur (upsert:false). Les créateurs
     // ont le droit d'INSÉRER dans `avatars`, mais pas d'UPDATE (réservé à l'agence) ;
     // upsert:true pouvait donc échouer côté créateur depuis le durcissement du bucket.

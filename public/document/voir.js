@@ -2,10 +2,13 @@
 // Supabase sert les .html en texte brut (protection anti-hébergement) : ouvert tel quel,
 // le navigateur montre le CODE avec les accents cassés. Ici on récupère le fichier
 // (décodé en UTF-8) et on l'affiche comme une vraie page, imprimable.
-// Sécurité : seuls les liens signés de notre stockage sont acceptés, les scripts et
+// Sécurité : seuls les liens signés des contrats de l'agence (dossier contracts/ du
+// stockage) sont acceptés, après lecture de l'adresse par new URL() ; les scripts et
 // attributs actifs sont retirés, et la CSP de la page bloque tout script venu du fichier.
+// Même règle que lienContrat (src/lib/fichierSur.ts).
 (function () {
-  var PREFIX = "https://zizvggziggswhrbuyhuo.supabase.co/storage/v1/object/sign/documents/";
+  var ORIGINE = "https://zizvggziggswhrbuyhuo.supabase.co";
+  var CONTRATS = "/storage/v1/object/sign/documents/contracts/";
   var msg = document.getElementById("msg");
   var fail = function (text) {
     msg.textContent = text;
@@ -22,8 +25,16 @@
   } catch {
     url = "";
   }
-  var path = url.split("?")[0];
-  if (url.indexOf(PREFIX) !== 0 || !/\.html?$/i.test(path)) {
+  // L'adresse est normalisée (« .. », « %2e%2e ») AVANT le contrôle : on vérifie celle
+  // qui sera vraiment chargée.
+  var u = null;
+  try {
+    u = new URL(url);
+  } catch {
+    u = null;
+  }
+  var nom = u && u.pathname.indexOf(CONTRATS) === 0 ? u.pathname.slice(CONTRATS.length) : "";
+  if (!u || u.origin !== ORIGINE || u.username || u.password || !/^[A-Za-z0-9._-]+\.html?$/i.test(nom)) {
     fail("Lien de document invalide. Rouvre-le depuis l'app TTP Creators.");
     return;
   }
@@ -113,7 +124,7 @@
     document.body.insertBefore(bar, document.body.firstChild);
   };
 
-  fetch(url)
+  fetch(u.href)
     .then(function (res) {
       if (!res.ok) throw new Error(String(res.status));
       return res.text();

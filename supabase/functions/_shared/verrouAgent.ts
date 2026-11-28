@@ -5,11 +5,16 @@
 // Une connexion marquée « agent » (Alfred, colonne mcp_grants.agent) n'envoie rien et ne fait
 // rien d'irréversible sans une validation faite par un compte agence dans l'app :
 //   • brouillons (envoyer_brouillon, envoyer_brouillons_valides, programmer_envoi) : chaque id
-//     doit figurer dans une proposition « brouillon_mail » validée dans la page Agents, et le
-//     brouillon ne doit pas avoir changé depuis la validation ;
-//   • outils à valider (versement, facture, suppression, réglages, invitation Google à une
-//     adresse hors de l'agence) : une proposition validée qui porte EXACTEMENT cet appel
-//     (proposer_action avec `outil`), utilisée une seule fois ;
+//     doit avoir sa proposition « brouillon_mail » validée dans la page Agents. Le serveur a lu
+//     lui même ce brouillon à la proposition (destinataires, objet, texte, pièces jointes) et
+//     gardé son empreinte (outil = { nom: "envoyer_brouillon", arguments: { boite, brouillon },
+//     empreinte }) : à l'envoi, le brouillon doit avoir la même empreinte (un seul brouillon par
+//     proposition, ni l'id cité dans un texte ni le lien ne comptent) ;
+//   • outils à valider (argent, accès, consignes durables des agents, pages publiques, crédits,
+//     suppression, réglages, invitation Google à une adresse hors de l'agence) : une proposition
+//     validée qui porte EXACTEMENT cet appel (proposer_action avec `outil`) ;
+//   • une validation ne vaut que pour la connexion qui l'a proposée (grant_id) et ne sert qu'une
+//     fois : elle est consommée (statut « envoye ») avant que l'outil tourne ;
 //   • envoyer_mail et envoyer_dm : jamais pour un agent (brouillon validé, ou Marc envoie lui même).
 // Les connexions de Marc et de l'équipe ne passent jamais par ici.
 // Depuis le 27/11 (SQL 2026-11-27-verrou-connexions) :
@@ -22,6 +27,7 @@
 // ============================================================================
 
 import { str } from "./texteSur.ts";
+import { externeLigne } from "./contenuExterne.ts";
 
 type Args = Record<string, unknown>;
 
@@ -35,7 +41,54 @@ export type Besoin =
 export const VALIDATION_JOURS = 7;
 
 /** Outils qu'un agent ne lance qu'avec un appel validé (proposer_action avec `outil`). */
-export const OUTILS_A_VALIDER = ["noter_reversement", "modifier_element", "supprimer_element", "reglages_app", "preparer_facture", "creer_meet", "inviter_rdv"] as const;
+// À garder égal à valides_app de agents/alfred/alfred.sh (CLAUDE.md, « Alfred »).
+export const OUTILS_A_VALIDER = [
+  "noter_reversement", "modifier_element", "supprimer_element", "reglages_app", "preparer_facture", "creer_meet", "inviter_rdv",
+  // Depuis le 28/11 : argent, accès d'un créateur, consignes durables, pages publiques, crédits.
+  "avancer_collab", "creer_element", "noter_droits", "noter_lecon", "ajouter_modele", "memoire_createur",
+  "lien_boite_createur", "lien_connexion_instagram", "maj_chiffres_mediakit",
+  "trouver_emails_marque", "trouver_email_personne", "scanner_base_createurs", "importer_historique_instagram",
+] as const;
+
+/** Outils qui envoient des brouillons (validation : une proposition brouillon_mail par id). */
+export const OUTILS_BROUILLONS = ["envoyer_brouillon", "envoyer_brouillons_valides", "programmer_envoi"] as const;
+
+/** Tables où toute création ou modification par un agent se valide (argent, accès, pages publiques, agenda). */
+export const TABLES_A_VALIDER = ["invoices", "creators", "documents", "creator_mail_settings", "creator_roadmap", "agency_mediakit", "events", "email_sequences"] as const;
+
+/** Collabs et prospects : les champs d'argent ou d'avancement qui se valident. */
+const CHAMPS_A_VALIDER: Record<string, string[]> = {
+  collabs: ["cachet", "step", "status"],
+  // stage : l'étape du pipeline (Signé, Perdu…). status n'existe pas sur prospects, gardé sans effet.
+  prospects: ["value", "proposal", "stage", "status"],
+};
+/** À la création d'une collab ou d'un prospect : quand un montant est posé. */
+const MONTANTS_A_LA_CREATION: Record<string, string[]> = { collabs: ["cachet"], prospects: ["value", "proposal"] };
+
+/** Étape de collab lue comme les outils la lisent (tools.ts, int : arrondi, bornée 1 à 11) ; null si illisible. */
+export function etapeCollab(v: unknown): number | null {
+  if (v === undefined || v === null || (typeof v === "string" && !v.trim())) return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(1, Math.min(11, Math.round(n))) : null;
+}
+
+/** Une collab créée déjà avancée (étape 8 ou plus, ou un statut autre que « active ») se valide comme avancer_collab. */
+function collabDejaAvancee(champs: Record<string, unknown>): boolean {
+  if (rempli(champs.step)) {
+    const e = etapeCollab(champs.step);
+    if (e === null || e >= 8) return true;
+  }
+  return rempli(champs.status) && String(champs.status).trim().toLowerCase() !== "active";
+}
+
+const objet = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
+const rempli = (v: unknown) => v !== undefined && v !== null && String(v).trim() !== "";
+
+/** Outils qui, appelés par un agent, se valident toujours (sans regarder les paramètres). */
+const TOUJOURS = new Set([
+  "noter_reversement", "supprimer_element", "noter_lecon", "ajouter_modele", "lien_boite_createur", "lien_connexion_instagram",
+  "maj_chiffres_mediakit", "trouver_emails_marque", "trouver_email_personne", "scanner_base_createurs", "importer_historique_instagram",
+]);
 
 // Les textes reçus sont lus par str (_shared/texteSur.ts), la même lecture que les outils
 // (tools.ts, admin.ts, envois.ts) : un écart ouvrirait une porte.
@@ -74,11 +127,29 @@ export function besoinValidation(nom: string, a: Args, agence: string): Besoin {
       return { genre: "interdit", raison: "un agent n'envoie un mail que depuis un brouillon validé : creer_brouillon_mail, puis proposer_action (type brouillon_mail, « brouillon <id> · boîte <boîte> » dans contexte) ; une fois validé dans la page Agents, envoyer_brouillon" };
     case "envoyer_dm":
       return { genre: "interdit", raison: "un agent n'envoie pas de DM : proposer_action (type instagram) avec le texte exact, Marc l'envoie depuis la page Agents" };
-    case "noter_reversement":
-    case "supprimer_element":
-      return { genre: "outil" };
-    case "modifier_element":
-      return str(a.table, 40) === "invoices" ? { genre: "outil" } : null;
+    case "modifier_element": {
+      const table = str(a.table, 40);
+      if ((TABLES_A_VALIDER as readonly string[]).includes(table)) return { genre: "outil" };
+      const champs = Object.keys(objet(a.champs));
+      return (CHAMPS_A_VALIDER[table] ?? []).some((c) => champs.includes(c)) ? { genre: "outil" } : null;
+    }
+    case "creer_element": {
+      const table = str(a.table, 40);
+      if ((TABLES_A_VALIDER as readonly string[]).includes(table)) return { genre: "outil" };
+      const champs = objet(a.champs);
+      if (table === "collabs" && collabDejaAvancee(champs)) return { genre: "outil" };
+      return (MONTANTS_A_LA_CREATION[table] ?? []).some((c) => rempli(champs[c])) ? { genre: "outil" } : null;
+    }
+    case "avancer_collab": {
+      // Facture envoyée, paiement reçu, créateur payé, bilan ; et tout retour en arrière. L'étape
+      // est lue comme l'outil la lit (arrondie) : 7,5 compte pour 8.
+      const etape = etapeCollab(a.etape);
+      return etape === null || etape >= 8 || a.revenir === true ? { genre: "outil" } : null;
+    }
+    case "noter_droits":
+      return rempli(a.prix) || a.clos !== undefined ? { genre: "outil" } : null;
+    case "memoire_createur":
+      return str(a.info) ? { genre: "outil" } : null;
     case "reglages_app":
       return str(a.action) === "lire" ? null : { genre: "outil" };
     case "preparer_facture": {
@@ -89,9 +160,11 @@ export function besoinValidation(nom: string, a: Args, agence: string): Besoin {
     case "creer_meet":
       return a.inviter === true && inviteExterne(a.invites, agence) ? { genre: "outil" } : null;
     case "inviter_rdv":
-      return a.envoyer === true && inviteExterne(a.invites, agence) ? { genre: "outil" } : null;
+      // Un invité externe ajouté sans mail serait prévenu par un second appel « envoyer » qui
+      // n'ajoute qu'une adresse interne : l'ajout d'un externe se valide aussi, et tout envoi.
+      return a.envoyer === true || inviteExterne(a.invites, agence) ? { genre: "outil" } : null;
     default:
-      return null;
+      return TOUJOURS.has(nom) ? { genre: "outil" } : null;
   }
 }
 
@@ -103,14 +176,116 @@ export function canonique(v: unknown): string {
   return `{${Object.keys(o).filter((k) => o[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${canonique(o[k])}`).join(",")}}`;
 }
 
-export type OutilPropose = { nom: string; arguments: Args };
+export type OutilPropose = { nom: string; arguments: Args; empreinte?: string };
 
-/** L'outil d'une proposition (colonne agent.actions.outil), ou null s'il est illisible. */
+/** L'outil d'une proposition (colonne agent.actions.outil), ou null s'il est illisible. L'empreinte n'est lue que dans une ligne de la base (écrite par le serveur). */
 export function lireOutil(v: unknown): OutilPropose | null {
   const o = v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
   if (!o || typeof o.nom !== "string") return null;
   const args = o.arguments && typeof o.arguments === "object" && !Array.isArray(o.arguments) ? (o.arguments as Args) : {};
-  return { nom: o.nom, arguments: args };
+  return { nom: o.nom, arguments: args, ...(typeof o.empreinte === "string" && o.empreinte ? { empreinte: o.empreinte } : {}) };
+}
+
+/** Nom de l'outil rangé par le serveur dans une proposition de mail (jamais proposable par un agent). */
+export const OUTIL_BROUILLON = "envoyer_brouillon";
+
+export type BrouillonPropose = { boite: string; brouillon: string; empreinte: string };
+
+/** Le brouillon rangé par le serveur dans une proposition brouillon_mail, ou null (ancienne proposition, ou autre chose). */
+export function brouillonDe(v: { type: string; outil: unknown }): BrouillonPropose | null {
+  if (v.type !== "brouillon_mail") return null;
+  const p = lireOutil(v.outil);
+  if (!p || p.nom !== OUTIL_BROUILLON || !p.empreinte) return null;
+  const boite = typeof p.arguments.boite === "string" ? p.arguments.boite : "";
+  const brouillon = typeof p.arguments.brouillon === "string" ? p.arguments.brouillon : "";
+  return boite && ID_BROUILLON.test(brouillon) ? { boite, brouillon, empreinte: p.empreinte } : null;
+}
+
+/** Même boîte (« partnerships », « talent » ou adresse d'une boîte de créateur), sans casse ni espaces. */
+export const memeBoite = (a: unknown, b: unknown) => String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
+
+/** La forme stricte « brouillon <id> · boîte <boîte> » d'un contexte (un « brouillon prêt » ou « le brouillon joint » ne compte pas). */
+const CITATION = /brouillon\s+([A-Za-z0-9_-]+)\s*·\s*bo[iî]te\s+([^\s·,;]+)/gi;
+
+/** Les citations strictes « brouillon <id> · boîte <boîte> » d'un contexte, sans doublon d'id. */
+export function citationsBrouillon(contexte: unknown): { brouillon: string; boite: string }[] {
+  const vus = new Map<string, string>();
+  for (const m of str(contexte, 1000).matchAll(CITATION)) if (!vus.has(m[1])) vus.set(m[1], m[2]);
+  return [...vus].map(([brouillon, boite]) => ({ brouillon, boite }));
+}
+
+/**
+ * Le brouillon qu'un agent fait valider (proposer_action, type brouillon_mail) : le paramètre
+ * `brouillon`, sinon la seule citation « brouillon <id> · boîte <boîte> » de contexte. Plusieurs
+ * ids : refus (un brouillon par proposition). La boîte : le paramètre `boite`, sinon celle de la
+ * citation, sinon « boîte <boîte> » de contexte. `cite` : un id a été donné (paramètre ou
+ * citation stricte) ; sans lui, une connexion qui n'est pas un agent dépose comme avant.
+ */
+export function brouillonCite(a: Args): ({ brouillon: string; boite: string } | { erreur: string }) & { cite: boolean } {
+  const contexte = str(a.contexte, 1000);
+  const citations = citationsBrouillon(contexte);
+  const donne = str(a.brouillon, 64);
+  const cite = !!donne || citations.length > 0;
+  if (donne && !ID_BROUILLON.test(donne)) return { erreur: "id de brouillon illisible", cite };
+  if (!donne && citations.length > 1) return { erreur: `un seul brouillon par proposition (contexte en cite ${citations.length} : ${citations.map((c) => c.brouillon).join(", ")})`, cite };
+  const brouillon = donne || citations[0]?.brouillon || "";
+  if (!brouillon) return { erreur: "donne l'id du brouillon (paramètre brouillon, ou « brouillon <id> · boîte <boîte> » dans contexte)", cite };
+  const boite = str(a.boite, 120) || citations.find((c) => c.brouillon === brouillon)?.boite || (/bo[iî]te\s+([^\s·,;]+)/i.exec(contexte)?.[1] ?? "");
+  if (!boite) return { erreur: "donne la boîte du brouillon (paramètre boite : partnerships, talent ou l'adresse d'une boîte de créateur)", cite };
+  return { brouillon, boite, cite };
+}
+
+/** Un brouillon tel que le serveur le lit dans Gmail (verrou des agents). */
+export type BrouillonComplet = {
+  message: string; // id Gmail du message : une modification du brouillon en crée un nouveau
+  from: string; to: string; cc: string; bcc: string; subject: string;
+  corps: string[]; // chaque partie texte ou HTML, décodée, dans l'ordre du message
+  texte: string; // le texte lisible montré dans la page Agents
+  pieces: { nom: string; type: string; taille: number }[];
+  claude: boolean;
+};
+
+/**
+ * Empreinte SHA-256 d'un brouillon : son message Gmail, ses en-têtes, ses parties et ses pièces
+ * jointes. Deux lectures du même brouillon non modifié donnent la même empreinte.
+ */
+export async function empreinteBrouillon(b: BrouillonComplet): Promise<string> {
+  const texte = canonique({ message: b.message, from: b.from, to: b.to, cc: b.cc, bcc: b.bcc, subject: b.subject, corps: b.corps, pieces: b.pieces });
+  const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texte));
+  return [...new Uint8Array(h)].map((x) => x.toString(16).padStart(2, "0")).join("");
+}
+
+/** Au delà, un brouillon ne se montre pas en entier dans la page Agents : la proposition est refusée. */
+export const ENTETE_MAX = 4000;
+export const TEXTE_MAX = 30000;
+
+/** Repère de la note de l'agent, après l'en-tête du serveur (lue par la page Agents, src/lib/aValider.ts). */
+export const NOTE_AGENT = "Note de l'agent : ";
+
+/**
+ * Ce que la page Agents montre d'un brouillon : l'en-tête et le texte écrits par le serveur
+ * d'après Gmail, en entier (rien n'est coupé : trop long, la proposition est refusée). Le
+ * contexte écrit par l'agent (`note`) suit l'en-tête, après « Note de l'agent : », sur une ligne
+ * et encadré comme une donnée ; s'il commence par « Prospection · », ce préfixe est repris en tête.
+ */
+export function propositionBrouillon(b: BrouillonComplet, boite: string, brouillon: string, note = ""): { cible: string; contexte: string; contenu: string } | { erreur: string } {
+  // Sur une ligne, sans « · » : un objet ou une note ne peut pas imiter un autre champ de l'en-tête.
+  const une = (s: string) => s.replace(/[\r\n]+/g, " ").replace(/·/g, "•").trim();
+  const dest = [`À : ${une(b.to) || "(personne)"}`, ...(b.cc ? [`Cc : ${une(b.cc)}`] : []), ...(b.bcc ? [`Cci : ${une(b.bcc)}`] : [])].join(" · ");
+  const pieces = b.pieces.length ? `\n\nPièces jointes : ${b.pieces.map((p) => une(p.nom)).join(", ")}` : "";
+  const entete = `brouillon ${brouillon} · boîte ${boite} · De : ${une(b.from) || boite} · Objet : ${une(b.subject) || "(sans objet)"} · ${dest}`;
+  const texte = b.texte || "(message vide)";
+  if (entete.length > ENTETE_MAX || texte.length + pieces.length > TEXTE_MAX) {
+    return { erreur: "brouillon trop long pour être montré en entier dans la page Agents (destinataires, objet ou texte), raccourcis-le" };
+  }
+  const n = note.trim();
+  const prefixe = /^Prospection\s*·/i.test(n) ? "Prospection · " : "";
+  const encadree = n ? externeLigne("note de l'agent", une(n)) : "";
+  return {
+    cible: dest.length > 200 ? `${dest.slice(0, 199)}…` : dest,
+    contexte: `${prefixe}${entete}${encadree ? ` · ${NOTE_AGENT}${encadree}` : ""}`,
+    contenu: texte + pieces,
+  };
 }
 
 export function memeAppel(p: OutilPropose, nom: string, a: Args): boolean {
@@ -132,7 +307,14 @@ export type Validation = {
   outil: unknown;
   valide_par: string | null;
   valide_le: string | null;
+  /** Connexion qui a déposé la proposition (SQL 2026-11-27-verrou-connexions) ; absente avant. */
+  grant_id?: string | null;
 };
+
+/** La proposition vient de cette connexion (une validation ne sert qu'à la connexion qui l'a proposée). */
+export function memeConnexion(v: Validation, grantId: string | null | undefined): boolean {
+  return !!grantId && !!v.grant_id && v.grant_id === grantId;
+}
 
 /**
  * Validation encore valable : faite par un compte agence connu, il y a moins de 7 jours, et par
@@ -146,16 +328,22 @@ export function validationValable(v: Validation, comptesAgence: Set<string>, mai
   return Number.isFinite(t) && t <= maintenant + 60_000 && maintenant - t <= VALIDATION_JOURS * 86_400_000;
 }
 
-/** La validation d'un brouillon : une proposition « brouillon_mail » qui cite son id. */
-export function validationBrouillon(vs: Validation[], id: string, comptesAgence: Set<string>, maintenant: number, valideur: string | null = null): Validation | null {
-  return vs.find((v) => v.type === "brouillon_mail" && (citeBrouillon(v.contexte, id) || citeBrouillon(v.lien_spark, id)) && validationValable(v, comptesAgence, maintenant, valideur)) ?? null;
+/**
+ * La validation d'un brouillon : la proposition « brouillon_mail » de CETTE connexion où le
+ * serveur a rangé ce brouillon (et cette boîte). Un id cité dans un texte ou un lien ne compte pas.
+ */
+export function validationBrouillon(vs: Validation[], id: string, boite: unknown, comptesAgence: Set<string>, maintenant: number, valideur: string | null, grantId: string | null | undefined): Validation | null {
+  return vs.find((v) => {
+    const b = brouillonDe(v);
+    return !!b && b.brouillon === id && memeBoite(b.boite, boite) && memeConnexion(v, grantId) && validationValable(v, comptesAgence, maintenant, valideur);
+  }) ?? null;
 }
 
-/** La validation d'un appel d'outil : une proposition qui porte exactement cet appel. */
-export function validationOutil(vs: Validation[], nom: string, a: Args, comptesAgence: Set<string>, maintenant: number, valideur: string | null = null): Validation | null {
+/** La validation d'un appel d'outil : une proposition de cette connexion qui porte exactement cet appel. */
+export function validationOutil(vs: Validation[], nom: string, a: Args, comptesAgence: Set<string>, maintenant: number, valideur: string | null, grantId: string | null | undefined): Validation | null {
   return vs.find((v) => {
     const p = lireOutil(v.outil);
-    return !!p && memeAppel(p, nom, a) && validationValable(v, comptesAgence, maintenant, valideur);
+    return !!p && p.nom !== OUTIL_BROUILLON && memeAppel(p, nom, a) && memeConnexion(v, grantId) && validationValable(v, comptesAgence, maintenant, valideur);
   }) ?? null;
 }
 
@@ -174,7 +362,11 @@ export type PropositionRelue = Validation & { statut: string };
  */
 export function validationTient(p: PropositionRelue | null, brouillon: string, comptesAgence: Set<string>, valideur: string | null = null): string | null {
   if (!p) return "validation introuvable dans la page Agents (proposition supprimée ?)";
-  if (p.type !== "brouillon_mail" || !(citeBrouillon(p.contexte, brouillon) || citeBrouillon(p.lien_spark, brouillon))) return "la proposition validée ne cite plus ce brouillon";
+  // Proposition du serveur (depuis le 28/11) : le brouillon rangé dans outil. Ligne de la file
+  // programmée avant : l'id cité dans contexte (jamais le lien).
+  const range = brouillonDe(p);
+  const cite = range ? range.brouillon === brouillon : p.type === "brouillon_mail" && !lireOutil(p.outil) && citeBrouillon(p.contexte, brouillon);
+  if (!cite) return "la proposition validée ne cite plus ce brouillon";
   if (p.statut === "ecarte") return "proposition écartée après sa validation (page Agents ou ecarter_proposition)";
   if (p.statut === "a_valider") return "validation retirée : la proposition attend de nouveau dans la page Agents";
   if (p.statut === "modifie_envoye") return "proposition déjà envoyée à la main après modification";
@@ -201,6 +393,14 @@ export function raisonConnexionFile(valideLe: string | null | undefined, connexi
   if (connexion === null) return "connexion du connecteur introuvable (compte supprimé ?) : rien n'est parti";
   if (!valideLe && connexion.agent) return "connexion passée en agent autonome après la programmation : à faire valider dans la page Agents, puis à programmer de nouveau";
   return null;
+}
+
+/**
+ * Le brouillon d'aujourd'hui n'est plus celui que la page Agents a montré : empreinte différente.
+ * `validee` absente (proposition d'avant le 28/11, file seulement) : pas de comparaison.
+ */
+export function empreinteChangee(validee: string | null | undefined, actuelle: string): boolean {
+  return !!validee && validee !== actuelle;
 }
 
 /** Le brouillon a changé après la validation (date du message Gmail plus récente). */
@@ -233,7 +433,7 @@ export function refusBrouillons(nom: string, manquants: { id: string; pourquoi: 
   return [
     `${ENTETE} ${nom} demande que chaque brouillon soit validé dans l'app, par ${qui}.`,
     ...manquants.map((m) => `- ${m.id} : ${m.pourquoi}`),
-    `Pour chacun : proposer_action (type brouillon_mail, « brouillon <id> · boîte <boîte> » dans contexte), ${qui} le valide dans la page Agents, puis tu l'envoies. Un « oui » sur Telegram ne suffit pas pour ce connecteur.`,
+    `Pour chacun : proposer_action (type brouillon_mail, un seul brouillon par proposition : paramètres brouillon et boite, ou « brouillon <id> · boîte <boîte> » dans contexte ; le serveur lit lui même le brouillon et le montre tel quel), ${qui} le valide dans la page Agents, puis tu l'envoies sans le modifier. Un « oui » sur Telegram ne suffit pas pour ce connecteur.`,
     ...(note ? [note] : []),
   ].join("\n");
 }
@@ -245,7 +445,7 @@ export function refusOutil(nom: string, a: Args, valideur: string | null = null)
   return [
     `${ENTETE} ${nom} demande une validation dans l'app pour cet appel précis, par ${qui}.`,
     `Dépose-le avec proposer_action : type « alerte », outil = { "nom": "${nom}", "arguments": ${canonique(a)} }, et en contenu pourquoi (avec la preuve).`,
-    `Quand ${qui} l'a validé dans la page Agents, tu rappelles l'outil avec exactement les mêmes arguments (une seule fois). Un « oui » sur Telegram ne suffit pas pour ce connecteur.`,
+    `Quand ${qui} l'a validé dans la page Agents, tu rappelles l'outil avec exactement les mêmes arguments, une seule fois (la validation sert à cet appel, même s'il échoue : reproposer alors). Un « oui » sur Telegram ne suffit pas pour ce connecteur.`,
     ...(note ? [note] : []),
   ].join("\n");
 }

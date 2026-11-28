@@ -38,6 +38,7 @@ import { nomAuteur } from "../_shared/auteurEnvoi.ts";
 import { tacheEnDouble, type TacheOuverte } from "../_shared/todoDoublon.ts";
 import { couper, str } from "../_shared/texteSur.ts";
 import { triggerSync } from "../_shared/google.ts";
+import { lireLignes, problemeTaux, problemeTotalHt } from "../_shared/lignesFacture.ts";
 
 type Json = Record<string, unknown>;
 type Args = Record<string, unknown>;
@@ -394,6 +395,9 @@ const preparerFacture: AdminTool = {
       if (!row) return fail(`Facture introuvable (${str(a.id) || str(a.ref)}).`);
     }
     if (str(a.statut) && !INVOICE_STATUSES.includes(str(a.statut))) return fail(`Statut inconnu (« ${str(a.statut)} »). Choisis parmi : ${INVOICE_STATUSES.join(", ")}.`);
+    // Bornes (_shared/lignesFacture.ts) : commission, TVA, quantités et total HT.
+    const tauxKo = problemeTaux(a);
+    if (tauxKo) return fail(tauxKo);
     if (row && lockedInvoiceChange(row.status, a)) return fail(`La facture ${row.ref} est déjà émise (${row.status}) : ses lignes, sa TVA et sa commission se modifient dans l'app, pas ici. Tu peux encore changer son statut, son échéance ou ses notes.`);
     const st = await readAppState(sb);
     const allDetails = (st.invoiceDetails as Record<string, Json> | undefined) ?? {};
@@ -410,9 +414,9 @@ const preparerFacture: AdminTool = {
       commission = pct(((c as Json[] | null) ?? [])[0]?.commission) ?? saved[creator] ?? null;
     }
     commission = commission ?? 20;
-    const items: InvoiceLine[] = Array.isArray(a.lignes)
-      ? (a.lignes as Json[]).map((l, i) => ({ id: `l${Date.now().toString(36)}${i}`, label: str(l.libelle, 300), qty: Number(l.quantite ?? 1) || 1, unit: Number(l.prix_ht) || 0 }))
-      : ((prev.items as InvoiceLine[] | undefined) ?? []);
+    const lues = Array.isArray(a.lignes) ? lireLignes(a.lignes as unknown[], `l${Date.now().toString(36)}`, (v) => str(v, 300)) : null;
+    if (lues && "error" in lues) return fail(lues.error);
+    const items: InvoiceLine[] = lues ? lues.items : ((prev.items as InvoiceLine[] | undefined) ?? []);
     if (!items.length) return fail("Ajoute au moins une ligne (libellé et prix HT).");
     const banks = (st.invoiceBankAccounts as { id?: string }[] | undefined) ?? [];
     const detail = {
@@ -435,6 +439,9 @@ const preparerFacture: AdminTool = {
       notes: "notes" in a ? str(a.notes, 2000) : String(prev.notes ?? ""),
     };
     const tot = invoiceTotals(items, detail.franchise, detail.vatRate, commission);
+    // Nouvelle facture ou nouvelles lignes : total HT positif (une facture déjà là garde ses lignes).
+    const totalKo = !row || lues ? problemeTotalHt(tot.ht) : null;
+    if (totalKo) return fail(totalKo);
     const summary: Json = {
       // Montant enregistré = TTC en euros (facture en devise : au taux de la facture, comme l'app).
       party: invoiceParty(brand, creator), amount: euro2(tot.ttc * (eurRateOf(detail) ?? 1)), date: detail.dueDate || "—",
@@ -457,7 +464,8 @@ const preparerFacture: AdminTool = {
       id = String((data as Json).id);
     }
     const { error: e2 } = await sb.rpc("app_state_merge", { p_key: "invoiceDetails", p_set: { [id]: detail }, p_remove: [] });
-    if (creator) await sb.rpc("app_state_merge", { p_key: "creatorCommission", p_set: { [creator]: commission }, p_remove: [] });
+    // Taux par défaut du créateur : seulement une facture qui sort du brouillon (un brouillon ne le change pas).
+    if (creator && summary.status !== "brouillon") await sb.rpc("app_state_merge", { p_key: "creatorCommission", p_set: { [creator]: commission }, p_remove: [] });
     // Facture passée « payée » : sa collab atteint « Paiement marque reçu » (étapes automatiques).
     const avance = summary.status === "payee" && String(row?.status ?? "") !== "payee" ? await apresFacturePayee(sb, id, str(a.collab_id) || null) : null;
     const fmt = (n: number) => euro2(n).replace(/ /g, " ");
@@ -507,6 +515,8 @@ const preparerDevis: AdminTool = {
     const quotes = Array.isArray(st.quotes) ? (st.quotes as Json[]) : [];
     const prev = str(a.ref) ? quotes.find((q) => String(q.ref) === str(a.ref)) : undefined;
     if (str(a.ref) && !prev) return fail(`Devis introuvable (${str(a.ref)}).`);
+    const tauxKo = problemeTaux(a);
+    if (tauxKo) return fail(tauxKo);
     if (prev && prev.status !== "brouillon") return fail(`Le devis ${prev.ref} n'est plus en brouillon (${prev.status}) : à modifier dans l'app.`);
     const client = obj(a.client) ?? {};
     const creator = "createur" in a ? str(a.createur, 120) : String(prev?.creator ?? "");
@@ -519,12 +529,15 @@ const preparerDevis: AdminTool = {
       commission = pct(((c as Json[] | null) ?? [])[0]?.commission) ?? saved[creator] ?? null;
     }
     commission = commission ?? 20;
-    const items: InvoiceLine[] = Array.isArray(a.lignes)
-      ? (a.lignes as Json[]).map((l, i) => ({ id: `l${Date.now().toString(36)}${i}`, label: str(l.libelle, 300), qty: Number(l.quantite ?? 1) || 1, unit: Number(l.prix_ht) || 0 }))
-      : ((prev?.items as InvoiceLine[] | undefined) ?? []);
+    const lues = Array.isArray(a.lignes) ? lireLignes(a.lignes as unknown[], `l${Date.now().toString(36)}`, (v) => str(v, 300)) : null;
+    if (lues && "error" in lues) return fail(lues.error);
+    const items: InvoiceLine[] = lues ? lues.items : ((prev?.items as InvoiceLine[] | undefined) ?? []);
     if (!items.length) return fail("Ajoute au moins une ligne (libellé et prix HT).");
     const banks = (st.invoiceBankAccounts as { id?: string }[] | undefined) ?? [];
     const issueDate = String(prev?.issueDate ?? "") || todayIso();
+    // Nouveau devis ou nouvelles lignes : total HT positif (un brouillon déjà là garde ses lignes).
+    const totalKo = !prev || lues ? problemeTotalHt(invoiceTotals(items, false, 0, 0).ht) : null;
+    if (totalKo) return fail(totalKo);
     const quote: Json = {
       ...(prev ?? {}), // devise et taux d'un devis existant : jamais perdus
       clientName: str(client.nom, 200) || String(prev?.clientName ?? ""),
@@ -590,7 +603,7 @@ const envoyerMail: AdminTool = {
   write: true,
   founder: true,
   run: async (sb, ctx, a) => {
-    const pb = await parseMailBox(sb, a.boite);
+    const pb = await parseMailBox(sb, a.boite, ctx.founder);
     if ("error" in pb) return fail(pb.error);
     const box: MailBox = pb.box;
     const to = addressList(a.a);
@@ -658,7 +671,7 @@ const envoyerBrouillon: AdminTool = {
   write: true,
   founder: true,
   run: async (sb, ctx, a) => {
-    const pb = await parseMailBox(sb, a.boite);
+    const pb = await parseMailBox(sb, a.boite, ctx.founder);
     if ("error" in pb) return fail(pb.error);
     const box: MailBox = pb.box;
     const id = str(a.brouillon, 64);
@@ -666,7 +679,7 @@ const envoyerBrouillon: AdminTool = {
     const alias = str(a.envoyer_en_tant_que, 200);
     try {
       if (alias) await resolveSender(sb, box, alias);
-      const r = await sendDraft(sb, box, id, alias || undefined, verifierAvantEnvoi(sb, str(a.createur, 80) || undefined));
+      const r = await sendDraft(sb, box, id, alias || undefined, verifierAvantEnvoi(sb, str(a.createur, 80) || undefined), ctx.messages?.[id]);
       await journaliserEnvoi(sb, { box: String(box), to: r.to, subject: r.subject, threadId: r.threadId, source: "claude", messageId: r.id, auteur: await nomAuteur(sb, ctx.userId) });
       const suivi = await suiviApresEnvoi(sb, adressesDe(r.to), { demarrer: a.demarrer_sequence === true, createur: str(a.createur, 80) || undefined }).catch(() => "");
       return ok(`✓ Brouillon envoyé de ${r.from || `${box}@`} à ${r.to} · objet « ${r.subject} ».${suivi}`);
@@ -676,6 +689,7 @@ const envoyerBrouillon: AdminTool = {
       if (m.startsWith("kit_refuse: ")) return fail(m.slice(12));
       if (m.startsWith("from_mismatch: ")) return fail(`Ce brouillon part de ${m.slice(15)}, pas de ${alias} : rien n'est envoyé. Refais le brouillon avec envoyer_en_tant_que.`);
       if (m === "not_claude") return fail("Ce brouillon n'a pas été préparé par Claude : à envoyer depuis Gmail ou l'app.");
+      if (m === "draft_changed") return fail("Brouillon modifié entre le contrôle et l'envoi : rien n'est envoyé, à reproposer.");
       if (/gmail_404/.test(m)) return fail("Brouillon introuvable : déjà envoyé ou supprimé.");
       return fail(/not_connected|invalid_grant/.test(m) ? "La boîte n'est pas connectée à l'app (Planning → Google Agenda → Connecter)." : /403|insufficient/i.test(m) ? "Gmail refuse l'envoi : le droit d'envoi manque pour cette boîte." : `Envoi impossible : ${m}`);
     }
@@ -705,7 +719,7 @@ const envoyerBrouillonsValides: AdminTool = {
   write: true,
   founder: true,
   run: async (sb, ctx, a) => {
-    const pb = await parseMailBox(sb, a.boite);
+    const pb = await parseMailBox(sb, a.boite, ctx.founder);
     if ("error" in pb) return fail(pb.error);
     const box: MailBox = pb.box;
     const ids = [...new Set((Array.isArray(a.brouillons) ? a.brouillons : []).map((x) => str(x, 64)).filter((x) => /^[A-Za-z0-9_-]+$/.test(x)))];
@@ -724,14 +738,14 @@ const envoyerBrouillonsValides: AdminTool = {
     let partis = 0;
     for (const id of ids) {
       try {
-        const r = await sendDraft(sb, box, id, alias || undefined, verifierAvantEnvoi(sb));
+        const r = await sendDraft(sb, box, id, alias || undefined, verifierAvantEnvoi(sb), ctx.messages?.[id]);
         partis++;
         await journaliserEnvoi(sb, { box: String(box), to: r.to, subject: r.subject, threadId: r.threadId, source: "claude", messageId: r.id, auteur: await nomAuteur(sb, ctx.userId) });
         const suivi = await suiviApresEnvoi(sb, adressesDe(r.to), { demarrer: a.demarrer_sequence === true }).catch(() => "");
         lignes.push(`✓ ${id} → ${r.to} · « ${r.subject} »${suivi.replace(/^\nSuivi : /, " · ")}`);
       } catch (e) {
         const m = (e as Error).message ?? "";
-        const why = m.startsWith("kit_refuse: ") ? m.slice(12).replace(/^Rien n'est envoyé : /, "").replace(/\n/g, " ") : m === "not_claude" ? "pas préparé par Claude" : /gmail_404/.test(m) ? "introuvable (déjà envoyé ou supprimé)" : m.startsWith("from_mismatch: ") ? `part de ${m.slice(15)}, pas de ${alias}` : /not_connected|invalid_grant/.test(m) ? "boîte non connectée" : m.slice(0, 120);
+        const why = m.startsWith("kit_refuse: ") ? m.slice(12).replace(/^Rien n'est envoyé : /, "").replace(/\n/g, " ") : m === "not_claude" ? "pas préparé par Claude" : m === "draft_changed" ? "modifié entre le contrôle et l'envoi" : /gmail_404/.test(m) ? "introuvable (déjà envoyé ou supprimé)" : m.startsWith("from_mismatch: ") ? `part de ${m.slice(15)}, pas de ${alias}` : /not_connected|invalid_grant/.test(m) ? "boîte non connectée" : m.slice(0, 120);
         lignes.push(`✗ ${id} : ${why}, rien n'est parti`);
       }
     }

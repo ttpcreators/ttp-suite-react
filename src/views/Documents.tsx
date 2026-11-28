@@ -19,7 +19,8 @@ import { notifyCreator } from "@/lib/push";
 import { markActivityRead, useActivityEvents } from "@/lib/useActivityEvents";
 import { NewDot } from "@/components/ui/new-dot";
 import { getCache, setCache } from "@/lib/viewCache";
-import { goToTab, viewableUrl } from "@/lib/openLater";
+import { goToTab, openBlankTab, openExternal, viewableUrl } from "@/lib/openLater";
+import { estPdf, genreFichier, type GenreFichier } from "@/lib/fichierSur";
 import { useEffect, useRef, useState } from "react";
 import { PencilLine, LayoutGrid, ReceiptText, FileSignature, FileText, Download, Eye, Share2, X, Trash2, BarChart3, ChevronLeft, Clapperboard, type LucideIcon } from "@/components/icons";
 import { PageHeaderRow } from "@/components/ui/page-header";
@@ -82,7 +83,7 @@ function slug(s: string): string {
   return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9.]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
-type FileKind = "image" | "pdf" | "html" | "other";
+type FileKind = GenreFichier;
 
 /** Fichier HTML (ex : contrats générés) — repéré à l'extension du chemin de stockage. */
 const isHtmlPath = (p: string) => /\.html?$/i.test(p);
@@ -99,11 +100,13 @@ const SORT_OPTIONS: FilterOpt[] = [
   { value: "type", label: "Type" },
 ];
 
-function fileKind(name: string): FileKind {
-  const ext = name.split(".").pop()?.toLowerCase() ?? "";
-  if (["png", "jpg", "jpeg", "gif", "webp", "avif", "svg", "bmp"].includes(ext)) return "image";
-  if (ext === "pdf") return "pdf";
-  return "other";
+/** Lien signé d'un fichier du bucket : ouvert dans le navigateur pour un PDF, une photo ou
+ *  un contrat HTML (lu par /document/), téléchargé pour tout le reste (le genre vient du
+ *  chemin de stockage, pas du nom affiché). */
+async function signedDocUrl(row: Row, ttl: number): Promise<string | null> {
+  const inline = genreFichier(row.path) !== "other";
+  const { data, error } = await supabase.storage.from("documents").createSignedUrl(row.path, ttl, inline ? undefined : { download: row.name || true });
+  return error || !data?.signedUrl ? null : data.signedUrl;
 }
 
 export function Documents() {
@@ -123,7 +126,14 @@ export function Documents() {
   const [docCreator, setDocCreator] = useState("");
   const [fileName, setFileName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [previewDoc, setPreviewDoc] = useState<{ name: string; url: string; kind: FileKind; html?: string } | null>(null);
+  // `src` : copie locale d'un PDF vérifié (adresse blob: typée PDF), affichée dans l'aperçu.
+  const [previewDoc, setPreviewDoc] = useState<{ name: string; url: string; kind: FileKind; html?: string; src?: string } | null>(null);
+  const previewSrc = previewDoc?.src;
+  useEffect(() => {
+    return () => {
+      if (previewSrc) URL.revokeObjectURL(previewSrc);
+    };
+  }, [previewSrc]);
   const [sort, setSort] = useState("recent");
   const [period, setPeriod] = useState("");
   const [openType, setOpenType] = useState<string | null>(null); // dossier ouvert (null = grille)
@@ -206,19 +216,20 @@ export function Documents() {
     }
     void markActivityRead("document", row.id);
     if (isExternalUrl(row.path)) {
-      window.open(row.path, "_blank", "noopener");
+      openExternal(row.path);
       return;
     }
     // On pré-ouvre l'onglet DANS le geste utilisateur (sinon le popup est bloqué
-    // après l'await, surtout sur iPhone). Un .html passe par la page de lecture (goToTab).
-    const w = window.open("", "_blank");
-    const { data, error } = await supabase.storage.from("documents").createSignedUrl(row.path, 3600);
-    if (error || !data?.signedUrl) {
+    // après l'await, surtout sur iPhone), sans lien vers l'app. Un contrat .html passe
+    // par la page de lecture (goToTab).
+    const w = openBlankTab();
+    const url = await signedDocUrl(row, 3600);
+    if (!url) {
       w?.close();
       toast("Lien indisponible");
       return;
     }
-    goToTab(w, data.signedUrl);
+    goToTab(w, url);
   };
 
   const preview = async (row: Row) => {
@@ -232,24 +243,43 @@ export function Documents() {
       setPreviewDoc({ name: row.name, url: row.path, kind: "other" });
       return;
     }
-    const { data, error } = await supabase.storage.from("documents").createSignedUrl(row.path, 3600);
-    if (error || !data?.signedUrl) {
+    const kind = genreFichier(row.path);
+    const signed = await signedDocUrl(row, 3600);
+    if (!signed) {
       toast("Aperçu indisponible");
       return;
     }
     // HTML : on récupère le contenu et on l'affiche via `srcDoc` (rendu correct, quel
-    // que soit le content-type servi par Supabase).
+    // que soit le content-type servi par Supabase), dans un cadre sans script.
     if (isHtmlPath(row.path)) {
       try {
-        const res = await fetch(data.signedUrl);
+        const res = await fetch(signed);
         const html = await res.text();
-        setPreviewDoc({ name: row.name, url: data.signedUrl, kind: "html", html });
+        setPreviewDoc({ name: row.name, url: signed, kind: "html", html });
         return;
       } catch {
         /* repli : lien d'ouverture */
       }
     }
-    setPreviewDoc({ name: row.name, url: data.signedUrl, kind: fileKind(row.name) });
+    // PDF : le fichier est relu et affiché seulement si c'est vraiment un PDF, depuis une
+    // copie locale typée PDF ; sinon, pas d'aperçu (lien de téléchargement).
+    if (kind === "pdf") {
+      try {
+        const res = await fetch(signed);
+        const octets = res.ok ? new Uint8Array(await res.arrayBuffer()) : new Uint8Array();
+        if (estPdf(octets)) {
+          const src = URL.createObjectURL(new Blob([octets], { type: "application/pdf" }));
+          setPreviewDoc({ name: row.name, url: signed, kind: "pdf", src });
+          return;
+        }
+      } catch {
+        /* repli : lien de téléchargement */
+      }
+      const { data } = await supabase.storage.from("documents").createSignedUrl(row.path, 3600, { download: row.name || true });
+      setPreviewDoc({ name: row.name, url: data?.signedUrl ?? signed, kind: "other" });
+      return;
+    }
+    setPreviewDoc({ name: row.name, url: signed, kind: kind === "html" ? "other" : kind });
   };
 
   const share = async (row: Row) => {
@@ -526,7 +556,7 @@ export function Documents() {
               {previewDoc.kind === "image" ? (
                 <img src={previewDoc.url} alt={previewDoc.name} className="max-h-[74vh] w-auto rounded-lg object-contain" />
               ) : previewDoc.kind === "pdf" ? (
-                <iframe title={previewDoc.name} src={previewDoc.url} className="h-[74vh] w-full rounded-lg bg-white" />
+                <iframe title={previewDoc.name} src={previewDoc.src} className="h-[74vh] w-full rounded-lg bg-white" />
               ) : previewDoc.kind === "html" ? (
                 <iframe title={previewDoc.name} srcDoc={previewDoc.html} sandbox="" className="h-[74vh] w-full rounded-lg bg-white" />
               ) : (
