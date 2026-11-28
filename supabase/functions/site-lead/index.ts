@@ -7,8 +7,11 @@
 // Renvoie { ok, roster } : le site affiche tout de suite le lien du deck agence.
 // « Rejoindre l'agence » : POST { type: "createur", nom, email, compte, reseau?, niche?, message?, site? }
 // → tâche de tri (écrite d'abord : c'est elle que compte le plafond), puis profil au scouting
-// créateurs (creator_pool, ou une ligne ajoutée à la note du profil du même compte, sans jamais
-// couper la note de l'agence), push générique. Renvoie { ok }. Une ancienne version déployée
+// créateurs (creator_pool) : une ligne ajoutée à la note du profil du même compte sur le même
+// réseau, sans jamais couper la note de l'agence, sinon un nouveau profil (si le même compte n'y
+// est que sur l'autre réseau, les deux profils se citent dans leur note), push générique. Renvoie
+// { ok }. Une lecture ou une écriture du scouting qui échoue retire la tâche et répond 503 (sauf la
+// ligne ajoutée au profil de l'autre réseau, notée au journal). Une ancienne version déployée
 // répond 400 (« marque » manquante) : le site propose alors un e-mail pré-rempli.
 // AUTH : verify_jwt = false (site public). Garde-fous : piège à robots, 30 demandes par
 // heure au plus, aucun texte du visiteur dans la notification. Règles : _shared/siteLead.ts.
@@ -16,7 +19,7 @@
 
 import { getServiceClient } from "../_shared/google.ts";
 import { makePayload, pushReady, sendTo } from "../_shared/push.ts";
-import { CANDIDATURE_TACHE, LEADS_PAR_HEURE, LEAD_ORIGINS, LEAD_TAG, ROSTER_URL, compteNettoye, ilikeExact, jourParis, ligneCandidature, ligneScouting, lireCandidature, lireLead, noteFusionnee, tacheCandidature, tacheLead, toucheLead } from "../_shared/siteLead.ts";
+import { CANDIDATURE_TACHE, LEADS_PAR_HEURE, LEAD_ORIGINS, LEAD_TAG, ROSTER_URL, chercherProfil, ilikeExact, jourParis, ligneAutreReseau, ligneCandidature, ligneScouting, lireCandidature, lireLead, noteFusionnee, tacheCandidature, tacheLead, toucheLead } from "../_shared/siteLead.ts";
 
 type Json = (b: unknown, status?: number) => Response;
 
@@ -35,32 +38,59 @@ async function candidature(body: unknown, json: Json): Promise<Response> {
   const descr = `${cand.email}\n${cand.compte} (${reseau})${cand.niche ? ` · ${cand.niche}` : ""}${cand.message ? `\n${cand.message}` : ""}`;
   const { data: tache, error: eT } = await sb.from("todos").insert({ text: tacheCandidature(cand), descr, priority: "moyenne", due: jourParis(now), done: false }).select("id").single<{ id: string }>();
   if (eT || !tache) return json({ error: "indisponible" }, 503);
-  const retirer = () => sb.from("todos").delete().eq("id", tache.id).then(() => {}, () => {});
+  const retirer = () => sb.from("todos").delete().eq("id", tache.id).then(({ error }) => {
+    if (error) console.error("site-lead candidature : tâche non retirée", error.message);
+  }, () => {});
   const { count } = await sb.from("todos").select("id", { count: "exact", head: true }).like("text", `${CANDIDATURE_TACHE}%`).gte("created_at", new Date(now.getTime() - 3600_000).toISOString());
   if ((count ?? 0) > LEADS_PAR_HEURE) {
     await retirer();
     return json({ error: "trop" }, 429);
   }
 
-  // Même compte déjà au scouting (@compte, compte ou lien Instagram / TikTok, quelle que soit la casse) :
-  // une ligne courte est ajoutée à sa note, sans jamais couper ce que l'agence y a écrit.
-  const h = cand.compte.slice(1).toLowerCase();
-  const { data: proches } = await sb.from("creator_pool").select("id, note, handle").ilike("handle", `*${ilikeExact(h)}*`).limit(20);
-  const ex = ((proches as { id: string; note: string | null; handle: string | null }[] | null) ?? []).find((r) => compteNettoye(r.handle) === h);
-  if (ex) {
-    const { error } = await sb.from("creator_pool").update({ note: noteFusionnee(ex.note, ligneCandidature(cand, now)) }).eq("id", ex.id);
+  // Même compte, sur le même réseau, déjà au scouting (@compte ou lien Instagram, lien TikTok, quelle
+  // que soit la casse) : une ligne courte est ajoutée à sa note, sans jamais couper ce que l'agence y a
+  // écrit. Toutes les lignes proches sont lues, page par page (ordre des id) ; une lecture échouée n'est
+  // jamais prise pour « aucun profil », ce qui créerait un doublon.
+  const motif = `*${ilikeExact(cand.compte.slice(1).toLowerCase())}*`;
+  const trouve = await chercherProfil((apres, taille) => {
+    const q = sb.from("creator_pool").select("id, note, handle").ilike("handle", motif);
+    return (apres ? q.gt("id", apres) : q).order("id").limit(taille);
+  }, cand);
+  if ("erreur" in trouve) {
+    console.error("site-lead candidature : recherche du profil", trouve.erreur);
+    await retirer();
+    return json({ error: "indisponible" }, 503);
+  }
+  if ("profil" in trouve) {
+    const { error } = await sb.from("creator_pool").update({ note: noteFusionnee(trouve.profil.note, ligneCandidature(cand, now)) }).eq("id", trouve.profil.id);
     if (error) {
+      console.error("site-lead candidature : note", error.message);
       await retirer();
       return json({ error: "indisponible" }, 503);
     }
   } else {
-    const { data: top } = await sb.from("creator_pool").select("sort_order").order("sort_order", { ascending: false }).limit(1);
-    const rang = ((top as { sort_order: number | null }[] | null)?.[0]?.sort_order ?? 0) + 1;
-    const { error } = await sb.from("creator_pool").insert({ ...ligneScouting(cand, now), sort_order: rang });
+    // Rang après le dernier profil rangé. Un profil sans rang (NULL) ne compte pas : Postgres le met en
+    // tête d'un tri décroissant, et la candidature aurait pris le rang 1.
+    const { data: top, error: eR } = await sb.from("creator_pool").select("sort_order").not("sort_order", "is", null).order("sort_order", { ascending: false }).limit(1);
+    if (eR) {
+      console.error("site-lead candidature : rang", eR.message);
+      await retirer();
+      return json({ error: "indisponible" }, 503);
+    }
+    const rang = ((top as { sort_order: number }[] | null)?.[0]?.sort_order ?? 0) + 1;
+    const autre = "autreReseau" in trouve ? trouve.autreReseau : null;
+    const { error } = await sb.from("creator_pool").insert({ ...ligneScouting(cand, now, autre !== null), sort_order: rang });
     if (error) {
       console.error("site-lead candidature", error.message);
       await retirer();
       return json({ error: "indisponible" }, 503);
+    }
+    // Même compte au scouting sur l'autre réseau seulement (souvent la même personne) : son profil reçoit
+    // une ligne qui signale la candidature, sans couper la note de l'agence. Le nouveau profil est déjà
+    // écrit : un échec ici est noté au journal, sans faire échouer la candidature.
+    if (autre) {
+      const { error: eA } = await sb.from("creator_pool").update({ note: noteFusionnee(autre.note, ligneAutreReseau(cand, now)) }).eq("id", autre.id);
+      if (eA) console.error("site-lead candidature : note du profil de l'autre réseau", eA.message);
     }
   }
   if (pushReady()) {

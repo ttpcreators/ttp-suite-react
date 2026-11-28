@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { compteNettoye, handleScouting, ilikeExact, jourParis, ligneCandidature, ligneScouting, lireCandidature, lireCompte, lireLead, noteCandidature, noteFusionnee, tacheCandidature, tacheLead, toucheLead } from "./siteLead.ts";
+import { chercherProfil, compteNettoye, handleScouting, ilikeExact, jourParis, ligneAutreReseau, ligneCandidature, ligneScouting, lireCandidature, lireCompte, lireLead, noteCandidature, noteFusionnee, tacheCandidature, tacheLead, toucheLead } from "./siteLead.ts";
 
 describe("lireLead", () => {
   it("lit et nettoie une demande", () => {
@@ -113,8 +113,75 @@ describe("profil, note et tâche de candidature", () => {
     expect(handleScouting({ ...cand, reseau: "tiktok" })).toBe("https://www.tiktok.com/@lea.fit_");
     expect(ligneScouting({ ...cand, niche: "" }, now).tag).toBeNull();
   });
+  it("même compte déjà au scouting sur l'autre réseau : les deux profils se citent", () => {
+    const tiktok = { ...cand, reseau: "tiktok" as const };
+    expect(ligneScouting(tiktok, now, true).note).toBe("Candidature via le site le 2026-11-27 (TikTok, même compte déjà au scouting sur Instagram) : Je fais du CrossFit");
+    expect(ligneScouting({ ...cand, message: "" }, now, true).note).toBe("Candidature via le site le 2026-11-27 (Instagram, même compte déjà au scouting sur TikTok)");
+    expect(ligneAutreReseau(tiktok, now)).toBe("Candidature via le site le 2026-11-27 avec son compte TikTok : Léa Martin, a@b.fr, profil TikTok ajouté au scouting, message dans la tâche");
+    expect(ligneAutreReseau({ ...tiktok, message: "" }, now)).toBe("Candidature via le site le 2026-11-27 avec son compte TikTok : Léa Martin, a@b.fr, profil TikTok ajouté au scouting");
+  });
   it("tâche au format fixe, avec le réseau", () => {
     expect(tacheCandidature(cand)).toBe("Candidature site : Léa Martin (@lea.fit_, Instagram) veut rejoindre l'agence");
     expect(tacheCandidature({ ...cand, reseau: "tiktok" })).toBe("Candidature site : Léa Martin (@lea.fit_, TikTok) veut rejoindre l'agence");
+  });
+});
+
+describe("chercherProfil : le profil du même compte au scouting, sans doublon", () => {
+  const cand = { email: "a@b.fr", nom: "Ana", compte: "@ana", reseau: "instagram" as const, niche: "", message: "" };
+  /** Le scouting vu par site-lead : les lignes proches (filtre ilike de la base), lues dans l'ordre des id, page par page. */
+  const scouting = (lignes: { handle: string | null; note?: string | null }[]) => {
+    const rows = lignes.map((l, i) => ({ id: `id-${String(i).padStart(5, "0")}`, note: l.note ?? null, handle: l.handle }));
+    return async (apres: string | null, taille: number) => ({ data: rows.filter((r) => apres === null || r.id > apres).slice(0, taille), error: null });
+  };
+
+  it("trouve le profil exact même derrière plus de 20 lignes proches", async () => {
+    const proches = Array.from({ length: 1200 }, (_, i) => ({ handle: `@banana_${i}` }));
+    const lirePage = scouting([...proches, { handle: "@Ana", note: "Note de l'agence" }]);
+    expect(await chercherProfil(lirePage, cand)).toEqual({ profil: { id: "id-01200", note: "Note de l'agence", handle: "@Ana" } });
+  });
+
+  it("une lecture échouée n'est jamais prise pour « aucun profil »", async () => {
+    const enPanne = async () => ({ data: null, error: { message: "délai dépassé" } });
+    expect(await chercherProfil(enPanne, cand)).toEqual({ erreur: "délai dépassé" });
+    const sansReponse = async () => ({ data: null, error: null });
+    expect(await chercherProfil(sansReponse, cand)).toEqual({ erreur: "lecture" });
+    const pagePleine = scouting(Array.from({ length: 500 }, (_, i) => ({ handle: `@banana_${i}` })));
+    const panneEnPage2 = async (apres: string | null, taille: number) => (apres === null ? pagePleine(apres, taille) : { data: null, error: { message: "délai dépassé" } });
+    expect(await chercherProfil(panneEnPage2, cand)).toEqual({ erreur: "délai dépassé" });
+  });
+
+  it("même compte sur l'autre réseau seulement : signalé à part, jamais pris pour le même profil", async () => {
+    const tiktok = { ...cand, reseau: "tiktok" as const };
+    expect(await chercherProfil(scouting([{ handle: "https://www.tiktok.com/@ana", note: "Vu sur TikTok" }]), cand)).toEqual({ autreReseau: { id: "id-00000", note: "Vu sur TikTok", handle: "https://www.tiktok.com/@ana" } });
+    expect(await chercherProfil(scouting([{ handle: "@ana" }]), tiktok)).toEqual({ autreReseau: { id: "id-00000", note: null, handle: "@ana" } });
+    const deux = scouting([{ handle: "https://www.tiktok.com/@ana" }, { handle: "instagram.com/ana/" }]);
+    expect(await chercherProfil(deux, cand)).toEqual({ profil: { id: "id-00001", note: null, handle: "instagram.com/ana/" } });
+    expect(await chercherProfil(deux, tiktok)).toEqual({ profil: { id: "id-00000", note: null, handle: "https://www.tiktok.com/@ana" } });
+  });
+
+  it("le profil du même réseau l'emporte, même lu plusieurs pages après celui de l'autre réseau", async () => {
+    const lignes = Array.from({ length: 1200 }, (_, i) => ({ handle: `@banana_${i}` }));
+    lignes[3] = { handle: "https://www.tiktok.com/@ana" };
+    lignes[1100] = { handle: "@ANA" };
+    expect(await chercherProfil(scouting(lignes), cand)).toEqual({ profil: { id: "id-01100", note: null, handle: "@ANA" } });
+    lignes[1100] = { handle: "@banana_1100" };
+    expect(await chercherProfil(scouting(lignes), cand)).toEqual({ autreReseau: { id: "id-00003", note: null, handle: "https://www.tiktok.com/@ana" } });
+  });
+
+  it("jusqu'à 10 000 lignes proches : réponse sûre ; au-delà, erreur plutôt qu'un doublon", async () => {
+    const proches = (n: number) => scouting(Array.from({ length: n }, (_, i) => ({ handle: `@banana_${i}` })));
+    expect(await chercherProfil(proches(10000), cand)).toEqual({ aucun: true });
+    expect(await chercherProfil(proches(10001), cand)).toEqual({ erreur: "trop de lignes proches" });
+  });
+
+  it("ne lit jamais sans fin", async () => {
+    let appels = 0;
+    const sansFin = async (apres: string | null, taille: number) => {
+      if (++appels > 100) throw new Error("lecture sans fin");
+      const debut = apres === null ? 0 : Number(apres) + 1;
+      return { data: Array.from({ length: taille }, (_, i) => ({ id: String(debut + i), note: null, handle: `@banana_${debut + i}` })), error: null };
+    };
+    expect(await chercherProfil(sansFin, cand)).toEqual({ erreur: "trop de lignes proches" });
+    expect(appels).toBe(21);
   });
 });

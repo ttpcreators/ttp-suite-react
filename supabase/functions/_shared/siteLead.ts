@@ -121,14 +121,21 @@ export function handleScouting(c: Candidature): string {
   return c.reseau === "tiktok" ? `https://www.tiktok.com/${c.compte}` : c.compte;
 }
 
-/** La note d'un NOUVEAU profil : la source, le jour, le réseau et le message du créateur. */
-export function noteCandidature(c: Candidature, now: Date): string {
-  return `${CANDIDATURE_NOTE} le ${jourParis(now)} (${nomReseau(c)})${c.message ? ` : ${c.message}` : ""}`;
+/** La note d'un NOUVEAU profil : la source, le jour, le réseau et le message du créateur. `autreReseau` : le même
+ *  compte est déjà au scouting sur l'autre réseau, dit dans l'en-tête (avant le message, qui vient du visiteur). */
+export function noteCandidature(c: Candidature, now: Date, autreReseau = false): string {
+  const autre = autreReseau ? `, même compte déjà au scouting sur ${c.reseau === "tiktok" ? "Instagram" : "TikTok"}` : "";
+  return `${CANDIDATURE_NOTE} le ${jourParis(now)} (${nomReseau(c)}${autre})${c.message ? ` : ${c.message}` : ""}`;
 }
 
 /** La ligne ajoutée à un profil DÉJÀ au scouting : courte, le message est dans la tâche. */
 export function ligneCandidature(c: Candidature, now: Date): string {
   return `${CANDIDATURE_NOTE} le ${jourParis(now)} : ${c.nom}, ${c.email} (${nomReseau(c)}), message dans la tâche`;
+}
+
+/** La ligne ajoutée au profil du même compte sur l'AUTRE réseau : la candidature a créé son propre profil. */
+export function ligneAutreReseau(c: Candidature, now: Date): string {
+  return `${CANDIDATURE_NOTE} le ${jourParis(now)} avec son compte ${nomReseau(c)} : ${c.nom}, ${c.email}, profil ${nomReseau(c)} ajouté au scouting${c.message ? ", message dans la tâche" : ""}`;
 }
 
 /** La note de l'agence reste entière et en tête ; la ligne n'est ajoutée qu'une fois. */
@@ -138,9 +145,45 @@ export function noteFusionnee(ancienne: unknown, ligne: string): string {
   return a.includes(ligne) ? a : `${a}\n${ligne}`;
 }
 
-/** Le profil ajouté au scouting créateurs (creator_pool), sans son rang. */
-export function ligneScouting(c: Candidature, now: Date) {
-  return { name: c.nom, handle: handleScouting(c), email: c.email, tag: c.niche || null, note: noteCandidature(c, now) };
+/** Une page des lignes proches du scouting (filtre ilike de la base), dans l'ordre des id : `apres` = dernier id lu. */
+export type LirePageProfils = (apres: string | null, taille: number) => PromiseLike<{ data: unknown; error: { message: string } | null }>;
+export type ProfilScouting = { id: string; note: string | null; handle: string | null };
+export const PROFILS_PAR_PAGE = 500;
+/** 20 pages pleines de 500 (10 000 lignes proches), plus la page vide qui confirme la fin. Le scouting compte une
+ *  centaine de profils en novembre 2026. */
+export const PAGES_MAX = 21;
+
+/** Le profil du scouting de ce compte SUR CE RÉSEAU (« @compte » ou lien Instagram = Instagram, lien TikTok =
+ *  TikTok, comme les rangent l'app et handleScouting ; casse ignorée). Sinon { autreReseau } : le même compte n'est
+ *  au scouting que sur l'autre réseau (souvent la même personne, mais pas le même profil). Sinon { aucun }.
+ *  Toutes les lignes proches sont lues, page par page. Une lecture échouée (ou trop de lignes pour être sûr)
+ *  donne { erreur }, jamais { aucun } : ce serait créer un doublon. */
+export async function chercherProfil(lirePage: LirePageProfils, c: Candidature): Promise<{ profil: ProfilScouting } | { autreReseau: ProfilScouting } | { aucun: true } | { erreur: string }> {
+  const compte = c.compte.slice(1).toLowerCase();
+  let autre: ProfilScouting | null = null;
+  let apres: string | null = null;
+  for (let page = 0; page < PAGES_MAX; page++) {
+    const { data, error } = await lirePage(apres, PROFILS_PAR_PAGE);
+    if (error) return { erreur: error.message || "lecture" };
+    if (!Array.isArray(data)) return { erreur: "lecture" };
+    const lignes = data as ProfilScouting[];
+    for (const r of lignes) {
+      const l = lireCompte(r.handle);
+      if (!l || l.compte.toLowerCase() !== compte) continue;
+      const p = { id: r.id, note: r.note, handle: r.handle };
+      if (l.reseau === c.reseau) return { profil: p };
+      autre ??= p;
+    }
+    if (!lignes.length) return autre ? { autreReseau: autre } : { aucun: true };
+    apres = lignes[lignes.length - 1].id;
+  }
+  return { erreur: "trop de lignes proches" };
+}
+
+/** Le profil ajouté au scouting créateurs (creator_pool), sans son rang. `autreReseau` : le même compte y est
+ *  déjà sur l'autre réseau, ce que la note du nouveau profil dit. */
+export function ligneScouting(c: Candidature, now: Date, autreReseau = false) {
+  return { name: c.nom, handle: handleScouting(c), email: c.email, tag: c.niche || null, note: noteCandidature(c, now, autreReseau) };
 }
 
 /** La tâche de tri : format fixe, le nom et le compte viennent du visiteur (nettoyés, courts). */
