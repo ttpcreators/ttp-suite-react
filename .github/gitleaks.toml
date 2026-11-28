@@ -1,0 +1,15 @@
+# Contrôle des secrets des PR (job « secrets » de .github/workflows/verif-pr.yml).
+# Les règles par défaut de gitleaks (clés Supabase, Google, GitHub, Stripe, clés privées…), plus
+# une règle pour un jeton sans préfixe écrit après « Bearer », comme le secret des crons dans
+# un SQL : les règles par défaut ne le voient pas.
+title = "TTP Suite"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "ttp-bearer-en-dur"
+description = "Jeton écrit en dur après « Bearer » (un SQL de cron doit garder un marqueur)"
+regex = '''(?i)\bbearer\s+([a-z0-9][a-z0-9._~+/-]{31,}={0,2})'''
+secretGroup = 1
+keywords = ["bearer"]

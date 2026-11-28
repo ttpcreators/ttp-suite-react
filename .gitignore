@@ -5,6 +5,19 @@ dist/
 # Secrets : jamais dans Git (spec agent — la chaîne ttp_agent vit en variable d'environnement)
 .env
 .env.*
+*.env
+config.env*
+# Alfred : son état et ses brouillons restent sur l'iMac (lancer Alfred depuis une copie du
+# dépôt les crée ici)
+agents/alfred/etat/
+agents/alfred/REDACTION.md
+.venv/
+# Clés Google (compte de service, client OAuth) et jeton npm
+*service-account*.json
+*service_account*.json
+client_secret*.json
+credentials*.json
+.npmrc
 
 scratch-*.png
 

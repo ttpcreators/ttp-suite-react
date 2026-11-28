@@ -149,6 +149,7 @@ function fakeDb(tables: Record<string, Row[]>, opts: { failTables?: string[] } =
       update: (p: Row) => ((op = "update"), (patch = p), b),
       insert: (p: Row) => ((op = "insert"), (patch = p), b),
       eq: (c: string, v: unknown) => (filters.push((r) => r[c] === v), b),
+      is: (c: string, v: unknown) => (filters.push((r) => (r[c] ?? null) === v), b),
       lt: (c: string, v: number) => (filters.push((r) => Number(r[c]) < v), b),
       not: (c: string, _o: string, list: string) => (filters.push((r) => !list.replace(/[()]/g, "").split(",").includes(String(r[c]))), b),
       limit: () => b,
@@ -187,6 +188,35 @@ describe("écritures des étapes automatiques", () => {
     expect(db.tables.collab_steps).toEqual([{ id: "n0", collab_id: "c1", step: 9, reached_at: "2026-11-20T10:00:00.000Z" }]);
     expect(await apresFacturePayee(db, "f1")).toBeNull();
     expect(db.tables.collab_steps.length).toBe(1);
+  });
+  it("facture payée sans lien : le lien est écrit avant que l'étape avance (indice ou rapprochement)", async () => {
+    // Indice : collab choisie dans l'éditeur, lien pas encore enregistré.
+    const db = fakeDb({
+      invoices: [{ id: "f1", status: "payee", party: "Autre", creator: "X", collab_id: null }],
+      collabs: [{ id: "c1", brand: "Marque X", creator: "CRÉATRICE A", step: 8, status: "active" }],
+      collab_steps: [],
+    });
+    expect((await apresFacturePayee(db, "f1", "c1"))?.step).toBe(9);
+    expect(db.tables.invoices[0].collab_id).toBe("c1");
+    expect(db.calls.indexOf("update invoices")).toBeLessThan(db.calls.indexOf("update collabs"));
+    // Rapprochement marque + créateur.
+    const db2 = fakeDb({
+      invoices: [{ id: "f2", status: "payee", party: "Marque X × Créatrice", creator: "CRÉATRICE A", collab_id: null }],
+      collabs: [{ id: "c2", brand: "Marque X", creator: "CRÉATRICE A", step: 8, status: "active" }],
+      collab_steps: [],
+    });
+    expect((await apresFacturePayee(db2, "f2"))?.collabId).toBe("c2");
+    expect(db2.tables.invoices[0].collab_id).toBe("c2");
+    expect(db2.calls.indexOf("update invoices")).toBeLessThan(db2.calls.indexOf("update collabs"));
+    // Facture déjà liée : son lien ne change jamais.
+    const db3 = fakeDb({
+      invoices: [{ id: "f3", status: "payee", collab_id: "c3" }],
+      collabs: [{ id: "c3", step: 8, status: "active" }, { id: "c4", step: 8, status: "active" }],
+      collab_steps: [],
+    });
+    await apresFacturePayee(db3, "f3", "c4");
+    expect(db3.tables.invoices[0].collab_id).toBe("c3");
+    expect(db3.calls).not.toContain("update invoices");
   });
   it("jamais en arrière, jamais une facture non payée, jamais une collab perdue", async () => {
     const db = fakeDb({

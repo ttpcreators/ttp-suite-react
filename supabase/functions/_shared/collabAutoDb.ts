@@ -63,19 +63,31 @@ async function collabsLegeres(sb: Sb): Promise<Pick<CollabAuto, "id" | "brand" |
 /**
  * Facture passée « payée » : sa collab (lien, `indice` donné par l'écran, sinon le
  * rapprochement marque + créateur s'il est sans doute) atteint l'étape 9.
+ * Facture sans lien : le lien vers cette collab est écrit AVANT d'avancer l'étape, pour que la
+ * base (collabs_step_task) voie une facture payée de la collab et pose « Reverser ».
  */
 export async function apresFacturePayee(sb: Sb, factureId: string, indice?: string | null): Promise<Avance | null> {
   try {
+    let lien = true;
     let r = await sb.from("invoices").select("id, status, party, creator, collab_id, paid_at").eq("id", factureId).maybeSingle();
-    if (r.error && colonneAbsente(r.error, /collab_id|paid_at/)) r = await sb.from("invoices").select("id, status, party, creator").eq("id", factureId).maybeSingle();
+    if (r.error && colonneAbsente(r.error, /collab_id|paid_at/)) {
+      lien = false;
+      r = await sb.from("invoices").select("id, status, party, creator").eq("id", factureId).maybeSingle();
+    }
     const f = r.data as { status?: string; party?: string; creator?: string; collab_id?: string; paid_at?: string } | null;
     if (r.error || !f || f.status !== "payee") return null;
-    let collabId = String(indice ?? "").trim() || String(f.collab_id ?? "").trim() || null;
+    const dejaLiee = String(f.collab_id ?? "").trim() || null;
+    let collabId = String(indice ?? "").trim() || dejaLiee;
     if (!collabId) {
       const collabs = await collabsLegeres(sb);
       collabId = collabs ? collabDeFacture(f, collabs) : null;
     }
-    return collabId ? await atteindreEtape(sb, collabId, ETAPE_PAIEMENT_MARQUE, f.paid_at) : null;
+    if (!collabId) return null;
+    if (lien && !dejaLiee) {
+      // Seulement une facture encore sans lien ; un échec (colonne absente, réseau) n'arrête rien.
+      await sb.from("invoices").update({ collab_id: collabId }).eq("id", factureId).is("collab_id", null).select("id").then(() => {}, () => {});
+    }
+    return await atteindreEtape(sb, collabId, ETAPE_PAIEMENT_MARQUE, f.paid_at);
   } catch {
     return null;
   }

@@ -15,11 +15,12 @@ import {
  * `collabAutoTasks`), comme un changement d'étape fait à la main dans Collabs.
  */
 
-async function suites(a: Avance): Promise<string> {
+/** `paiementRecu` : l'avance vient d'une facture payée (la tâche « Reverser » reste due). */
+async function suites(a: Avance, paiementRecu = false): Promise<string> {
   pokeTeam("collabs", { step: a.step });
   try {
     const st = await getAppState();
-    if (st["collabAutoTasks"] !== false) await createStepTask({ id: a.collabId, brand: a.brand, creator: a.creator, step: a.step, status: "active" }, a.step);
+    if (st["collabAutoTasks"] !== false) await createStepTask({ id: a.collabId, brand: a.brand, creator: a.creator, step: a.step, status: "active" }, a.step, { paiementRecu });
   } catch {
     // Tâche de l'étape non créée : l'étape, elle, est bien enregistrée.
   }
@@ -29,7 +30,7 @@ async function suites(a: Avance): Promise<string> {
 /** Facture passée « payée » (indice : collab choisie dans l'éditeur, pas encore enregistrée). */
 export async function autoFacturePayee(invoiceId: string, indice?: string | null): Promise<string[]> {
   const a = await apresFacturePayee(supabase, invoiceId, indice);
-  return a ? [await suites(a)] : [];
+  return a ? [await suites(a, true)] : [];
 }
 
 /** Versement noté pour un créateur, avec ses factures dues AVANT ce versement. */
