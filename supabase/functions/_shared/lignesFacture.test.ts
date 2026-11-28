@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { QTE_MAX, lireLignes, problemeTaux, problemeTotalHt } from "./lignesFacture.ts";
+import { PRIX_MAX, QTE_MAX, lireLignes, problemeTaux, problemeTotalHt } from "./lignesFacture.ts";
 
 const lib = (v: unknown) => String(v ?? "").trim();
 
@@ -20,6 +20,11 @@ describe("factures et devis du connecteur : bornes", () => {
     expect("error" in lireLignes([{ libelle: "X", prix_ht: "beaucoup" }], "l", lib)).toBe(true);
     expect("error" in lireLignes([{ libelle: "X" }], "l", lib)).toBe(true);
     expect(lireLignes([{ libelle: "Remise", prix_ht: -50 }], "l", lib)).toEqual({ items: [{ id: "l0", label: "Remise", qty: 1, unit: -50 }] });
+    expect(lireLignes([{ libelle: "X", prix_ht: PRIX_MAX }], "l", lib)).toEqual({ items: [{ id: "l0", label: "X", qty: 1, unit: PRIX_MAX }] });
+    for (const prix_ht of [PRIX_MAX + 1, -(PRIX_MAX + 1), 1e15]) {
+      const r = lireLignes([{ libelle: "X", prix_ht }], "l", lib);
+      expect("error" in r && r.error).toMatch(/^Ligne 1 : prix HT refusé/);
+    }
   });
 
   it("commission entre 0 et 100, TVA parmi les taux français", () => {

@@ -4,7 +4,10 @@
 // Envoi (sendMail) : fondateurs seulement, et Claude demande l'accord avant (outil envoyer_mail).
 // Boîtes des créateurs (creator_mail_boxes) : réservées aux fondateurs, comme creator-box-mail.
 // Les fonctions qui choisissent une boîte reçoivent `founder` (ctx.founder de l'appel) ; sans
-// lui, elles gardent l'ancien comportement (true), le temps que chaque appel le passe.
+// lui, elles gardent l'ancien comportement (true). Appels qui ne le passent pas encore (tools.ts) :
+// rechercher_mails (dont « partout »), lire_mail, brouillons_claude, supprimer_brouillon,
+// creer_brouillon_mail (et ses pièces jointes), sa recherche des échanges déjà eus ; l'outil
+// contrats n'est pas encore marqué fondateur. Ceux d'admin.ts passent déjà ctx.founder.
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";

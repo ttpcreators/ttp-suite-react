@@ -535,7 +535,8 @@ const preparerDevis: AdminTool = {
     if (!items.length) return fail("Ajoute au moins une ligne (libellé et prix HT).");
     const banks = (st.invoiceBankAccounts as { id?: string }[] | undefined) ?? [];
     const issueDate = String(prev?.issueDate ?? "") || todayIso();
-    const totalKo = problemeTotalHt(invoiceTotals(items, false, 0, 0).ht);
+    // Nouveau devis ou nouvelles lignes : total HT positif (un brouillon déjà là garde ses lignes).
+    const totalKo = !prev || lues ? problemeTotalHt(invoiceTotals(items, false, 0, 0).ht) : null;
     if (totalKo) return fail(totalKo);
     const quote: Json = {
       ...(prev ?? {}), // devise et taux d'un devis existant : jamais perdus

@@ -3,10 +3,9 @@
 -- avant de reverser
 -- Titre Supabase : « Étape 9 sans paiement »
 -- ----------------------------------------------------------------------------
--- Pourquoi (audit des 14 attaques du 28/11, équipe « argent », contre-vérifié) : rien ne
--- relie l'étape d'une collab au statut de ses factures. L'étape 9 posée sans facture payée
--- (avancer_collab, modifier_element, l'écran Collabs) faisait créer par la base la tâche
--- « Reverser <prénom> », comme si la marque avait payé.
+-- Pourquoi (audit des 14 attaques du 28/11, équipe « argent », contre-vérifié) : la tâche
+-- « Reverser <prénom> » de l'étape 9 suit le statut des factures de la collab, pas seulement
+-- son étape (avancer_collab, modifier_element ou l'écran Collabs peuvent poser l'étape 9).
 --
 -- Quoi : collabs_step_task (copie de la version en prod, 2026-11-27-etape-collab-auto.sql,
 -- relue en base le 28/11). À l'étape 9 seulement :
@@ -19,6 +18,11 @@
 --   reconnaît les deux textes comme la tâche de l'étape 9 et n'en crée pas une seconde ; elle
 --   marche avant et après ce SQL. Un test (src/lib/collabStepSql.test.ts) vérifie que les
 --   textes de ce fichier restent ceux de l'app.
+--   Facture payée qui fait avancer la collab (apresFacturePayee, _shared/collabAutoDb.ts) :
+--   si la facture n'était pas encore liée, le lien est écrit avant l'avance, et l'app crée
+--   « Reverser » même si « Vérifier » est déjà là (paiement reçu).
+--   Limite : si ce déclencheur ne pose aucune tâche (insertion en échec, notée en warning, ou
+--   collab perdue ou archivée), l'app crée « Reverser » à l'étape 9 sans relire les factures.
 --
 -- Contrôle : la requête à la fin. Attendu : true · true · false
 -- Relançable sans risque (create or replace). Le déclencheur collabs_step_task ne change pas.

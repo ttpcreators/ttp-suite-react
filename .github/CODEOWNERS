@@ -1,8 +1,7 @@
 # Relecteurs du code sensible (GitHub demande leur avis sur une PR qui touche ces chemins).
 #
 # Pourquoi ces chemins :
-#   - agents/alfred/ : l'iMac d'Alfred installe ce dossier de main chaque nuit à 4 h et
-#     l'exécute à côté de ses secrets ;
+#   - agents/alfred/ : code exécuté par l'agent avec ses secrets ;
 #   - supabase/functions/ et supabase/config.toml : le code déployé avec les secrets du projet,
 #     et le réglage verify_jwt de chaque fonction ;
 #   - .github/ : les workflows (dont le déploiement des fonctions) et ce fichier lui même.

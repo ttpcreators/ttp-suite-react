@@ -48,8 +48,8 @@ jobs:
           echo "$(wc -l < /tmp/fonctions.txt) fonctions à contrôler"
           deno check --quiet $(cat /tmp/fonctions.txt)
 
-  # Secrets ajoutés par la PR (seulement ses propres commits : l'ancien secret des crons, changé
-  # depuis, reste dans l'historique de main). gitleaks à une version figée, vérifiée par son
+  # Secrets ajoutés par la PR (seulement les commits de la PR : l'historique déjà fusionné n'est
+  # pas rescanné). gitleaks à une version figée, vérifiée par son
   # empreinte SHA-256 ; rien n'est affiché en clair (--redact), les journaux étant publics.
   # Contrôle à part, pas encore exigé pour fusionner (comme « fonctions »).
   secrets:

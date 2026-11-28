@@ -3,13 +3,12 @@
 -- son kit public ; sa photo vient seulement du stockage de l'agence
 -- Titre Supabase : « Garde du media kit »
 -- ----------------------------------------------------------------------------
--- Pourquoi (audit des 14 attaques du 28/11, points 4 et 11) : par un appel direct à l'API, un
--- créateur pouvait écrire sa niche (coefficient de la calculette), sa plateforme et tout son
--- media kit (vues, audience, adresse publique /mediakit/<slug>/, marques, photos, captures).
--- Ce sont les entrées de la calculette de prix de l'agence et ce que les marques lisent sur
--- le site. Il pouvait aussi mettre dans photo_url une adresse extérieure, recopiée telle
--- quelle par les pages du site. L'espace créateur n'écrit jamais ces champs : seule la
--- photo de profil, envoyée dans le bucket public avatars (avatar-upload.tsx).
+-- Pourquoi (audit des 14 attaques du 28/11, points 4 et 11) : niche, platform et mediakit
+-- sont les entrées de la calculette de prix de l'agence et ce que les marques lisent sur le
+-- site ; ils restent à l'agence. Pour un compte créateur, niche, platform et mediakit gardent
+-- la valeur enregistrée, et photo_url n'accepte qu'une adresse du bucket avatars du projet.
+-- L'espace créateur n'écrit jamais ces champs : seule la photo de profil, envoyée dans le
+-- bucket public avatars (avatar-upload.tsx).
 --
 -- Quoi :
 --   1) creators_guard, pour un compte créateur connecté : la valeur d'avant est remise (sans
@@ -27,7 +26,7 @@
 -- que ses infos et sa photo du bucket avatars).
 -- Contrôle : la requête à la fin. Attendu : true · true · true · false · false
 -- Puis l'essai annulé du bas (compte de test ZZZ seulement) : niche, kit, slug et photo
--- extérieure restent inchangés, abonnés changés.
+-- hors bucket restent inchangés, abonnés changés.
 -- Relançable sans risque (create or replace).
 -- Pas encore dans SETUP.sql (à replier avec 2026-11-27-reperes-depots-infos.sql, qui y manque
 -- aussi). Après ce SQL, ne plus relancer 2026-11-27-reperes-depots-infos.sql ni

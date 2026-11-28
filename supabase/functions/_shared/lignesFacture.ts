@@ -3,12 +3,14 @@
 // (outils preparer_facture et preparer_devis de ttp-mcp/admin.ts). Logique PURE, testée par
 // lignesFacture.test.ts.
 //   • quantité : un nombre fini, plus grand que 0 et au plus QTE_MAX (absente = 1) ;
-//   • prix HT : un nombre fini (une ligne de remise négative reste possible) ;
+//   • prix HT : un nombre fini, au plus PRIX_MAX en valeur absolue (une ligne de remise
+//     négative reste possible) ;
 //   • commission : entre 0 et 100 % ; TVA : un des taux français (TVA_PERMISES) ;
 //   • total HT : plus grand que 0. Un avoir se prépare dans l'app, pas par le connecteur.
 // ============================================================================
 
 export const QTE_MAX = 10_000;
+export const PRIX_MAX = 1_000_000;
 export const TVA_PERMISES = [0, 2.1, 5.5, 10, 20] as const;
 
 export type LigneLue = { id: string; label: string; qty: number; unit: number };
@@ -23,6 +25,7 @@ export function lireLignes(brutes: unknown[], prefixeId: string, libelle: (v: un
     const unit = typeof l.prix_ht === "number" || typeof l.prix_ht === "string" ? Number(l.prix_ht) : NaN;
     if (!Number.isFinite(qty) || qty <= 0 || qty > QTE_MAX) return { error: `Ligne ${i + 1} : quantité refusée (un nombre plus grand que 0, au plus ${QTE_MAX}).` };
     if (!Number.isFinite(unit)) return { error: `Ligne ${i + 1} : prix HT illisible.` };
+    if (Math.abs(unit) > PRIX_MAX) return { error: `Ligne ${i + 1} : prix HT refusé (au plus ${PRIX_MAX} en valeur absolue).` };
     items.push({ id: `${prefixeId}${i}`, label: libelle(l.libelle), qty, unit });
   }
   return { items };

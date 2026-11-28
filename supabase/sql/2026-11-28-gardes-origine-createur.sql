@@ -3,15 +3,10 @@
 -- synchro verrouillés
 -- Titre Supabase : « Gardes origine créateur »
 -- ----------------------------------------------------------------------------
--- Pourquoi (audit des 14 attaques du 28/11, constats de l'équipe « accès » contre-vérifiés) :
---   • un créateur qui insère une tâche avec source 'alfred' ou 'claude' la gardait telle
---     quelle (seule 'agency' était remplacée) : la To-do de l'agence affichait alors
---     « Demandée par : L'agence » ; même chose pour ses idées et ses cadeaux (« Ajoutée par
---     l'agence ») et ses rendez-vous, sans aucune garde sur source ;
---   • sur une tâche de l'agence qu'il voit, il pouvait changer collab_id, id, created_at et
---     sort_order ;
---   • sur ses rendez-vous, il choisissait google_event_id, google_etag et last_synced_at :
---     l'évènement Google que la synchro de l'agence modifie ou supprime.
+-- Pourquoi (audit des 14 attaques du 28/11, équipe « accès », contre-vérifié) : pour un
+-- compte créateur, l'origine d'une ligne (source) dit toujours qu'elle vient de lui, les
+-- champs d'organisation d'une tâche de l'agence restent ceux de l'agence, et les champs de
+-- la synchro Google d'un rendez-vous restent ceux que la synchro a posés.
 --
 -- Quoi :
 --   1) todos_creators_guard (copie de la version en prod, 2026-11-27-taches-pour-createur.sql,
