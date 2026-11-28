@@ -2,6 +2,9 @@
 // ttp-mcp/gmail.ts : les deux boîtes de l'agence pour Claude (recherche, lecture,
 // brouillon, envoi). partnerships@ = connexion Google de l'app ; talent@ = compte de service.
 // Envoi (sendMail) : fondateurs seulement, et Claude demande l'accord avant (outil envoyer_mail).
+// Boîtes des créateurs (creator_mail_boxes) : réservées aux fondateurs, comme creator-box-mail.
+// Les fonctions qui choisissent une boîte reçoivent `founder` (ctx.founder de l'appel) ; sans
+// lui, elles gardent l'ancien comportement (true), le temps que chaque appel le passe.
 // ============================================================================
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
@@ -53,12 +56,17 @@ export type ThreadSummary = { box: MailBox; threadId: string; subject: string; f
  *  17 novembre 2026 : facture déjà partagée depuis la boîte d'un créateur, Alfred ne l'a pas vue). */
 export const PARTOUT = "partout";
 
-export async function searchThreads(sb: SupabaseClient, box: string | undefined, q: string, max: number): Promise<{ threads: ThreadSummary[]; errors: string[] }> {
+/** Refus d'une boîte de créateur pour un compte qui n'est pas fondateur. */
+export const REFUS_BOITE_CREATEUR = "Les boîtes des créateurs sont réservées aux fondateurs de l'agence.";
+
+export async function searchThreads(sb: SupabaseClient, box: string | undefined, q: string, max: number, founder = true): Promise<{ threads: ThreadSummary[]; errors: string[] }> {
   const out: ThreadSummary[] = [];
   const errors: string[] = [];
+  // « partout » pour un membre : les boîtes de l'agence seulement.
   const boxes = box === PARTOUT
-    ? [...boxesFor(undefined), ...(await listCreatorBoxes(sb)).filter((r) => r.connected && r.refresh_token).map((r) => r.email)]
-    : boxesFor(box);
+    ? [...boxesFor(undefined), ...(founder ? (await listCreatorBoxes(sb)).filter((r) => r.connected && r.refresh_token).map((r) => r.email) : [])]
+    : boxesFor(box).filter((b) => founder || !isCreatorBox(b));
+  if (!founder && box && box !== PARTOUT && isCreatorBox(box)) errors.push(REFUS_BOITE_CREATEUR);
   for (const b of boxes) {
     try {
       const token = await tokenFor(sb, b, "read");
@@ -322,12 +330,13 @@ export async function createDraft(sb: SupabaseClient, box: MailBox, to: string, 
  * La boîte demandée par un outil : « partnerships », « talent », ou l'adresse d'une boîte de
  * créateur connectée. null + message si elle n'est pas utilisable.
  */
-export async function parseMailBox(sb: SupabaseClient, v: unknown): Promise<{ box: MailBox } | { error: string }> {
+export async function parseMailBox(sb: SupabaseClient, v: unknown, founder = true): Promise<{ box: MailBox } | { error: string }> {
   const s = String(v ?? "").trim().toLowerCase();
   if (s === "partnerships") return { box: "partnerships" };
   if (s === "talent") return talentAddress() ? { box: "talent" } : { error: "Boîte talent@ non configurée." };
   const e = normEmail(s);
   if (e) {
+    if (!founder) return { error: REFUS_BOITE_CREATEUR };
     if (await connectedCreatorBox(sb, e)) return { box: e };
     return { error: `La boîte ${e} n'est pas connectée à TTP Suite (boites_createurs ; lien_boite_createur pour la connecter).` };
   }
@@ -395,10 +404,11 @@ export type ClaudeDraft = { box: MailBox; id: string; to: string; subject: strin
  * a déjà envoyé un message dans le fil APRÈS ce brouillon (Marc a répondu lui même : le
  * brouillon fait doublon). Les brouillons écrits à la main ne sont jamais listés.
  */
-export async function listClaudeDrafts(sb: SupabaseClient, box: string | undefined): Promise<{ drafts: ClaudeDraft[]; errors: string[] }> {
+export async function listClaudeDrafts(sb: SupabaseClient, box: string | undefined, founder = true): Promise<{ drafts: ClaudeDraft[]; errors: string[] }> {
   const drafts: ClaudeDraft[] = [];
   const errors: string[] = [];
-  for (const b of boxesFor(box)) {
+  if (!founder && box && isCreatorBox(box)) errors.push(REFUS_BOITE_CREATEUR);
+  for (const b of boxesFor(box).filter((x) => founder || !isCreatorBox(x))) {
     try {
       const token = await tokenFor(sb, b, "read");
       const list = await gjson(token, `${GMAIL}/drafts?maxResults=100`);

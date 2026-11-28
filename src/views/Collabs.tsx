@@ -52,7 +52,7 @@ import { createStepTask } from "@/lib/collabLinksDb";
 import { autoCollabSignee } from "@/lib/collabAutoDb";
 import { lireCollabPrefill } from "@/lib/quotes";
 import { gagneeHorsBilan } from "@/lib/collabAuto";
-import { autoTaskFor, cachetAmount, cachetCurrency } from "@/lib/collabLinks";
+import { autoTaskFor, cachetAmount, cachetCurrency, stepTaskTexts } from "@/lib/collabLinks";
 import { dealKind } from "@/lib/dealKind";
 import { DealBadge } from "@/components/ui/deal-badge";
 import { putInvoicePrefill } from "@/lib/invoicePrefill";
@@ -557,6 +557,7 @@ export function Collabs() {
           if (r === "created") toast(`Tâche ajoutée : ${autoTaskFor(clamped, row)?.text ?? ""}`);
           // Après le SQL du 27/11, la base crée elle-même la tâche de l'étape : on la retrouve ici.
           else if (r === "exists") toast(`Tâche de l'étape : ${autoTaskFor(clamped, row)?.text ?? ""}`);
+          else if (r === "verifier") toast(`Tâche de l'étape : ${stepTaskTexts(clamped, row).at(-1) ?? ""}`);
           else if (r === "error") toast("Tâche de l'étape non créée");
         });
       }

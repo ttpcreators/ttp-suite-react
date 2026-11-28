@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { autoTaskFor, collabIdMissing, hasAutoTask, LINK_TABLES, type CollabLite, type LinkData, type LinkTable } from "./collabLinks";
+import { autoTaskFor, collabIdMissing, hasAutoTask, LINK_TABLES, stepTaskTexts, type CollabLite, type LinkData, type LinkTable } from "./collabLinks";
 import { requestIntent } from "./openIntent";
 import { dbInsert } from "./db";
 import { creatorsPatch } from "./todoCreators";
@@ -65,12 +65,16 @@ export async function openCollab(collabId: string): Promise<void> {
  * Tâche de l'étape que la collab vient d'atteindre (« Résumer le brief pour Léna » à J+1…).
  * Pas de doublon : une tâche au même texte pour cette collab (ou sans collab) existe déjà.
  */
-export async function createStepTask(c: CollabLite, step: number): Promise<"created" | "exists" | "none" | "error"> {
+export async function createStepTask(c: CollabLite, step: number): Promise<"created" | "exists" | "verifier" | "none" | "error"> {
   const task = autoTaskFor(step, c);
   if (!task) return "none";
-  const { data: same, error } = await supabase.from("todos").select("*").ilike("text", task.text.replace(/[\\%_]/g, (m) => `\\${m}`));
-  if (error) return "error";
-  if (hasAutoTask((same as { text: string; collab_id?: string | null; done?: boolean | null }[]) ?? [], c.id, task.text)) return "exists";
+  // Étape 9 sans facture payée : la base a pu poser « Vérifier le paiement de … » à la place
+  // (SQL 2026-11-28) ; elle compte comme la tâche de l'étape (« verifier »).
+  for (const text of stepTaskTexts(step, c)) {
+    const { data: same, error } = await supabase.from("todos").select("*").ilike("text", text.replace(/[\\%_]/g, (m) => `\\${m}`));
+    if (error) return "error";
+    if (hasAutoTask((same as { text: string; collab_id?: string | null; done?: boolean | null }[]) ?? [], c.id, text)) return text === task.text ? "exists" : "verifier";
+  }
   const created = await dbInsert("todos", {
     text: task.text,
     descr: null,
