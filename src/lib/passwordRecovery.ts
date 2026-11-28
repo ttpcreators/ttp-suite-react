@@ -8,8 +8,10 @@
  * servi revient avec « error_code=otp_expired ».
  */
 
-/** Longueur minimale, la même que la page Accès et la fonction create-access. */
-export const MIN_MOT_DE_PASSE = 6;
+/** Longueur minimale, la même que la page Accès et la fonction create-access (supabase/functions/_shared/comptes.ts). */
+export const MIN_MOT_DE_PASSE = 12;
+/** Message du minimum (texte français, clé de traduction). */
+export const MESSAGE_MINIMUM = "12 caractères au moins.";
 
 export type RetourLien = "recovery" | "expired" | null;
 
@@ -36,7 +38,7 @@ export function adresseRetour(origin: string, base = "/"): string {
 
 /** Saisie à refuser avant l'envoi : le message (texte français, clé de traduction), sinon null. */
 export function motDePasseInvalide(motDePasse: string, confirmation: string): string | null {
-  if (motDePasse.length < MIN_MOT_DE_PASSE) return "6 caractères au moins.";
+  if (motDePasse.length < MIN_MOT_DE_PASSE) return MESSAGE_MINIMUM;
   if (motDePasse !== confirmation) return "Les deux mots de passe ne sont pas identiques.";
   return null;
 }
@@ -46,7 +48,7 @@ export function messageErreurMotDePasse(e: { code?: string | null; message?: str
   const code = String(e?.code ?? "");
   const m = String(e?.message ?? "").toLowerCase();
   if (code === "same_password" || m.includes("different from the old")) return "Le mot de passe doit être différent de l'ancien.";
-  if (code === "weak_password" || m.includes("at least")) return "6 caractères au moins.";
+  if (code === "weak_password" || m.includes("at least")) return MESSAGE_MINIMUM;
   if (code === "reauthentication_needed" || code === "session_not_found" || m.includes("reauthentication") || m.includes("session")) return "Pour des raisons de sécurité, reconnecte-toi puis réessaie.";
   return "Ça n'a pas marché. Réessaie dans un instant.";
 }

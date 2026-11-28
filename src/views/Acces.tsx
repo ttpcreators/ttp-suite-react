@@ -20,6 +20,7 @@ import { AgencyAvatar } from "@/components/ui/agency-avatar";
 import { guessName, saveAgencyName } from "@/lib/team";
 import { CreatorPickerField } from "@/components/ui/creator-picker";
 import { couper } from "../../supabase/functions/_shared/texteSur.ts";
+import { MIN_MOT_DE_PASSE } from "@/lib/passwordRecovery";
 
 type AccessAccount = {
   email: string;
@@ -180,13 +181,13 @@ function cloudBadge(cloud: string | undefined) {
   return { status: "neutral" as const, label: "Cloud" };
 }
 
-/** Mot de passe lisible mais solide (à communiquer au créateur). */
+/** Mot de passe lisible mais solide (à communiquer au créateur), 14 caractères. */
 function genPwd(): string {
   const a = "ABCDEFGHJKLMNPQRSTUVWXYZ";
   const b = "abcdefghijkmnpqrstuvwxyz";
   const n = "23456789";
   const pick = (s: string, k: number) => Array.from(crypto.getRandomValues(new Uint32Array(k)), (x) => s[x % s.length]).join("");
-  return `${pick(a, 2)}${pick(b, 4)}${pick(n, 3)}!`;
+  return `${pick(a, 3)}${pick(b, 6)}${pick(n, 4)}!`;
 }
 
 /** Retire tout mot de passe en clair avant d'écrire la liste. */
@@ -304,8 +305,8 @@ export function Acces() {
       toast("Email invalide");
       return;
     }
-    if (pwd.length < 6) {
-      toast("Mot de passe trop court (6 caractères min)");
+    if (pwd.length < MIN_MOT_DE_PASSE) {
+      toast(`Mot de passe trop court (${MIN_MOT_DE_PASSE} caractères min)`);
       return;
     }
     if (role === "creator" && !creatorName) {
@@ -326,8 +327,10 @@ export function Acces() {
         const map: Record<string, string> = {
           email_deja_utilise: "Cet email a déjà un compte",
           email_invalide: "Email invalide",
-          mot_de_passe_trop_court: "Mot de passe trop court",
+          mot_de_passe_trop_court: `Mot de passe trop court (${MIN_MOT_DE_PASSE} caractères min)`,
           createur_requis: "Choisis le créateur",
+          createur_inconnu: "Ce créateur n'a pas de fiche dans le roster",
+          createur_deja_relie: "Ce créateur a déjà un compte de connexion",
           unauthorized: "Action réservée à l'agence",
         };
         toast(map[res?.error ?? ""] ?? "Création du compte échouée, réessaie");
@@ -365,6 +368,8 @@ export function Acces() {
       if (fnErr || !res?.ok) {
         const map: Record<string, string> = {
           compte_introuvable: "Aucun compte de connexion pour cet email",
+          reset_fondateur_refuse: "Un autre fondateur change lui même son mot de passe",
+          reset_profil_absent: "Ce compte n'a pas de profil dans l'app : nouveau mot de passe refusé",
           unauthorized: "Action réservée aux fondateurs",
           email_invalide: "Email invalide",
         };

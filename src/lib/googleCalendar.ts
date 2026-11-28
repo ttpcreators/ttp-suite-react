@@ -150,18 +150,20 @@ export async function disconnect(): Promise<void> {
 }
 
 /**
- * Au montage de l'app : détecte le retour OAuth (?google=connected|error),
+ * Au montage de l'app : détecte le retour OAuth (?google=connected|error|compte ;
+ * « compte » : un autre compte Google que la boîte de l'agence, refusé, compté aussi en erreur),
  * nettoie l'URL, et renvoie l'issue. La vraie protection anti-CSRF est portée
  * par le `state` signé côté serveur (pas de nonce client à revérifier).
  */
-export function consumeOAuthReturn(): { justConnected: boolean; error: boolean } {
+export function consumeOAuthReturn(): { justConnected: boolean; error: boolean; wrongAccount: boolean } {
   const url = new URL(window.location.href);
   const flag = url.searchParams.get("google");
   const justConnected = flag === "connected";
-  const error = flag === "error";
+  const wrongAccount = flag === "compte";
+  const error = flag === "error" || wrongAccount;
   if (flag) {
     url.searchParams.delete("google");
     window.history.replaceState({}, "", url.toString());
   }
-  return { justConnected, error };
+  return { justConnected, error, wrongAccount };
 }

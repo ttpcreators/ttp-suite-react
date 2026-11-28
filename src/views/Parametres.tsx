@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SIGNATURE_KEY, scribble, validSig, type SignatureData } from "@/lib/agencySignature";
 import { SignaturePad } from "@/components/signature-pad";
 import { PasswordSettings } from "@/components/password-form";
+import { DoubleAuthSettings } from "@/components/double-auth";
 import {
   BellRing, Smartphone, Sunrise, History, LogOut, Palette, MessageCircle, Bot, Copy, Unplug, PenLine, Sparkles,
   Search, ChevronRight, ChevronDown, X, KeyRound, type LucideIcon,
@@ -1665,6 +1666,9 @@ export function Parametres() {
           <Card anchor="Compte">
             <div className="mb-4 border-b border-border pb-4">
               <PasswordSettings />
+            </div>
+            <div className="mb-4 border-b border-border pb-4">
+              <DoubleAuthSettings />
             </div>
             <button
               type="button"
